@@ -2,695 +2,783 @@
 
 ## Purpose
 
-Complete the Template IR (TIR) migration so template semantics have one AST-local authority, the durable `Template` value is a narrow handle, and no production or test path reconstructs template meaning from `TemplateContent`, `TemplateAtom`, old render plans, or migration-only fallback state.
-
-Final architecture:
+Complete the Template IR migration around one fast AST-local representation and one unambiguous path from parser output to HIR.
 
 ```text
 template syntax
--> parser-local construction state
--> module-local AST TIR registry
--> TirView composition, formatting, folding, metadata, and finalization
--> folded StringSlice expressions or neutral owned runtime handoff payloads
+-> parser-local TIR construction
+-> one module-scoped TemplateIrStore
+-> exact TirView
+-> one semantic preparation pass
+-> folded string or owned runtime handoff
 -> HIR
 ```
 
-Completion means one authoritative TIR path from parsing through AST finalization, with no TIR identities crossing into HIR or backends.
+The final implementation must preserve template behaviour while deleting multi-store ownership, duplicated classification and safety walks, incomplete view identity, fallback terminology and implementation-shaped tests.
+
+TIR remains AST-local. No TIR store, ID, view, overlay or preparation type may cross into HIR, a backend or a completed compiler module.
 
 ## Current state
 
-ACTIVE_PLAN: `docs/roadmap/plans/final-tir-completion-plan.md`
+```text
+ACTIVE_PLAN: docs/roadmap/plans/final-tir-completion-plan.md
 STATUS: active
-CURRENT_SLICE: Slice 3E3c2e - propagate folded-child authority and close lazy fold validation gaps
-LAST_ACCEPTED_COMMIT: `c1ecc2c58`
-BRANCH: `main`
-WORKTREE: `main`; unaccepted Slice 3E3c2e source, focused-test and plan changes. Concurrent user-owned documentation updates are committed through `450cbb591` and remain outside this slice
-REQUIRED_RELOADS: startup files, this plan, relevant template/language references and current source/diff
-RELEVANT_CONTEXT_NOW:
-- docs: compiler AST template/TIR contract, focused template language references, testing and validation standards
-- code: `tir/fold_safety.rs::PreparedTirViewFold` and virtual-wrapper eligibility, `tir/fold.rs` prepared entry plus foreign child recursion and focused finalization/fold/handoff authority tests
-- below-Composed roots, active bindings, runtime plans, unsupported shapes, cycles and genuine non-const diagnostics remain semantic non-folding outcomes. Prepared authority must bind to one exact view, and wrapper safety must inspect every effective source/expression consumed by folding.
-ACCEPTANCE_CRITERIA:
-- Make prepared eligibility explicit so runtime plans and every unsupported reason remain non-folded unless the fold path demonstrably preserves them.
-- Bind prepared authority to exact root, phase, overlay and store-owner identity and reject mismatched consumption before cache lookup.
-- Make exact wrapper safety inspect non-injected resolved slot sources, effective expressions and one shared wrapper-context cycle stack.
-- Guard registry-qualified cross-store fold cycles and return the established non-foldable diagnostic without cache or authority recursion.
-- Add focused malformed-authority regressions without changing valid fold output or user-facing diagnostics.
-VALIDATION_STATE:
-- Slice 3E3c2d focused schema, HIR-handoff, wrapper-context and runtime-site suites: passed
-- Slice 3E3c2d post-correction Codex re-audit: acceptable with no blocking findings
-- Slice 3E3c2d parent `just validate`: passed cross-target Clippy, 3467 unit tests, 1764 integration cases, docs checking and `bench-check` 28/28 with a 5 ms average improvement, 23 faster and 0 slower
-- Slice 3E3c2e correction worker focused tests and formatting: passed
-- Slice 3E3c2e parent `cargo run --quiet -- check docs`: passed with no errors or warnings
-- Slice 3E3c2e post-correction Codex re-audit: not acceptable; dynamic-template token reuse and foreign child/wrapper boundary validation remain
-- Slice 3E3c2e final Codex re-audit: not acceptable; same-store wrappers are redundantly preflighted per application
-- Slice 3E3c2e acceptance Codex re-audit: not acceptable; nested folded-child shortcut can discard an outer root expression overlay
-- Slice 3E3c2e overlay correction focused HIR/fold tests, docs and bench-check: passed
-- Slice 3E3c2e worker `just validate`: failed at five in-slice `fold.rs` `too_many_arguments` Clippy diagnostics
-- Slice 3E3c2e fold traversal refactor: 102 focused tests, cross-target Clippy, docs and bench-check passed
-- Slice 3E3c2e combined Codex audit: not acceptable; direct child folds lose outer expression overlays and virtual wrapper folds validate but do not consume exact overlays
-- Slice 3E3c2e fold overlay correction: 490 focused TIR tests, cross-target Clippy, docs and bench-check passed; full diff check is blocked only by unrelated `style-guide.bd` trailing whitespace
-- Slice 3E3c2e post-overlay Codex audit: not acceptable; production classification loses root-first expression context, nested virtual-wrapper children skip occurrence context and `IfChildEmits` can hide malformed foreign wrappers
-- Slice 3E3c2e cross-owner correction: 501 focused TIR tests, 41 finalization tests, cross-target Clippy, docs, bench-check and full `just validate` passed
-- Slice 3E3c2e cross-owner Codex audit: not acceptable; below-Composed classification still consumes child overlay authority and virtual-wrapper safety does not traverse the exact views used by folding
-- Slice 3E3c2e phase-gated safety correction: full `just validate` passed with 3498 unit tests, 1764 integration cases, docs clean and bench-check 28/28; cross-target Clippy and scoped diff check passed
-- Slice 3E3c2e phase-gated Codex audit: not acceptable; runtime plans remain fold-eligible, wrapper safety misses effective sources/expressions/cycles, prepared authority is not view-bound and cross-store fold cycles are unguarded
-- Slice 3E3c2e preparation/wrapper/cycle correction: full `just validate` passed with 3504 unit tests, 1764 integration cases, docs clean and bench-check 28/28; cross-target Clippy, formatting and scoped diff check passed
-- Slice 3E3c2e preparation/wrapper/cycle Codex audit: not acceptable; renderable semantic fallback does not enter owned runtime handoff, wrapper eligibility drops the active outer expression stack and prepared owner identity lacks same-ID/different-owner coverage
-- Slice 3E3c2e finalization/stack/owner correction: full `just validate` passed with 3508 unit tests, 1764 integration cases, docs clean and bench-check 28/28; implementation completed for AST expressions, wrapper stack parity and prepared owner identity but the direct module-constant caller was outside the worker's allowed scope
-- Slice 3E3c2e module-constant disposition correction: full `just validate` passed with 3509 unit tests, 1764 integration cases, docs clean and bench-check 28/28; module constants now use the established non-foldable-const diagnostic instead of an internal transformation error
-- Slice 3E3c2e final complete Codex audit: not acceptable; prepared authority remains store-local across foreign children/wrappers/resolved sources and nested foreign safety transitions compare against the original root store instead of the current owning store
-DOCS_IMPACT: progress matrix unchanged for this representation-only phase. Source module docs update with final owners. Phase 5 owns final external docs and deferred-performance handoff
-BLOCKERS_OR_OPEN_DECISIONS: make the sole authority walk registry-qualified and exhaustive before fallback classification, then correct nested foreign expression-stack transitions to use the current owning store. Preserve all concurrent user-owned docs edits
-DELEGATION_DECISION: codex-cli implementation - user selected Codex CLI as the primary worker for all remaining slices
-NEXT_WORKER_ORDER: codex-cli, ollama, parent-direct; Ollama is fallback-only after a Codex CLI blocker
-STOP_REASON: none
-NEXT_RESUME_ACTION: implement the two bounded foreign-authority and nested-stack corrections through Codex CLI, then re-audit the complete slice
+CURRENT_PHASE: R0 - lock the single-store ownership boundary
+LAST_ACCEPTED_COMMIT: c1ecc2c58
+IMPLEMENTATION_BASE_COMMIT: 069a29acb
+BRANCH: main
+```
 
-SELF_AUDIT_NOTE: parser-owned text, head values, nested templates, slots, inserts, control flow, wrappers, formatting, and runtime handoff already have TIR owners. The remaining work is deletion, state thinning, final API consolidation, targeted low-risk efficiency cleanup, test ownership, documentation, and closure.
+Use `069a29acb` as the implementation and regression base. Do not continue extending `FoldAuthorityWalk`, foreign-store traversal, external expression-overlay stacks or prepared foreign-wrapper proofs.
 
-## Plan lifecycle and execution rules
+## Final architecture
 
-This is a temporary implementation checklist.
+### One module-scoped TIR store
 
-- Implement one bounded slice at a time and keep the compiler valid after each slice.
-- Split work by final owner, never by “old path versus new path”.
-- Update only the `Current state` block, the active checkboxes, and one concise accepted-slice note when necessary. Do not rebuild a chronological progress log.
-- Before editing, confirm `main`, inspect `git status`, and preserve unrelated user-owned changes.
-- Read every edited owner and its focused tests before changing an API.
-- Do not add compatibility wrappers, optional fallback parameters, duplicate structs, or broad utility modules.
-- User-visible behavior belongs in integration cases. Focused unit tests protect only hidden final invariants.
-- Code-bearing slices run `cargo fmt`, focused tests, and `just validate`. Run `just bench-check` when formatter, fold, traversal, allocation, or hot construction paths change.
-- A strictly documentation-only slice follows the documentation release-build gate from `style-guide/validation.bd`; do not claim `just validate` unless it was actually run.
-- Delete this plan after Phase 6 completes.
+One AST module build owns one `TemplateIrStore` containing all template arenas and overlay payloads:
 
-## Completed migration summary
+```rust
+pub(crate) struct TemplateIrStore {
+    templates: Vec<TemplateIr>,
+    nodes: Vec<TemplateIrNode>,
+    wrapper_sets: Vec<TemplateWrapperSet>,
+    slot_plans: Vec<TemplateSlotPlan>,
+    expression_overlays: Vec<TirExpressionOverlay>,
+    slot_resolution_overlays: Vec<TirSlotResolutionOverlay>,
+    wrapper_context_overlays: Vec<TirWrapperContextOverlay>,
+    // existing counters and side tables
+}
+```
 
-The following work is closed and must not be re-planned:
+Move the current overlay vectors and their allocation/look-up APIs from `TemplateIrRegistry` into `TemplateIrStore`. Do not add a second overlay registry or a new owner beside the store.
 
-- Parser head/body paths emit text, expressions, children, slots, inserts, loop control, and control-flow roots directly into the module TIR store.
-- Registry-qualified refs, phases, overlays, cross-store child resolution, wrapper sets, slot composition, folding, formatter views, reactive traversal, classification, and owned runtime handoff exist.
-- Production formatting and render-unit preparation no longer read `TemplateContent` or `TemplateAtom`.
-- Production const evaluation, finalization, doc fragments, helper filtering, and HIR handoff use registry-backed effective TIR.
-- Recursive wrapper `Template` storage, aggregate-wrapper source mirrors, content-to-TIR production conversion, current-state scratch-store classifiers, and legacy fold/handoff fallbacks were removed.
-- Runtime handoff is neutral AST-owned data; HIR and backends do not receive TIR stores, refs, views, overlays, or registries.
-- `Template.content`, detached content types, detached materialization and related converter/parity helpers are removed from production and tests.
-- Remaining fixtures use parser-emitted or directly constructed registry-qualified TIR and protect final behavior or TIR invariants.
+Production contexts carry one shared `Rc<RefCell<TemplateIrStore>>`. `ScopeContext::new` and other production constructors must receive this handle explicitly. They must not allocate scratch stores that are immediately replaced.
 
-Git history is the detailed evidence. This plan records only the final architecture and remaining work.
+Delete:
 
-## Binding design decisions
+- `TemplateIrRegistry`
+- `RegisteredTemplateIrStore`
+- registry store vectors and store-handle lookups
+- `TemplateStoreId`
+- `TemplateStringDomainId`
+- `TemplateIrStoreOwner`
+- store freezing and string-domain validation
+- cross-registry owner checks
+- foreign-store child, wrapper, slot-source and fold paths
+- `foreign_slot_insert_proxy.rs`
 
-### Authority and stage boundary
+A future second-store design requires a separate plan with a real production owner and measured benefit.
 
-- TIR is AST-local and is the only structural authority after parser emission.
-- `TirView` is the production read API for effective roots and overlays.
-- HIR receives only folded strings or neutral owned runtime handoff payloads.
-- Missing required TIR authority is an internal compiler error, not permission to reconstruct from content or silently keep an older root.
+### Keep direct parser emission
 
-### Phase and reference identity
+`TemplateParserIrBuilderState` continues to emit text, expressions, child templates, slots, inserts and control-flow roots directly into the shared module store.
+
+Do not restore detached content, per-template stores, routine subtree cloning, a parallel AST template tree or a second render plan.
+
+Every template value parsed during one module build belongs to the same store. Template-valued head and body expressions must therefore become structural `ChildTemplate` or `InsertContribution` nodes immediately rather than opaque dynamic expressions that need later foreign conversion.
+
+### Module-local references
+
+All TIR IDs are module-local typed IDs into the one store.
+
+Target reference shapes:
+
+```rust
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct TemplateViewContext {
+    pub(crate) expression_overlay: Option<TirExpressionOverlayId>,
+    pub(crate) slot_resolution: Option<TirSlotResolutionOverlayId>,
+    pub(crate) wrapper_context: Option<TirWrapperContextOverlayId>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct TemplateTirReference {
+    pub(crate) root: TemplateIrId,
+    pub(crate) phase: TemplateTirPhase,
+    pub(crate) context: TemplateViewContext,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct TemplateTirChildReference {
+    pub(crate) root: TemplateIrId,
+    pub(crate) phase: TemplateTirPhase,
+    pub(crate) context: TemplateViewContext,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct TemplateWrapperReference {
+    pub(crate) root: TemplateIrId,
+    pub(crate) phase: TemplateTirPhase,
+    pub(crate) context: TemplateViewContext,
+}
+```
+
+`TemplateViewContext` is carried by value. Do not replace `TemplateOverlaySetId` with another context ID or canonical context table. Back optional overlay IDs with `NonZeroU32` and index-plus-one encoding so each `Option<...Id>` stays one word without sentinel values. Record the resulting context/reference sizes as a focused performance invariant.
+
+Delete:
+
+- `TemplateRef`
+- `TemplateNodeRef`
+- `TemplateWrapperSetRef`
+- `TemplateOverlaySet`
+- `TemplateOverlaySetId`
+- overlay-set allocation, lookup and composition
+- store-qualification helpers such as `template_id_in_store`
+
+Move durable reference types out of `parser_builder_state.rs` into `refs.rs`. Keep parser builder state limited to in-progress parser construction.
+
+### Thin durable `Template`
+
+Target shape:
+
+```rust
+pub(crate) struct Template {
+    pub(crate) tir_reference: TemplateTirReference,
+    pub(crate) location: SourceLocation,
+}
+```
+
+`TemplateIr.kind` is the sole post-construction template-kind owner. Remove `Template.kind`, kind synchronization methods and foreign-boundary cache comments.
+
+The phase sequence remains:
 
 ```text
 Parsed -> Composed -> Formatted -> Finalized
 ```
 
-- Folding requires `Composed` or later.
-- HIR handoff requires `Finalized`.
-- Effective identity is store-qualified root + phase + overlay-set ID, resolved through the owning module registry.
-- Remove `TemplateTirReference::is_composed`; `phase >= Composed` is the single source of that fact.
-- Lifecycle state belongs to the reference phase, not to shape summaries. Remove formatter-pending booleans such as `TemplateIrSummary::has_formatter` and `suppress_formatter_summary_on_finish` unless an audit proves a distinct structural fact that cannot be derived from style + phase.
-- Do not restamp foreign overlay IDs or treat store-local IDs as globally meaningful.
-- Keep the store-owner proof only if the post-fixture audit proves registry identity alone cannot prevent wrong-store reuse in production.
+Folding requires `Composed` or later. AST-to-HIR handoff requires `Finalized`.
 
-### Slots and wrapper context
+### Complete `TirView` identity
 
-The accepted wrapper model remains:
+`TirView` borrows the one store and carries one exact identity:
 
-```text
-wrapper template effective identity
--> store-qualified root + phase + overlay-set ID
--> canonical wrapper-set entry
--> wrapper-context overlay keyed by ChildTemplateOccurrenceId
--> TirView resolves effective application
-```
+```rust
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct TirViewIdentity {
+    pub(crate) root: TemplateIrId,
+    pub(crate) phase: TemplateTirPhase,
+    pub(crate) context: TemplateViewContext,
+}
 
-- Wrapper order is exact and outermost/innermost behavior must remain unchanged.
-- `$fresh` suppresses only the immediate parent’s wrappers.
-- Use `TirWrapperApplicationMode::Always` for ordinary children and `IfChildEmits` for structurally conditional children.
-- Slot-bearing wrappers route child output as fill through slot-resolution overlays.
-- Slotless wrappers preserve prepend/wrap semantics.
-- Missing slots render empty; repeated slots replay the same routed contribution.
-- False/no-else branches and zero-iteration loops produce structural no-output, so `IfChildEmits` wrappers do not render.
-- Eager cross-store copying is not the primary model. Copy-on-write/subtree copying is allowed only for a derived local tree, fresh occurrence IDs, or owned handoff materialization.
-
-### Final durable `Template`
-
-`Template` must stop acting as both mutable parser state and durable AST value.
-
-The target durable shape is:
-
-```text
-Template {
-    tir_reference: TemplateTirReference,   // non-optional after construction
-    kind: TemplateType,                    // only if a final audit proves it cannot be derived cheaply
-    id: String,                            // only if still used outside diagnostics/debugging
-    location: SourceLocation,
+pub(crate) struct TirView<'a> {
+    store: &'a TemplateIrStore,
+    identity: TirViewIdentity,
 }
 ```
 
-Delete durable copies of:
+No consumer may carry a separate expression-overlay stack, store token, authority token or active root identity that is not represented by `TirViewIdentity`.
 
-- `content`
-- `control_flow`
-- `style`
-- `child_wrappers`
-- parser builder/finalization state
+`ExpressionSiteId`, `SlotOccurrenceId` and `ChildTemplateOccurrenceId` remain allocated from module-wide store counters. Numeric collisions between unrelated templates are impossible inside one store.
 
-Use the existing `TemplateConstructionContext` plus a small parser-local build-state record for mutable head/body metadata. Do not add another long-lived template representation.
+### Complete expression-overlay invariant
 
-### Diagnostics and failure behavior
+An expression overlay attached to a composed or finalized value root must contain the effective overrides for every structural descendant reached through:
 
-- User syntax/rule failures remain `CompilerDiagnostic`.
-- Missing stores, roots, overlays, body IDs, or impossible phase transitions are `CompilerError`.
-- Replace `Option`/`.ok()?` fallback flows with `Result` when the state is required by the final architecture.
-- Do not silently ignore overlay composition failures or missing TIR nodes.
+- child-template nodes
+- wrappers
+- resolved slot sources
+- branch and fallback bodies
+- loop bodies and aggregate wrappers
+- structural helper roots
 
-## Scope boundary for performance work
+When finalization creates a root expression overlay, reuse the existing site-keyed normalization collector and merge structural descendant overrides into that root overlay once. The outer, more contextual override wins when the same reused expression site appears in both maps.
 
-This branch may include only cheap, behavior-preserving cleanup that naturally belongs to final TIR ownership:
+Structural expressions without an override remain read directly from their TIR node.
 
-- remove whole-node/kind clones used only for discriminant checks or formatter-run classification
-- remove repeated effective-node reads when one narrow transient snapshot is measurably clearer and cheaper
-- preserve existing byte-length/output-size summary hooks
+This replaces root-first overlay stacks. Expression lookup is one overlay lookup followed by structural fallback.
 
-Do not perform the broad `$md` parser/renderer rewrite during TIR closure. Phase 5 transfers that work, plus horizontal-rule support, into an explicit post-TIR roadmap item.
+### Two explicit view transitions
+
+All recursive consumers use methods on `TirView`. They must not calculate phase or overlay transitions locally.
+
+#### Structural transition
+
+Used for TIR child nodes, wrappers and resolved slot sources.
+
+- Retain the current view's complete expression overlay.
+- For a `Parsed` reference, ignore the referenced slot and wrapper overlays.
+- For a `Composed` or later reference, use the referenced slot and wrapper overlays.
+- Preserve the referenced root and phase.
+
+Provide named methods such as:
+
+```rust
+view.structural_child(reference)
+view.wrapper(reference)
+view.resolved_slot_source(root)
+```
+
+#### Nested value transition
+
+Used when an AST expression contains an independently owned `Template` value.
+
+- Start from the nested template's complete `TemplateTirReference.context`.
+- Do not retain the containing structural root's expression overlay.
+
+Provide one named method such as:
+
+```rust
+view.nested_template_value(reference)
+```
+
+This distinction resolves both known overlay bugs without store comparisons or stack-reset heuristics.
+
+### One semantic preparation owner
+
+Replace authority validation, fold safety and immediate pre-fold classification with one owner in `tir/preparation.rs`.
+
+```rust
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(crate) enum TemplatePreparationMode {
+    Value,
+    ConstRequired,
+}
+
+pub(crate) enum PreparedTemplate {
+    Foldable(PreparedFold),
+    Runtime(PreparedRuntime),
+    Helper(TemplateHelperKind),
+}
+
+pub(crate) struct PreparedFold {
+    pub(crate) identity: TirViewIdentity,
+    pub(crate) value_kind: TemplateConstValueKind,
+}
+
+pub(crate) struct PreparedRuntime {
+    pub(crate) identity: TirViewIdentity,
+    pub(crate) reason: RuntimeTemplateReason,
+}
+```
+
+The enum must make contradictory states impossible. Do not return an optional folded value beside a second disposition enum.
+
+Preparation:
+
+- validates every reachable required root, node, overlay, wrapper set, slot plan and render root
+- follows structural and nested-value transitions through `TirView`
+- validates all authority even after discovering runtime dependence
+- detects cycles by `TirViewIdentity`
+- distinguishes helper values from final template values
+- records one foldable or runtime disposition
+- preserves lazy runtime semantics in `Value` mode
+- applies const-required branch, loop and helper rules in `ConstRequired` mode
+- returns `CompilerError` for missing authority
+- lets the owning caller convert valid runtime dependence into the existing const-required diagnostic
+
+Preparation is a compact semantic result, not a cloned node plan or second IR.
+
+Use a preparation cache only when its key includes every semantic input:
+
+```text
+TirViewIdentity + TemplatePreparationMode + const-loop limit
+```
+
+Binding-dependent preparation remains uncached unless binding identity becomes explicit.
+
+### One fold entry
+
+```rust
+pub(crate) fn fold_prepared_template(
+    prepared: &PreparedFold,
+    view: TirView<'_>,
+    context: &mut TemplateFoldContext<'_>,
+) -> Result<TemplateEmission, TemplateError>;
+```
+
+The function verifies that `prepared.identity == view.identity()` before cache lookup.
+
+Only `PreparedTemplate::Foldable` reaches the folder. Delete:
+
+- `FoldAuthorityWalk`
+- `FoldAuthorityToken`
+- `PreparedTirViewFold`
+- `PreparedTirFoldDecision`
+- `ViewNativeWalkContext`
+- `ReadOnly` versus `Direct`
+- `fold_tir_view_prepared`
+- prevalidated and expression-stack fold entries
+- prepared foreign wrappers
+- foreign fold cycle stacks
+
+The fold walker trusts preparation, uses `TirView` transitions and performs no recursive authority or eligibility preflight.
+
+A runtime slot plan is never folded as `NoOutput`. `NoOutput`, `Break` and `Continue` remain structural emission states only.
+
+### One handoff path
+
+Owned runtime handoff materialization remains a distinct reducer because it produces different data from folding. It consumes `PreparedRuntime` and the same exact `TirView` used by preparation.
+
+Handoff must use the same structural and nested-value transition methods. It must not classify again, reconstruct overlays or use a folded-child shortcut with different semantics.
+
+HIR continues to receive only owned runtime handoff payloads or folded string expressions.
+
+### One finalization decision
+
+Replace `try_fold_template_to_string`, `TemplateFinalizationFoldDisposition` and `TemplateFinalizationFoldResult` with one finalization owner, provisionally `template_value_finalization.rs`.
+
+Call-site policy:
+
+- ordinary AST template expression: prepare in `Value` mode, then fold or materialise runtime handoff
+- module constant: prepare in `ConstRequired` mode, then fold or emit the existing non-foldable-const diagnostic
+- top-level const fragment, `$doc` and Beandown content: `ConstRequired`
+- slot inserts, slot definitions and loop-control helpers: consumed or rejected by their composition owner before the final value boundary
+
+Module-constant and AST-expression paths share preparation and folding. They differ only in whether a runtime result is valid and which established diagnostic owns rejection.
+
+### Exact cache semantics
+
+Adapt the existing `TirFoldCache` rather than adding another cache layer.
+
+A fold key includes:
+
+```text
+TirViewIdentity + const-loop limit + empty-binding proof
+```
+
+Binding-sensitive folds remain uncached unless a stable binding key is introduced deliberately.
+
+Cache lookup happens only after preparation identity has been checked. A cache hit must never hide malformed authority or a runtime disposition.
+
+## Existing systems to reuse
+
+Keep and simplify these systems rather than replacing them:
+
+- `TemplateIrStore` typed arenas and module-wide occurrence counters
+- direct parser TIR construction
+- `TemplateIrSummary` for capacity hints, output-size estimates and conservative cheap facts
+- `TemplateTirPhase`
+- the `TirView` effective-read concept
+- immutable expression, slot-resolution and wrapper-context overlay payloads
+- existing slot schema and loose-fill routing
+- wrapper-set reuse and equivalence checks
+- `TirCopyState` only where a real derived tree needs copied nodes or fresh occurrence IDs
+- existing owned runtime handoff types and handoff walker
+- `TirFoldCache`, with the corrected key
+- the expression-payload walker for nested AST expressions
+- output-size reservation and fold counters
+
+Do not keep an old owner merely because its implementation can be reused. Move useful logic into the final owner and delete the obsolete surface.
+
+## Module ownership map
+
+Expected final owners:
+
+```text
+ast/templates/
+  template.rs                 shared template vocabulary and thin Template
+  template_folding.rs         fold context, bindings and TemplateEmission
+  runtime_handoff.rs          neutral owned handoff vocabulary
+  reactive_template_metadata.rs
+
+ast/templates/tir/
+  mod.rs                      concise module map and contracts
+  ids.rs                      module-local typed IDs
+  refs.rs                     durable, child and wrapper references
+  store.rs                    all TIR arenas, overlays and side tables
+  overlays.rs                 overlay payloads and TemplateViewContext
+  view.rs                     identity, effective reads and transitions
+  preparation.rs              sole semantic preparation owner
+  fold.rs                     prepared constant folding
+  handoff_materialization.rs  prepared runtime materialisation
+  formatter_view.rs           formatter read/write boundary
+  render_unit.rs              branch and aggregate derived-root construction
+  wrapper_sets.rs             wrapper-set storage policy
+  slot_composition/           slot schema, routing and composition
+```
+
+Delete `registry.rs`, `fold_safety.rs` and `foreign_slot_insert_proxy.rs`.
+
+Do not create a generic visitor framework or cosmetic one-type modules. Split a surviving file only when it remains mixed-responsibility or above the style guide's practical ~2000-line target after deletion.
+
+## Execution rules
+
+- Work by final owner, not by old path versus new path.
+- Do not commit forwarding shims, parallel context types or optional compatibility parameters.
+- Mechanical intermediate states may exist only inside one uncheckpointed slice.
+- Delete tests tied only to an owner in the same slice that deletes the owner.
+- Preserve the `069a29acb` semantic regressions until their final owner has equivalent coverage.
+- Do not add new cross-product tests while temporary 3E3c2e coverage already proves the case.
+- Keep each phase net-negative in production TIR lines. Temporary growth inside a slice must be removed before its checkpoint.
+- Keep functions under roughly 200 lines and files under roughly 2000 lines where practical.
+- Preserve unrelated user-owned changes.
+
+### Common code gate
+
+Every code-bearing checkpoint runs:
+
+```bash
+cargo fmt
+# focused tests for the changed owners
+just validate
+```
+
+`just validate` already includes cross-target Clippy, unit tests, integration tests, docs checking and non-recording `bench-check`. Do not record a separate final `bench-check` as additional validation.
 
 ## Remaining implementation
 
-### Phase 1 — Delete the test-only content bridge
+### Phase R0 - Lock the ownership boundary
 
-#### Goal
+#### R0A - Production inventory
 
-Remove all detached-content reconstruction and representation-shaped tests without weakening behavior coverage.
-
-#### Slice 1A - Inventory and classify
-
-- [x] Run focused greps for:
-  - [x] `TemplateContent`
-  - [x] `TemplateAtom`
-  - [x] `TemplateSegment` construction
-  - [x] `finalized_template_tir_id`
-  - [x] `build_finalized_tir_root_from_content`
-  - [x] `build_finalized_tir_root_with_control_flow`
-  - [x] `TemplateTirSyncMissReason`
-  - [x] `ChildMaterializationContext`
-  - [x] `classify_materialized_current_tir_template` in tests
-- [x] Group every hit by final owner and distinct invariant:
-  - [x] parser/create-template fixtures
-  - [x] view/classification/remap fixtures
-  - [x] slot/wrapper/control-flow fixtures
-  - [x] folding/finalization fixtures
-  - [x] HIR handoff fixtures
-- [x] For each family, record one decision in the working notes: delete as redundant, rewrite through direct TIR construction, or move the unique assertion to the final owner.
-- [x] Do not create a shared replacement fixture merely to preserve old test ergonomics.
-
-Phase 1A inventory decisions:
-
-- Rewrite parser TIR, AST normalization, HIR lowering, head validation and doc-fragment fixtures through direct registry-qualified TIR construction.
-- Rewrite or remove their shared control-flow body helper only after its parser, HIR and head-validation callers migrate.
-- Delete reactive metadata stale-content assertions. Keep their direct TIR subscription-discovery coverage.
-- Delete the vacuous wrapper content-node counter. Replace it with a TIR invariant only if the owning test lacks effective structural coverage.
-- Replace the static-fragment helper's content walk with an effective TIR view or folded-output assertion.
-- Delete the test-only materializer in `tir/finalize_sync.rs` and the detached content types after every caller family has migrated.
-- Process independent families first. The reactive metadata family is smallest, followed by wrapper counting, static fragments and doc fragments. The shared control-flow helper and bridge owner remain terminal.
-
-#### Slice 1B — Remove one connected family per commit
-
-For the selected family:
-
-- [x] Compare its assertions with current parser-builder, `TirView`, fold, validation, and integration coverage.
-- [x] Delete representation/layout assertions that are not semantic invariants.
-- [x] Rebuild only genuinely unique internal invariants with direct TIR builders and registry-qualified refs.
-- [x] Prefer an existing integration case when output or diagnostics can prove the behavior.
-- [x] Remove one-caller helpers with the family.
-- [x] Run the family’s focused suite, template/TIR tests, and `just validate`.
-
-Repeat Slice 1B until only the bridge owner remains.
-
-Completed Phase 1B families:
-
-- Reactive metadata tests now protect formatted-root discovery, Parsed-phase gating and expression-overlay resolution directly through TIR. Obsolete stale-content setup and imports were removed.
-- The docs-style wrapper stress test now measures a nonzero, bounded same-store TIR node count at Composed-or-later phase. Its vacuous compatibility-content walker was deleted.
-- Static control-flow body text tests now traverse nested template child references through same-store TIR. Their detached `TemplateAtom` walker was deleted.
-- Doc-fragment folding now uses a directly constructed formatted TIR fixture. The redundant stale-content precedence test was deleted.
-- Const-required option-capture fixtures now build their branch-chain roots directly in the module TIR store. Their one-caller content materializer and finalizer helpers were deleted.
-- Runtime-template HIR expression and Float tests now construct neutral owned handoff payloads directly. Their detached-content/TIR materializer fixture layer and two newly dead shared materializers were deleted.
-- Raw HIR module-constant invariant fixtures now contain only the malformed raw Template shape required by the rejection path. Irrelevant literal content setup was deleted.
-- AST normalization tests now construct registered TIR directly. Detached-content precedence cases and their finalized-content bridge helpers were deleted.
-- Parser-created stale-content parity tests were deleted. Retained parser tests now name final TIR phase, root reuse, formatter output and root-shape invariants.
-- Manual body-dynamic and reactive formatter fixtures now construct direct registered TIR and assert preserved reactive payloads. Obsolete nested-template conversion fixtures were deleted.
-- Parser `$doc` and empty named-insert formatter fixtures now use real source parsing. Impossible explicit-formatter slot-definition coverage, tautological note/todo coverage and their detached-content attachment helper were deleted.
-- Parser tests no longer call `finalized_template_tir_id` or assert detached-content absence. Bridge-only template-ID reuse fixtures were deleted while final phase, output and root-shape owners remain.
-- Create-template tests no longer assert that obsolete detached content is empty. Their final TIR head, body and control-flow assertions remain the behavior owners.
-- Const-eval, type-resolution, field-member and expression-dispatch registry fixtures now construct store-qualified slot templates without stale runtime content. Their distinct foreign-store and module-registry classification assertions remain.
-- Const-required head and template-folding fixtures now use direct store-qualified TIR without detached payload content. Same-store active-borrow, foreign-store registry and no-substitution borrowing remain distinct test owners.
-- The obsolete control-flow body-ref helper was deleted after proving it only walked detached content and never installed TIR. Its parser-created callers already own authoritative body roots.
-
-#### Slice 1C — Delete the bridge owner
-
-- [x] Delete `Template.content`.
-- [x] Delete `TemplateContent`, `TemplateAtom`, and test-only `TemplateSegment`.
-- [x] Delete `finalized_template_tir_id`.
-- [x] Delete content-to-TIR builders and materialization-only enums/contexts from `tir/finalize_sync.rs`.
-- [x] Delete test-only re-exports and imports in `tir/mod.rs`.
-- [x] Remove obsolete counters, comments, and `#[cfg(test)]` branches that existed only for detached content.
-- [x] Rename or dissolve `finalize_sync.rs` so its remaining production owner is explicit.
-- [x] Confirm no test constructs old template authority for convenience.
-
-#### Phase 1 acceptance
-
-- [x] No `TemplateContent`, `TemplateAtom`, finalized-content bridge, or detached materializer remains anywhere under `src/compiler_frontend`.
-- [x] Tests assert final behavior or final TIR invariants.
-- [x] `just validate` passes.
-- [x] `just bench-check` is unchanged or improved; no compatibility path is restored for timing.
-
----
-
-### Phase 2 — Thin `Template` and remove duplicate semantic state
-
-#### Goal
-
-Separate parser-local mutable state from the durable handle and make TIR the sole owner of style, control-flow structure, wrapper context, and phase.
-
-#### Slice 2A — Introduce explicit parser-local state
-
-- [x] Reuse `TemplateConstructionContext` as the TIR/store/registry/location owner.
-- [x] Add one small parser-local `TemplateBuildState` (or equivalent) for `kind`, `style`, direct-child wrapper refs, foldability, and control-flow parse metadata.
-- [x] Audit the parse-time `can_fold` boolean against final effective-TIR classification. Delete it if classification already owns the complete decision; otherwise keep it parser-local and document the exact non-derivable fact it carries.
-- [x] Change head/body parser requests to receive build state instead of `&mut Template`.
-- [x] Remove `Template::empty()` as the parser accumulator.
-- [x] Make construction finish return a non-optional `TemplateTirReference`; missing builder output is an internal invariant.
-- [x] Construct the durable `Template` only after the authoritative reference exists.
-
-#### Slice 2B — Remove duplicate control-flow objects
-
-TIR `BranchChain`, `Loop`, and `LoopControl` nodes already own selectors/headers/body roots.
-
-- [x] Make render-unit preparation operate on parser TIR node IDs/body refs and parse-local scratch directly.
-- [x] Replace `TemplateControlFlowBodyScratch` with the smallest explicit parser result needed by preparation, or delete it if the authoritative control-flow node/body refs already provide the same information.
-- [x] Remove `Template.control_flow` and the take/restore borrow workaround in `prepare_control_flow_render_units`.
-- [x] Delete duplicate durable structs:
-  - [x] `TemplateControlFlow`
-  - [x] `TemplateBranchChain`
-  - [x] `TemplateConditionalBranch`
-  - [x] `TemplateFallbackBranch`
-  - [x] `TemplateLoopControlFlow`
-- [x] Replace `TemplateControlFlowTirReference` with `TemplateTirBodyReference` or direct TIR node/view identity; do not keep a wrapper that only forwards methods.
-- [x] Keep shared semantic selector/header/loop-control types only where parser, TIR, fold, and HIR handoff genuinely share them.
-- [x] Replace `template_contains_control_flow` dual checks with TIR summary/view classification only.
-- [x] Remove body “sync/refreshed/previous-ref” fallback logic. Prepared body roots are required results.
-- [x] Delete `suppress_formatter_summary_on_finish`; preparation must return/install an explicit formatted root and phase rather than mutating a builder-side lifecycle flag.
-
-Phase 2B2 checkpoint: normalization, reactive annotation and owned runtime handoff now read selectors, headers, bodies and aggregate wrappers from one root `TirView`. One root expression overlay preserves earlier effective root and same-store child expressions. `TirSubtreeView`, per-body overlay storage and node-level handoff materialization are deleted.
-
-Phase 2B3 checkpoint: control-flow structure now exists only in TIR. The obsolete body-reference layer and unreachable AST/TIR remap graph are deleted, with real build-boundary remapping retained at headers, diagnostics, parsed types, `TypeEnvironment` and HIR.
-
-#### Slice 2C — Remove style and wrapper duplication
-
-- [x] Keep effective style on `TemplateIr`; keep mutable parse-time style on `TemplateBuildState`.
-- [x] Remove `Template.style`, `apply_style`, and `apply_style_updates`.
-- [x] Normalize `$children(..)` arguments at the directive boundary and carry refs through parse-local state.
-- [x] Attach final wrapper context through the existing wrapper-set/overlay owner.
-- [x] Remove `Template.child_wrappers`.
-- [x] Ensure folding, formatting, classification, and handoff read style/wrappers from the effective TIR view, never from the durable handle.
-
-Phase 2C checkpoint: mutable style and wrapper references now end with parser-local build state. Durable templates carry neither, effective reads use TIR views and wrapper application remains registry-owned through canonical wrapper sets and context overlays.
-
-#### Slice 2D — Simplify final references and classification markers
-
-- [x] Make `Template.tir_reference` non-optional.
-- [x] Delete `TemplateTirReference::is_composed`; use `phase.is_at_least(Composed)`.
-- [x] Delete `TemplateIrSummary::has_formatter` if it is only pending-lifecycle state; derive pending formatting from effective style + reference phase.
-- [x] Replace optional/missing-reference branches with explicit construction invariants.
-- [x] Audit `store_owner` after detached tests are gone:
-  - [x] retain it because registry-local store IDs can collide and direct-store consumers cannot always re-borrow the registry
-  - [x] remove the obsolete detached-snapshot helper/test and keep one focused cross-registry collision invariant
-- [x] Audit `Template.kind`:
-  - [x] confirm it cannot move fully into TIR because foreign parser/head and store-less coercion boundaries do not always hold the originating registry
-  - [x] keep it as a documented cached marker with one synchronization owner and focused consistency checks against `TemplateIr.kind`
-- [x] Audit `Template.id`; remove it if it is debug-only and derivable from existing identity.
-- [x] Remove obsolete convenience methods such as `tir_template_id`, `tir_root_node_id`, or `tir_store_owner` when direct reference access is clearer.
-- [x] Audit the repeated registry + store handle + store-ID triple. Consolidate it only if one registered-store context removes identity duplication and debug assertions without forcing every parser write through registry lookup.
-
-Phase 2D1a checkpoint: durable templates always carry authoritative TIR identity. Missing-reference production branches, empty handles and detached no-authority fixtures are deleted, while phase, registry and store-mismatch outcomes remain explicit.
-
-Phase 2D1b1 checkpoint: `TemplateTirPhase` is the sole composed-lifecycle authority. Head-chain and wrapper-overlay composition advance Parsed roots without downgrading later phases, formatted-root installation stays Formatted and slot-insert diagnostics use the same Composed-or-later contract.
-
-Phase 2D1b2 checkpoint: formatter lifecycle is derived from effective style plus reference phase, not shape summary. Child-template formatting uses the child's exact phase and overlay. Bare local insert IDs rely on the verified invariant that formatter-bearing helpers are formatted before recording; default-style foreign proxies preserve the existing whitespace path.
-
-Phase 2D2 checkpoint: the logical store-origin token remains required. Registry-local store IDs can collide across module registries, while several production consumers hold a direct store borrow and must reject a foreign local ID without re-borrowing the registry. The unused detached-snapshot helper/test are deleted and one two-registry collision test owns the invariant.
-
-Phase 2D3 checkpoint: `Template.kind` remains a narrow boundary cache because proven foreign parser/head paths can lack the originating registry. `TemplateIr.kind` is authoritative wherever a store, registry or view exists, one synchronization method updates TIR before the cache and focused tests protect construction consistency plus cross-registry identity.
-
-Phase 2D4 checkpoint: the generated parser `Template.id` had no production reader, so durable and parser-local ID state, its head-parser assignment, all fixture fields and the now-unused `BS_VAR_PREFIX` constant are deleted without replacement. Store-qualified TIR identity remains the only template identity.
-
-Phase 2D5 checkpoint: trivial `Template` forwarding methods for the TIR template ID and store-owner token are deleted. Callers now read the authoritative reference fields directly, owner comparisons avoid an unnecessary `Arc` clone and store/kind accessors that enforce real boundaries remain.
-
-Phase 2D6 checkpoint: `RegisteredTemplateIrStore` now couples the registry, registry-level store ID and exact direct store handle for all four production carriers. Checked existing-store construction rejects missing IDs and same-ID foreign handles, parser writes still borrow the direct handle and the repeated debug pointer assertion is deleted.
-
-#### Slice 2E — Remove the HIR raw-template shim
-
-- [x] Delete HIR's `Template` import and `lower_runtime_template_expression(&Template, ...)` invariant shim.
-- [x] Keep raw `ExpressionKind::Template` rejection at the AST/HIR normalization boundary or in the HIR dispatcher without a Template-specific lowering API.
-- [x] Update stale "cutover" and "legacy" comments on runtime handoff variants.
-- [x] Confirm HIR lowers owned runtime handoffs only.
-
-Phase 2E checkpoint: raw templates now fail directly at the HIR expression dispatcher. HIR imports no `Template` type and runtime lowering accepts only neutral owned template or slot-application handoffs. A narrow malformed-expression fixture preserves dispatcher and module-constant invariant coverage without placing TIR construction under HIR.
-
-#### Phase 2 acceptance
-
-- [x] Durable `Template` has no content, control-flow, style, wrapper, or parser-state fields.
-- [x] TIR phase is the only composed/formatted/finalized status.
-- [x] HIR imports no `Template` type.
-- [x] Parser diagnostics and all template integration outputs are unchanged.
-- [x] `just validate` and `just bench-check` pass.
-
----
-
-### Phase 3 — Consolidate final TIR owners and remove migration noise
-
-#### Goal
-
-Use existing final systems consistently, delete duplicate walkers/state, and make remaining hot paths explicit without starting a broad formatter rewrite.
-
-#### Slice 3A — One classification/read path
-
-- [x] Make `TirView` the production classification input.
-- [x] Rename `MaterializedTirTemplateClassification` to `TirTemplateClassification`.
-- [x] Replace `classify_materialized_current_tir_template` and other “current/materialized/fresh” entry points with one effective-view classifier.
-- [x] Keep raw store recursion private to the view/classification owner only where required.
-- [x] Reuse the existing registry-aware expression-payload walker for nested template/expression inspection; delete ad hoc recursion in head parsing, finalization, and helper filters when semantics match.
-- [x] Preserve exact root + phase + overlay cycle identity.
-
-Phase 3A1 checkpoint: full-template classification now has one effective-view entry and one neutral result type. Create-template classification carries the authoritative reference identity, effective slot policy distinguishes resolved sources from uncovered slots, standalone structural predicates retain their narrow owners and expression overlays have a focused Finalized-phase invariant test.
-
-Phase 3A2 checkpoint: nested expression and effective-view predicate traversal now has one TIR owner and one exact root, phase and overlay visited set. Template-head runtime-slot detection delegates to it with conservative failures, while normalization's site-keyed collection and reactive annotation's environment-aware traversal remain separate because they carry distinct state and mutation policy.
-
-#### Slice 3B — Make render-unit and overlay failures explicit
-
-- [x] Rename `try_sync_*`, `body_sync_*`, `refreshed_*`, and similar migration names to final `prepare_*`/`prepared_*` terminology.
-- [ ] Convert required `Option` returns and `.ok()?` chains to `Result`.
-- [x] Do not fall back to a previous body root after a preparation error.
-- [x] Move wrapper-context overlay collection out of `create_template_node.rs` into the existing TIR wrapper/overlay owner.
-- [x] Make that traversal registry-aware and reuse existing wrapper-set canonicalization.
-- [x] Propagate missing-node, missing-store, and overlay-compose failures as internal errors; do not silently return or ignore `Err`.
-- [ ] Remove local recursive walkers that duplicate `tir/slot_composition`, `tir/render_unit`, or `TirView`.
-
-Phase 3B1 checkpoint: wrapper-context construction now belongs to the TIR wrapper-set owner. The pass resolves same-store and foreign child metadata without re-entering the current store, validates exact root and overlay authority before allocation, reuses one canonical inherited wrapper set and reports missing authority or composition failures instead of silently skipping them.
-
-Phase 3B2 checkpoint: linear formatter installation rejects wrong-store authority, and runtime control-flow artifact validation now has one required registry-backed effective-view path. Nested children retain exact root, phase and overlay identity, malformed stores/templates/nodes/overlays fail explicitly, and the raw same-store validator plus redundant pre-pass are deleted.
-
-Phase 3B3 checkpoint: final type and debug TypeId validation require one Finalized effective view with exact direct-store and registry-store ownership. Insert contributions preserve inherited phase and overlay identity, while the tri-state authority attempt, raw same-store expression walker and its adapters are deleted.
-
-Phase 3B4 checkpoint: const-required control-flow validation propagates missing effective authority through the compiler-error diagnostic lane. Runtime and const traversal share an exact root, phase and overlay active-cycle key, and recursive overlay coverage protects distinct effective identities.
-
-Phase 3B5 checkpoint: AST normalization now has one required Finalized effective-view HIR handoff path. Ordinary runtime handoffs and missing template/store authority are required results, exact registered-store ownership rejects matching local IDs from foreign registries and only genuine runtime slot-plan absence remains optional.
-
-Phase 3B6 checkpoint: view-backed fold-context handoff materialization requires a registry and validates registry-view ownership. The folded-child text shortcut propagates malformed overlay-set authority failures for `Composed`-or-later children while preserving the `Parsed`-phase shortcut-unavailable fallthrough for both same-store and cross-store child references. The `materialize_folded_child_text` handoff path preserves genuine shortcut-unavailable states as structural runtime handoff fallback. A pre-existing `module_inception` Clippy blocker from the package naming migration was fixed by renaming `builder_surface::builder_surface` to `builder_surface::definition`.
-
-#### Slice 3C — Consolidate TIR summary construction
-
-- [x] Audit duplicated manual updates to `TemplateIrSummary` in parser builder, subtree copy/materialization, derived wrapper construction, and summary walking.
-- [x] Introduce one narrow summary accumulator in `tir/summary.rs` only where update semantics are identical.
-- [x] Split runtime slot-site cursor state from summary accumulation if they have different callers.
-- [x] Rename `CurrentStateMaterializationSummary` and `record_materialization_counters` to final TIR construction/copy terminology, or delete them if the shared accumulator replaces them.
-- [x] Preserve existing text-byte, node-count, depth, slot, control-flow, and reactivity facts. Keep formatter presence as style data; do not preserve a redundant formatter-pending lifecycle bit.
-
-Phase 3C checkpoint: identical incremental updates now belong to `TemplateIrSummary`, while `TirCopyState` composes summary facts, depth and a separate runtime slot-site cursor for recursive copy passes. Derived render-unit, fill and conditional-wrapper templates summarize their final TIR nodes through the existing summary walker, preserving side-table reactivity and nested body facts without a parallel counter path.
-
-#### Slice 3D — Bounded clone/allocation audit
-
-- [x] In `tir/formatter_view.rs`, remove whole `TemplateIrNode` / `TemplateIrNodeKind` clones used only for eligibility, discriminant checks, or anchor classification.
-- [x] Derive cheap facts while the effective node is borrowed; snapshot only IDs, locations, subscriptions, and anchor kind needed after the borrow ends.
-- [x] Apply the same rule to wrapper-context collection and other final TIR walkers.
-- [x] Measure repeated effective-node reads in formatter-run preparation.
-- [x] Add a transient `FormatterRunInput` (or equivalent) only if it removes duplicate reads without becoming a second render plan.
-- [x] Do not change `$md` grammar, per-character atom representation, link/code parsing, or list rendering in this slice.
-- [x] Run `just bench-check` and retain only neutral/improved changes.
-
-Phase 3D checkpoint: formatter traversal now snapshots only child IDs, references and source locations when a view borrow must end before writeback. Run eligibility and opaque classification reuse the active node borrow, representative locations use one pass and wrapper-context traversal recurses over borrowed structural nodes without transient child-vector clones. No second render plan was needed.
-
-#### Slice 3E — Final module/API ownership
-
-- [ ] Re-evaluate final owners after deletion:
-  - [x] `tir/finalize_sync.rs`
-  - [x] `tir/construction.rs`
-  - [x] `template_render_units.rs`
-  - [x] `template_folding.rs`
-  - [x] `template_control_flow/**`
-  - [x] `template_slots/**`
-  - [x] `template.rs` / `template_types.rs`
-- [ ] Delete files whose remaining contents are test-only or forwarding-only.
-- [ ] Rename files whose names describe migration rather than final responsibility.
-- [ ] Keep a thin facade only where it marks a real AST substage boundary.
-- [ ] Move surviving neutral vocabulary into the narrowest coherent owner; do not over-split into one-type files.
-- [ ] Replace redundant long argument lists with one named context only when the same values travel together across several functions.
-- [ ] Remove stale `#[allow(dead_code)]`, “legacy”, “mirror”, “current-state”, “sync”, and future-cutover comments.
-- [ ] Update `templates/mod.rs` and `tir/mod.rs` to describe the final module map.
-
-Slice 3E1 checkpoint: the durable `Template`, its cached-kind synchronization and its store/registry reads now live with the final shared template vocabulary in `template.rs`. The one-type `template_types.rs` owner and all direct import paths are deleted without a forwarding module. Source comments now keep the handle AST-local and name parser/TIR wrapper ownership accurately.
-
-Slice 3E2a checkpoint: recursive TIR copy-pass state, runtime slot-site cursor state and copy instrumentation now live in `tir/copy_state.rs`. The vague `tir/construction.rs` name, its stale atom/materialization wording and every old private import are deleted without changing copy algorithms or counters.
-
-Slice 3E2b1 checkpoint: formatter, wrapper normalization and render-unit preparation now propagate missing root, overlay, store, template and node authority through explicit internal errors. Body and loop helpers require sequence roots, foreign child conversion requires registry-backed kind ownership and focused malformed-store tests protect the final error boundaries without changing valid template output.
-
-Slice 3E2b2 checkpoint: runtime slot-site planning now distinguishes missing nodes from present non-slots and missing same-store child templates from foreign references. Required authority fails in the runtime-plan owner, semantic optionality remains explicit and focused subsystem tests protect the store-local and subtree-copy boundaries without changing valid slot routing.
-
-Slice 3E3a checkpoint: malformed-store validation now lives with its focused TIR tests. The production `validation` submodule and module-map entries are deleted, while all 27 invariant tests retain the same checker and diagnostics.
-
-Slice 3E3b1 checkpoint: HIR template normalization now carries a required module TIR registry. Every production and focused context supplies the authority directly, and registry-absence branches no longer skip overlay normalization, classification, folding, metadata, handoff or kind reads.
-
-Slice 3E3b2 checkpoint: post-normalization reactive metadata now requires a Finalized registry-backed view. Exact child view identity selects the owning store for slot-plan traversal, semantic expression-override absence still uses the stored payload, and malformed store, root, node, overlay, plan or site authority propagates as an internal compiler error instead of downgrading to raw-store reads.
-
-Slice 3E3c1 checkpoint: reactive annotation, flow refresh and raw structural metadata traversal now propagate same-store root, overlay, node, slot-plan, slot-site and resolver failures through the AST finalizer. Below-Composed and foreign-store templates remain semantic non-participants, while the flow-aware collector and effective-view paths keep their distinct state and owned runtime handoffs use one fallible canonical walker.
-
-Slice 3E3c2a checkpoint: contribution-shape classification, loose-content routing, control-flow detection and wrapper-set composition now propagate missing node, same-store template and wrapper-set authority through the internal compiler diagnostic lane. Foreign child references, absent optional wrapper fields and genuinely empty combined wrapper sets remain semantic outcomes, with focused malformed-store coverage at the classification and slot-composition owners.
-
-Slice 3E3c2b checkpoint: effective unresolved-slot, resolved-slot and escaped-insert classification now propagates missing node and required same-store child or insert-template authority through `TemplateError`. Runtime slot-site planning carries the strict result through `TemplateSlotError`, while foreign references, cycle re-entry, uncovered slots, present no-slot wrappers and named-only wrapper routing remain semantic outcomes.
-
-Slice 3E3c2c checkpoint: fold-safety gates now distinguish malformed TIR authority from valid non-foldable shapes through `Result`. Wrong supplied-store identity and missing root, node, overlay dimension, wrapper-set or required same-store child authority propagate through finalization and HIR handoff, including non-empty child overlays, while runtime-slot, reactive, cross-store, cycle and unsupported-wrapper shapes remain semantic fallbacks.
-
-Slice 3E3c2d checkpoint: wrapper loose-fill selection now belongs to one typed slot-schema traversal and always chooses the smallest positional target before default. Fold, runtime-site planning and owned HIR handoff share that policy, while canonical handoff injection reaches branches, loop aggregates and same-store children, preserves foreign opacity and activates each wrapper's exact validated overlay identity. Missing current-store authority remains an internal error and obsolete schema `StringTable` plumbing is deleted.
-
-#### Phase 3 acceptance
-
-- [ ] `TirView` is the single production effective-read path.
-- [ ] No silent preparation fallback or ignored overlay error remains.
-- [ ] No classification-only deep clone remains in the formatter adapter.
-- [ ] Module names and comments describe final ownership.
-- [ ] `just validate` and `just bench-check` pass.
-
----
-
-### Phase 4 — Final behavior and invariant test ownership
-
-#### Goal
-
-Finish with a smaller test suite that protects observable behavior and real TIR invariants, not deleted representation.
-
-#### Tasks
-
-- [ ] Confirm one primary integration owner for:
-  - [ ] `$md` formatting
-  - [ ] Beandown implicit `$md`
-  - [ ] child-template opacity and dynamic anchors
-  - [ ] default/named/positional slots and missing-slot empty output
-  - [ ] `$insert(...)` routing and diagnostics
-  - [ ] repeated slot replay
-  - [ ] `$children(...)`, `$fresh`, wrapper ordering, and no leakage
-  - [ ] template `if` / `loop`, no-output, and output before break/continue
-  - [ ] runtime slot applications inside control flow
-  - [ ] reactive subscriptions
-  - [ ] top-level const/runtime page fragments
-  - [ ] malformed template diagnostics
-- [ ] Retain focused TIR tests only for hidden facts: store/phase/overlay identity, cycle keys, wrapper-set reuse/equivalence, occurrence IDs, and malformed-store invariants.
-- [ ] Remove duplicate parity tests, broad shared test helpers, and exact incidental sequence/vector layout assertions.
-- [ ] Move tests with renamed owners.
-- [ ] Confirm integration output and diagnostic codes did not change.
-
-#### Phase 4 acceptance
-
-- [ ] Tests have no old-authority terminology or fixtures.
-- [ ] Behavior coverage is at least as strong as before deletion.
-- [ ] `just validate` passes.
-- [ ] `just bench-check` passes if test/fixture changes touch benchmark inputs; otherwise do not record benchmark history.
-
----
-
-### Phase 5 — Final documentation and post-TIR roadmap handoff
-
-#### Goal
-
-Describe only the final TIR system and transfer non-closure feature/performance work into explicit follow-ups.
-
-#### Final architecture docs
-
-- [ ] Re-verify `docs/compiler-design-overview.md`, `templates/mod.rs`, and `tir/mod.rs`:
-  - [ ] TIR is AST-local and registry-owned.
-  - [ ] `Template` matches its actual thin final shape.
-  - [ ] classification, formatting, folding, wrappers, slots, and handoff read effective TIR.
-  - [ ] HIR receives owned handoff data only.
-  - [ ] no migration/fallback wording remains.
-- [ ] Keep the progress matrix behavior-focused; do not add rows for internal micro-optimizations.
-- [ ] Close/delete the stale sibling `template-optimisation-and-tir-implementation-plan.md` and remove stale roadmap references to it.
-
-#### Post-TIR `$md` feature and performance follow-up
-
-Record a dedicated roadmap item or new plan with the following accepted scope. Do not implement it during TIR closure.
-
-##### Horizontal-rule behavior
-
-- Three or more contiguous ASCII `-` characters on their own logical line.
-- Leading/trailing spaces and tabs are allowed; a terminal `\r` from CRLF is ignored. Internal whitespace is not allowed.
-- Any non-whitespace non-dash atom or opaque anchor rejects the rule candidate.
-- `- - -` remains list/plain syntax, not a rule.
-- Emit exactly `<hr>`.
-- A rule is an immediate paragraph and list boundary; no surrounding blank line is required.
-- Near misses remain literal content with no diagnostic.
-- Do not add Setext headings, `***`, `___`, Unicode dashes, or general CommonMark behavior.
-- Primary behavior coverage: standalone and indented rules, longer runs, paragraph/list boundaries, near misses, opaque anchors, inline-code literals, explicit `$md`, runtime/const paths, and Beandown implicit `$md`.
-
-##### `$md` allocation/algorithm follow-up
-
-Profile before broad rewrites, then evaluate:
-
-- borrowed heading/list/link/inline-code parse spans instead of owned vectors/strings
-- slice-returning trim helpers
-- direct rendering into one `MarkdownOutputBuilder`
-- streaming list rendering without retained rendered-item vectors
-- UTF-8 iterator/byte-index whitespace normalization instead of temporary `Vec<char>`
-- resolved formatter-text transport that avoids intermediate `StringTable` intern/resolve cycles
-- coalesced UTF-8 text spans instead of one `MarkdownInlineAtom::Char` per scalar
-- a single-pass or cursor-based inline parser only if malformed-candidate profiling justifies it
-
-Keep source-span-backed TIR text and `$md`’s internal text-span representation as separate design questions.
-
-##### Other deferred template performance work
-
-Retain the existing post-TIR roadmap scope without implementing it here:
-
-- source-span-backed body text instead of eager source-text interning
-- per-template parse and formatter-output caches
-- dev-mode source-hash keyed TIR reuse and dependency-aware invalidation
-- incremental module/template compilation after module-boundary incremental infrastructure exists
-- profiling-backed parallel nested-template folding
-- backend-neutral runtime string-build lowering (`StringBuild` / `StringAppend`)
-- generated scaling cases for wrapper depth, slot replay, directive mix, control flow, reactivity, interpolation chunk count, and custom `$md` volume
-
-##### Benchmark follow-up
-
-Add a dedicated `$md` workload distinct from plain `.md` asset rendering:
-
-- long paragraphs and many short lines
-- headings and nested mixed lists
-- valid links and inline-code spans
-- malformed link/backtick candidates
-- child-template and dynamic-expression anchors
-- Unicode-heavy content
-- horizontal rules and near misses after the feature lands
-
-Do not treat `pulldown-cmark` `.md` asset cases as evidence for the custom `$md` formatter.
-
-#### Phase 5 acceptance
-
-- [ ] Docs describe final code, not intended-but-unlanded migration state.
-- [ ] Roadmap contains the explicit `$md` follow-up and other deferred template performance items.
-- [ ] Horizontal rules remain outside this TIR closure.
-- [ ] Run the documentation-only release-build gate if this phase changes docs only; otherwise run `just validate`.
-
----
-
-### Phase 6 — Final closure
-
-#### Hard grep gates
-
-Production and test hits must be zero unless explicitly justified as final vocabulary.
-
-```bash
-rg "TemplateContent|TemplateAtom|build_finalized_tir_root_from_content|finalized_template_tir_id|TemplateTirSyncMissReason|ChildMaterializationContext" src/compiler_frontend
-rg "current_state|CurrentStateMaterialization|classify_materialized_current_tir|fresh_tir_root|mirror_skipped|ContentMirror|FormattedTir" src/compiler_frontend/ast/templates
-rg "is_composed|control_flow: Option<TemplateControlFlow>|child_wrappers: Vec<TemplateWrapperReference>|pub style: Style" src/compiler_frontend/ast/templates
-rg "legacy|fallback path|compatibility mirror|content mirror|current-state|try_sync_|body_sync" src/compiler_frontend/ast/templates
-rg "TemplateRenderPlan|RenderPiece|render_plan" src/compiler_frontend/ast/templates
-rg "template_types::Template" src/compiler_frontend/hir src/backends
-rg "TemplateIrRegistry|TirView|TemplateRef|TemplateNodeRef|TemplateOverlaySet|TemplateIrStore" src/compiler_frontend/hir src/backends
-```
-
-Allowed final hits:
-
-- neutral names such as `TemplateType`, `TemplateFormatter`, `TemplateTirReference`, `TemplateSegmentOrigin`, and owned runtime handoff types
-- documentation that explicitly describes deferred follow-up work
-- a narrowly justified store-owner field if Phase 2 proves it remains required
-
-#### Validation and evidence
-
-- [ ] Run `cargo fmt`.
-- [ ] Run all hard grep gates and inspect every allowed hit.
-- [ ] Run `just validate`.
-- [ ] Run five independent recorded `just bench` invocations.
-- [ ] Run `just bench-report`.
-- [ ] Record a concise benchmark summary under `benchmarks/summaries/`.
-- [ ] Include `check docs`, template stress/churn, Beandown or custom `$md` coverage where present, and slot/directive-heavy cases.
-- [ ] If Phase 3 changed `tir/formatter_view.rs`, also run one fixed targeted `$md`/Beandown workload. Do not change the tracked comparison suite midway through the before/after series.
-- [ ] Confirm no production old authority, TIR leak, raw HIR template path, or duplicate semantic state remains.
-- [ ] Confirm user-visible output and diagnostics are behavior-preserving.
-- [ ] Confirm docs and roadmap match the final system.
-- [ ] Delete this plan and close/delete the stale sibling plan.
-
-#### Final acceptance
-
-Accept closure only when:
-
-- [ ] all hard gates pass
-- [ ] `just validate` passes
-- [ ] benchmark evidence is recorded
-- [ ] the durable `Template` is thin and has non-optional authoritative TIR identity
-- [ ] TIR views are the sole effective semantic read path
-- [ ] HIR receives owned handoff payloads only
-- [ ] tests protect behavior/final invariants without compatibility scaffolding
-- [ ] docs describe final TIR only
-
-If timing regresses materially, do not restore old paths. Attribute the regression with counters/profiling and open a separate performance plan.
-
-## Current source anchors
-
-Review these before the relevant phase; do not assume names survive Phase 3:
+Run focused production and test inventories for:
 
 ```text
-src/compiler_frontend/ast/templates/
-├── create_template_node.rs
-├── template.rs
-├── template_render_units.rs
-├── template_control_flow/
-├── template_slots/
-├── formatter_contract.rs
-├── runtime_handoff.rs
-├── styles/markdown/
-└── tir/
-    ├── mod.rs
-    ├── refs.rs
-    ├── registry.rs
-    ├── overlays.rs
-    ├── view.rs
-    ├── parser_builder_state.rs
-    ├── construction_context.rs
-    ├── classification.rs
-    ├── formatter_view.rs
-    ├── render_unit.rs
-    ├── copy_state.rs
-    ├── handoff_materialization.rs
-    ├── slot_composition/
-    └── tests/
-
-src/compiler_frontend/hir/hir_expression/templates/
+TemplateIrRegistry
+RegisteredTemplateIrStore
+allocate_store
+allocate_in
+adopt_store
+store_handle
+TemplateStoreId
+TemplateIrStoreOwner
+TemplateStringDomainId
+foreign_slot_insert_proxy
+TemplateRef
+TemplateOverlaySetId
+expression_overlay_stack
 ```
+
+Classify every hit as:
+
+- required production owner
+- production compatibility or defensive path
+- test-only fixture support
+- obsolete migration architecture
+
+Confirm:
+
+- `AstPhaseContext` allocates one module store
+- every production `ScopeContext` and constant context receives that same handle
+- no completed AST, HIR, backend or compiled module stores raw TIR identity
+- imported constants and source-backed package declarations are rebuilt into the consuming module's AST-local store rather than sharing a foreign TIR store
+
+Record scoped production and test line counts for `src/compiler_frontend/ast/templates/tir` at `c1ecc2c58` and `069a29acb`.
+
+#### R0 acceptance
+
+- No required production second-store owner exists.
+- Any contradiction identifies an exact production path and stops R1 before code changes.
+- The current state block records the accepted ownership decision and next slice.
+
+### Phase R1 - Collapse ownership and references
+
+#### R1A - Require the shared store handle
+
+- Make production `ScopeContext` construction require the module TIR handle.
+- Remove default scratch registry/store allocation from `ScopeContext::new`.
+- Update constant, type, trait, function-signature and body-emission contexts to pass the same handle.
+- Keep test-only isolated store construction in local test helpers, not production constructors.
+
+#### R1B - Merge registry storage into the store
+
+- Move overlay payload vectors and APIs into `TemplateIrStore`.
+- Move overlay dimension allocation and lookup callers to the store.
+- Replace registry/store pairs in contexts with one store handle.
+- Delete `TemplateIrRegistry` and `RegisteredTemplateIrStore` in the same checkpoint.
+- Remove owner-token, store-ID, freeze and string-domain fields and APIs.
+- Remove `Clone` from the full store if no final production owner needs whole-store snapshots. Rewrite tests to build the exact malformed or derived shape they require.
+
+Do not leave a thin registry that forwards to the store.
+
+#### R1C - Make references module-local
+
+- Replace store-qualified roots and side-table refs with typed module-local IDs.
+- Move durable reference types into `refs.rs`.
+- Update wrapper sets, slot-resolution sources, child nodes, caches and diagnostics.
+- Keep source locations for diagnostics rather than formatting store-qualified IDs into messages.
+
+#### R1D - Delete foreign conversion
+
+- Delete `foreign_slot_insert_proxy.rs` and its tests.
+- Delete foreign child, wrapper, slot-source, metadata and fold branches.
+- Make parser template values structural immediately.
+- Simplify `render_unit.rs` so branch and aggregate candidates reuse same-store nodes directly.
+- Remove `runtime_template_expression` conversion from render-unit preparation when it exists only for foreign templates.
+
+#### R1 acceptance
+
+- One shared `TemplateIrStore` is the only TIR owner in production.
+- No store ID, owner token, store vector, foreign proxy or cross-store branch remains.
+- Parser output, integration output and diagnostics are unchanged.
+- Production and test lines are below the `069a29acb` base.
+- Common code gate passes.
+
+### Phase R2 - Make `TirView` complete
+
+#### R2A - Replace overlay sets with value contexts
+
+- Add copyable `TemplateViewContext` containing the three optional overlay IDs.
+- Convert overlay IDs to `NonZeroU32`-backed newtypes so optional dimensions remain compact.
+- Replace `TemplateOverlaySetId` fields on durable, child and wrapper references.
+- Delete overlay-set storage, canonicalization and composition.
+- Make the empty context `TemplateViewContext::default()`.
+
+#### R2B - Build complete expression overlays
+
+- Reuse the existing expression-site normalization collector.
+- Merge structural descendant overrides into each effective root overlay once.
+- Preserve outer-context precedence for reused sites.
+- Assert that all expression overlay entries refer to valid module-global `ExpressionSiteId`s.
+- Keep structural fallback for sites with no override.
+
+#### R2C - Centralize transitions
+
+- Add structural child, wrapper, resolved-source and nested-value methods to `TirView`.
+- Encode `Parsed` versus `Composed` slot/wrapper rules once.
+- Delete every external `expression_overlay_stack`, manual push/pop and current-store comparison.
+- Make cycle and cache identity use `TirViewIdentity`.
+
+Focused invariants:
+
+- a structural child retains the outer complete expression overlay
+- an independently nested template value starts its own expression overlay
+- a `Parsed` structural child ignores premature slot/wrapper context
+- a `Composed` child uses its slot/wrapper context
+- the same root under different view contexts remains cache-distinct
+- reused expression sites obey outer-context precedence
+
+#### R2 acceptance
+
+- `TirViewIdentity` completely determines every effective read.
+- No overlay context exists outside `TirView` or a TIR reference.
+- No overlay-set table or expression stack remains.
+- Common code gate passes.
+
+### Phase R3 - Introduce one preparation pass
+
+#### R3A - Add preparation vocabulary
+
+- Add `TemplatePreparationMode`, `PreparedTemplate`, `PreparedFold`, `PreparedRuntime`, `RuntimeTemplateReason` and `TemplateHelperKind` only where existing types do not already express the state.
+- Keep the result compact and identity-based.
+- Add a cache keyed by exact identity, mode and const-loop limit only if repeated preparation is observed in current callers.
+
+#### R3B - Implement exhaustive preparation
+
+- Traverse through `TirView` transitions.
+- Validate roots, nodes, overlay IDs, wrapper sets, slot plans, render pieces and helper references.
+- Continue validation after runtime dependence is found.
+- Detect cycles by exact view identity.
+- Preserve current const control-flow, slot, wrapper, reactivity and helper semantics.
+- Use existing `TemplateIrSummary` only for safe cheap hints, never as authority.
+- Reuse existing expression and slot-schema helpers rather than adding another expression or slot walker.
+
+#### R3C - Delete replaced owners
+
+- Delete `fold_safety.rs`.
+- Delete fold authority tokens and decisions.
+- Delete immediate full-template classification before folding.
+- Delete redundant full-tree slot, insert and loop-control scans whose facts now come from preparation.
+- Retain earlier parser-stage predicates only when they answer a genuinely earlier question and cannot consume a prepared view.
+
+#### R3 acceptance
+
+- Every effective template produces exactly one foldable, runtime or helper result.
+- Missing required authority is always an internal compiler error.
+- Runtime dependence is ordinary semantics, not a fallback.
+- `fold_safety.rs` and authority tokens are gone.
+- Common code gate passes.
+
+### Phase R4 - Simplify fold, handoff and finalization
+
+#### R4A - One prepared fold path
+
+- Add `fold_prepared_template`.
+- Remove prevalidated, read-only, direct, stack-carrying and foreign fold entries.
+- Remove recursive authority and eligibility checks from `fold.rs`.
+- Route child, wrapper and resolved slot sources through `TirView` methods.
+- Reject runtime slot plans before entering fold dispatch.
+- Remove duplicate active-root cycle stacks after preparation owns cycle rejection.
+
+#### R4B - Exact fold caching
+
+- Adapt `TirFoldCacheKey` to `TirViewIdentity`.
+- Include the const-loop limit and empty-binding proof.
+- Keep binding-dependent folds uncached.
+- Check prepared/view identity before cache lookup.
+
+#### R4C - Prepared runtime handoff
+
+- Make handoff materialization accept `PreparedRuntime` plus the exact view.
+- Remove folded-child shortcuts that bypass preparation or use different transition rules.
+- Keep existing owned runtime handoff types and HIR lowering contracts.
+
+#### R4D - One finalization owner
+
+- Replace the current prepare/classify/fold/disposition sequence with one helper.
+- Migrate AST expressions, module constants, top-level const fragments, `$doc` and Beandown callers to their explicit preparation mode.
+- Delete `TemplateFinalizationFoldDisposition`, `TemplateFinalizationFoldResult` and `try_fold_template_to_string`.
+- Keep module-constant and runtime-expression diagnostics distinct at the final caller boundary.
+
+#### R4 acceptance
+
+- Finalization never reclassifies a prepared template.
+- Fold and handoff consume the same exact semantics.
+- Runtime slot plans cannot disappear as empty output.
+- The fold cache cannot hide malformed authority.
+- Common code gate passes.
+
+### Phase R5 - Consolidate remaining consumers and tests
+
+#### R5A - Remaining consumers
+
+- Move reactive metadata traversal onto `TirView` transitions.
+- Use prepared facts or the same view methods for const-required control-flow validation.
+- Use exact finalized views for final type and debug validation.
+- Remove raw-store authority helpers and registry-era comments.
+- Keep distinct reducer matches where metadata, folding and handoff genuinely produce different results.
+
+#### R5B - Remove duplicate durable state
+
+- Remove `Template.kind` and synchronization methods.
+- Read `TemplateIr.kind` through the shared store.
+- Keep mutable kind only in parser-local state before the `TemplateIr` entry is created.
+
+#### R5C - Assign test ownership
+
+Keep one primary owner for:
+
+- rendered output and diagnostics
+- expression context at structural and nested-value boundaries
+- phase transition rules
+- missing-authority errors
+- slot routing, missing slots and repeated replay
+- `$fresh` immediate-parent suppression
+- wrapper order and `IfChildEmits`
+- runtime slot applications in control flow
+- runtime handoff
+- cache identity
+- cycle rejection
+- reactive subscriptions
+
+Then:
+
+- move user-visible cases to `tests/cases`
+- keep focused unit tests only for hidden invariants
+- merge tests that differ only by old store numbering, owner tokens, entry point or walker implementation
+- delete cross-store, owner-collision, foreign-proxy and removed-API fixtures
+- delete broad shared fixture helpers that hide the exact invariant
+- record final production and test line reductions from `069a29acb`
+
+#### R5 acceptance
+
+- Each behaviour has one primary test owner.
+- Test names describe semantics rather than implementation paths.
+- Production and test lines are materially lower than `069a29acb`.
+- Common code gate passes.
+
+### Phase R6 - Document, measure and close
+
+#### R6A - Final docs and module maps
+
+- Update `docs/compiler-design-overview.md` to the one-store architecture.
+- Update `templates/mod.rs` and `tir/mod.rs` as concise structural maps.
+- Remove multiple-store, foreign-reference, freezing, authority-token and fallback wording.
+- Document exact view context, structural versus nested-value transitions, preparation modes and the HIR boundary.
+- Update progress docs only if user-visible support changed.
+
+#### R6B - Hard grep gates
+
+Require zero production hits unless an exact final use is documented:
+
+```text
+TemplateIrRegistry
+RegisteredTemplateIrStore
+TemplateStoreId
+TemplateStringDomainId
+TemplateIrStoreOwner
+TemplateRef
+TemplateNodeRef
+TemplateWrapperSetRef
+TemplateOverlaySet
+TemplateOverlaySetId
+foreign_slot_insert_proxy
+FoldAuthorityWalk
+FoldAuthorityToken
+PreparedTirViewFold
+PreparedForeignWrapper
+ViewNativeWalkContext
+expression_overlay_stack
+read_only_safe
+current-state
+compatibility mirror
+fallback path
+```
+
+Require zero TIR imports in HIR and backend modules except neutral owned runtime handoff vocabulary.
+
+#### R6C - Performance evidence
+
+Retain counters for:
+
+- preparation attempts and cache hits
+- preparation nodes visited
+- fold attempts and cache hits
+- fold nodes visited
+- wrapper applications
+- output reservation and estimate misses
+- owned handoff materialisations
+
+Confirm adjacent finalization callers do not prepare the same view repeatedly.
+
+After the architecture is stable:
+
+```bash
+just bench
+just bench
+just bench
+just bench
+just bench
+just bench-report
+```
+
+Compare representative template, wrapper, slot, control-flow, Beandown and docs workloads against `c1ecc2c58` and `069a29acb`. Attribute consistent regressions with counters or profiling. Do not restore deleted architecture to hide a regression.
+
+#### R6D - Roadmap handoff
+
+- Review active plans touching templates, AST finalization, HIR handoff, module compilation, diagnostics or performance.
+- Remove stale pre-TIR assumptions.
+- Create one dedicated post-TIR `$md` and template-parser optimisation plan.
+- Move source-slice text, formatter allocation, incremental caching, parallel folding and backend string-build work into that owner.
+- Delete this temporary completion plan after final architecture docs own the contract.
+
+#### R6 acceptance
+
+- Hard grep gates pass.
+- Common code gate passes.
+- Recorded benchmark evidence is reviewed.
+- Manual architecture audit finds no duplicate required path, compatibility shim, mixed owner or stale comment.
+- Final docs match implemented code.
+
+## Final acceptance
+
+TIR is complete only when:
+
+- one AST module build owns one `TemplateIrStore`
+- parser-emitted TIR is the only structural authority
+- all TIR identities are module-local
+- `Template` carries only its TIR reference and source location
+- `TirViewIdentity` contains every effective semantic dimension
+- expression overlays require one lookup, not an external stack
+- structural and nested-value transitions are explicit and shared
+- one preparation owner decides foldable, runtime or helper
+- one fold path consumes prepared constants
+- runtime handoff consumes the same prepared view
+- missing authority is always an internal error
+- runtime dependence is never represented as an implementation fallback
+- no TIR identity reaches HIR or a backend
+- production and test code are materially smaller than `069a29acb`
+- output, diagnostics, formatting, wrappers, slots, control flow and reactivity remain unchanged
+- validation and recorded benchmark gates pass
+
+## Non-goals
+
+- broad `$md` redesign
+- new template language features
+- HIR template nodes
+- backend-specific render plans
+- TIR persistence across modules or incremental builds
+- parallel AST template parsing
+- speculative multi-store support
+- broad `StringTable` or source-text redesign
+- benchmark-driven semantic changes
