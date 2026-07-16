@@ -156,10 +156,14 @@ Always:
 - Add doc comments at the top of new files.
 - Add concise WHAT/WHY comments for complex functions, structs, methods and important control-flow joins.
 
-Be comment-positive, but not noisy.
-Explain behaviour and rationale, don't restate syntax.
+WHAT comments should mostly provide context about what something does from the perspective of its role in the wider module / compiler.
+They should be very concise and terse.
 
-Add comments when they help a reader understand code locally without reading large parts of the codebase first.
+Comments should help a reader understand code locally without reading large parts of the codebase first.
+They should not restate syntax, especially for functions with already descriptive names and signatures. 
+
+Be comment-positive, but not noisy.
+
 They should explain:
 
 - what role this code plays in the larger subsystem.
