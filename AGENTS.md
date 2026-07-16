@@ -6,7 +6,7 @@ Resolve every relative path in this file from the current worktree root. Do not 
 
 Before any Beanstalk task, read:
 - this file
-- `docs/src/docs/codebase/overview.bd`
+- `docs/compiler-design-overview.md`
 - `docs/src/docs/codebase/style-guide/style-guide.bd`
 - `docs/src/docs/codebase/memory-management/overview.bd`
 
@@ -14,11 +14,6 @@ Before making or reviewing a non-trivial change, read:
 - `docs/src/docs/codebase/style-guide/validation.bd`
 
 Read `docs/src/docs/codebase/style-guide/testing.bd` when the task changes or reviews behavior, diagnostics, compiler stages, backend artifacts, tests, fixtures, or test infrastructure.
-
-For compiler, build-system, analysis, HIR, or backend work:
-1. Read `docs/src/docs/codebase/compiler-design/overview.bd`
-2. Use its task-reading matrix
-3. Read the selected leaf documents before changing implementation
 
 For memory, ownership, borrow checking, allocation, GC, drops, or runtime-handle work:
 1. Read `docs/src/docs/codebase/memory-management/overview.bd`
@@ -151,7 +146,7 @@ If implementation work makes documentation inaccurate, report the affected files
 If context was compacted, reset or may be incomplete, always re-read:
 
 1. This file
-2. Follow the `Reading list` at the top of this document and reread all relevant documents
+2. Follow the `Reading list` at the top of this document and re-read all relevant documents
 3. The current plan
 4. The current implementation and diff
 
