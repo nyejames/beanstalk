@@ -15,7 +15,7 @@
 - `name ~= value` declares a mutable binding with an inferred type.
 - `name ~Type = value` declares a mutable binding with an explicit type.
 - Reassignment still uses ordinary `=`.
-- `~=` is the mutable marker followed by assignment syntax. Spacing around both tokens is required.
+- `~=` is an adjacent mutable-declaration marker. Write whitespace before `~` and after `=`, but never between them.
 - Mutability belongs to the binding, not the semantic type.
 
 ### Exclusive access

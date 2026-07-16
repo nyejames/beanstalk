@@ -1,4 +1,4 @@
--- Compile-time constant with inferred type using new #= syntax.
+-- Compile-time constant with an inferred type.
 
 value #= 42
 

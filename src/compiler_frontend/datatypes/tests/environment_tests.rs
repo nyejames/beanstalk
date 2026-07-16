@@ -1267,7 +1267,7 @@ fn intern_generic_instance_distinguishes_different_arguments() {
 }
 
 #[test]
-fn const_record_display_shows_hash_prefix() {
+fn const_record_display_uses_source_visible_terminology() {
     let mut env = TypeEnvironment::new();
     let mut table = StringTable::new();
     let path = InternedPath::from_single_str("Config", &mut table);
@@ -1280,7 +1280,7 @@ fn const_record_display_shows_hash_prefix() {
         const_record: true,
     });
 
-    assert_eq!(display_type(type_id, &env, &table), "#Config");
+    assert_eq!(display_type(type_id, &env, &table), "const record Config");
 }
 
 #[test]

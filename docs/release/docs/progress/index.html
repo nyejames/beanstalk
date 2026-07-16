@@ -548,7 +548,7 @@ body {
      <td style="padding: 0.2em 0.5em;  "> Supported</td>
      <td style="padding: 0.2em 0.5em;  "> Broad top-level constant, dependency sorting, template folding, numeric folding, const-record, external constant, config, and diagnostics coverage.</td>
      <td style="padding: 0.2em 0.5em;  "> Frontend</td>
-     <td style="padding: 0.2em 0.5em;  "> Top-level <code>#</code> constants must fully fold. Same-file constant evaluation follows source order unless dependency sorting can order top-level declarations. Const records are compile-time field-access-only values.</td>
+     <td style="padding: 0.2em 0.5em;  "> Top-level compile-time constants such as <code>name #= value</code> must fully fold. Same-file constant evaluation follows source order unless dependency sorting can order top-level declarations. Const records are compile-time field-access-only values.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">

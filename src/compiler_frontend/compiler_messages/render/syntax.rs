@@ -8,8 +8,9 @@ use super::{DiagnosticRenderContext, diagnostic_type_name, token_kind_name};
 use crate::compiler_frontend::compiler_messages::{
     CommonSyntaxMistakeReason, InvalidLoopHeaderReason, InvalidMatchArmReason,
     InvalidStandaloneStatementReason, InvalidStatementPositionReason, InvalidStringEscapeReason,
-    InvalidThisUsageReason, InvalidTypeAnnotationReason, NumberLiteralErrorReason,
-    OperatorOperandPosition,
+    InvalidThisUsageReason, InvalidTypeAnnotationReason, MissingWhitespace,
+    NumberLiteralErrorReason, OperatorOperandPosition, SymbolicSpacingConstruct,
+    SymbolicSpacingError,
 };
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 
@@ -217,8 +218,8 @@ pub(crate) fn common_syntax_mistake_message(
         CommonSyntaxMistakeReason::InvalidReactiveBindingSpacing => {
             "Invalid reactive binding syntax. Use `name $= value` for inferred reactive bindings or `name $Type = value` for explicit reactive types. For collection and option types, attach `$` to the first token of the type: `names ${String} = ...` or `value $String? = ...`.".to_string()
         }
-        CommonSyntaxMistakeReason::InvalidSymbolicBinaryOperatorSpacing => {
-            "Symbolic binary operators require whitespace on both sides.".to_string()
+        CommonSyntaxMistakeReason::InvalidSymbolicSpacing { error } => {
+            symbolic_spacing_message(*error)
         }
         CommonSyntaxMistakeReason::InvalidUnaryNegationSpacing => {
             "Unary negation must be attached to its operand with no intervening whitespace."
@@ -230,59 +231,95 @@ pub(crate) fn common_syntax_mistake_message(
     }
 }
 
-pub(crate) fn common_syntax_mistake_suggestion(reason: &CommonSyntaxMistakeReason) -> &'static str {
+/// Render the exact construct, spelling and missing whitespace side.
+fn symbolic_spacing_message(error: SymbolicSpacingError) -> String {
+    let construct_name = match error.construct {
+        SymbolicSpacingConstruct::BinaryOperator { .. } => "Binary operator",
+        SymbolicSpacingConstruct::Assignment => "Assignment",
+        SymbolicSpacingConstruct::CompoundAssignment { .. } => "Compound assignment",
+        SymbolicSpacingConstruct::MutableDeclaration => "Mutable declaration",
+    };
+    let spelling = error.construct.source_spelling();
+    let side = match error.missing {
+        MissingWhitespace::Before => "before it",
+        MissingWhitespace::After => "after it",
+        MissingWhitespace::Both => "on both sides",
+    };
+    format!("{construct_name} '{spelling}' requires whitespace {side}.")
+}
+
+/// Minimal valid correction example for the exact construct.
+fn symbolic_spacing_suggestion(construct: SymbolicSpacingConstruct) -> String {
+    let spelling = construct.source_spelling();
+    match construct {
+        SymbolicSpacingConstruct::BinaryOperator { .. } => {
+            format!("Add spaces around the operator, for example `left {spelling} right`")
+        }
+        SymbolicSpacingConstruct::Assignment => {
+            "Add spaces around `=`, for example `name = value`".to_owned()
+        }
+        SymbolicSpacingConstruct::CompoundAssignment { .. } => {
+            format!("Add spaces around the operator, for example `count {spelling} 1`")
+        }
+        SymbolicSpacingConstruct::MutableDeclaration => {
+            "Add spaces around `~=`, for example `name ~= value`".to_owned()
+        }
+    }
+}
+
+pub(crate) fn common_syntax_mistake_suggestion(reason: &CommonSyntaxMistakeReason) -> String {
     match reason {
-        CommonSyntaxMistakeReason::EqualityOperator => "Replace `==` with `is`",
-        CommonSyntaxMistakeReason::InequalityOperator => "Replace `!=` with `is not`",
-        CommonSyntaxMistakeReason::LogicalAndOperator => "Replace `&&` with `and`",
-        CommonSyntaxMistakeReason::LogicalOrOperator => "Replace `||` with `or`",
-        CommonSyntaxMistakeReason::BooleanBangNegation => "Replace `!` with `not`",
+        CommonSyntaxMistakeReason::EqualityOperator => "Replace `==` with `is`".to_owned(),
+        CommonSyntaxMistakeReason::InequalityOperator => "Replace `!=` with `is not`".to_owned(),
+        CommonSyntaxMistakeReason::LogicalAndOperator => "Replace `&&` with `and`".to_owned(),
+        CommonSyntaxMistakeReason::LogicalOrOperator => "Replace `||` with `or`".to_owned(),
+        CommonSyntaxMistakeReason::BooleanBangNegation => "Replace `!` with `not`".to_owned(),
         CommonSyntaxMistakeReason::ExpressionAssignment => {
-            "Replace `=` with `is` for equality, or move the assignment to statement position"
+            "Replace `=` with `is` for equality, or move the assignment to statement position".to_owned()
         }
         CommonSyntaxMistakeReason::RustBorrowPrefix => {
-            "Remove `&`; shared borrows are automatic. For mutation, prefix the place with `~` at the call site."
+            "Remove `&`; shared borrows are automatic. For mutation, prefix the place with `~` at the call site.".to_owned()
         }
         CommonSyntaxMistakeReason::InvalidAsOperator => {
-            "Use `cast` at an explicitly typed boundary for supported conversions, or use `as` only in a supported renaming context"
+            "Use `cast` at an explicitly typed boundary for supported conversions, or use `as` only in a supported renaming context".to_owned()
         }
         CommonSyntaxMistakeReason::SignatureAsKeyword => {
-            "Remove `as` or use it only in a supported renaming context"
+            "Remove `as` or use it only in a supported renaming context".to_owned()
         }
-        CommonSyntaxMistakeReason::StatementLineComment => "Replace `//` with `--` for a comment",
-        CommonSyntaxMistakeReason::FunctionKeyword { .. } => "Write `name |args| -> Type:` instead",
+        CommonSyntaxMistakeReason::StatementLineComment => "Replace `//` with `--` for a comment".to_owned(),
+        CommonSyntaxMistakeReason::FunctionKeyword { .. } => "Write `name |args| -> Type:` instead".to_owned(),
         CommonSyntaxMistakeReason::LetOrVarKeyword => {
-            "Write `name Type = value` for an immutable binding, or `name ~Type = value` for a mutable one"
+            "Write `name Type = value` for an immutable binding, or `name ~Type = value` for a mutable one".to_owned()
         }
         CommonSyntaxMistakeReason::ConstKeyword => {
-            "Write `name #= value` for an inferred compile-time constant or `name #Type = value` for an explicit constant type"
+            "Write `name #= value` for an inferred compile-time constant or `name #Type = value` for an explicit constant type".to_owned()
         }
         CommonSyntaxMistakeReason::MatchKeyword => {
-            "Replace `match value {` with `if value is:` and use `<pattern> =>` arms"
+            "Replace `match value {` with `if value is:` and use `<pattern> =>` arms".to_owned()
         }
         CommonSyntaxMistakeReason::StructKeyword { .. } => {
-            "Write `Name = | field Type, |` instead of `struct Name { ... }`"
+            "Write `Name = | field Type, |` instead of `struct Name { ... }`".to_owned()
         }
         CommonSyntaxMistakeReason::SignatureParenthesisDelimiter => {
-            "Replace `(` with `|` and `)` with `|`"
+            "Replace `(` with `|` and `)` with `|`".to_owned()
         }
         CommonSyntaxMistakeReason::InvalidCompileTimeBindingSpacing => {
-            "Remove the space after `#` so it is immediately followed by `=` or the type annotation"
+            "Remove the space after `#` so it is immediately followed by `=` or the type annotation".to_owned()
         }
         CommonSyntaxMistakeReason::InvalidMutableBindingSpacing => {
-            "Remove the space after `~` so it is immediately followed by `=` or the type annotation"
+            "Remove the space after `~` so it is immediately followed by `=` or the type annotation".to_owned()
         }
         CommonSyntaxMistakeReason::InvalidReactiveBindingSpacing => {
-            "Remove the space after `$` so it is immediately followed by `=` or the type annotation"
+            "Remove the space after `$` so it is immediately followed by `=` or the type annotation".to_owned()
         }
-        CommonSyntaxMistakeReason::InvalidSymbolicBinaryOperatorSpacing => {
-            "Add spaces around the operator, for example `left + right`"
+        CommonSyntaxMistakeReason::InvalidSymbolicSpacing { error } => {
+            symbolic_spacing_suggestion(error.construct)
         }
         CommonSyntaxMistakeReason::InvalidUnaryNegationSpacing => {
-            "Write unary negation as `-value` or `-1`"
+            "Write unary negation as `-value` or `-1`".to_owned()
         }
         CommonSyntaxMistakeReason::UnsupportedUnaryPlus => {
-            "Remove the leading `+`; use the value directly"
+            "Remove the leading `+`; use the value directly".to_owned()
         }
     }
 }

@@ -44,7 +44,7 @@ pub(super) fn validate_and_apply_config_ast(
     let mut errors = Vec::new();
     let mut seen_config_keys = HashSet::new();
 
-    // Only top-level `#` constant declarations authored in `config.bst` are config keys.
+    // Only top-level compile-time constant declarations authored in `config.bst` are config keys.
     // Imported package constants and types are support surface, not entries. The authored scope
     // is the exact interned identity the parser used for tokenization, so membership is checked by
     // direct interned equality rather than by converting paths back to `PathBuf`.
@@ -86,7 +86,8 @@ pub(super) fn validate_and_apply_config_ast(
     }
 
     // 2. Reject authored start-body statements in `config.bst`.
-    // Only top-level `#` constants are config entries; plain bindings and runtime statements are not.
+    // Only top-level compile-time constants are config entries. Plain bindings and runtime
+    // statements are not.
     for node in &parsed_config.ast.nodes {
         let NodeKind::Function(path, _, body) = &node.kind else {
             continue;
@@ -140,9 +141,10 @@ pub(super) fn validate_and_apply_config_ast(
 //  AST Declaration Extraction
 // -------------------------
 
-/// Extract one config key-value pair from a folded top-level `#` constant declaration.
+/// Extract one config key-value pair from a folded top-level compile-time constant declaration.
 ///
-/// WHY: top-level `#` constants in the authored config file are the only source of config entries.
+/// WHY: top-level compile-time constants in the authored config file are the only source of
+/// config entries.
 fn extract_config_declaration(
     config: &mut Config,
     declaration: &Declaration,

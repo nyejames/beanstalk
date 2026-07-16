@@ -46,7 +46,10 @@ Imported content participates in normal dependency tracking. The `.md` file is c
 
 ### Distinction from asset imports
 
-`.md` content imports are not asset imports. They produce a compile-time `#String` constant, not a tracked asset path. Markdown links and images render literal `href` and `src` values. They are not tracked assets and are not rewritten. Use normal Beanstalk asset paths when a file should participate in tracked-asset output.
+`.md` content imports are not asset imports. They produce a compile-time `content #String`
+constant, not a tracked asset path. Markdown links and images render literal `href` and `src`
+values. They are not tracked assets and are not rewritten. Use normal Beanstalk asset paths when
+a file should participate in tracked-asset output.
 
 ### Related concepts
 

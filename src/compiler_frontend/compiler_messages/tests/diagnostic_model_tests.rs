@@ -1,9 +1,9 @@
 use super::{
     BorrowAccessKind, BorrowDiagnosticKind, CompileTimeEvaluationErrorReason, CompilerDiagnostic,
     ConfigDiagnosticKind, DeferredFeatureDiagnosticKind, DeferredFeatureReason, DiagnosticBag,
-    DiagnosticCategory, DiagnosticKind, DiagnosticLabel, DiagnosticLabelMessage,
-    DiagnosticOperator, DiagnosticPayload, DiagnosticPlace, DiagnosticSeverity,
-    GenericApplicationErrorReason, ImportClauseKind, ImportDiagnosticKind,
+    DiagnosticCategory, DiagnosticCompoundAssignmentOperator, DiagnosticKind, DiagnosticLabel,
+    DiagnosticLabelMessage, DiagnosticOperator, DiagnosticPayload, DiagnosticPlace,
+    DiagnosticSeverity, GenericApplicationErrorReason, ImportClauseKind, ImportDiagnosticKind,
     IncompatibleChoiceComparisonReason, InfrastructureDiagnosticKind,
     InvalidAssignmentTargetReason, InvalidCastReason, InvalidChoiceVariantReason,
     InvalidCollectionTypeReason, InvalidConfigReason, InvalidFunctionSignatureReason,
@@ -11,8 +11,9 @@ use super::{
     InvalidResultOperandReason, InvalidSignatureMemberReason, InvalidStandaloneStatementReason,
     InvalidStatementPositionReason, InvalidStringEscapeReason, InvalidTemplateDirectiveReason,
     InvalidTemplateStructureReason, InvalidTraitKeywordUsageReason, InvalidTypeAnnotationReason,
-    NameNamespace, NumberLiteralErrorReason, PathKind, RuleDiagnosticKind, SyntaxDiagnosticKind,
-    TypeAnnotationContext, TypeDiagnosticKind, TypeMismatchContext, UnsupportedOperatorCategory,
+    MissingWhitespace, NameNamespace, NumberLiteralErrorReason, PathKind, RuleDiagnosticKind,
+    SymbolicSpacingConstruct, SymbolicSpacingError, SyntaxDiagnosticKind, TypeAnnotationContext,
+    TypeDiagnosticKind, TypeMismatchContext, UnsupportedOperatorCategory,
 };
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_messages::render::{
@@ -1009,7 +1010,7 @@ fn syntax_renderers_keep_typed_prose_without_error_conversion() {
                 InvalidCollectionTypeReason::CapacityNotConstant,
                 location(source_path.clone()),
             ),
-            "Collection capacity must be a positive integer literal or a bare `#Int` constant name.",
+            "Collection capacity must be a positive integer literal or the bare name of a visible compile-time `Int` constant.",
             "CapacityNotConstant",
         ),
         (
@@ -1795,6 +1796,67 @@ fn terse_message_field_is_never_empty() {
             !message_field.is_empty(),
             "Terse message field should be non-empty for {:?}, got: {terse_line}",
             kind,
+        );
+    }
+}
+
+/// The symbolic spacing diagnostic must render the exact construct, spelling and
+/// missing side without calling assignment, compound assignment or mutable
+/// declaration a binary operator.
+#[test]
+fn symbolic_spacing_renders_exact_construct_and_side() {
+    let string_table = StringTable::new();
+    let render_context = DiagnosticRenderContext::new(&string_table);
+
+    let cases = [
+        (
+            SymbolicSpacingConstruct::BinaryOperator {
+                operator: DiagnosticOperator::Add,
+            },
+            MissingWhitespace::After,
+            "Binary operator '+' requires whitespace after it.",
+        ),
+        (
+            SymbolicSpacingConstruct::Assignment,
+            MissingWhitespace::Before,
+            "Assignment '=' requires whitespace before it.",
+        ),
+        (
+            SymbolicSpacingConstruct::CompoundAssignment {
+                operator: DiagnosticCompoundAssignmentOperator::Add,
+            },
+            MissingWhitespace::Before,
+            "Compound assignment '+=' requires whitespace before it.",
+        ),
+        (
+            SymbolicSpacingConstruct::CompoundAssignment {
+                operator: DiagnosticCompoundAssignmentOperator::IntDivide,
+            },
+            MissingWhitespace::Both,
+            "Compound assignment '//=' requires whitespace on both sides.",
+        ),
+        (
+            SymbolicSpacingConstruct::MutableDeclaration,
+            MissingWhitespace::After,
+            "Mutable declaration '~=' requires whitespace after it.",
+        ),
+    ];
+
+    for (construct, missing, expected_message) in cases {
+        let diagnostic = CompilerDiagnostic::common_syntax_mistake(
+            crate::compiler_frontend::compiler_messages::CommonSyntaxMistakeReason::InvalidSymbolicSpacing {
+                error: SymbolicSpacingError { construct, missing },
+            },
+            SourceLocation::new(
+                InternedPath::from_single_str("test.bst", &mut StringTable::new()),
+                CharPosition { line_number: 1, char_column: 1 },
+                CharPosition { line_number: 1, char_column: 2 },
+            ),
+        );
+        let rendered = terminal::format_payload_guidance(&diagnostic.payload, render_context);
+        assert!(
+            rendered.iter().any(|line| line.contains(expected_message)),
+            "expected message '{expected_message}' in rendered output {rendered:?} for {construct:?} {missing:?}"
         );
     }
 }

@@ -86,7 +86,7 @@ pub(crate) fn invalid_collection_type_message(reason: InvalidCollectionTypeReaso
         }
         InvalidCollectionTypeReason::CapacityNotInt => "Collection capacity must be an integer.",
         InvalidCollectionTypeReason::CapacityNotConstant => {
-            "Collection capacity must be a positive integer literal or a bare `#Int` constant name."
+            "Collection capacity must be a positive integer literal or the bare name of a visible compile-time `Int` constant."
         }
         InvalidCollectionTypeReason::CapacityOverflow => "Collection capacity is too large.",
         InvalidCollectionTypeReason::InitializerExceedsFixedCapacity { .. } => {

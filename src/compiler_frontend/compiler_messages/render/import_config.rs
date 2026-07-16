@@ -57,7 +57,7 @@ pub(crate) fn invalid_config_message(
         }
         InvalidConfigReason::PlainBindingUnsupported => {
             format!(
-                "Config key '{key_label}' must be a top-level `#` constant. Use `{key_label} #= value` instead of a plain binding."
+                "Config key '{key_label}' must be a top-level compile-time constant. Write `{key_label} #= value` instead of a runtime binding."
             )
         }
         InvalidConfigReason::UnsupportedStatement => {

@@ -83,7 +83,8 @@ It doesn't produce HIR.
 It doesn't create runtime `start` semantics.
 It doesn't export language-visible declarations.
 
-Authored config entries must be known top-level `#` constants.
+Authored config entries must be known top-level compile-time constants declared with
+`name #= value` or `name #Type = value`.
 Plain top-level bindings are runtime Beanstalk syntax and are rejected in config.
 Imported constants and support types may participate in config expressions, but imported declarations are support surface only and never become config entries.
 

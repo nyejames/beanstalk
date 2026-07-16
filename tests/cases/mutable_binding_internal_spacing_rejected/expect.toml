@@ -2,3 +2,4 @@
 mode = "failure"
 warnings = "forbid"
 diagnostic_codes = ["BST-SYNTAX-0031"]
+message_contains = ["Invalid mutable binding syntax."]

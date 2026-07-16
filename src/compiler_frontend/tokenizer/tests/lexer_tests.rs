@@ -4,8 +4,10 @@ use crate::compiler_frontend::compiler_messages::render::{
     DiagnosticRenderContext, terminal::format_payload_guidance,
 };
 use crate::compiler_frontend::compiler_messages::{
-    CommonSyntaxMistakeReason, CompilerDiagnostic, DiagnosticKind, DiagnosticPayload,
-    InvalidStringEscapeReason, NumberLiteralErrorReason, SyntaxDiagnosticKind,
+    CommonSyntaxMistakeReason, CompilerDiagnostic, DiagnosticCompoundAssignmentOperator,
+    DiagnosticKind, DiagnosticOperator, DiagnosticPayload, InvalidStringEscapeReason,
+    MissingWhitespace, NumberLiteralErrorReason, SymbolicSpacingConstruct, SymbolicSpacingError,
+    SyntaxDiagnosticKind,
 };
 use crate::compiler_frontend::numeric_text::token::NumericLiteralSign;
 use crate::compiler_frontend::style_directives::{
@@ -157,6 +159,31 @@ fn assert_common_syntax_mistake(
         DiagnosticPayload::CommonSyntaxMistake { reason } => {
             assert_eq!(*reason, expected_reason);
         }
+        payload => panic!("expected common syntax mistake payload, found {payload:?}"),
+    }
+}
+
+fn assert_symbolic_spacing(
+    diagnostic: &CompilerDiagnostic,
+    construct: SymbolicSpacingConstruct,
+    missing: MissingWhitespace,
+) {
+    assert_eq!(
+        diagnostic.kind,
+        DiagnosticKind::Syntax(SyntaxDiagnosticKind::CommonSyntaxMistake)
+    );
+
+    match &diagnostic.payload {
+        DiagnosticPayload::CommonSyntaxMistake { reason } => match reason {
+            CommonSyntaxMistakeReason::InvalidSymbolicSpacing { error } => {
+                assert_eq!(
+                    error,
+                    &SymbolicSpacingError { construct, missing },
+                    "symbolic spacing construct or missing side mismatch"
+                );
+            }
+            other => panic!("expected InvalidSymbolicSpacing, found {other:?}"),
+        },
         payload => panic!("expected common syntax mistake payload, found {payload:?}"),
     }
 }
@@ -619,24 +646,54 @@ fn rejects_unary_negation_with_whitespace() {
 }
 
 #[test]
-fn rejects_missing_symbolic_binary_operator_spacing() {
-    for source in [
-        "value = a+b\n",
-        "value = a-1\n",
-        "value = a -1\n",
-        "value = a- 1\n",
-        "value = a*-1\n",
-        "value = a//b\n",
-        "count=1\n",
-        "count =1\n",
-        "count~=1\n",
-        "value = a<b\n",
-        "value = a>=b\n",
+fn rejects_binary_operator_spacing() {
+    for (source, operator, missing) in [
+        (
+            "value = a+b\n",
+            DiagnosticOperator::Add,
+            MissingWhitespace::Both,
+        ),
+        (
+            "value = a-1\n",
+            DiagnosticOperator::Subtract,
+            MissingWhitespace::Both,
+        ),
+        (
+            "value = a -1\n",
+            DiagnosticOperator::Subtract,
+            MissingWhitespace::After,
+        ),
+        (
+            "value = a- 1\n",
+            DiagnosticOperator::Subtract,
+            MissingWhitespace::Before,
+        ),
+        (
+            "value = a*-1\n",
+            DiagnosticOperator::Multiply,
+            MissingWhitespace::Both,
+        ),
+        (
+            "value = a //b\n",
+            DiagnosticOperator::IntDivide,
+            MissingWhitespace::After,
+        ),
+        (
+            "value = a<b\n",
+            DiagnosticOperator::LessThan,
+            MissingWhitespace::Both,
+        ),
+        (
+            "value = a>=b\n",
+            DiagnosticOperator::GreaterThanOrEqual,
+            MissingWhitespace::Both,
+        ),
     ] {
         let (diagnostic, _string_table) = tokenize_source_error(source);
-        assert_common_syntax_mistake(
+        assert_symbolic_spacing(
             &diagnostic,
-            CommonSyntaxMistakeReason::InvalidSymbolicBinaryOperatorSpacing,
+            SymbolicSpacingConstruct::BinaryOperator { operator },
+            missing,
         );
     }
 }
@@ -675,22 +732,27 @@ fn accepts_valid_compound_assignment_spacing() {
     }
 }
 
-/// All compound assignment forms with no spacing at all (`count+=1` etc.) must fail.
+/// Every compound assignment token is covered at least once across the three
+/// missing-side branches: both, after and before.
 #[test]
 fn rejects_compound_assignment_missing_all_spacing() {
-    for source in [
-        "count+=1\n",
-        "count-=1\n",
-        "count*=2\n",
-        "count/=4\n",
-        "count//=3\n",
-        "count%=5\n",
-        "count^=2\n",
+    for (source, operator) in [
+        ("count+=1\n", DiagnosticCompoundAssignmentOperator::Add),
+        ("count-=1\n", DiagnosticCompoundAssignmentOperator::Subtract),
+        ("count*=2\n", DiagnosticCompoundAssignmentOperator::Multiply),
+        ("count/=4\n", DiagnosticCompoundAssignmentOperator::Divide),
+        (
+            "count//=3\n",
+            DiagnosticCompoundAssignmentOperator::IntDivide,
+        ),
+        ("count%=5\n", DiagnosticCompoundAssignmentOperator::Modulus),
+        ("count^=2\n", DiagnosticCompoundAssignmentOperator::Exponent),
     ] {
         let (diagnostic, _string_table) = tokenize_source_error(source);
-        assert_common_syntax_mistake(
+        assert_symbolic_spacing(
             &diagnostic,
-            CommonSyntaxMistakeReason::InvalidSymbolicBinaryOperatorSpacing,
+            SymbolicSpacingConstruct::CompoundAssignment { operator },
+            MissingWhitespace::Both,
         );
     }
 }
@@ -698,19 +760,32 @@ fn rejects_compound_assignment_missing_all_spacing() {
 /// Compound assignments with left spacing but missing right spacing (`count +=1`) must fail.
 #[test]
 fn rejects_compound_assignment_missing_right_spacing() {
-    for source in [
-        "count +=1\n",
-        "count -=1\n",
-        "count *=2\n",
-        "count /=4\n",
-        "count //=3\n",
-        "count %=5\n",
-        "count ^=2\n",
+    for (source, operator) in [
+        ("count +=1\n", DiagnosticCompoundAssignmentOperator::Add),
+        (
+            "count -=1\n",
+            DiagnosticCompoundAssignmentOperator::Subtract,
+        ),
+        (
+            "count *=2\n",
+            DiagnosticCompoundAssignmentOperator::Multiply,
+        ),
+        ("count /=4\n", DiagnosticCompoundAssignmentOperator::Divide),
+        (
+            "count //=3\n",
+            DiagnosticCompoundAssignmentOperator::IntDivide,
+        ),
+        ("count %=5\n", DiagnosticCompoundAssignmentOperator::Modulus),
+        (
+            "count ^=2\n",
+            DiagnosticCompoundAssignmentOperator::Exponent,
+        ),
     ] {
         let (diagnostic, _string_table) = tokenize_source_error(source);
-        assert_common_syntax_mistake(
+        assert_symbolic_spacing(
             &diagnostic,
-            CommonSyntaxMistakeReason::InvalidSymbolicBinaryOperatorSpacing,
+            SymbolicSpacingConstruct::CompoundAssignment { operator },
+            MissingWhitespace::After,
         );
     }
 }
@@ -718,33 +793,80 @@ fn rejects_compound_assignment_missing_right_spacing() {
 /// Compound assignments with right spacing but missing left spacing (`count+= 1`) must fail.
 #[test]
 fn rejects_compound_assignment_missing_left_spacing() {
-    for source in [
-        "count+= 1\n",
-        "count-= 1\n",
-        "count*= 2\n",
-        "count/= 4\n",
-        "count//= 3\n",
-        "count%= 5\n",
-        "count^= 2\n",
+    for (source, operator) in [
+        ("count+= 1\n", DiagnosticCompoundAssignmentOperator::Add),
+        (
+            "count-= 1\n",
+            DiagnosticCompoundAssignmentOperator::Subtract,
+        ),
+        (
+            "count*= 2\n",
+            DiagnosticCompoundAssignmentOperator::Multiply,
+        ),
+        ("count/= 4\n", DiagnosticCompoundAssignmentOperator::Divide),
+        (
+            "count//= 3\n",
+            DiagnosticCompoundAssignmentOperator::IntDivide,
+        ),
+        ("count%= 5\n", DiagnosticCompoundAssignmentOperator::Modulus),
+        (
+            "count^= 2\n",
+            DiagnosticCompoundAssignmentOperator::Exponent,
+        ),
     ] {
         let (diagnostic, _string_table) = tokenize_source_error(source);
-        assert_common_syntax_mistake(
+        assert_symbolic_spacing(
             &diagnostic,
-            CommonSyntaxMistakeReason::InvalidSymbolicBinaryOperatorSpacing,
+            SymbolicSpacingConstruct::CompoundAssignment { operator },
+            MissingWhitespace::Before,
         );
     }
 }
 
-/// `~=` is tokenized as `Mutable` + `Assign` and must also enforce spacing.
-/// The mutable marker rejects `count~= 1` (missing left space before `~`),
-/// and the assign token rejects `count ~=1` (missing right space after `=`).
+/// Plain assignment `=` requires whitespace on both sides.
 #[test]
-fn rejects_mutable_assignment_missing_spacing() {
-    for source in ["count~= 1\n", "count ~=1\n"] {
+fn rejects_assignment_spacing() {
+    for (source, missing) in [
+        ("count=1\n", MissingWhitespace::Both),
+        ("count =1\n", MissingWhitespace::After),
+        ("count= 1\n", MissingWhitespace::Before),
+    ] {
         let (diagnostic, _string_table) = tokenize_source_error(source);
-        assert_common_syntax_mistake(
+        assert_symbolic_spacing(&diagnostic, SymbolicSpacingConstruct::Assignment, missing);
+    }
+}
+
+/// `~=` is tokenized as `Mutable` + `Assign` and must enforce outer whitespace.
+/// The tokenizer inspects the complete adjacent marker before reporting either outer side.
+#[test]
+fn rejects_mutable_declaration_spacing() {
+    for (source, missing) in [
+        ("count~= 1\n", MissingWhitespace::Before),
+        ("count ~=1\n", MissingWhitespace::After),
+        ("count~=1\n", MissingWhitespace::Both),
+    ] {
+        let (diagnostic, _string_table) = tokenize_source_error(source);
+        assert_symbolic_spacing(
             &diagnostic,
-            CommonSyntaxMistakeReason::InvalidSymbolicBinaryOperatorSpacing,
+            SymbolicSpacingConstruct::MutableDeclaration,
+            missing,
+        );
+    }
+}
+
+/// Internal whitespace inside the mutable marker pair (`name ~ = value`) is not a
+/// tokenizer spacing error. The tokenizer accepts it and the declaration parser
+/// owns the `InvalidMutableBindingSpacing` rejection.
+#[test]
+fn internal_mutable_marker_whitespace_does_not_trigger_symbolic_spacing() {
+    for source in ["value ~ = 42\n", "value ~ =42\n"] {
+        let (file_tokens, _string_table) = tokenize_source(source);
+        assert!(
+            file_tokens
+                .tokens
+                .iter()
+                .any(|token| matches!(token.kind, TokenKind::Mutable)),
+            "expected a Mutable token in `{source}`"
         );
     }
 }

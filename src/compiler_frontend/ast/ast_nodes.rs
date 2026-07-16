@@ -156,10 +156,9 @@ pub enum NodeKind {
 
     /// Accumulate a runtime string expression into the entry start() fragment list.
     ///
-    /// WHAT: replaces the old `VariableDeclaration(#template, ...)` protocol used to
-    /// mark top-level runtime templates for later extraction/synthesis passes.
-    /// WHY: explicit intent avoids encoding the protocol through synthetic variable names,
-    /// and removes the need for post-hoc fragment extraction from the start body.
+    /// WHAT: marks a top-level runtime template for entry-start fragment emission.
+    /// WHY: explicit intent avoids synthetic variable protocols and post-hoc fragment
+    /// extraction from the start body.
     /// The HIR builder lowers this into a `PushRuntimeFragment` statement inside entry start().
     PushStartRuntimeFragment(Expression),
 

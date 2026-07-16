@@ -103,7 +103,8 @@ Avoid that.
 ## Config extraction
 
 `config.bst` is compiled through the frontend up to AST.
-Stage 0 extracts only authored known top-level `#` config-key constants from shared AST const facts.
+Stage 0 extracts only authored known top-level config-key constants declared with `name #= value`
+or `name #Type = value` from shared AST const facts.
 Imported constants and support declarations may help config expressions, but they never become config entries.
 
 This lets config use the same folding and diagnostics as source constants without making config a runtime module.

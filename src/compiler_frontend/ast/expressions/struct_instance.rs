@@ -60,7 +60,7 @@ pub(crate) struct StructConstructorParseInput<'a> {
 /// - Constructor syntax is syntactically identical to function call syntax; sharing the same
 ///   argument-resolution machinery keeps the two forms consistent and avoids a parallel
 ///   resolution system.
-/// - Const-record coercion for top-level `#` constants is applied after resolution.
+/// - Const-record coercion for top-level compile-time constants is applied after resolution.
 pub(super) fn parse_struct_constructor_expression(
     token_stream: &mut FileTokens,
     input: StructConstructorParseInput<'_>,

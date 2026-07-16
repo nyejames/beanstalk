@@ -219,7 +219,10 @@ Source and binding registries remain separate because their compiler and runtime
 
 `config.bst` is build-system-owned compile-time Beanstalk source. It is compiled through AST so it can use normal constants, folding, allowed Core or Builder imports and typed diagnostics. It is not a module, produces no HIR, has no `start` and exports no language-visible declarations.
 
-Authored config entries are known top-level `#` constants. Imported constants and support types may contribute to expressions but never become config entries. Config rejects project-local or relative imports, runtime declarations, mutable bindings, functions, traits, conformances, standalone templates and page fragments.
+Authored config entries are known top-level compile-time constants declared with `name #= value` or
+`name #Type = value`. Imported constants and support types may contribute to expressions but never
+become config entries. Config rejects project-local or relative imports, runtime declarations,
+mutable bindings, functions, traits, conformances, standalone templates and page fragments.
 
 External import providers convert supported non-Beanstalk files into typed binding-backed package surfaces before AST consumes visibility. Provider results may also record runtime imports and assets for later link planning.
 
@@ -616,7 +619,7 @@ Tokenization converts source text into structured tokens with source locations. 
 - source location tracking
 - string and template delimiter context
 - numeric literal scanning and source-location diagnostics. The tokenizer consumes literal text, classifies attached negative literals and reports spacing-sensitive syntax errors. [`numeric_text/`](../src/compiler_frontend/numeric_text/) owns shared numeric grammar, normalisation, separator/exponent validation and materialisation helpers used by later semantic consumers.
-- symbolic binary-operator spacing and unary-negation spacing diagnostics
+- symbolic operator, assignment and mutable-declaration outer-spacing diagnostics plus unary-negation spacing diagnostics
 - style directive token recognition through the merged directive registry
 - syntax-level rejection of unsupported or unknown directive forms where applicable
 

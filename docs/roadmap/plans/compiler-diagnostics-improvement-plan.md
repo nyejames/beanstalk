@@ -12,18 +12,18 @@ This is an implementation plan, not a research backlog. Each phase should leave 
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-diagnostics-improvement-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 2.1, accepted and ready to commit
-LAST_ACCEPTED_COMMIT: `2189b2107`
-WORKTREE: `main` at `2189b2107` with the reviewed Phase 2.1 implementation, tests, canonical docs, generated docs and plan updates
+CURRENT_SLICE: Phase 2.2, accepted and ready to commit
+LAST_ACCEPTED_COMMIT: `979703ea7`
+WORKTREE: `main` at `979703ea7` with the reviewed Phase 2.2 implementation, tests, canonical docs, generated docs, hard-removal audit cleanup and plan updates
 REQUIRED_RELOADS: startup files, this plan and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: quoted-string and raw-token language surface, tokenizer ownership, diagnostics, testing, validation and documentation rebuild contracts
-- code: `tokenizer/text_modes.rs`, tokenizer tests, diagnostic taxonomy/payload/constructor/render/remap and one integration case
+- docs: symbolic operator, assignment, compound-assignment and mutable-declaration spacing contracts plus tokenizer, diagnostics, testing and validation ownership
+- code: tokenizer symbolic-operator scanning and tests, `DiagnosticOperator`, syntax diagnostic payload/reason/constructor/render/remap and existing spacing fixtures
 ACCEPTANCE_CRITERIA:
-- quoted strings decode only `\\`, `\"`, `\n`, `\r` and `\t`
-- unsupported escapes, trailing backslashes and physical LF/CRLF continuation use typed `BST-SYNTAX-0034` diagnostics with precise spans
-- raw-token behaviour is unchanged and expression-position raw backticks remain rejected
-- canonical and generated documentation state the accepted escape contract
+- `BST-SYNTAX-0031` carries the exact binary operator, assignment, compound assignment or adjacent `~=` mutable declaration plus the missing whitespace side
+- complete tokens such as `//=` are classified before spacing is checked
+- internal whitespace in `name ~ = value` remains owned by `InvalidMutableBindingSpacing`
+- valid operators, assignment, compound assignment and `name ~= value` tokenization are unchanged
 VALIDATION_STATE:
 - Phase 1.1 `just validate`: passed, including 3,511 Rust tests and 1,764 integration cases
 - Phase 1.2a focused compiler-message tests: passed, 36 tests
@@ -32,12 +32,14 @@ VALIDATION_STATE:
 - Phase 1.3 `just validate`: passed, including cross-target Clippy, 3,511 Rust tests, 1,755 integration cases, docs check and 28 benchmark cases
 - Phase 2.1 `just validate`: passed, including cross-target Clippy, 3,520 Rust tests, 1,756 integration cases, docs check and 28 benchmark cases
 - Phase 2.1 docs release build: passed, 72 files built before the final full gate
-DOCS_IMPACT: canonical string docs and the progress matrix now record the exact quoted-string escape contract, and generated docs were rebuilt through the compiler
+- Phase 2.2 `just validate`: passed, including cross-target Clippy, 3,523 Rust tests, 1,756 integration cases, docs check and 28 benchmark cases
+- Phase 2.2 dev and release docs builds: passed, 72 files built in each mode before the final full gate
+DOCS_IMPACT: canonical spacing docs now distinguish binary operators, assignment, compound assignment and adjacent `~=` outer spacing; generated docs were rebuilt; architecture/config docs now use only current postfix constant examples
 BLOCKERS_OR_OPEN_DECISIONS: none
 DELEGATION_DECISION: Ollama - explicitly required for every implementation worker slice
 NEXT_WORKER_ORDER: Ollama only for implementation slices
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit Phase 2.1, reload the plan and startup context, then prepare the bounded Phase 2.2 Ollama worker
+NEXT_RESUME_ACTION: commit Phase 2.2, reload the plan and startup context, then prepare the bounded Phase 2.3 Ollama worker
 
 ## Confirmed design decisions
 
@@ -93,77 +95,17 @@ stable codes, locations or the terminal and dev-server formats.
 ### 1.2 Remove stale source terminology and misleading guidance
 
 **Original findings consolidated:** DIAG-015, DIAG-025, DIAG-030, DIAG-043, DIAG-044
-**Additional confirmed drift:** generic operator guidance, standalone function-body templates, optional-type suggestion, statement-position `type`/`of` wording and const-folded template diagnostics
+**Status:** Complete in `fb4d26a3b` and `99ec971b9`
 
-Audit all messages touched by this plan for source terminology that no longer matches Beanstalk.
+Phase 1.2a replaced category-only operator facts with diagnostic-owned `DiagnosticOperator`
+values and exact authored spellings. Range renders as `to`. Generic-parameter operator failures
+now explain that operators are compiler-owned and aren't granted by trait bounds.
 
-Implement this in two coherent slices:
-
-1. **1.2a exact operator facts (complete in `fb4d26a3b`):** replace the broad operator-category payload with the exact source operator and complete the operator wording formerly listed in Phase 7.2. This must land first because the generic message cannot name `<op>` from `UnsupportedOperatorCategory`.
-2. **1.2b remaining terminology (complete in `99ec971b9`):** correct fallible, optional, template and statement-position messages plus the source-hostile internal-stage wording listed below.
-
-#### Required corrections
-
-- Replace user-facing `Result` wording with `fallible expression`, `Error! return` or the exact source construct.
-- Replace `Option` as a source type name with optional syntax such as `String?`.
-- Change the stale generic-operator message that says trait bounds are unsupported. Trait bounds exist, but compiler-owned operators are not granted by generic bounds.
-- Use this rule for generic operators:
-
-  > Operator `<op>` is not available for generic parameter `<T>`. Beanstalk operators are compiler-owned and generic bounds do not provide operator support. Use a concrete type or a receiver method provided by an explicit bound.
-
-- Change the standalone-template-in-function diagnostic. Templates are valid expressions inside functions. Only an unreceived standalone template is invalid:
-
-  > A standalone template is not a valid statement here. Assign it, return it or pass it to a receiving expression.
-
-  Move this case from `InvalidControlFlowStatementReason::TemplateInsideFunctionBody` to a template-specific `InvalidStandaloneStatementReason` variant. A standalone expression statement is owned by the existing `BST-SYNTAX-0025` family, not the control-flow rule family. Remove the stale control-flow reason, then add a focused integration case while preserving positive assigned, returned and argument templates.
-
-- Change the compile-time `none` guidance from `Option<Type>` to a real optional annotation such as `value String? = none`.
-- Change stale statement-position wording:
-  - `type` is valid only in top-level generic declaration headers
-  - `of` is valid only in generic type annotations
-  - neither is a future reserved feature
-  - rename `ReservedGenericDeclaration` so the reason no longer encodes the obsolete implementation status
-- Change `InvalidResultHandlingReason::NotResultExpression`, which currently calls the operand a `Result`-valued expression, to source-visible `Error!` and fallible-expression terminology. Phase 4 still replaces the umbrella reason with authored-handler cases.
-- Rename `InvalidTemplateStructureReason::ResultInTemplateHead` to a fallible-value reason while correcting its rendered message. Internal fallible-carrier implementation terminology must not leak into the diagnostic taxonomy or prose for this source rule.
-- Rename `InvalidResultOperandReason::{ResultNotUnwrapped, OptionNotUnwrapped}` to fallible and optional source concepts while correcting their rendered messages. Keep the existing stable diagnostic code.
-- Remove internal-stage wording from `InvalidConfigReason::ValueCouldNotFold`. Explain only that the value could not be evaluated at compile time and cannot depend on runtime evaluation.
-- Replace `const-required template` and `current const value model` in template-structure diagnostics with the source-visible rule that the template must be fully evaluated at compile time. In particular, `TemplateOptionCaptureConstDeferred` must explain that the optional value's presence cannot be determined at compile time instead of describing `Option-present` folding internals.
-- Apply the same source-visible compile-time rule to `InvalidCastReason` messages that currently call a context or expression `const-required`.
-- Change the deferred `async:` message from future `async lowering` to future language support. Lowering is a compiler stage, not a source correction concept.
-
-#### Exact operator prerequisite and consolidated wording
-
-- Add a diagnostic-owned exact operator enum that is independent of AST storage and can be reused by tokenizer spacing diagnostics in Phase 2.2.
-- Map AST `Operator` to the diagnostic operator at the operator-policy emission boundary.
-- Use authored source spellings. In particular, range construction is `to`, not the stale `Operator::to_str()` spelling `..`. Correct that existing AST spelling while replacing the diagnostic path.
-- Replace `UnsupportedOperatorTypes { category, ... }` with exact operator facts. Derive broad families only where generic fallback wording still needs them.
-- Render exact operator messages in this slice.
-
-  For `not`:
-
-  > Operator `not` requires a `Bool` operand, found `Int`.
-
-  For mixed String concatenation:
-
-  > Operator `+` cannot concatenate `String` and `Int`. Use a template for mixed textual interpolation.
-
-  For generic parameters:
-
-  > Operator `<op>` is not available for generic parameter `<T>`. Beanstalk operators are compiler-owned and generic bounds do not provide operator support. Use a concrete type or a receiver method provided by an explicit bound.
-- Update payload remapping, constructors, AST operator-policy emitters and focused tests as one API replacement. Do not retain the category-only payload as a compatibility path.
-- Correct stale comments in touched operator-policy files that describe logical operators as `&&` and `||`. The source operators are `and` and `or`.
-
-#### Acceptance
-
-- No user-facing message claims generic bounds are unimplemented.
-- No user-facing message teaches `Option<Type>`.
-- No user-facing message claims templates are top-level-only.
-- No user-facing message calls an `Error!` expression a first-class `Result`.
-- No user-facing message exposes AST construction or finalization as a correction concept.
-- No user-facing message exposes a `const-required` template category or the compiler's const value model.
-- No user-facing message describes `async` lowering or calls a source context `const-required`.
-- Repository search finds no stale wording after superseded variants are removed.
-
+Phase 1.2b removed source-facing `Result` and `Option<Type>` terminology, stale
+top-level-only template guidance, internal AST/finalization and const-model wording plus
+implementation-stage language around deferred `async`. Standalone unreceived templates now use
+the existing standalone-statement family. Superseded reason variants, payload paths and renderer
+branches were removed rather than preserved as compatibility aliases.
 ### 1.3 Remove obsolete compatibility-only diagnostic paths
 
 **Original finding:** DIAG-039
@@ -175,82 +117,36 @@ migration prose for discontinued declaration syntax were deleted. Current bindin
 template and module-root syntax retained its existing positive coverage. Canonical docs were
 updated and generated docs were rebuilt through the compiler.
 
+The Phase 2.2 hard-removal audit also deleted the obsolete diagnostic display `#Config` for const
+records and replaced ambiguous “top-level `#` constant” prose with exact current postfix examples.
+Const-record diagnostics now render source-visible `const record Config` terminology.
+
 ## Phase 2: Tokenizer and structural syntax diagnostics
 
 ### 2.1 Implement the quoted-string escape contract
 
 **Original finding:** DIAG-028
-**Status:** Complete
-**Original DIAG-029 disposition:** Removed. Raw strings intentionally preserve backslashes and newlines.
-**Additional confirmed constraint:** expression-position raw backtick slices remain outside the
-accepted Alpha language surface and are already covered by
-`raw_backtick_string_expression_rejected`. This phase must preserve the tokenizer's raw-token
-behaviour without enabling raw backticks as source expressions.
-**Additional confirmed gap:** a physical newline after a backslash cannot be rendered through
-`UnsupportedEscape { escaped: '\n' }`. That would appear to reject the supported two-character
-`\\n` escape. Physical line continuation needs its own reason and prose.
+**Status:** Complete in `979703ea7`
 
-The current quoted-string tokenizer discards `\` and accepts any following character. This does not implement a defined escape grammar.
+Quoted strings now decode exactly `\\`, `\"`, `\n`, `\r` and `\t`. Typed
+`BST-SYNTAX-0034` reasons distinguish unsupported escapes, physical LF/CRLF continuation and a
+trailing backslash. Spans cover two authored characters for complete unsupported escapes and only
+the backslash for continuation or trailing cases. Control characters render source-visibly.
 
-#### Implementation
-
-Add `SyntaxDiagnosticKind::InvalidStringEscape` with stable code `BST-SYNTAX-0034` and a structured reason:
-
-```rust
-enum InvalidStringEscapeReason {
-    UnsupportedEscape { escaped: char },
-    PhysicalNewline,
-    TrailingBackslash,
-}
-```
-
-Update quoted-string tokenization to decode only:
-
-| Source | Value |
-|---|---|
-| `\\` | backslash |
-| `\"` | double quote |
-| `\n` | newline |
-| `\r` | carriage return |
-| `\t` | tab |
-
-Reject `\0`, `\x`, `\u`, `\q`, a backslash before a physical newline and every other escape.
-
-Render:
-
-- `Unsupported string escape '<escape>'. Quoted strings support '\\', '\"', '\n', '\r' and '\t'.`
-- `A backslash cannot continue a quoted string across a physical newline. Remove the backslash or use the two-character '\n' escape.`
-- `The string ends with a backslash. Add a supported escaped character or remove the backslash.`
-
-The primary span should cover the backslash and escaped character where both exist. A trailing backslash should point at the backslash.
-Render `<escape>` as the complete authored escape spelling with one leading backslash. Escape
-control characters for display so a literal tab or other non-printing character never changes the
-diagnostic's layout.
-The physical-newline reason should point at the backslash without formatting the line break as
-the supported `\\n` spelling. Treat both LF and CRLF as the same source mistake.
-
-Raw backtick strings remain unchanged:
-
-- no escape decoding
-- no invalid-escape diagnostics
-- physical newlines remain allowed
-- backslashes remain literal
-- no AST or language-surface change. Expression-position raw backticks remain rejected through
-  the existing ordinary syntax path.
-
-#### Tests
-
-- Unit tests for every accepted escape and decoded value
-- Unit tests for unsupported escapes and a trailing backslash
-- Unit tests for LF and CRLF physical-newline continuation
-- Integration case proving invalid escapes use `BST-SYNTAX-0034`
-- Tokenizer unit cases for raw tokens containing `\n`, `\q`, backslashes and physical newlines
-- Preserve the existing integration rejection for expression-position raw backticks
-
+Raw-token behavior is unchanged: backslashes and physical newlines stay literal, no escape
+diagnostic is emitted and expression-position raw backticks remain rejected by the existing
+ordinary syntax path. Canonical string docs, generated docs and the progress matrix record the
+accepted contract. Tokenizer, renderer and integration coverage protect decoding, reasons, spans
+and raw-token preservation.
 ### 2.2 Make symbolic spacing diagnostics exact
 
 **Original findings:** DIAG-004, DIAG-005
+**Status:** Accepted, commit pending
 **Additional confirmed gap:** the same umbrella diagnostic currently labels plain assignment `=` and malformed mutable declaration spacing around `~=` as binary-operator errors, even though neither construct is a binary operator
+**Additional confirmed doc drift:** canonical spacing prose groups assignment with binary operators
+and says spacing is required around both tokens in `~=`, which can teach the invalid
+`name ~ = value` form. This slice must state that `~=` stays adjacent and requires only outer
+whitespace.
 
 The tokenizer currently uses one `InvalidSymbolicBinaryOperatorSpacing` reason for binary operators and compound assignment. It does not carry the operator or missing side.
 
@@ -263,7 +159,7 @@ exact symbolic spelling so invalid construct/operator combinations cannot be for
 enum SymbolicSpacingConstruct {
     BinaryOperator { operator: DiagnosticOperator },
     Assignment,
-    CompoundAssignment { operator: DiagnosticOperator },
+    CompoundAssignment { operator: DiagnosticCompoundAssignmentOperator },
     MutableDeclaration,
 }
 
@@ -278,6 +174,9 @@ struct SymbolicSpacingError {
     missing: MissingWhitespace,
 }
 ```
+
+`DiagnosticCompoundAssignmentOperator` contains only `+`, `-`, `*`, `/`, `//`, `%` and `^`.
+This keeps unsupported combinations such as word-operator compound assignments unrepresentable.
 
 - Determine the complete token first, including `//=`.
 - Record leading and trailing whitespace independently.
@@ -302,6 +201,9 @@ struct SymbolicSpacingError {
 #### Tests
 
 Cover every compound-assignment token at least once and cover before, after and both missing-side branches across the operator family. Also cover plain `=`, both outer sides of adjacent `~=` and the preserved internal-whitespace rejection so none can regress to binary-operator prose. Avoid one fixture per cosmetic variant when a tokenizer table test protects the same invariant.
+`name~=value` must report `Both`, not whichever side the tokenizer encounters first.
+Rename the stale `constant_mutable_spacing_error` integration owner to describe mutable-binding
+internal spacing without calling a runtime binding a constant.
 
 ### 2.3 Recognise a missing `@` import prefix before `/` becomes an operator error
 
@@ -310,6 +212,13 @@ Cover every compound-assignment token at least once and cover before, after and 
 **Additional confirmed gap:** `import ./utils` is the same missing-`@` mistake but currently reaches
 the generic `BST-SYNTAX-0019` "expected a path" branch. The structured reason must cover relative
 bare paths as well as identifier-led paths.
+**Additional confirmed path family:** direct JavaScript provider imports keep their `.js`
+extension, so a missing-prefix path such as `import ./drawing.js` or
+`import vendor/drawing.js as drawing` must preserve the extension and stop before the alias.
+**Additional confirmed doc drift:** the canonical import-path reference and current compiler use
+`@./file` for file-relative imports, but `docs/compiler-design-overview.md` still says `@./...`
+has no supported meaning. Correct that architecture bullet in this slice. The narrow language
+reference is authoritative.
 
 `import core/math` currently reaches symbolic `/` spacing logic before header import parsing can explain the import mistake.
 
@@ -337,6 +246,8 @@ bare paths as well as identifier-led paths.
 - a longer bare path whose rendered correction preserves every authored component
 - a bare path followed by a grouped import clause, proving the narrow scan stops before `{`
 - a relative bare path such as `import ./utils`
+- a relative `.js` provider path and a non-relative `.js` provider path followed by `as`, proving
+  the scan preserves extensions and stops before aliases
 - valid `import @core/math`
 - ordinary division after a value
 - `//` integer division and comments remain unaffected
@@ -415,6 +326,24 @@ The incomplete-value cases in 2.4 must return typed diagnostics before expressio
 #### Acceptance
 
 The retained malformed-source fixtures produce no `BST-INFRA-0001`.
+
+### 2.6 Delete config-key migration diagnostics
+
+**Additional audit finding:** `InvalidConfigReason::{DeprecatedSrcKey, ReplacedLibrariesKey,
+ReplacedRootFoldersKey, ReplacedPackageFoldersKey}` and their Stage 0 name checks exist only to
+teach pre-Alpha config-key migrations. The config registry already has a structured `UnknownKey`
+path for every unregistered name. The canonical module plan also records this deletion as
+accepted cleanup.
+
+- Delete the four migration-only reason variants and render branches.
+- Delete the special name checks for `src`, `libraries`, `root_folders` and `library_folders`.
+- Let those unregistered names use the ordinary `UnknownKey` diagnostic without suggesting a
+  historical replacement.
+- Remove migration-only unit tests, integration fixtures and manifest entries.
+- Preserve current `entry_root` and `package_folders` positive coverage plus generic unknown-key
+  coverage.
+- Do not reserve the removed names or add aliases, compatibility parsing or replacement
+  diagnostics.
 
 ## Phase 3: Mutability, assignment and explicit copy
 
@@ -766,6 +695,21 @@ Add `InvalidMatchArmReason::MissingBody`:
 Primary label: the arm arrow or empty body boundary.
 
 Keep positive coverage for bodyless `else =>`. Value-producing matches must continue to require produced values on every selected path.
+
+### 4.7 Delete legacy match-arm compatibility diagnostics
+
+**Additional audit finding:** `InvalidMatchArmReason::{LegacyColonSyntax, LegacyElseSyntax}` and
+the `current_line_contains_top_level_colon` pre-scan exist only to identify discontinued match-arm
+grammar. They preserve migration history in the current parser and renderer.
+
+- Delete both reason variants and their render branches.
+- Delete the colon pre-scan and its one-caller helper when it becomes unused.
+- Remove the migration-only unit test for colon arms.
+- Let `pattern:` reach the ordinary current missing-`=>` or invalid-arm-header diagnostic.
+- Let `else:` reach the ordinary current expected-`=>` diagnostic.
+- Preserve `InvalidArrow` for authored `->`. That reason factually identifies the current token
+  mistake and suggests `=>` without describing a former language feature.
+- Do not add replacement recognisers, fixtures or compatibility messages.
 
 ## Phase 5: Names, imports, calls and match context
 

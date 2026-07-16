@@ -213,13 +213,14 @@ Uppercase `E` is rejected. A leading `-` is part of a signed numeric literal onl
 for example `-1` or `-1e6`; unary negation for non-literals must also be attached, for example
 `-count`. Spaced unary negation such as `- count` and unary `+` are rejected.
 
-Symbolic binary operators must have spaces around them, such as `a + b` and `count = 1`.
-Forms like `a+b`, `a-1`, and `count=1` are syntax errors.
+Symbolic binary operators must have spaces around them, such as `a + b`. Assignment `=` follows
+the same outer-spacing rule but is not a binary operator. Forms like `a+b`, `a-1` and `count=1`
+are syntax errors.
 
 Compound symbolic assignments (`+=`, `-=`, `*=`, `/=`, `//=`, `%=`, `^=`) follow the same
 spacing rule: `count += 1` is valid, while `count+=1`, `count +=1`, and `count+= 1` are
-syntax errors. `~=` is tokenized as the separate mutable marker `~` and assignment `=`,
-so both sides of each token require spacing (e.g. `count ~= 1`).
+syntax errors. The mutable declaration spelling `~=` remains adjacent, with whitespace before `~`
+and after `=`. Write `count ~= 1`, not `count~= 1`, `count ~=1` or `count ~ = 1`.
 
 Runtime numeric operations are checked. Integer overflow, divide/modulo by zero, invalid integer
 exponents, and non-finite Float results are failures. When the enclosing function has builtin
@@ -1312,7 +1313,8 @@ A module is a directory-scoped set of Beanstalk source files compiled together. 
 `config.bst`:
 - lives at the project root;
 - uses normal declaration syntax;
-- accepts only known top-level `#` constants as config entries;
+- accepts only known top-level compile-time constants declared with `name #= value` or
+  `name #Type = value` as config entries;
 - requires values to fold at compile time;
 - may reference earlier compile-time config keys or constants imported from core/builder source-backed packages;
 - may contain core/builder imports, type aliases, structs, and choices as support declarations;

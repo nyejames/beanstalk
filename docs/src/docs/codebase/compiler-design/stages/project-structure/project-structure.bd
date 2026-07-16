@@ -22,7 +22,8 @@ Important owners:
 Stage 0 owns:
 
 - parsing `config.bst` and reachable core/builder source-backed package support files through the frontend up to AST
-- extracting only authored known top-level `#` config-key constants from shared AST const facts
+- extracting only authored known top-level config-key constants declared with `name #= value` or
+  `name #Type = value` from shared AST const facts
 - enforcing each config key's registered value shape before core fields are applied or backend settings are stored
 - allowing config imports only from Core or Builder packages
 - rejecting project-local and relative config imports by design

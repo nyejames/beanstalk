@@ -1,4 +1,4 @@
--- Compile-time constant with collection type using new #{Type} = syntax.
+-- Compile-time constant with a collection type.
 
 names #{String} = {"hello", "world"}
 

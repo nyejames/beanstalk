@@ -66,7 +66,7 @@ fn display_definition(
                 .name_str(table)
                 .unwrap_or("<anonymous struct>");
             if struct_def.const_record {
-                format!("#{name}")
+                format!("const record {name}")
             } else {
                 name.to_owned()
             }

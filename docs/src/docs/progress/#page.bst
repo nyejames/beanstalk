@@ -262,7 +262,7 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
             [: Supported]
             [: Broad top-level constant, dependency sorting, template folding, numeric folding, const-record, external constant, config, and diagnostics coverage.]
             [: Frontend]
-            [: Top-level [$html:<code>#</code>] constants must fully fold. Same-file constant evaluation follows source order unless dependency sorting can order top-level declarations. Const records are compile-time field-access-only values.]
+            [: Top-level compile-time constants such as [$html:<code>name #= value</code>] must fully fold. Same-file constant evaluation follows source order unless dependency sorting can order top-level declarations. Const records are compile-time field-access-only values.]
         ]
 
         [data:

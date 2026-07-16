@@ -162,7 +162,7 @@ pub(crate) fn compile_time_evaluation_error_suggestion(
             "Use only compile-time constant values inside constants and const templates"
         }
         CompileTimeEvaluationErrorReason::NonCompileTimeFieldInConstantContext => {
-            "Use only compile-time values when constructing records or choices for top-level '#' constants"
+            "Use only compile-time values when constructing records or choices for top-level compile-time constants"
         }
         CompileTimeEvaluationErrorReason::NoneLiteralRequiresOptionalTypeContext => {
             "Add an explicit optional type annotation, for example `value String? = none`"

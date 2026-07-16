@@ -313,7 +313,7 @@ impl DataType {
                     .name_str(string_table)
                     .unwrap_or("<anonymous struct>");
                 if *const_record {
-                    format!("#{bare_name}")
+                    format!("const record {bare_name}")
                 } else {
                     bare_name.to_owned()
                 }

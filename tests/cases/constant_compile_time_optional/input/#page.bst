@@ -1,4 +1,4 @@
--- Compile-time constant with optional type using new #Type? = syntax.
+-- Compile-time constant with an optional type.
 
 value #Int? = 42
 

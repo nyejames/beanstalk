@@ -1281,6 +1281,37 @@ impl DiagnosticOperator {
     }
 }
 
+/// Diagnostic-owned compound-assignment operator.
+///
+/// WHAT: carries only the seven operators that have an authored compound-assignment form.
+/// WHY: a dedicated type prevents impossible spacing facts such as `and=` from reaching the
+/// renderer and keeps user input away from internal-invariant panic paths.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum DiagnosticCompoundAssignmentOperator {
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
+    IntDivide,
+    Modulus,
+    Exponent,
+}
+
+impl DiagnosticCompoundAssignmentOperator {
+    /// Authored source spelling used in rendered diagnostics.
+    pub fn source_spelling(&self) -> &'static str {
+        match self {
+            Self::Add => "+=",
+            Self::Subtract => "-=",
+            Self::Multiply => "*=",
+            Self::Divide => "/=",
+            Self::IntDivide => "//=",
+            Self::Modulus => "%=",
+            Self::Exponent => "^=",
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum InvalidResultOperandReason {
     FallibleValueNotHandled,
@@ -1478,6 +1509,49 @@ pub enum InvalidStatementPositionReason {
     UnexpectedScopeCloseInTemplate,
 }
 
+/// WHAT: the exact symbolic construct whose whitespace is wrong.
+/// WHY: the construct enum owns the exact operator so impossible construct/operator combinations
+/// cannot be formed. Plain assignment and mutable declaration carry no operator because they are
+/// not binary operators.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum SymbolicSpacingConstruct {
+    BinaryOperator {
+        operator: DiagnosticOperator,
+    },
+    Assignment,
+    CompoundAssignment {
+        operator: DiagnosticCompoundAssignmentOperator,
+    },
+    MutableDeclaration,
+}
+
+impl SymbolicSpacingConstruct {
+    /// Authored source spelling used in rendered diagnostics.
+    pub fn source_spelling(&self) -> &'static str {
+        match self {
+            Self::BinaryOperator { operator } => operator.source_spelling(),
+            Self::Assignment => "=",
+            Self::CompoundAssignment { operator } => operator.source_spelling(),
+            Self::MutableDeclaration => "~=",
+        }
+    }
+}
+
+/// WHAT: which side of a symbolic construct is missing required whitespace.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum MissingWhitespace {
+    Before,
+    After,
+    Both,
+}
+
+/// WHAT: structured facts for a symbolic spacing diagnostic.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct SymbolicSpacingError {
+    pub construct: SymbolicSpacingConstruct,
+    pub missing: MissingWhitespace,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum CommonSyntaxMistakeReason {
     EqualityOperator,
@@ -1499,7 +1573,7 @@ pub enum CommonSyntaxMistakeReason {
     InvalidCompileTimeBindingSpacing,
     InvalidMutableBindingSpacing,
     InvalidReactiveBindingSpacing,
-    InvalidSymbolicBinaryOperatorSpacing,
+    InvalidSymbolicSpacing { error: SymbolicSpacingError },
     InvalidUnaryNegationSpacing,
     UnsupportedUnaryPlus,
 }
@@ -1529,7 +1603,7 @@ impl CommonSyntaxMistakeReason {
             | CommonSyntaxMistakeReason::InvalidCompileTimeBindingSpacing
             | CommonSyntaxMistakeReason::InvalidMutableBindingSpacing
             | CommonSyntaxMistakeReason::InvalidReactiveBindingSpacing
-            | CommonSyntaxMistakeReason::InvalidSymbolicBinaryOperatorSpacing
+            | CommonSyntaxMistakeReason::InvalidSymbolicSpacing { .. }
             | CommonSyntaxMistakeReason::InvalidUnaryNegationSpacing
             | CommonSyntaxMistakeReason::UnsupportedUnaryPlus => {}
         }

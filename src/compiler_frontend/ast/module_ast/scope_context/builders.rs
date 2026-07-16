@@ -178,7 +178,7 @@ impl ScopeContext {
 
     /// Seed explicit compile-time constants known before final module lookups exist.
     ///
-    /// WHAT: records top-level `#` constants already resolved by the environment builder.
+    /// WHAT: records top-level compile-time constants already resolved by the environment builder.
     /// WHY: constant-header and nominal-member contexts run before final `AstModuleLookups`
     ///      contains `module_constants`, but fixed-capacity type syntax still needs to
     ///      distinguish explicit constants from merely foldable runtime bindings.

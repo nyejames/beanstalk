@@ -5,7 +5,10 @@
 //! callers can run it against worker-local string tables before deterministic module aggregation.
 
 use crate::compiler_frontend::arena::TokenStats;
-use crate::compiler_frontend::compiler_messages::{CommonSyntaxMistakeReason, CompilerDiagnostic};
+use crate::compiler_frontend::compiler_messages::{
+    CommonSyntaxMistakeReason, CompilerDiagnostic, DiagnosticCompoundAssignmentOperator,
+    DiagnosticOperator, MissingWhitespace, SymbolicSpacingConstruct, SymbolicSpacingError,
+};
 use crate::compiler_frontend::keywords::{
     attached_bang_keyword_token_kind, is_identifier_continue, is_valid_identifier,
     keyword_token_kind,
@@ -35,7 +38,7 @@ pub const END_SCOPE_CHAR: char = ';';
 /// Boxed diagnostic result shared by every lexer result boundary in this file.
 ///
 /// WHAT: one file-local alias for the boxed `CompilerDiagnostic` error variant returned by
-/// `tokenize`, `get_token_kind`, `require_symbolic_binary_spacing`, `tokenize_style_directive`
+/// `tokenize`, `get_token_kind`, `require_symbolic_spacing`, `tokenize_style_directive`
 /// and `tokenize_identifier_or_keyword`.
 /// WHY: lexer dispatch propagates one diagnostic through several nested mode helpers and the
 /// production callers already own boxed diagnostic boundaries. Numeric and text-mode helpers
@@ -80,16 +83,34 @@ fn next_char_is_whitespace_or_end(stream: &mut TokenStream<'_>) -> bool {
 }
 
 fn next_char_is_missing_rhs_boundary(stream: &mut TokenStream<'_>) -> bool {
-    stream
-        .peek()
-        .is_none_or(|character| matches!(character, '\n' | '\r' | ',' | ')' | ']' | '}' | ';'))
+    character_is_missing_rhs_boundary(stream.peek().copied())
 }
 
-fn symbolic_spacing_error(stream: &mut TokenStream<'_>) -> CompilerDiagnostic {
+fn character_is_missing_rhs_boundary(character: Option<char>) -> bool {
+    character.is_none_or(|character| matches!(character, '\n' | '\r' | ',' | ')' | ']' | '}' | ';'))
+}
+
+fn symbolic_spacing_error(
+    stream: &mut TokenStream<'_>,
+    construct: SymbolicSpacingConstruct,
+    missing: MissingWhitespace,
+) -> CompilerDiagnostic {
     CompilerDiagnostic::common_syntax_mistake(
-        CommonSyntaxMistakeReason::InvalidSymbolicBinaryOperatorSpacing,
+        CommonSyntaxMistakeReason::InvalidSymbolicSpacing {
+            error: SymbolicSpacingError { construct, missing },
+        },
         stream.new_location(),
     )
+}
+
+/// Compute the missing whitespace side from independent leading and trailing checks.
+fn missing_whitespace_side(missing_left: bool, missing_right: bool) -> Option<MissingWhitespace> {
+    match (missing_left, missing_right) {
+        (true, true) => Some(MissingWhitespace::Both),
+        (true, false) => Some(MissingWhitespace::Before),
+        (false, true) => Some(MissingWhitespace::After),
+        (false, false) => None,
+    }
 }
 
 fn unary_negation_spacing_error(stream: &mut TokenStream<'_>) -> CompilerDiagnostic {
@@ -99,24 +120,26 @@ fn unary_negation_spacing_error(stream: &mut TokenStream<'_>) -> CompilerDiagnos
     )
 }
 
-/// Enforce spacing only when the current symbolic token is acting as a binary operator.
+/// Enforce outer spacing when the current complete symbolic token follows an expression.
 ///
-/// WHAT: requires whitespace before and after symbolic operators with expression operands.
-/// WHY: tokenizer-front-loaded spacing catches ambiguous forms such as `a+b` and `a*-1`
-/// before later parsing can reinterpret the same characters in a less readable way.
-fn require_symbolic_binary_spacing(
+/// WHAT: requires whitespace before and after binary operators and compound assignments.
+/// WHY: tokenizer-front-loaded spacing catches ambiguous forms such as `a+b` and `a*-1` before
+/// later parsing can reinterpret the same characters in a less readable way.
+fn require_symbolic_spacing(
     stream: &mut TokenStream<'_>,
     context: LexerTokenContext<'_>,
     whitespace_before_current: bool,
+    construct: SymbolicSpacingConstruct,
 ) -> LexerResult<()> {
     if !context.previous_can_end_expression() {
         return Ok(());
     }
 
-    if !context.has_leading_whitespace(whitespace_before_current)
-        || !next_char_is_whitespace_or_end(stream)
-    {
-        return Err(Box::new(symbolic_spacing_error(stream)));
+    let missing_left = !context.has_leading_whitespace(whitespace_before_current);
+    let missing_right = !next_char_is_whitespace_or_end(stream);
+
+    if let Some(missing) = missing_whitespace_side(missing_left, missing_right) {
+        return Err(Box::new(symbolic_spacing_error(stream, construct, missing)));
     }
 
     Ok(())
@@ -415,21 +438,24 @@ fn get_token_kind(
             if stream.peek() != Some(&'=') {
                 let previous_is_mutable_marker =
                     matches!(context.previous_token_kind, Some(TokenKind::Mutable));
-                let previous_can_start_assignment = previous_is_mutable_marker
-                    || context
-                        .previous_token_kind
-                        .is_some_and(TokenKind::can_end_expression);
+                let previous_can_start_assignment = context
+                    .previous_token_kind
+                    .is_some_and(TokenKind::can_end_expression);
 
-                if previous_can_start_assignment
+                if !previous_is_mutable_marker
+                    && previous_can_start_assignment
                     && !matches!(context.previous_token_kind, Some(TokenKind::Bang))
                     && !next_char_is_missing_rhs_boundary(stream)
                 {
-                    let missing_left_spacing = !previous_is_mutable_marker
-                        && !context.has_leading_whitespace(whitespace_before_current);
-                    let missing_right_spacing = !next_char_is_whitespace_or_end(stream);
+                    let missing_left = !context.has_leading_whitespace(whitespace_before_current);
+                    let missing_right = !next_char_is_whitespace_or_end(stream);
 
-                    if missing_left_spacing || missing_right_spacing {
-                        return Err(Box::new(symbolic_spacing_error(stream)));
+                    if let Some(missing) = missing_whitespace_side(missing_left, missing_right) {
+                        return Err(Box::new(symbolic_spacing_error(
+                            stream,
+                            SymbolicSpacingConstruct::Assignment,
+                            missing,
+                        )));
                     }
                 }
             }
@@ -497,7 +523,14 @@ fn get_token_kind(
 
             if next_char == '=' {
                 stream.next();
-                require_symbolic_binary_spacing(stream, context, whitespace_before_current)?;
+                require_symbolic_spacing(
+                    stream,
+                    context,
+                    whitespace_before_current,
+                    SymbolicSpacingConstruct::CompoundAssignment {
+                        operator: DiagnosticCompoundAssignmentOperator::Subtract,
+                    },
+                )?;
                 return_token!(TokenKind::SubtractAssign, stream);
             }
 
@@ -508,7 +541,14 @@ fn get_token_kind(
 
             if next_char.is_numeric() {
                 if context.previous_can_end_expression() {
-                    return Err(Box::new(symbolic_spacing_error(stream)));
+                    require_symbolic_spacing(
+                        stream,
+                        context,
+                        whitespace_before_current,
+                        SymbolicSpacingConstruct::BinaryOperator {
+                            operator: DiagnosticOperator::Subtract,
+                        },
+                    )?;
                 }
 
                 let first_digit = stream.advance_after_peek(
@@ -523,12 +563,14 @@ fn get_token_kind(
             }
 
             if context.previous_can_end_expression() {
-                if !context.has_leading_whitespace(whitespace_before_current)
-                    || !next_char_is_whitespace_or_end(stream)
-                {
-                    return Err(Box::new(symbolic_spacing_error(stream)));
-                }
-
+                require_symbolic_spacing(
+                    stream,
+                    context,
+                    whitespace_before_current,
+                    SymbolicSpacingConstruct::BinaryOperator {
+                        operator: DiagnosticOperator::Subtract,
+                    },
+                )?;
                 return_token!(TokenKind::Subtract, stream);
             }
 
@@ -548,12 +590,26 @@ fn get_token_kind(
                 && next_char == '='
             {
                 stream.next();
-                require_symbolic_binary_spacing(stream, context, whitespace_before_current)?;
+                require_symbolic_spacing(
+                    stream,
+                    context,
+                    whitespace_before_current,
+                    SymbolicSpacingConstruct::CompoundAssignment {
+                        operator: DiagnosticCompoundAssignmentOperator::Add,
+                    },
+                )?;
                 return_token!(TokenKind::AddAssign, stream);
             }
 
             if context.previous_can_end_expression() {
-                require_symbolic_binary_spacing(stream, context, whitespace_before_current)?;
+                require_symbolic_spacing(
+                    stream,
+                    context,
+                    whitespace_before_current,
+                    SymbolicSpacingConstruct::BinaryOperator {
+                        operator: DiagnosticOperator::Add,
+                    },
+                )?;
                 return_token!(TokenKind::Add, stream);
             }
 
@@ -568,11 +624,25 @@ fn get_token_kind(
                 && next_char == '='
             {
                 stream.next();
-                require_symbolic_binary_spacing(stream, context, whitespace_before_current)?;
+                require_symbolic_spacing(
+                    stream,
+                    context,
+                    whitespace_before_current,
+                    SymbolicSpacingConstruct::CompoundAssignment {
+                        operator: DiagnosticCompoundAssignmentOperator::Multiply,
+                    },
+                )?;
                 return_token!(TokenKind::MultiplyAssign, stream);
             }
 
-            require_symbolic_binary_spacing(stream, context, whitespace_before_current)?;
+            require_symbolic_spacing(
+                stream,
+                context,
+                whitespace_before_current,
+                SymbolicSpacingConstruct::BinaryOperator {
+                    operator: DiagnosticOperator::Multiply,
+                },
+            )?;
             return_token!(TokenKind::Multiply, stream);
         }
 
@@ -586,26 +656,50 @@ fn get_token_kind(
                         && next_next_char == '='
                     {
                         stream.next();
-                        require_symbolic_binary_spacing(
+                        require_symbolic_spacing(
                             stream,
                             context,
                             whitespace_before_current,
+                            SymbolicSpacingConstruct::CompoundAssignment {
+                                operator: DiagnosticCompoundAssignmentOperator::IntDivide,
+                            },
                         )?;
                         return_token!(TokenKind::IntDivideAssign, stream);
                     }
-                    require_symbolic_binary_spacing(stream, context, whitespace_before_current)?;
+                    require_symbolic_spacing(
+                        stream,
+                        context,
+                        whitespace_before_current,
+                        SymbolicSpacingConstruct::BinaryOperator {
+                            operator: DiagnosticOperator::IntDivide,
+                        },
+                    )?;
                     return_token!(TokenKind::IntDivide, stream);
                 }
 
                 // Divide assign (/=)
                 if next_char == '=' {
                     stream.next();
-                    require_symbolic_binary_spacing(stream, context, whitespace_before_current)?;
+                    require_symbolic_spacing(
+                        stream,
+                        context,
+                        whitespace_before_current,
+                        SymbolicSpacingConstruct::CompoundAssignment {
+                            operator: DiagnosticCompoundAssignmentOperator::Divide,
+                        },
+                    )?;
                     return_token!(TokenKind::DivideAssign, stream);
                 }
             }
 
-            require_symbolic_binary_spacing(stream, context, whitespace_before_current)?;
+            require_symbolic_spacing(
+                stream,
+                context,
+                whitespace_before_current,
+                SymbolicSpacingConstruct::BinaryOperator {
+                    operator: DiagnosticOperator::Divide,
+                },
+            )?;
             return_token!(TokenKind::Divide, stream);
         }
 
@@ -614,11 +708,25 @@ fn get_token_kind(
                 && next_char == '='
             {
                 stream.next();
-                require_symbolic_binary_spacing(stream, context, whitespace_before_current)?;
+                require_symbolic_spacing(
+                    stream,
+                    context,
+                    whitespace_before_current,
+                    SymbolicSpacingConstruct::CompoundAssignment {
+                        operator: DiagnosticCompoundAssignmentOperator::Modulus,
+                    },
+                )?;
                 return_token!(TokenKind::ModulusAssign, stream);
             }
 
-            require_symbolic_binary_spacing(stream, context, whitespace_before_current)?;
+            require_symbolic_spacing(
+                stream,
+                context,
+                whitespace_before_current,
+                SymbolicSpacingConstruct::BinaryOperator {
+                    operator: DiagnosticOperator::Modulus,
+                },
+            )?;
             return_token!(TokenKind::Modulus, stream);
         }
 
@@ -627,11 +735,25 @@ fn get_token_kind(
                 && next_char == '='
             {
                 stream.next();
-                require_symbolic_binary_spacing(stream, context, whitespace_before_current)?;
+                require_symbolic_spacing(
+                    stream,
+                    context,
+                    whitespace_before_current,
+                    SymbolicSpacingConstruct::CompoundAssignment {
+                        operator: DiagnosticCompoundAssignmentOperator::Exponent,
+                    },
+                )?;
                 return_token!(TokenKind::ExponentAssign, stream);
             }
 
-            require_symbolic_binary_spacing(stream, context, whitespace_before_current)?;
+            require_symbolic_spacing(
+                stream,
+                context,
+                whitespace_before_current,
+                SymbolicSpacingConstruct::BinaryOperator {
+                    operator: DiagnosticOperator::Exponent,
+                },
+            )?;
             return_token!(TokenKind::Exponent, stream);
         }
 
@@ -643,7 +765,14 @@ fn get_token_kind(
             if let Some(&next_char) = stream.peek() {
                 if next_char == '=' {
                     stream.next();
-                    require_symbolic_binary_spacing(stream, context, whitespace_before_current)?;
+                    require_symbolic_spacing(
+                        stream,
+                        context,
+                        whitespace_before_current,
+                        SymbolicSpacingConstruct::BinaryOperator {
+                            operator: DiagnosticOperator::GreaterThanOrEqual,
+                        },
+                    )?;
                     return_token!(TokenKind::GreaterThanOrEqual, stream);
                 }
 
@@ -656,7 +785,14 @@ fn get_token_kind(
             if !greater_than_is_generic_angle_end(stream, context, whitespace_before_current)
                 && !greater_than_is_template_tag_end(stream, context, whitespace_before_current)
             {
-                require_symbolic_binary_spacing(stream, context, whitespace_before_current)?;
+                require_symbolic_spacing(
+                    stream,
+                    context,
+                    whitespace_before_current,
+                    SymbolicSpacingConstruct::BinaryOperator {
+                        operator: DiagnosticOperator::GreaterThan,
+                    },
+                )?;
             }
             return_token!(TokenKind::GreaterThan, stream);
         }
@@ -665,7 +801,14 @@ fn get_token_kind(
             if let Some(&next_char) = stream.peek() {
                 if next_char == '=' {
                     stream.next();
-                    require_symbolic_binary_spacing(stream, context, whitespace_before_current)?;
+                    require_symbolic_spacing(
+                        stream,
+                        context,
+                        whitespace_before_current,
+                        SymbolicSpacingConstruct::BinaryOperator {
+                            operator: DiagnosticOperator::LessThanOrEqual,
+                        },
+                    )?;
                     return_token!(TokenKind::LessThanOrEqual, stream);
                 }
 
@@ -678,17 +821,39 @@ fn get_token_kind(
             if !less_than_is_generic_angle_start(stream, context, whitespace_before_current)
                 && !less_than_is_template_tag_start(stream, context, whitespace_before_current)
             {
-                require_symbolic_binary_spacing(stream, context, whitespace_before_current)?;
+                require_symbolic_spacing(
+                    stream,
+                    context,
+                    whitespace_before_current,
+                    SymbolicSpacingConstruct::BinaryOperator {
+                        operator: DiagnosticOperator::LessThan,
+                    },
+                )?;
             }
             return_token!(TokenKind::LessThan, stream);
         }
 
         if current_char == '~' {
-            if context.previous_can_end_expression()
-                && stream.peek() == Some(&'=')
-                && !context.has_leading_whitespace(whitespace_before_current)
-            {
-                return Err(Box::new(symbolic_spacing_error(stream)));
+            if context.previous_can_end_expression() && stream.peek() == Some(&'=') {
+                let mut remaining_chars = stream.chars.clone();
+                let marker_assign = remaining_chars.next();
+                debug_assert_eq!(marker_assign, Some('='));
+
+                let missing_left = !context.has_leading_whitespace(whitespace_before_current);
+                let trailing_char = remaining_chars.next();
+                let missing_right = !character_is_missing_rhs_boundary(trailing_char)
+                    && trailing_char.is_some_and(|character| !character.is_whitespace());
+
+                if let Some(missing) = missing_whitespace_side(missing_left, missing_right) {
+                    stream.advance_after_peek(
+                        "Tokenizer peeked the mutable declaration assignment marker but could not advance.",
+                    );
+                    return Err(Box::new(symbolic_spacing_error(
+                        stream,
+                        SymbolicSpacingConstruct::MutableDeclaration,
+                        missing,
+                    )));
+                }
             }
 
             return_token!(TokenKind::Mutable, stream);

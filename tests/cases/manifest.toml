@@ -5609,8 +5609,8 @@ path = "constant_compile_time_spacing_error"
 tags = ["integration", "constants", "diagnostics", "language"]
 
 [[case]]
-id = "constant_mutable_spacing_error"
-path = "constant_mutable_spacing_error"
+id = "mutable_binding_internal_spacing_rejected"
+path = "mutable_binding_internal_spacing_rejected"
 tags = ["integration", "diagnostics", "language"]
 
 [[case]]

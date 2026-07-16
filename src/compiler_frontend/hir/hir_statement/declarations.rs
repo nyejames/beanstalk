@@ -131,7 +131,7 @@ impl<'a> HirBuilder<'a> {
                         value: lowered_value,
                     });
                 }
-                // Const-eligible struct constructors in top-level '#' constants are coerced
+                // Const-eligible struct constructors in top-level compile-time constants are coerced
                 // in AST to data-only struct instances, and land here as HIR const records.
                 Ok(Some(HirConstValue::Record(lowered_fields)))
             }

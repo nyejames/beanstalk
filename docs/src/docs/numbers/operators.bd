@@ -60,7 +60,8 @@ Parentheses override normal precedence.
 
 ### Spacing
 
-Symbolic binary operators require spaces on both sides.
+Symbolic binary operators require spaces on both sides. Assignment `=` follows
+the same outer-spacing rule, but it is not a binary operator.
 
 [codeblock, $code("bst"):
     total = left + right
@@ -83,12 +84,14 @@ Compound assignments follow the same rule:
 
 `count+=1`, `count +=1` and `count+= 1` are invalid.
 
-`~=` is tokenized as the mutable marker plus assignment, so its tokens also
-need spacing:
+The mutable declaration spelling `~=` stays adjacent. It needs whitespace
+before `~` and after `=`:
 
 [codeblock, $code("bst"):
     count ~= 1
 ]
+
+`count~= 1`, `count ~=1` and `count ~ = 1` are invalid.
 
 Operator overloading is outside Beanstalk's language design. Operators remain
 compiler-owned and predictable.

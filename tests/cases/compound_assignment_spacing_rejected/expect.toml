@@ -2,4 +2,4 @@
 mode = "failure"
 warnings = "forbid"
 diagnostic_codes = ["BST-SYNTAX-0031"]
-message_contains = ["Symbolic binary operators", "whitespace"]
+message_contains = ["Compound assignment '+=' requires whitespace after it."]

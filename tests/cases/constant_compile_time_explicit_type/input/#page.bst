@@ -1,4 +1,4 @@
--- Compile-time constant with explicit type using new #Type = syntax.
+-- Compile-time constant with an explicit type.
 
 value #Int = 42
 

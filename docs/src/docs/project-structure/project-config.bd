@@ -15,7 +15,8 @@
 
 ### Strict key rules
 
-- Only known top-level `#` constants are accepted as config entries.
+- Only known top-level compile-time constants declared with `name #= value` or
+  `name #Type = value` are accepted as config entries.
 - Unknown keys are rejected with `BST-CONFIG-0001`.
 - Values must fold at compile time.
 - Config-key constants may reference earlier config keys or constants imported from Core or Builder source-backed packages.
