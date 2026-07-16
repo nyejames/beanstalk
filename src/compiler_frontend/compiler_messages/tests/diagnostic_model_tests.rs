@@ -1591,3 +1591,64 @@ fn dev_server_html_renderer_outputs_error_card_before_warning_card() {
         "error card should appear before warning card in dev-server HTML"
     );
 }
+
+#[test]
+fn terse_descriptor_only_diagnostics_use_descriptor_title() {
+    let mut string_table = StringTable::new();
+    let source_path = InternedPath::from_single_str("main.bst", &mut string_table);
+    let render_context = DiagnosticRenderContext::new(&string_table);
+
+    let diagnostics = [
+        (
+            CompilerDiagnostic::unterminated_string_literal(location(source_path.clone())),
+            "BST-SYNTAX-0006",
+            "Unterminated string literal",
+        ),
+        (
+            CompilerDiagnostic::invalid_char_literal(location(source_path.clone())),
+            "BST-SYNTAX-0009",
+            "Invalid character literal",
+        ),
+        (
+            CompilerDiagnostic::export_outside_module_root(location(source_path)),
+            "BST-RULE-0077",
+            "`export:` is only valid in a module root file",
+        ),
+    ];
+
+    for (diagnostic, expected_code, expected_title) in diagnostics {
+        let terse_line = terse::format_terse_diagnostic_with_context(&diagnostic, render_context);
+        assert!(
+            terse_line.contains(expected_code),
+            "Expected terse line to contain {expected_code}, got: {terse_line}",
+        );
+        assert!(
+            terse_line.contains(expected_title),
+            "Expected terse line to contain descriptor title {expected_title}, got: {terse_line}",
+        );
+        let message_field = terse_line.rsplit('|').next().unwrap_or_default();
+        assert!(
+            !message_field.is_empty(),
+            "Terse message field should be non-empty for {expected_code}, got: {terse_line}",
+        );
+    }
+}
+
+#[test]
+fn terse_message_field_is_never_empty() {
+    let mut string_table = StringTable::new();
+    let source_path = InternedPath::from_single_str("main.bst", &mut string_table);
+    let render_context = DiagnosticRenderContext::new(&string_table);
+
+    for kind in DiagnosticKind::all() {
+        let diagnostic =
+            CompilerDiagnostic::new(kind, location(source_path.clone()), DiagnosticPayload::None);
+        let terse_line = terse::format_terse_diagnostic_with_context(&diagnostic, render_context);
+        let message_field = terse_line.rsplit('|').next().unwrap_or_default();
+        assert!(
+            !message_field.is_empty(),
+            "Terse message field should be non-empty for {:?}, got: {terse_line}",
+            kind,
+        );
+    }
+}

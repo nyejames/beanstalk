@@ -8,6 +8,32 @@ Every retained item in this plan has been checked against the current language a
 
 This is an implementation plan, not a research backlog. Each phase should leave one current diagnostic path, remove superseded variants and add end-to-end coverage for the user-visible behaviour it changes.
 
+## Current state
+
+ACTIVE_PLAN: `docs/roadmap/plans/compiler-diagnostics-improvement-plan.md`
+STATUS: active
+CURRENT_SLICE: Phase 1.2a, carry exact operator facts and consolidate operator diagnostics
+LAST_ACCEPTED_COMMIT: none
+WORKTREE: `main` at `069a29acb`, Phase 1.1 accepted and awaiting checkpoint commit
+REQUIRED_RELOADS: startup files, this plan and current source/diff
+RELEVANT_CONTEXT_NOW:
+- docs: compiler diagnostics ownership, generic and trait bounds, operator semantics, style, testing and validation contracts
+- code: exact AST `Operator`, operator-policy emitters, diagnostic payload/remapping and operator renderers/tests
+ACCEPTANCE_CRITERIA:
+- unsupported-operator diagnostics carry and render the exact source operator
+- `not`, mixed String `+` and generic-parameter failures use the Phase 1.2 wording
+- no user-facing message claims trait bounds are unsupported
+VALIDATION_STATE:
+- targeted compiler-message tests: passed, 36 tests
+- full Rust tests and Clippy: passed in the Phase 1.1 Ollama worker
+- `just validate`: passed for Phase 1.1, including 3,511 Rust tests and 1,764 integration cases
+DOCS_IMPACT: plan state only; progress matrix unaffected by Phase 1.1
+BLOCKERS_OR_OPEN_DECISIONS: none
+DELEGATION_DECISION: Ollama - explicitly required for every implementation worker slice
+NEXT_WORKER_ORDER: Ollama only for implementation slices
+STOP_REASON: none
+NEXT_RESUME_ACTION: run `just validate`, commit Phase 1.1 and launch the Phase 1.2a Ollama worker
+
 ## Confirmed design decisions
 
 - Quoted strings support exactly these escapes:
@@ -53,6 +79,7 @@ This is an implementation plan, not a research backlog. Each phase should leave 
 ### 1.1 Guarantee non-empty terse messages
 
 **Original findings:** DIAG-013, DIAG-027
+**Status:** Complete, pending checkpoint commit
 
 `render::terse` currently emits only `RenderedPayload.message`. Payloads such as `DiagnosticPayload::None` can therefore produce an empty final field even when the diagnostic descriptor has a useful title.
 
@@ -80,6 +107,11 @@ This is an implementation plan, not a research backlog. Each phase should leave 
 
 Audit all messages touched by this plan for source terminology that no longer matches Beanstalk.
 
+Implement this in two coherent slices:
+
+1. **1.2a exact operator facts:** replace the broad operator-category payload with the exact source operator and complete the operator wording formerly listed in Phase 7.2. This must land first because the generic message cannot name `<op>` from `UnsupportedOperatorCategory`.
+2. **1.2b remaining terminology:** correct fallible, optional, template and statement-position messages plus the source-hostile internal-stage wording listed below.
+
 #### Required corrections
 
 - Replace user-facing `Result` wording with `fallible expression`, `Error! return` or the exact source construct.
@@ -98,6 +130,19 @@ Audit all messages touched by this plan for source terminology that no longer ma
   - `type` is valid only in top-level generic declaration headers
   - `of` is valid only in generic type annotations
   - neither is a future reserved feature
+- Change `InvalidResultHandlingReason::NotResultExpression`, which currently calls the operand a `Result`-valued expression, to source-visible `Error!` and fallible-expression terminology. Phase 4 still replaces the umbrella reason with authored-handler cases.
+- Remove internal-stage wording from `InvalidConfigReason::ValueCouldNotFold`. Explain only that the value could not be evaluated at compile time and cannot depend on runtime evaluation.
+
+#### Exact operator prerequisite and consolidated wording
+
+- Add a diagnostic-owned exact operator enum that is independent of AST storage and can be reused by tokenizer spacing diagnostics in Phase 2.2.
+- Map AST `Operator` to the diagnostic operator at the operator-policy emission boundary.
+- Replace `UnsupportedOperatorTypes { category, ... }` with exact operator facts. Derive broad families only where generic fallback wording still needs them.
+- Render exact operator messages in this slice:
+  - `Operator 'not' requires a 'Bool' operand, found 'Int'.`
+  - `Operator '+' cannot concatenate 'String' and 'Int'. Use a template for mixed textual interpolation.`
+  - `Operator '<op>' is not available for generic parameter '<T>'. Beanstalk operators are compiler-owned and generic bounds do not provide operator support. Use a concrete type or a receiver method provided by an explicit bound.`
+- Update payload remapping, constructors, AST operator-policy emitters and focused tests as one API replacement. Do not retain the category-only payload as a compatibility path.
 
 #### Acceptance
 
@@ -105,6 +150,7 @@ Audit all messages touched by this plan for source terminology that no longer ma
 - No user-facing message teaches `Option<Type>`.
 - No user-facing message claims templates are top-level-only.
 - No user-facing message calls an `Error!` expression a first-class `Result`.
+- No user-facing message exposes AST construction or finalization as a correction concept.
 - Repository search finds no stale wording after superseded variants are removed.
 
 ### 1.3 Remove legacy `#import` completely
@@ -866,6 +912,18 @@ The annotation scanner currently sees only supported exports, so an annotation b
 - genuinely orphaned annotation
 - provider-level rendering preserves `BST-IMPORT-0022` and the JavaScript source span
 
+### 6.4 Keep standalone template-helper diagnostics source-visible
+
+**Additional audit finding:** `InvalidTemplateStructureReason::HelperOutsideWrapperSlot` currently tells the user that a helper reached AST finalization. The source mistake is a standalone `$insert(...)` contribution, not the compiler stage that detected it.
+
+Render:
+
+> `$insert(...)` is a template contribution helper, not a standalone value. Keep it inside a template application that receives the contribution.
+
+- Do not mention AST, TIR, finalization or internal helper-artifact policy.
+- Keep the diagnostic at the standalone helper expression.
+- Add an integration assertion for the existing standalone-insert rejection so the source-visible wording is contractual.
+
 ## Phase 7: Remaining focused quality improvements
 
 ### 7.1 Duplicate reactive declarations should use the normal no-shadowing path
@@ -883,28 +941,12 @@ A second reactive declaration is not invalid because `$` is unexpected. It is in
 - Label both declarations.
 - Do not invent a separate reactive uniqueness rule.
 
-### 7.2 Distinguish unary `not` and string concatenation
+### 7.2 Exact operator diagnostics consolidated into Phase 1.2
 
 **Original findings:** DIAG-015, DIAG-030
-**Additional finding:** generic operator guidance is stale.
+**Status:** Moved earlier
 
-`UnsupportedOperatorTypes` currently carries only a broad category. Add the exact semantic operator.
-
-Messages:
-
-- `not`:
-
-  > Operator `not` requires a `Bool` operand, found `Int`.
-
-- string plus non-string:
-
-  > Operator `+` cannot concatenate `String` and `Int`. Use a template for mixed textual interpolation.
-
-A valid example is `[: value: [x]]`.
-
-Do not suggest bare `cast x`. `cast` requires an explicit typed target boundary.
-
-For generic parameters, use the compiler-owned-operator wording from phase 1.2.
+The exact operator payload and the `not`, string concatenation and generic-parameter messages now belong to Phase 1.2a. The generic-bound terminology fix already requires exact operator facts, so retaining a later category-only-to-exact migration would create transitional API and duplicate renderer work.
 
 ### 7.3 Add actionable collection-loop guidance
 

@@ -7,8 +7,9 @@
 use super::*;
 use crate::builder_surface::SourceFileKind;
 use crate::compiler_frontend::compiler_messages::{
-    DiagnosticPayload, InvalidTraitConformanceReason, InvalidTraitIncompatibilityReason,
-    InvalidTraitKeywordUsageReason, NamingConvention, ReservedNameOwner,
+    DiagnosticKind, DiagnosticPayload, InvalidTraitConformanceReason,
+    InvalidTraitIncompatibilityReason, InvalidTraitKeywordUsageReason, NamingConvention,
+    ReservedNameOwner,
 };
 
 pub(crate) struct RenderedPayload {
@@ -69,6 +70,22 @@ pub(crate) fn render_payload(
     };
 
     RenderedPayload { message, guidance }
+}
+
+/// WHAT: guarantees every terse record carries a non-empty message.
+/// WHY: descriptor-only diagnostics use `DiagnosticPayload::None`, which renders an empty
+/// payload message. The descriptor title is always present and provides useful context.
+pub(crate) fn terse_payload_message(
+    payload: &DiagnosticPayload,
+    kind: DiagnosticKind,
+    context: DiagnosticRenderContext<'_>,
+) -> String {
+    let rendered = render_payload(payload, context);
+    if rendered.message.is_empty() {
+        kind.descriptor().title.to_owned()
+    } else {
+        rendered.message
+    }
 }
 
 fn render_payload_message(

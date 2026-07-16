@@ -6,7 +6,7 @@
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_messages::render::{
     DiagnosticRenderContext, display_column_number, display_line_number,
-    relative_display_path_from_root, render_payload, resolve_source_file_path,
+    relative_display_path_from_root, resolve_source_file_path, terse_payload_message,
 };
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, DiagnosticSeverity};
 #[cfg(test)]
@@ -65,12 +65,12 @@ pub(crate) fn format_terse_diagnostic_with_context(
     let line = display_line_number(diagnostic.primary_location.start_pos.line_number);
     let column = display_column_number(diagnostic.primary_location.start_pos.char_column);
 
-    let rendered_payload = render_payload(&diagnostic.payload, context);
+    let message = terse_payload_message(&diagnostic.payload, diagnostic.kind, context);
 
     format!(
         "{severity_char}|{}|{sanitized_path}|{line}:{column}|{}",
         descriptor.code,
-        sanitize_terse_field(&rendered_payload.message)
+        sanitize_terse_field(&message)
     )
 }
 
