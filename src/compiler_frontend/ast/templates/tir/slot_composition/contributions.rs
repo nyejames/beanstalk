@@ -125,7 +125,7 @@ pub(crate) fn route_tir_slot_contributions(
     fill_template_id: TemplateIrId,
     string_table: &StringTable,
 ) -> ContributionResult<RoutedTirSlotContributions> {
-    let schema = collect_tir_slot_schema(store, wrapper_template_id, string_table)?;
+    let schema = collect_tir_slot_schema(store, wrapper_template_id)?;
 
     if !schema.has_any_slots() {
         return Err(Box::new(internal_compiler_error(

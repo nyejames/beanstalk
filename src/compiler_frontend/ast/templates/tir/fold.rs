@@ -43,9 +43,7 @@ use crate::compiler_frontend::ast::templates::tir::parser_builder_state::Templat
 use crate::compiler_frontend::ast::templates::tir::refs::{
     TemplateTirChildReference, TemplateWrapperReference,
 };
-use crate::compiler_frontend::ast::templates::tir::slot_composition::{
-    TirSlotSchema, collect_tir_slot_schema,
-};
+use crate::compiler_frontend::ast::templates::tir::slot_composition::collect_tir_slot_schema;
 use crate::compiler_frontend::ast::templates::tir::store::TemplateIrStore;
 use crate::compiler_frontend::ast::templates::tir::view::{TemplateTirPhase, TirView};
 use crate::compiler_frontend::compiler_errors::CompilerError;
@@ -1038,11 +1036,7 @@ fn fold_tir_wrapper_around_child_output(
     let mut output_buffer = reserve_tir_fold_output_buffer(estimated_bytes);
     let mut emitted_output = false;
 
-    let schema = collect_tir_slot_schema(
-        wrapper_store,
-        wrapper_reference.root.template_id,
-        fold_context.string_table,
-    )?;
+    let schema = collect_tir_slot_schema(wrapper_store, wrapper_reference.root.template_id)?;
 
     if !schema.has_any_slots() {
         // Slot-less wrapper: fold the wrapper content, then append the child
@@ -1064,8 +1058,13 @@ fn fold_tir_wrapper_around_child_output(
         // injected at the slot that the fill content would route to. Other
         // slots fold to empty, matching the structural expansion behavior where
         // unfilled slots produce no output.
-        let fill_target_key =
-            determine_wrapper_fill_target_key(&schema, &wrapper_template.location)?;
+        let fill_target_key = schema.loose_fill_target_key().ok_or_else(|| {
+            CompilerDiagnostic::invalid_template_slot(
+                InvalidTemplateSlotReason::LooseContentWithoutDefaultSlot,
+                None,
+                wrapper_template.location.to_owned(),
+            )
+        })?;
 
         fold_tir_wrapper_node_with_child_output(
             wrapper_store,
@@ -1085,30 +1084,6 @@ fn fold_tir_wrapper_around_child_output(
     record_tir_fold_output_intern(actual_len);
 
     Ok(output_id)
-}
-
-/// Determines which slot key the child output maps to, using the same routing
-/// logic as the structural path: first positional slot, then default slot.
-fn determine_wrapper_fill_target_key(
-    schema: &TirSlotSchema,
-    wrapper_location: &SourceLocation,
-) -> Result<SlotKey, TemplateError> {
-    let positional_slots = schema.ordered_positional_slots();
-    if let Some(&first_positional) = positional_slots.first() {
-        return Ok(SlotKey::Positional(first_positional));
-    }
-    if schema.has_default_slot {
-        return Ok(SlotKey::Default);
-    }
-
-    // The fill content (child output) has no slot to flow into. This matches
-    // the structural routing error when loose content has no target slot.
-    Err(CompilerDiagnostic::invalid_template_slot(
-        InvalidTemplateSlotReason::LooseContentWithoutDefaultSlot,
-        None,
-        wrapper_location.to_owned(),
-    )
-    .into())
 }
 
 /// Recursively folds a wrapper template node, injecting the already-folded

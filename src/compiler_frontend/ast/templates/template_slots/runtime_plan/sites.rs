@@ -15,27 +15,24 @@ use crate::compiler_frontend::ast::templates::template_slots::error::TemplateSlo
 use crate::compiler_frontend::ast::templates::tir::{
     TemplateIrId, TemplateIrNodeId, TemplateIrNodeKind, TemplateIrStore, TemplateSlotPlanId,
     TemplateSlotSitePlan, TemplateSlotSiteRenderPiece, TemplateSlotSiteRenderPlan,
-    TemplateWrapperSetId, TirCopyState, TirSlotPlaceholder, TirSlotSchema,
-    collect_tir_slot_placeholders_in_order, collect_tir_slot_schema,
-    copy_tir_subtree_with_active_slot_plan, tir_subtree_has_unresolved_slots,
+    TemplateWrapperSetId, TirCopyState, TirSlotPlaceholder, collect_tir_slot_placeholders_in_order,
+    collect_tir_slot_schema, copy_tir_subtree_with_active_slot_plan,
+    tir_subtree_has_unresolved_slots,
 };
 use crate::compiler_frontend::compiler_errors::{CompilerError, SourceLocation};
 use crate::compiler_frontend::instrumentation::{AstCounter, add_ast_counter};
-use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 pub(super) fn build_runtime_wrapper_site_plan(
     wrapper_tir_root: TemplateIrNodeId,
     sources: &[RuntimeSlotContributionSourceDraft],
     slot_plan_id: TemplateSlotPlanId,
     store: &mut TemplateIrStore,
-    string_table: &StringTable,
     copy_state: &mut TirCopyState,
 ) -> Result<Vec<TemplateSlotSitePlan>, TemplateSlotError> {
     RuntimeWrapperSitePlanBuilder {
         sources,
         slot_plan_id,
         store,
-        string_table,
         copy_state,
     }
     .build_slot_sites(wrapper_tir_root)
@@ -53,7 +50,6 @@ struct RuntimeWrapperSitePlanBuilder<'a> {
     sources: &'a [RuntimeSlotContributionSourceDraft],
     slot_plan_id: TemplateSlotPlanId,
     store: &'a mut TemplateIrStore,
-    string_table: &'a StringTable,
     copy_state: &'a mut TirCopyState,
 }
 
@@ -277,8 +273,8 @@ impl RuntimeWrapperSitePlanBuilder<'_> {
             return Ok(Some(pieces));
         }
 
-        let schema = collect_tir_slot_schema(self.store, template_id, self.string_table)?;
-        let Some(target_key) = loose_contribution_target_key(&schema) else {
+        let schema = collect_tir_slot_schema(self.store, template_id)?;
+        let Some(target_key) = schema.loose_fill_target_key() else {
             // Named-only wrappers cannot absorb a loose contribution. Returning
             // None lets the caller report that the wrapper could not be applied.
             return Ok(None);
@@ -295,24 +291,6 @@ impl RuntimeWrapperSitePlanBuilder<'_> {
 
         Ok(Some(pieces))
     }
-}
-
-/// Chooses the slot key that a single loose contribution would fill.
-///
-/// WHAT: routes a loose contribution to positional slots first, then to the
-///       default slot. Named slots only receive explicit `$insert(...)`
-///       contributions, so a wrapper with only named slots cannot absorb a
-///       loose contribution through this path.
-fn loose_contribution_target_key(schema: &TirSlotSchema) -> Option<SlotKey> {
-    if let Some(index) = schema.ordered_positional_slots().first() {
-        return Some(SlotKey::Positional(*index));
-    }
-
-    if schema.has_default_slot {
-        return Some(SlotKey::Default);
-    }
-
-    None
 }
 
 /// Builds render pieces for a wrapper TIR tree by replacing direct slot

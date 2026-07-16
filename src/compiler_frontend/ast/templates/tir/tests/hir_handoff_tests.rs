@@ -5,10 +5,18 @@
 //! WHY: the owned runtime slot handoff preserves routed source order, wrapper
 //! site order, repeated slot replay, and child-template boundaries for HIR.
 
+use super::super::builder::TemplateIrBuilder;
 use super::super::ids::{ExpressionSiteId, SlotOccurrenceId, TemplateIrId, TemplateIrNodeId};
-use super::super::node::{TemplateIr, TemplateIrNode, TemplateIrNodeKind, TirSlotPlaceholder};
-use super::super::overlays::{TirSlotResolution, TirSlotResolutionOverlay};
-use super::super::refs::{TemplateRef, TemplateStoreId, TemplateTirChildReference};
+use super::super::node::{
+    TemplateIr, TemplateIrBranch, TemplateIrNode, TemplateIrNodeKind, TirSlotPlaceholder,
+};
+use super::super::overlays::{
+    TirSlotResolution, TirSlotResolutionOverlay, TirWrapperContext, TirWrapperContextOverlay,
+};
+use super::super::refs::{
+    TemplateRef, TemplateStoreId, TemplateTirChildReference, TemplateWrapperReference,
+    TemplateWrapperSetRef,
+};
 use super::super::registry::TemplateIrRegistry;
 
 use super::super::store::TemplateIrStore;
@@ -18,6 +26,9 @@ use crate::compiler_frontend::ast::expressions::expression::{Expression, Express
 use crate::compiler_frontend::ast::expressions::expression_types::ConstRecordState;
 use crate::compiler_frontend::ast::templates::template::{
     SlotKey, Style, TemplateSegmentOrigin, TemplateType,
+};
+use crate::compiler_frontend::ast::templates::template_control_flow::{
+    TemplateBranchSelector, TemplateLoopHeader,
 };
 use crate::compiler_frontend::ast::templates::template_folding::TemplateFoldContext;
 use crate::compiler_frontend::ast::templates::tir::TirFoldCache;
@@ -513,6 +524,529 @@ fn materialize_parent_handoff(
         overlay_set_id,
     )
     .expect("handoff materialization should succeed")
+}
+
+fn assert_owned_text_node(
+    node: &OwnedRuntimeTemplateNode,
+    expected: &str,
+    string_table: &StringTable,
+) {
+    let OwnedRuntimeTemplateNode::Text { text, .. } = node else {
+        panic!("expected owned text node, got {:?}", node);
+    };
+
+    assert_eq!(string_table.resolve(*text), expected);
+}
+
+fn build_branch_wrapper_template(store: &mut TemplateIrStore) -> TemplateIrId {
+    let mut builder = TemplateIrBuilder::new(store);
+    let default_slot = builder.push_slot_node(SlotKey::Default, empty_location());
+    let positional_slot = builder.push_slot_node(SlotKey::Positional(2), empty_location());
+    let branches = vec![
+        TemplateIrBranch::new(
+            TemplateBranchSelector::Bool(Expression::bool(
+                true,
+                empty_location(),
+                ValueMode::ImmutableOwned,
+            )),
+            default_slot,
+            empty_location(),
+        ),
+        TemplateIrBranch::new(
+            TemplateBranchSelector::Bool(Expression::bool(
+                false,
+                empty_location(),
+                ValueMode::ImmutableOwned,
+            )),
+            positional_slot,
+            empty_location(),
+        ),
+    ];
+    let root = builder.push_branch_chain_node(branches, None, empty_location());
+
+    builder.finish_template(
+        root,
+        Style::default(),
+        TemplateType::String,
+        TemplateIrSummary::empty(),
+        empty_location(),
+    )
+}
+
+fn build_loop_wrapper_template(
+    store: &mut TemplateIrStore,
+    string_table: &mut StringTable,
+) -> TemplateIrId {
+    let mut builder = TemplateIrBuilder::new(store);
+    let body_default_slot = builder.push_slot_node(SlotKey::Default, empty_location());
+    let aggregate_before = builder.push_text_node(
+        string_table.intern("aggregate-before"),
+        "aggregate-before".len() as u32,
+        TemplateSegmentOrigin::Body,
+        empty_location(),
+    );
+    let aggregate_positional_slot =
+        builder.push_slot_node(SlotKey::Positional(1), empty_location());
+    let aggregate_after = builder.push_text_node(
+        string_table.intern("aggregate-after"),
+        "aggregate-after".len() as u32,
+        TemplateSegmentOrigin::Body,
+        empty_location(),
+    );
+    let aggregate_wrapper = builder.push_sequence_node(
+        vec![aggregate_before, aggregate_positional_slot, aggregate_after],
+        empty_location(),
+    );
+    let root = builder.push_loop_node(
+        TemplateLoopHeader::Conditional {
+            condition: Box::new(Expression::bool(
+                true,
+                empty_location(),
+                ValueMode::ImmutableOwned,
+            )),
+        },
+        body_default_slot,
+        Some(aggregate_wrapper),
+        empty_location(),
+    );
+
+    builder.finish_template(
+        root,
+        Style::default(),
+        TemplateType::String,
+        TemplateIrSummary::empty(),
+        empty_location(),
+    )
+}
+
+fn build_same_store_child_wrapper_template(
+    store: &mut TemplateIrStore,
+    string_table: &mut StringTable,
+) -> TemplateIrId {
+    let mut builder = TemplateIrBuilder::new(store);
+    let nested_before = builder.push_text_node(
+        string_table.intern("nested-before"),
+        "nested-before".len() as u32,
+        TemplateSegmentOrigin::Body,
+        empty_location(),
+    );
+    let nested_positional_slot = builder.push_slot_node(SlotKey::Positional(0), empty_location());
+    let nested_after = builder.push_text_node(
+        string_table.intern("nested-after"),
+        "nested-after".len() as u32,
+        TemplateSegmentOrigin::Body,
+        empty_location(),
+    );
+    let nested_root = builder.push_sequence_node(
+        vec![nested_before, nested_positional_slot, nested_after],
+        empty_location(),
+    );
+    let nested_template_id = builder.finish_template(
+        nested_root,
+        Style::default(),
+        TemplateType::String,
+        TemplateIrSummary::empty(),
+        empty_location(),
+    );
+    let nested_child = builder.push_child_template_node(nested_template_id, empty_location());
+
+    builder.finish_template(
+        nested_child,
+        Style::default(),
+        TemplateType::String,
+        TemplateIrSummary::empty(),
+        empty_location(),
+    )
+}
+
+fn build_expression_wrapper_template(
+    store: &mut TemplateIrStore,
+    string_table: &mut StringTable,
+) -> (TemplateIrId, ExpressionSiteId) {
+    let expression_site_id = store.next_expression_site_id();
+    let expression_node = store.push_node(TemplateIrNode::new(
+        TemplateIrNodeKind::DynamicExpression {
+            expression: Box::new(bool_reference_expression(string_table, "original")),
+            origin: TemplateSegmentOrigin::Body,
+            reactive_subscription: None,
+            site_id: expression_site_id,
+        },
+        empty_location(),
+    ));
+    let mut builder = TemplateIrBuilder::new(store);
+    let slot_node = builder.push_slot_node(SlotKey::Default, empty_location());
+    let root = builder.push_sequence_node(vec![expression_node, slot_node], empty_location());
+    let template_id = builder.finish_template(
+        root,
+        Style::default(),
+        TemplateType::String,
+        TemplateIrSummary::empty(),
+        empty_location(),
+    );
+
+    (template_id, expression_site_id)
+}
+
+fn build_slotless_wrapper_template(
+    store: &mut TemplateIrStore,
+    string_table: &mut StringTable,
+) -> TemplateIrId {
+    push_text_template(store, string_table, "slotless-wrapper")
+}
+
+fn build_named_only_wrapper_template(
+    store: &mut TemplateIrStore,
+    string_table: &mut StringTable,
+) -> TemplateIrId {
+    let named_slot_name = string_table.intern("named");
+    let mut builder = TemplateIrBuilder::new(store);
+    let named_slot = builder.push_slot_node(SlotKey::Named(named_slot_name), empty_location());
+
+    builder.finish_template(
+        named_slot,
+        Style::default(),
+        TemplateType::String,
+        TemplateIrSummary::empty(),
+        empty_location(),
+    )
+}
+
+#[test]
+fn inherited_wrapper_handoff_injects_through_branch_boundaries() {
+    let mut string_table = StringTable::new();
+    let mut registry = TemplateIrRegistry::new();
+    let store_id = registry.allocate_store();
+    let empty_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let wrapper_template_id = {
+        let mut store = registry
+            .store_mut(store_id)
+            .expect("registry store should be mutable");
+        build_branch_wrapper_template(&mut store)
+    };
+    let (parent_template_id, overlay_set_id) = build_parent_with_inherited_wrapper(
+        &mut registry,
+        store_id,
+        wrapper_template_id,
+        empty_overlay_set_id,
+        &mut string_table,
+    );
+
+    let body = materialize_parent_handoff(
+        registry,
+        store_id,
+        parent_template_id,
+        &mut string_table,
+        overlay_set_id,
+    );
+    let OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::BranchChain {
+        branches,
+        fallback,
+        ..
+    }) = body
+    else {
+        panic!("expected branch-chain wrapper handoff, got {:?}", body);
+    };
+
+    assert!(fallback.is_none());
+    assert_eq!(branches.len(), 2);
+    assert!(matches!(
+        branches[0].body,
+        OwnedRuntimeTemplateNode::Slot { .. }
+    ));
+    assert_owned_text_node(&branches[1].body, "child", &string_table);
+}
+
+#[test]
+fn inherited_wrapper_handoff_injects_through_loop_body_and_aggregate() {
+    let mut string_table = StringTable::new();
+    let mut registry = TemplateIrRegistry::new();
+    let store_id = registry.allocate_store();
+    let empty_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let wrapper_template_id = {
+        let mut store = registry
+            .store_mut(store_id)
+            .expect("registry store should be mutable");
+        build_loop_wrapper_template(&mut store, &mut string_table)
+    };
+    let (parent_template_id, overlay_set_id) = build_parent_with_inherited_wrapper(
+        &mut registry,
+        store_id,
+        wrapper_template_id,
+        empty_overlay_set_id,
+        &mut string_table,
+    );
+
+    let body = materialize_parent_handoff(
+        registry,
+        store_id,
+        parent_template_id,
+        &mut string_table,
+        overlay_set_id,
+    );
+    let OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::Loop {
+        body,
+        aggregate_wrapper,
+        ..
+    }) = body
+    else {
+        panic!("expected loop wrapper handoff, got {:?}", body);
+    };
+
+    assert!(matches!(*body, OwnedRuntimeTemplateNode::Slot { .. }));
+    let Some(aggregate_wrapper) = aggregate_wrapper else {
+        panic!("expected aggregate wrapper to remain present");
+    };
+    let OwnedRuntimeTemplateNode::Sequence { children } = aggregate_wrapper.as_ref() else {
+        panic!(
+            "expected aggregate wrapper sequence, got {:?}",
+            aggregate_wrapper
+        );
+    };
+    assert_eq!(children.len(), 3);
+    assert_owned_text_node(&children[0], "aggregate-before", &string_table);
+    assert_owned_text_node(&children[1], "child", &string_table);
+    assert_owned_text_node(&children[2], "aggregate-after", &string_table);
+}
+
+#[test]
+fn inherited_wrapper_handoff_injects_through_same_store_child_template() {
+    let mut string_table = StringTable::new();
+    let mut registry = TemplateIrRegistry::new();
+    let store_id = registry.allocate_store();
+    let empty_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let wrapper_template_id = {
+        let mut store = registry
+            .store_mut(store_id)
+            .expect("registry store should be mutable");
+        build_same_store_child_wrapper_template(&mut store, &mut string_table)
+    };
+    let (parent_template_id, overlay_set_id) = build_parent_with_inherited_wrapper(
+        &mut registry,
+        store_id,
+        wrapper_template_id,
+        empty_overlay_set_id,
+        &mut string_table,
+    );
+
+    let body = materialize_parent_handoff(
+        registry,
+        store_id,
+        parent_template_id,
+        &mut string_table,
+        overlay_set_id,
+    );
+    let OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::ChildTemplate { template }) =
+        body
+    else {
+        panic!("expected same-store child wrapper handoff, got {:?}", body);
+    };
+    let OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::Sequence { children }) =
+        template.body
+    else {
+        panic!(
+            "expected nested same-store child sequence, got {:?}",
+            template.body
+        );
+    };
+
+    assert_eq!(children.len(), 3);
+    assert_owned_text_node(&children[0], "nested-before", &string_table);
+    assert_owned_text_node(&children[1], "child", &string_table);
+    assert_owned_text_node(&children[2], "nested-after", &string_table);
+}
+
+#[test]
+fn inherited_same_store_wrapper_handoff_applies_wrapper_overlay() {
+    let mut string_table = StringTable::new();
+    let mut registry = TemplateIrRegistry::new();
+    let store_id = registry.allocate_store();
+    let empty_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let (wrapper_template_id, expression_site_id) = {
+        let mut store = registry
+            .store_mut(store_id)
+            .expect("registry store should be mutable");
+        build_expression_wrapper_template(&mut store, &mut string_table)
+    };
+    let wrapper_overlay_set_id = expression_overlay_set(
+        &mut registry,
+        vec![(
+            expression_site_id,
+            Expression::bool(true, empty_location(), ValueMode::ImmutableOwned),
+        )],
+    );
+    let (parent_template_id, overlay_set_id) = build_parent_with_inherited_wrapper_and_overlay(
+        &mut registry,
+        store_id,
+        wrapper_template_id,
+        empty_overlay_set_id,
+        wrapper_overlay_set_id,
+        &mut string_table,
+    );
+
+    let body = materialize_parent_handoff(
+        registry,
+        store_id,
+        parent_template_id,
+        &mut string_table,
+        overlay_set_id,
+    );
+    let OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::Sequence { children }) = body
+    else {
+        panic!("expected same-store wrapper sequence, got {:?}", body);
+    };
+
+    let OwnedRuntimeTemplateNode::DynamicExpression { expression, .. } = &children[0] else {
+        panic!("expected wrapper expression, got {:?}", children[0]);
+    };
+    assert!(
+        matches!(expression.kind, ExpressionKind::Bool(true)),
+        "same-store wrapper overlay should override the wrapper expression"
+    );
+    assert_owned_text_node(&children[1], "child", &string_table);
+}
+
+#[test]
+fn inherited_slotless_wrapper_handoff_appends_child_after_wrapper_content() {
+    let mut string_table = StringTable::new();
+    let mut registry = TemplateIrRegistry::new();
+    let store_id = registry.allocate_store();
+    let empty_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let wrapper_template_id = {
+        let mut store = registry
+            .store_mut(store_id)
+            .expect("registry store should be mutable");
+        build_slotless_wrapper_template(&mut store, &mut string_table)
+    };
+    let (parent_template_id, overlay_set_id) = build_parent_with_inherited_wrapper(
+        &mut registry,
+        store_id,
+        wrapper_template_id,
+        empty_overlay_set_id,
+        &mut string_table,
+    );
+
+    let body = materialize_parent_handoff(
+        registry,
+        store_id,
+        parent_template_id,
+        &mut string_table,
+        overlay_set_id,
+    );
+    let OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::Sequence { children }) = body
+    else {
+        panic!("expected slotless wrapper sequence, got {:?}", body);
+    };
+
+    assert_eq!(children.len(), 2);
+    assert_owned_text_node(&children[0], "slotless-wrapper", &string_table);
+    assert_owned_text_node(&children[1], "child", &string_table);
+}
+
+#[test]
+fn inherited_named_only_wrapper_handoff_preserves_named_slot_and_appends_child() {
+    let mut string_table = StringTable::new();
+    let mut registry = TemplateIrRegistry::new();
+    let store_id = registry.allocate_store();
+    let empty_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let wrapper_template_id = {
+        let mut store = registry
+            .store_mut(store_id)
+            .expect("registry store should be mutable");
+        build_named_only_wrapper_template(&mut store, &mut string_table)
+    };
+    let (parent_template_id, overlay_set_id) = build_parent_with_inherited_wrapper(
+        &mut registry,
+        store_id,
+        wrapper_template_id,
+        empty_overlay_set_id,
+        &mut string_table,
+    );
+
+    let body = materialize_parent_handoff(
+        registry,
+        store_id,
+        parent_template_id,
+        &mut string_table,
+        overlay_set_id,
+    );
+    let OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::Sequence { children }) = body
+    else {
+        panic!("expected named-only wrapper sequence, got {:?}", body);
+    };
+
+    assert_eq!(children.len(), 2);
+    assert!(matches!(children[0], OwnedRuntimeTemplateNode::Slot { .. }));
+    assert_owned_text_node(&children[1], "child", &string_table);
+}
+
+#[test]
+fn inherited_wrapper_handoff_keeps_foreign_child_opaque_to_local_slot_selection() {
+    let mut string_table = StringTable::new();
+    let mut registry = TemplateIrRegistry::new();
+    let local_store_id = registry.allocate_store();
+    let foreign_store_id = registry.allocate_store();
+    let empty_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let foreign_template_id = {
+        let mut store = registry
+            .store_mut(foreign_store_id)
+            .expect("foreign registry store should be mutable");
+        push_text_template(&mut store, &mut string_table, "foreign-wrapper-child")
+    };
+    let wrapper_template_id = {
+        let mut store = registry
+            .store_mut(local_store_id)
+            .expect("local registry store should be mutable");
+        let foreign_child = child_template_node_id(
+            &mut store,
+            child_reference(foreign_store_id, foreign_template_id, empty_overlay_set_id),
+        );
+        let mut builder = TemplateIrBuilder::new(&mut store);
+        let positional_slot = builder.push_slot_node(SlotKey::Positional(0), empty_location());
+        let root =
+            builder.push_sequence_node(vec![foreign_child, positional_slot], empty_location());
+        builder.finish_template(
+            root,
+            Style::default(),
+            TemplateType::String,
+            TemplateIrSummary::empty(),
+            empty_location(),
+        )
+    };
+    let (parent_template_id, overlay_set_id) = build_parent_with_inherited_wrapper(
+        &mut registry,
+        local_store_id,
+        wrapper_template_id,
+        empty_overlay_set_id,
+        &mut string_table,
+    );
+
+    let body = materialize_parent_handoff(
+        registry,
+        local_store_id,
+        parent_template_id,
+        &mut string_table,
+        overlay_set_id,
+    );
+    let OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::Sequence { children }) = body
+    else {
+        panic!("expected foreign-child wrapper sequence, got {:?}", body);
+    };
+
+    assert_eq!(children.len(), 2);
+    let OwnedRuntimeTemplateNode::ChildTemplate { template } = &children[0] else {
+        panic!(
+            "expected foreign child to remain opaque, got {:?}",
+            children[0]
+        );
+    };
+    let OwnedRuntimeTemplateBody::Render(foreign_child) = &template.body else {
+        panic!(
+            "expected foreign child render body, got {:?}",
+            template.body
+        );
+    };
+    assert_owned_text_node(foreign_child, "foreign-wrapper-child", &string_table);
+    assert_owned_text_node(&children[1], "child", &string_table);
 }
 
 #[test]
@@ -1047,5 +1581,192 @@ fn view_backed_fold_context_without_registry_fails() {
     assert_eq!(
         error.msg,
         "TIR HIR handoff view-backed fold-context materialization requires a registry, but the fold context has none."
+    );
+}
+
+/// Builds one parent child occurrence with an inherited wrapper and returns the
+/// parent plus the wrapper-context overlay that activates it.
+fn build_parent_with_inherited_wrapper(
+    registry: &mut TemplateIrRegistry,
+    store_id: TemplateStoreId,
+    wrapper_template_id: TemplateIrId,
+    empty_overlay_set_id: TemplateOverlaySetId,
+    string_table: &mut StringTable,
+) -> (TemplateIrId, TemplateOverlaySetId) {
+    build_parent_with_inherited_wrapper_and_overlay(
+        registry,
+        store_id,
+        wrapper_template_id,
+        empty_overlay_set_id,
+        empty_overlay_set_id,
+        string_table,
+    )
+}
+
+fn build_parent_with_inherited_wrapper_and_overlay(
+    registry: &mut TemplateIrRegistry,
+    store_id: TemplateStoreId,
+    wrapper_template_id: TemplateIrId,
+    empty_overlay_set_id: TemplateOverlaySetId,
+    wrapper_overlay_set_id: TemplateOverlaySetId,
+    string_table: &mut StringTable,
+) -> (TemplateIrId, TemplateOverlaySetId) {
+    let (parent_template_id, wrapper_set_id, child_occurrence_id) = {
+        let mut store = registry
+            .store_mut(store_id)
+            .expect("registry store should be mutable");
+        let child_template_id = push_text_template(&mut store, string_table, "child");
+        let child_occurrence_id = store.next_child_template_occurrence_id();
+        let child_reference = TemplateTirChildReference::same_store(
+            child_template_id,
+            store_id,
+            TemplateTirPhase::Finalized,
+            empty_overlay_set_id,
+        );
+        let child_node = store.push_node(TemplateIrNode::new(
+            TemplateIrNodeKind::ChildTemplate {
+                reference: child_reference,
+                occurrence_id: child_occurrence_id,
+            },
+            empty_location(),
+        ));
+        let parent_template_id = finish_text_template(&mut store, child_node);
+        let wrapper_reference = TemplateWrapperReference::new(
+            TemplateRef::new(store_id, wrapper_template_id),
+            TemplateTirPhase::Finalized,
+            wrapper_overlay_set_id,
+        );
+        let wrapper_set_id = store.push_or_reuse_wrapper_set(vec![wrapper_reference]);
+
+        (parent_template_id, wrapper_set_id, child_occurrence_id)
+    };
+
+    let wrapper_set_ref = TemplateWrapperSetRef::new(store_id, wrapper_set_id);
+    let wrapper_overlay_id = registry.allocate_wrapper_context_overlay(TirWrapperContextOverlay {
+        contexts: vec![(
+            child_occurrence_id,
+            TirWrapperContext::inherited(wrapper_set_ref),
+        )],
+    });
+    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet {
+        expression_overrides: None,
+        slot_resolution: None,
+        wrapper_context: Some(wrapper_overlay_id),
+    });
+
+    (parent_template_id, overlay_set_id)
+}
+
+/// A missing node after a valid wrapper slot is still malformed authority.
+#[test]
+fn missing_wrapper_tree_node_propagates_schema_extraction_error() {
+    let mut string_table = StringTable::new();
+    let mut registry = TemplateIrRegistry::new();
+    let store_id = registry.allocate_store();
+    let empty_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let wrapper_template_id = {
+        let mut store = registry
+            .store_mut(store_id)
+            .expect("registry store should be mutable");
+        let slot_occurrence_id = store.next_slot_occurrence_id();
+        let slot = store.push_node(TemplateIrNode::new(
+            TemplateIrNodeKind::Slot {
+                placeholder: TirSlotPlaceholder::new(
+                    SlotKey::Default,
+                    slot_occurrence_id,
+                    empty_location(),
+                ),
+            },
+            empty_location(),
+        ));
+        let wrapper_root = store.push_node(TemplateIrNode::new(
+            TemplateIrNodeKind::Sequence {
+                children: vec![slot, TemplateIrNodeId::new(9999)],
+            },
+            empty_location(),
+        ));
+
+        store.push_template(TemplateIr::new(
+            wrapper_root,
+            Style::default(),
+            TemplateType::String,
+            TemplateIrSummary::empty(),
+            empty_location(),
+        ))
+    };
+    let (parent_template_id, overlay_set_id) = build_parent_with_inherited_wrapper(
+        &mut registry,
+        store_id,
+        wrapper_template_id,
+        empty_overlay_set_id,
+        &mut string_table,
+    );
+
+    let error = materialize_parent_handoff_result(
+        registry,
+        store_id,
+        parent_template_id,
+        &mut string_table,
+        overlay_set_id,
+    )
+    .expect_err("missing wrapper tree node should produce a CompilerError");
+
+    assert!(
+        error.msg.contains("TIR slot schema extraction: node ID"),
+        "expected schema-owned node error, got: {}",
+        error.msg
+    );
+}
+
+/// A missing same-store child template inside a wrapper is malformed authority.
+#[test]
+fn missing_same_store_child_in_wrapper_propagates_schema_extraction_error() {
+    let mut string_table = StringTable::new();
+    let mut registry = TemplateIrRegistry::new();
+    let store_id = registry.allocate_store();
+    let empty_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let wrapper_template_id = {
+        let mut store = registry
+            .store_mut(store_id)
+            .expect("registry store should be mutable");
+        let missing_child_reference = TemplateTirChildReference::same_store(
+            TemplateIrId::new(9999),
+            store_id,
+            TemplateTirPhase::Finalized,
+            empty_overlay_set_id,
+        );
+        let missing_child_occurrence_id = store.next_child_template_occurrence_id();
+        let missing_child_node = store.push_node(TemplateIrNode::new(
+            TemplateIrNodeKind::ChildTemplate {
+                reference: missing_child_reference,
+                occurrence_id: missing_child_occurrence_id,
+            },
+            empty_location(),
+        ));
+        finish_text_template(&mut store, missing_child_node)
+    };
+    let (parent_template_id, overlay_set_id) = build_parent_with_inherited_wrapper(
+        &mut registry,
+        store_id,
+        wrapper_template_id,
+        empty_overlay_set_id,
+        &mut string_table,
+    );
+
+    let error = materialize_parent_handoff_result(
+        registry,
+        store_id,
+        parent_template_id,
+        &mut string_table,
+        overlay_set_id,
+    )
+    .expect_err("missing same-store child in wrapper should produce a CompilerError");
+
+    assert!(
+        error
+            .msg
+            .contains("TIR slot schema extraction: child template ID"),
+        "expected schema-owned child-template error, got: {}",
+        error.msg
     );
 }

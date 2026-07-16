@@ -425,8 +425,8 @@ fn schema_from_default_slot_only() {
     let mut store = TemplateIrStore::new();
     let template_id = build_single_slot_template(&mut store, SlotKey::Default);
 
-    let schema = collect_tir_slot_schema(&store, template_id, &StringTable::new())
-        .expect("schema extraction should succeed");
+    let schema =
+        collect_tir_slot_schema(&store, template_id).expect("schema extraction should succeed");
 
     assert!(schema.has_default_slot);
     assert!(schema.named_slots.is_empty());
@@ -454,8 +454,8 @@ fn schema_from_named_slots() {
         empty_location(),
     );
 
-    let schema = collect_tir_slot_schema(&store, template_id, &string_table)
-        .expect("schema extraction should succeed");
+    let schema =
+        collect_tir_slot_schema(&store, template_id).expect("schema extraction should succeed");
 
     assert!(!schema.has_default_slot);
     assert!(schema.named_slots.contains(&name_alpha));
@@ -480,8 +480,8 @@ fn schema_from_positional_slots() {
         empty_location(),
     );
 
-    let schema = collect_tir_slot_schema(&store, template_id, &StringTable::new())
-        .expect("schema extraction should succeed");
+    let schema =
+        collect_tir_slot_schema(&store, template_id).expect("schema extraction should succeed");
 
     assert!(!schema.has_default_slot);
     assert!(schema.named_slots.is_empty());
@@ -513,8 +513,8 @@ fn schema_from_mixed_slot_types() {
         empty_location(),
     );
 
-    let schema = collect_tir_slot_schema(&store, template_id, &string_table)
-        .expect("schema extraction should succeed");
+    let schema =
+        collect_tir_slot_schema(&store, template_id).expect("schema extraction should succeed");
 
     assert!(schema.has_default_slot);
     assert!(schema.named_slots.contains(&name_id));
@@ -548,7 +548,7 @@ fn schema_from_nested_child_template_containing_slot() {
         empty_location(),
     );
 
-    let schema = collect_tir_slot_schema(&store, parent_template_id, &string_table)
+    let schema = collect_tir_slot_schema(&store, parent_template_id)
         .expect("schema extraction should succeed");
 
     assert!(schema.named_slots.contains(&name_id));
@@ -577,8 +577,8 @@ fn schema_from_branch_chain_containing_slot() {
         empty_location(),
     );
 
-    let schema = collect_tir_slot_schema(&store, template_id, &string_table)
-        .expect("schema extraction should succeed");
+    let schema =
+        collect_tir_slot_schema(&store, template_id).expect("schema extraction should succeed");
 
     assert!(schema.named_slots.contains(&name_id));
 }
@@ -608,10 +608,84 @@ fn schema_from_loop_containing_slot() {
         empty_location(),
     );
 
-    let schema = collect_tir_slot_schema(&store, template_id, &string_table)
-        .expect("schema extraction should succeed");
+    let schema =
+        collect_tir_slot_schema(&store, template_id).expect("schema extraction should succeed");
 
     assert!(schema.named_slots.contains(&name_id));
+}
+
+#[test]
+fn loose_fill_target_prefers_later_positional_slot_across_branches() {
+    let mut store = TemplateIrStore::new();
+    let mut builder = TemplateIrBuilder::new(&mut store);
+
+    let default_slot = builder.push_slot_node(SlotKey::Default, empty_location());
+    let positional_slot = builder.push_slot_node(SlotKey::Positional(2), empty_location());
+    let branches = vec![
+        TemplateIrBranch::new(
+            TemplateBranchSelector::Bool(bool_expression(true)),
+            default_slot,
+            empty_location(),
+        ),
+        TemplateIrBranch::new(
+            TemplateBranchSelector::Bool(bool_expression(false)),
+            positional_slot,
+            empty_location(),
+        ),
+    ];
+    let root = builder.push_branch_chain_node(branches, None, empty_location());
+    let template_id = builder.finish_template(
+        root,
+        Style::default(),
+        TemplateType::String,
+        TemplateIrSummary::empty(),
+        empty_location(),
+    );
+
+    let schema =
+        collect_tir_slot_schema(&store, template_id).expect("schema extraction should succeed");
+
+    assert_eq!(
+        schema.loose_fill_target_key(),
+        Some(SlotKey::Positional(2)),
+        "positional loose fill should win even when default appears first in branch order"
+    );
+}
+
+#[test]
+fn loose_fill_target_prefers_aggregate_positional_slot_after_loop_body_default() {
+    let mut store = TemplateIrStore::new();
+    let mut builder = TemplateIrBuilder::new(&mut store);
+
+    let body_default_slot = builder.push_slot_node(SlotKey::Default, empty_location());
+    let aggregate_positional_slot =
+        builder.push_slot_node(SlotKey::Positional(1), empty_location());
+    let aggregate_wrapper =
+        builder.push_sequence_node(vec![aggregate_positional_slot], empty_location());
+    let root = builder.push_loop_node(
+        TemplateLoopHeader::Conditional {
+            condition: Box::new(bool_expression(true)),
+        },
+        body_default_slot,
+        Some(aggregate_wrapper),
+        empty_location(),
+    );
+    let template_id = builder.finish_template(
+        root,
+        Style::default(),
+        TemplateType::String,
+        TemplateIrSummary::empty(),
+        empty_location(),
+    );
+
+    let schema =
+        collect_tir_slot_schema(&store, template_id).expect("schema extraction should succeed");
+
+    assert_eq!(
+        schema.loose_fill_target_key(),
+        Some(SlotKey::Positional(1)),
+        "aggregate-wrapper slots must participate in positional loose-fill selection"
+    );
 }
 
 #[test]
@@ -630,10 +704,11 @@ fn multiple_default_slots_produces_diagnostic() {
         empty_location(),
     );
 
-    let result = collect_tir_slot_schema(&store, template_id, &StringTable::new());
+    let result = collect_tir_slot_schema(&store, template_id);
     let error = result.expect_err("two default slots should produce an error");
 
-    match &error.payload {
+    let diagnostic = Box::<CompilerDiagnostic>::from(error);
+    match &diagnostic.payload {
         DiagnosticPayload::InvalidTemplateSlot {
             reason: InvalidTemplateSlotReason::MultipleDefaultSlots,
             ..
@@ -668,8 +743,8 @@ fn ordered_slot_keys_returns_deterministic_order() {
         empty_location(),
     );
 
-    let schema = collect_tir_slot_schema(&store, template_id, &string_table)
-        .expect("schema extraction should succeed");
+    let schema =
+        collect_tir_slot_schema(&store, template_id).expect("schema extraction should succeed");
 
     let ordered = schema.ordered_slot_keys(&string_table);
     assert_eq!(ordered.len(), 5);
@@ -746,8 +821,8 @@ fn skipped_node_kinds_do_not_contribute_to_schema() {
         empty_location(),
     );
 
-    let schema = collect_tir_slot_schema(&store, template_id, &string_table)
-        .expect("schema extraction should succeed");
+    let schema =
+        collect_tir_slot_schema(&store, template_id).expect("schema extraction should succeed");
 
     assert!(!schema.has_any_slots());
 }

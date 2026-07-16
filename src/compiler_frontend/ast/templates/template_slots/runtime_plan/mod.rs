@@ -78,8 +78,8 @@ pub(in crate::compiler_frontend::ast::templates) fn materialize_tir_native_runti
 
     // Re-collect the wrapper's slot schema in production, since
     // RoutedTirSlotContributions only carries the schema in test builds.
-    let schema = collect_tir_slot_schema(store, wrapper_template_id, string_table)
-        .map_err(TemplateSlotError::from)?;
+    let schema =
+        collect_tir_slot_schema(store, wrapper_template_id).map_err(TemplateSlotError::from)?;
 
     let sources = sources::build_tir_native_contribution_sources(
         &schema,
@@ -100,7 +100,6 @@ pub(in crate::compiler_frontend::ast::templates) fn materialize_tir_native_runti
         &sources,
         slot_plan_id,
         store,
-        string_table,
         &mut copy_state,
     )?;
 

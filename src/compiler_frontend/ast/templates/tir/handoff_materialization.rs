@@ -38,6 +38,7 @@ use crate::compiler_frontend::ast::templates::tir::refs::{
     TemplateRef, TemplateTirChildReference, TemplateWrapperReference,
 };
 use crate::compiler_frontend::ast::templates::tir::registry::TemplateIrRegistry;
+use crate::compiler_frontend::ast::templates::tir::slot_composition::collect_tir_slot_schema;
 use crate::compiler_frontend::ast::templates::tir::slot_plan::{
     TemplateSlotPlan, TemplateSlotSiteRenderPiece,
 };
@@ -251,16 +252,69 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
         &self,
         foreign_store: &'foreign TemplateIrStore,
         overlay_set_id: TemplateOverlaySetId,
-    ) -> RuntimeHandoffMaterializer<'foreign, 'static, 'static> {
+    ) -> Result<RuntimeHandoffMaterializer<'foreign, 'static, 'static>, CompilerError> {
+        self.validate_overlay_set(overlay_set_id)?;
         let registry = self.registry.as_ref().map(Rc::clone);
-        RuntimeHandoffMaterializer {
+        Ok(RuntimeHandoffMaterializer {
             store: foreign_store,
             registry,
             fold_context: None,
             overlay_set_stack: vec![overlay_set_id],
             template_stack: self.template_stack.clone(),
             node_stack: Vec::new(),
+        })
+    }
+
+    /// Validates one registry-owned overlay set before it becomes active.
+    ///
+    /// WHAT: uses the registry's canonical overlay-set lookup and permits the
+    ///       empty ID only for the direct test materializer that has no
+    ///       registry.
+    /// WHY: wrapper and child references carry exact overlay identity. A
+    ///      missing set must fail before traversal rather than being mistaken
+    ///      for an empty context.
+    fn validate_overlay_set(
+        &self,
+        overlay_set_id: TemplateOverlaySetId,
+    ) -> Result<bool, CompilerError> {
+        let Some(registry) = self.registry.as_ref().map(Rc::clone) else {
+            if overlay_set_id != TemplateOverlaySetId::empty() {
+                return Err(CompilerError::compiler_error(
+                    "TIR HIR handoff materialization requires a registry for a non-empty overlay set.",
+                ));
+            }
+
+            return Ok(false);
+        };
+
+        let registry = registry.borrow();
+        if registry.overlay_set(overlay_set_id).is_none() {
+            return Err(CompilerError::compiler_error(format!(
+                "TIR HIR handoff materialization referenced missing overlay set {}",
+                overlay_set_id
+            )));
         }
+
+        Ok(true)
+    }
+
+    /// Temporarily activates one exact overlay set while materializing a
+    /// nested root, restoring the parent stack even when traversal fails.
+    fn with_overlay_set<T>(
+        &mut self,
+        overlay_set_id: TemplateOverlaySetId,
+        build: impl FnOnce(&mut Self) -> Result<T, CompilerError>,
+    ) -> Result<T, CompilerError> {
+        let should_push = self.validate_overlay_set(overlay_set_id)?;
+        if !should_push {
+            return build(self);
+        }
+
+        self.overlay_set_stack.push(overlay_set_id);
+        let result = build(self);
+        let popped_overlay_set = self.overlay_set_stack.pop();
+        debug_assert_eq!(popped_overlay_set, Some(overlay_set_id));
+        result
     }
 
     fn owned_runtime_slot_handoff_for_template(
@@ -276,7 +330,7 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
         self.with_template_on_stack(
             TemplateRef::new(self.store.store_id(), id),
             |materializer| {
-                materializer.materialize_runtime_slot_application_by_parts(root, slot_plan_id)
+                materializer.materialize_runtime_slot_application_by_parts(root, slot_plan_id, None)
             },
         )
         .map(Some)
@@ -289,13 +343,14 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
         // `materialize_template` already validates the template exists and
         // pushes it onto the recursion stack so child-template cycles are
         // detected there.
-        self.materialize_template(id, None)
+        self.materialize_template(id, None, None)
     }
 
     fn materialize_template(
         &mut self,
         id: TemplateIrId,
         active_slot_plan: Option<TemplateSlotPlanId>,
+        injection: Option<(&SlotKey, &OwnedRuntimeTemplateNode)>,
     ) -> Result<OwnedRuntimeTemplateHandoff, CompilerError> {
         let template = self.get_template(id)?;
         let location = template.location.clone();
@@ -307,13 +362,18 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
             |materializer| {
                 let body = if let Some(slot_plan_id) = runtime_slot_plan {
                     OwnedRuntimeTemplateBody::RuntimeSlotApplication(Box::new(
-                        materializer
-                            .materialize_runtime_slot_application_by_parts(root, slot_plan_id)?,
+                        materializer.materialize_runtime_slot_application_by_parts(
+                            root,
+                            slot_plan_id,
+                            injection,
+                        )?,
                     ))
                 } else {
-                    OwnedRuntimeTemplateBody::Render(
-                        materializer.materialize_node(root, active_slot_plan)?,
-                    )
+                    OwnedRuntimeTemplateBody::Render(materializer.materialize_node_with_injection(
+                        root,
+                        active_slot_plan,
+                        injection,
+                    )?)
                 };
 
                 Ok(OwnedRuntimeTemplateHandoff { body, location })
@@ -325,9 +385,11 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
         &mut self,
         wrapper_root: TemplateIrNodeId,
         slot_plan_id: TemplateSlotPlanId,
+        injection: Option<(&SlotKey, &OwnedRuntimeTemplateNode)>,
     ) -> Result<OwnedRuntimeSlotApplicationHandoff, CompilerError> {
         let slot_plan = self.get_slot_plan(slot_plan_id)?.clone();
-        let wrapper = self.materialize_node(wrapper_root, Some(slot_plan_id))?;
+        let wrapper =
+            self.materialize_node_with_injection(wrapper_root, Some(slot_plan_id), injection)?;
         let contribution_sources =
             self.materialize_contribution_sources(&slot_plan, slot_plan_id)?;
         let slot_sites = self.materialize_slot_sites(&slot_plan, slot_plan_id)?;
@@ -397,6 +459,24 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
         id: TemplateIrNodeId,
         active_slot_plan: Option<TemplateSlotPlanId>,
     ) -> Result<OwnedRuntimeTemplateNode, CompilerError> {
+        self.materialize_node_with_injection(id, active_slot_plan, None)
+    }
+
+    /// Materializes one TIR node through the canonical handoff walker, with an
+    /// optional inherited child injected at matching slot placeholders.
+    ///
+    /// WHAT: keeps ordinary node materialization and wrapper fill injection on
+    ///       the same structural traversal, including branches, loops and
+    ///       same-store child-template roots.
+    /// WHY: wrapper target selection is schema-owned, so the handoff walker must
+    ///      be able to replace every structural shape that schema discovery can
+    ///      reach without creating a second, partial materializer.
+    fn materialize_node_with_injection(
+        &mut self,
+        id: TemplateIrNodeId,
+        active_slot_plan: Option<TemplateSlotPlanId>,
+        injection: Option<(&SlotKey, &OwnedRuntimeTemplateNode)>,
+    ) -> Result<OwnedRuntimeTemplateNode, CompilerError> {
         let node = self.effective_node(id)?;
 
         let owned_node = self.with_node_on_stack(id, |materializer| {
@@ -404,9 +484,11 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
                 TemplateIrNodeKind::Sequence { children } => {
                     let mut owned_children = Vec::with_capacity(children.len());
                     for child in children {
-                        owned_children.push(
-                            materializer.materialize_node(child, active_slot_plan)?,
-                        );
+                        owned_children.push(materializer.materialize_node_with_injection(
+                            child,
+                            active_slot_plan,
+                            injection,
+                        )?);
                     }
 
                     Ok(OwnedRuntimeTemplateNode::Sequence {
@@ -447,6 +529,7 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
                         &reference,
                         &node.location,
                         active_slot_plan,
+                        injection,
                     )?;
 
                     if let Some(context) = wrapper_context {
@@ -463,7 +546,11 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
                 TemplateIrNodeKind::BranchChain { branches, fallback } => {
                     let mut owned_branches = Vec::with_capacity(branches.len());
                     for branch in branches {
-                        let body = materializer.materialize_node(branch.body, active_slot_plan)?;
+                        let body = materializer.materialize_node_with_injection(
+                            branch.body,
+                            active_slot_plan,
+                            injection,
+                        )?;
 
                         owned_branches.push(OwnedRuntimeTemplateBranch {
                             selector: materializer.effective_branch_selector(
@@ -477,7 +564,11 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
 
                     let fallback = if let Some(fallback_id) = fallback {
                         Some(Box::new(
-                            materializer.materialize_node(fallback_id, active_slot_plan)?,
+                            materializer.materialize_node_with_injection(
+                                fallback_id,
+                                active_slot_plan,
+                                injection,
+                            )?,
                         ))
                     } else {
                         None
@@ -497,11 +588,19 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
                     aggregate_wrapper,
                     ..
                 } => {
-                    let body_node = materializer.materialize_node(body, active_slot_plan)?;
+                    let body_node = materializer.materialize_node_with_injection(
+                        body,
+                        active_slot_plan,
+                        injection,
+                    )?;
 
                     let aggregate_wrapper = if let Some(wrapper_id) = aggregate_wrapper {
                         Some(Box::new(
-                            materializer.materialize_node(wrapper_id, active_slot_plan)?,
+                            materializer.materialize_node_with_injection(
+                                wrapper_id,
+                                active_slot_plan,
+                                injection,
+                            )?,
                         ))
                     } else {
                         None
@@ -540,6 +639,12 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
                 }
 
                 TemplateIrNodeKind::Slot { placeholder } => {
+                    if let Some((fill_target_key, child_handoff)) = injection
+                        && placeholder.key == *fill_target_key
+                    {
+                        return Ok(child_handoff.clone());
+                    }
+
                     if let Some(resolution) = materializer
                         .effective_slot_resolution_for_occurrence(placeholder.occurrence_id)?
                         && let TirSlotResolutionKind::Resolved { sources } = resolution.kind
@@ -559,7 +664,7 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
                 TemplateIrNodeKind::InsertContribution { template } => {
                     Ok(OwnedRuntimeTemplateNode::ChildTemplate {
                         template: Box::new(
-                            materializer.materialize_template(template, active_slot_plan)?,
+                            materializer.materialize_template(template, active_slot_plan, None)?,
                         ),
                     })
                 }
@@ -851,12 +956,15 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
         reference: &TemplateTirChildReference,
         location: &SourceLocation,
         active_slot_plan: Option<TemplateSlotPlanId>,
+        injection: Option<(&SlotKey, &OwnedRuntimeTemplateNode)>,
     ) -> Result<OwnedRuntimeTemplateNode, CompilerError> {
         // Same-store folded-text shortcut: inline stable const-foldable
         // children as owned `Text` nodes before any structural materialization.
         // Folding uses the current store's string table and fold context, so
         // it only applies when the child lives in the same store.
-        if let Some(text_node) = self.materialize_folded_child_text(reference, location)? {
+        if injection.is_none()
+            && let Some(text_node) = self.materialize_folded_child_text(reference, location)?
+        {
             return Ok(text_node);
         }
 
@@ -881,21 +989,11 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
         // resolution, and wrapper context lookups during materialization
         // read through the child's overlay context rather than the parent's.
         // Without this, child templates with expression or slot overlays
-        // would materialize from stale structural payloads. The direct test
-        // entry point may omit a registry only for the canonical empty overlay.
-        let has_registry = self.registry.is_some();
-        if !has_registry && reference.overlay_set_id != TemplateOverlaySetId::empty() {
-            return Err(CompilerError::compiler_error(
-                "HIR handoff materialization requires a registry for a child template with an overlay.",
-            ));
-        }
-        if has_registry {
-            self.overlay_set_stack.push(reference.overlay_set_id);
-        }
-        let handoff = self.materialize_template(template_id, active_slot_plan);
-        if has_registry {
-            self.overlay_set_stack.pop();
-        }
+        // would materialize from stale structural payloads. The scoped helper
+        // validates registry authority and restores the stack on errors.
+        let handoff = self.with_overlay_set(reference.overlay_set_id, |materializer| {
+            materializer.materialize_template(template_id, active_slot_plan, injection)
+        });
 
         Ok(OwnedRuntimeTemplateNode::ChildTemplate {
             template: Box::new(handoff?),
@@ -959,13 +1057,13 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
         // ancestor template stack for qualified cycle detection. The child's
         // overlay set is pushed so expression, slot-resolution, and
         // wrapper-context lookups read through the child's overlay context.
-        let mut nested =
-            self.nested_foreign_store_materializer(&foreign_store_borrow, reference.overlay_set_id);
+        let mut nested = self
+            .nested_foreign_store_materializer(&foreign_store_borrow, reference.overlay_set_id)?;
 
         // `TemplateSlotPlanId` is store-local: do not forward the parent's
         // active slot plan. The foreign template's own slot plan (if any) is
         // resolved inside `materialize_template`.
-        let handoff = nested.materialize_template(reference.root.template_id, None)?;
+        let handoff = nested.materialize_template(reference.root.template_id, None, None)?;
 
         Ok(OwnedRuntimeTemplateNode::ChildTemplate {
             template: Box::new(handoff),
@@ -1029,7 +1127,7 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
             TemplateTirPhase::Composed,
             TemplateOverlaySetId::empty(),
         );
-        self.materialize_child_template_node(&child_reference, location, active_slot_plan)
+        self.materialize_child_template_node(&child_reference, location, active_slot_plan, None)
     }
 
     /// Applies a wrapper-context overlay entry to an already-materialized child
@@ -1152,10 +1250,10 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
         child_handoff: OwnedRuntimeTemplateNode,
     ) -> Result<OwnedRuntimeTemplateNode, CompilerError> {
         match fill_target_key {
-            Some(fill_target_key) => materializer.materialize_wrapper_node_with_node_injection(
+            Some(fill_target_key) => materializer.materialize_node_with_injection(
                 wrapper_root,
-                &fill_target_key,
-                child_handoff,
+                None,
+                Some((&fill_target_key, &child_handoff)),
             ),
             None => {
                 let wrapper_content = materializer.materialize_node(wrapper_root, None)?;
@@ -1169,8 +1267,9 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
     /// Wraps one wrapper template around a child handoff node.
     ///
     /// WHAT: materializes the wrapper template's content, then either injects the
-    ///       child at the wrapper's fill slot (for slot-bearing wrappers) or
-    ///       appends the child after the wrapper content (for slot-less wrappers).
+    ///       child at the wrapper's loose-fill slot or appends it after wrapper
+    ///       content when the schema has no loose-fill target (slot-less or
+    ///       named-only wrappers).
     ///       Runtime slot-plan wrappers are rejected because inherited `$children(..)`
     ///       wrappers must be ordinary render templates.
     /// WHY: this produces the same owned shape as TIR wrapper composition
@@ -1216,8 +1315,9 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
             self.store
         };
 
-        let wrapper_template = wrapper_store
+        let (wrapper_root, has_runtime_slot_plan) = wrapper_store
             .get_template(wrapper_reference.root.template_id)
+            .map(|template| (template.root, template.runtime_slot_plan.is_some()))
             .ok_or_else(|| {
                 CompilerError::compiler_error(format!(
                     "TIR HIR handoff: wrapper template {} not found in store {}.",
@@ -1225,77 +1325,41 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
                 ))
             })?;
 
-        if wrapper_template.runtime_slot_plan.is_some() {
+        if has_runtime_slot_plan {
             return Err(CompilerError::compiler_error(
                 "TIR HIR handoff: inherited wrapper template declares a runtime slot plan.",
             ));
         }
 
-        let fill_target_key =
-            determine_wrapper_fill_target_key(wrapper_store, wrapper_reference.root.template_id);
+        let schema = collect_tir_slot_schema(wrapper_store, wrapper_reference.root.template_id)
+            .map_err(CompilerError::from)?;
+        let fill_target_key = schema.loose_fill_target_key();
 
         if is_cross_store {
             // The nested materializer inherits the parent's qualified template
             // stack so cross-store wrapper cycles are detected the same way as
             // cross-store child cycles. The registry was already verified when
             // resolving `wrapper_store_rc` above.
-            let mut wrapper_materializer = self
-                .nested_foreign_store_materializer(wrapper_store, wrapper_reference.overlay_set_id);
+            let mut wrapper_materializer = self.nested_foreign_store_materializer(
+                wrapper_store,
+                wrapper_reference.overlay_set_id,
+            )?;
 
             Self::materialize_wrapper_with_child(
                 &mut wrapper_materializer,
-                wrapper_template.root,
+                wrapper_root,
                 fill_target_key,
                 child_handoff,
             )
         } else {
-            Self::materialize_wrapper_with_child(
-                self,
-                wrapper_template.root,
-                fill_target_key,
-                child_handoff,
-            )
-        }
-    }
-
-    /// Materializes a wrapper-template node, injecting the child handoff at every
-    /// slot placeholder that matches the fill target key.
-    ///
-    /// WHAT: recursively walks the wrapper's TIR root and substitutes the child
-    ///       handoff for matching `Slot` nodes. Non-sequence nodes are delegated
-    ///       to the normal node materializer.
-    /// WHY: wrapper templates used as inherited `$children(..)` wrappers are
-    ///      typically simple `text + slot + text` sequences, so a focused
-    ///      sequence/slot substitution produces the correct owned shape without
-    ///      needing a full slot-routing plan at handoff time.
-    fn materialize_wrapper_node_with_node_injection(
-        &mut self,
-        node_id: TemplateIrNodeId,
-        fill_target_key: &SlotKey,
-        child_handoff: OwnedRuntimeTemplateNode,
-    ) -> Result<OwnedRuntimeTemplateNode, CompilerError> {
-        let node = self.get_node(node_id)?.to_owned();
-
-        match node.kind {
-            TemplateIrNodeKind::Slot { placeholder } if placeholder.key == *fill_target_key => {
-                Ok(child_handoff)
-            }
-
-            TemplateIrNodeKind::Sequence { children } => {
-                let mut owned_children = Vec::with_capacity(children.len());
-                for child_id in children {
-                    owned_children.push(self.materialize_wrapper_node_with_node_injection(
-                        child_id,
-                        fill_target_key,
-                        child_handoff.clone(),
-                    )?);
-                }
-                Ok(OwnedRuntimeTemplateNode::Sequence {
-                    children: owned_children,
-                })
-            }
-
-            _ => self.materialize_node(node_id, None),
+            self.with_overlay_set(wrapper_reference.overlay_set_id, |materializer| {
+                Self::materialize_wrapper_with_child(
+                    materializer,
+                    wrapper_root,
+                    fill_target_key,
+                    child_handoff,
+                )
+            })
         }
     }
 
@@ -1385,81 +1449,5 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
             Ok(_) => Ok(None),
             Err(TemplateError::Infrastructure(_)) | Err(TemplateError::Diagnostic(_)) => Ok(None),
         }
-    }
-}
-
-/// Determines which slot key the child handoff should flow into for a wrapper
-/// template.
-///
-/// WHAT: scans the wrapper template for the first positional slot (smallest
-///       index) or, if none, the first default slot. Named slots are ignored
-///       because inherited `$children(..)` wrappers route fill content through
-///       positional/default slots.
-/// WHY: this mirrors the routing logic in `fold.rs`'s
-///      `determine_wrapper_fill_target_key` without requiring a `StringTable`.
-fn determine_wrapper_fill_target_key(
-    store: &TemplateIrStore,
-    template_id: TemplateIrId,
-) -> Option<SlotKey> {
-    let template = store.get_template(template_id)?;
-    find_fill_target_key_in_node(store, template.root)
-}
-
-fn find_fill_target_key_in_node(
-    store: &TemplateIrStore,
-    node_id: TemplateIrNodeId,
-) -> Option<SlotKey> {
-    let node = store.get_node(node_id)?;
-
-    match &node.kind {
-        TemplateIrNodeKind::Slot { placeholder } => match placeholder.key {
-            SlotKey::Default => Some(SlotKey::Default),
-            SlotKey::Positional(index) => Some(SlotKey::Positional(index)),
-            SlotKey::Named(_) => None,
-        },
-
-        TemplateIrNodeKind::Sequence { children } => {
-            let mut positional: Option<usize> = None;
-            let mut has_default = false;
-
-            for child_id in children {
-                match find_fill_target_key_in_node(store, *child_id) {
-                    Some(SlotKey::Positional(index)) => {
-                        positional = Some(positional.map_or(index, |current| current.min(index)));
-                    }
-                    Some(SlotKey::Default) => has_default = true,
-                    _ => {}
-                }
-            }
-
-            positional
-                .map(SlotKey::Positional)
-                .or_else(|| has_default.then_some(SlotKey::Default))
-        }
-
-        TemplateIrNodeKind::BranchChain { branches, fallback } => {
-            for branch in branches {
-                if let Some(key) = find_fill_target_key_in_node(store, branch.body) {
-                    return Some(key);
-                }
-            }
-            fallback.and_then(|fallback_id| find_fill_target_key_in_node(store, fallback_id))
-        }
-
-        TemplateIrNodeKind::Loop {
-            body,
-            aggregate_wrapper,
-            ..
-        } => find_fill_target_key_in_node(store, *body).or_else(|| {
-            aggregate_wrapper.and_then(|wrapper_id| find_fill_target_key_in_node(store, wrapper_id))
-        }),
-
-        TemplateIrNodeKind::ChildTemplate { reference, .. } => {
-            let child_id = reference.template_id_in_store(store.store_id())?;
-            let child_template = store.get_template(child_id)?;
-            find_fill_target_key_in_node(store, child_template.root)
-        }
-
-        _ => None,
     }
 }

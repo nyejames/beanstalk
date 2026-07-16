@@ -126,14 +126,12 @@ fn missing_same_store_child_template_is_an_authority_error() {
 #[test]
 fn missing_structural_authority_propagates_through_runtime_slot_site_planner() {
     let mut store = TemplateIrStore::new();
-    let string_table = StringTable::new();
     let mut copy_state = TirCopyState::new();
     let inner_plan = TemplateSlotSiteRenderPlan::default();
     let mut planner = super::RuntimeWrapperSitePlanBuilder {
         sources: &[],
         slot_plan_id: TemplateSlotPlanId::new(0),
         store: &mut store,
-        string_table: &string_table,
         copy_state: &mut copy_state,
     };
 

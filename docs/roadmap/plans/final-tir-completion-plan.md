@@ -21,28 +21,30 @@ Completion means one authoritative TIR path from parsing through AST finalizatio
 
 ACTIVE_PLAN: `docs/roadmap/plans/final-tir-completion-plan.md`
 STATUS: active
-CURRENT_SLICE: Slice 3E3c2d - require handoff wrapper-target scan authority
-LAST_ACCEPTED_COMMIT: `31dbf08ed`; Slice 3E3c2c is validated and awaiting its checkpoint commit
+CURRENT_SLICE: Slice 3E3c2e - propagate folded-child authority and close lazy fold validation gaps
+LAST_ACCEPTED_COMMIT: `61ecabed1`; Slice 3E3c2d is validated and awaiting its checkpoint commit
 BRANCH: `main`
-WORKTREE: `main`; intended Slice 3E3c2c source, focused-test and plan changes only
+WORKTREE: `main`; intended Slice 3E3c2d source, focused-test and plan changes only
 REQUIRED_RELOADS: startup files, this plan, relevant template/language references and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: compiler AST template/TIR contract, focused template language references, testing and validation standards
-- code: `tir/handoff_materialization.rs::determine_wrapper_fill_target_key`, `find_fill_target_key_in_node`, their wrapper-handoff caller and focused HIR-handoff tests
-- absent positional/default targets and foreign child references are semantic outcomes. Missing wrapper templates, nodes and required same-store child authority must propagate as internal errors rather than silently returning no target.
+- code: `tir/handoff_materialization.rs::materialize_folded_child_text`, `tir/fold.rs` direct fold boundaries, output-size estimation and focused fold/handoff authority tests
+- below-Composed roots, foreign stores, missing fold context, active bindings, unsupported shapes and genuine non-const diagnostics remain structural fold fallbacks. Missing current-store roots, nodes, templates, wrappers and contradictory authority must propagate even when a branch or loop would emit no output.
 ACCEPTANCE_CRITERIA:
-- Give the wrapper fill-target scan a narrow result shape that distinguishes optional routing outcomes from malformed required authority.
-- Propagate missing template, node and same-store child authority through the existing HIR-handoff internal error lane.
-- Preserve positional-before-default selection, named-only/no-target outcomes and foreign-child behavior without changing valid handoff output.
+- Propagate folded-child `TemplateError::Infrastructure` through HIR handoff while retaining only documented shortcut-unavailable fallbacks.
+- Make direct fold and output-size boundaries reject missing required authority instead of returning zero, empty output or skipping validation through untaken branches and zero-iteration loops.
+- Validate present aggregate wrappers independently from whether a loop body emits output.
+- Add focused malformed-authority regressions without changing valid fold output or user-facing diagnostics.
 VALIDATION_STATE:
-- Slice 3E3c2c focused suites: passed 37 fold-cache, 34 wrapper-context and 13 HIR-handoff tests
-- Slice 3E3c2c parent `just validate`: passed cross-target Clippy, 3456 unit tests, 1764 integration cases, docs checking and `bench-check` 28/28 with a 2 ms average improvement, 13 faster and 0 slower
+- Slice 3E3c2d focused schema, HIR-handoff, wrapper-context and runtime-site suites: passed
+- Slice 3E3c2d post-correction Codex re-audit: acceptable with no blocking findings
+- Slice 3E3c2d parent `just validate`: passed cross-target Clippy, 3467 unit tests, 1764 integration cases, docs checking and `bench-check` 28/28 with a 5 ms average improvement, 23 faster and 0 slower
 DOCS_IMPACT: progress matrix unchanged for this representation-only phase. Source module docs update with final owners. Phase 5 owns final external docs and deferred-performance handoff
-BLOCKERS_OR_OPEN_DECISIONS: none; the user has started the local Ollama server
-DELEGATION_DECISION: ollama implementation primary - user requested the default worker order after Slice 3E3c2c
-NEXT_WORKER_ORDER: ollama, codex-cli, parent-direct
+BLOCKERS_OR_OPEN_DECISIONS: none
+DELEGATION_DECISION: codex-cli implementation - user selected Codex CLI as the primary worker for all remaining slices
+NEXT_WORKER_ORDER: codex-cli, ollama, parent-direct; Ollama is fallback-only after a Codex CLI blocker
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit accepted Slice 3E3c2c, refresh its commit hash and delegate Slice 3E3c2d through Ollama
+NEXT_RESUME_ACTION: commit accepted Slice 3E3c2d, refresh its commit hash and delegate Slice 3E3c2e through Codex CLI
 
 SELF_AUDIT_NOTE: parser-owned text, head values, nested templates, slots, inserts, control flow, wrappers, formatting, and runtime handoff already have TIR owners. The remaining work is deletion, state thinning, final API consolidation, targeted low-risk efficiency cleanup, test ownership, documentation, and closure.
 
@@ -456,6 +458,8 @@ Slice 3E3c2a checkpoint: contribution-shape classification, loose-content routin
 Slice 3E3c2b checkpoint: effective unresolved-slot, resolved-slot and escaped-insert classification now propagates missing node and required same-store child or insert-template authority through `TemplateError`. Runtime slot-site planning carries the strict result through `TemplateSlotError`, while foreign references, cycle re-entry, uncovered slots, present no-slot wrappers and named-only wrapper routing remain semantic outcomes.
 
 Slice 3E3c2c checkpoint: fold-safety gates now distinguish malformed TIR authority from valid non-foldable shapes through `Result`. Wrong supplied-store identity and missing root, node, overlay dimension, wrapper-set or required same-store child authority propagate through finalization and HIR handoff, including non-empty child overlays, while runtime-slot, reactive, cross-store, cycle and unsupported-wrapper shapes remain semantic fallbacks.
+
+Slice 3E3c2d checkpoint: wrapper loose-fill selection now belongs to one typed slot-schema traversal and always chooses the smallest positional target before default. Fold, runtime-site planning and owned HIR handoff share that policy, while canonical handoff injection reaches branches, loop aggregates and same-store children, preserves foreign opacity and activates each wrapper's exact validated overlay identity. Missing current-store authority remains an internal error and obsolete schema `StringTable` plumbing is deleted.
 
 #### Phase 3 acceptance
 

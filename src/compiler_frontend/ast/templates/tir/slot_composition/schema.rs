@@ -10,7 +10,9 @@
 //!      fill content from TIR nodes. Keeping schema discovery separate from
 //!      contribution routing lets each phase stay focused.
 
+use crate::compiler_frontend::ast::templates::error::TemplateError;
 use crate::compiler_frontend::ast::templates::template::{SlotKey, Style, TemplateType};
+use crate::compiler_frontend::ast::templates::template_slots::TemplateSlotError;
 use crate::compiler_frontend::ast::templates::tir::contribution_shape::{
     ContributionShape, classify_tir_contribution_node,
 };
@@ -23,6 +25,7 @@ use crate::compiler_frontend::ast::templates::tir::{
     TemplateIr, TemplateIrBranch, TemplateIrId, TemplateIrNode, TemplateIrNodeId,
     TemplateIrNodeKind, TemplateIrStore, TemplateWrapperSetId,
 };
+use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorType};
 use crate::compiler_frontend::compiler_messages::compiler_errors::compiler_error_to_diagnostic;
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, InvalidTemplateSlotReason};
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
@@ -52,6 +55,101 @@ use super::helpers::{SlotResolutionComposition, internal_compiler_error, tir_tre
 ///      zero-cost `From<Box<CompilerDiagnostic>>` conversions added alongside
 ///      this boxing.
 type SlotSchemaResult<T> = Result<T, Box<CompilerDiagnostic>>;
+
+/// Narrow error boundary for the schema walk itself.
+///
+/// WHAT: keeps source slot diagnostics and malformed TIR authority in their
+///       owning typed lanes while the single schema traversal serves both
+///       composition and handoff.
+/// WHY: composition converts infrastructure failures at its existing
+///      diagnostic boundary, while HIR handoff can move the original
+///      `CompilerError` without reverse-converting a `DiagnosticPayload`.
+#[derive(Debug)]
+pub(crate) enum SlotSchemaError {
+    Diagnostic(Box<CompilerDiagnostic>),
+    Infrastructure(Box<CompilerError>),
+}
+
+type SlotSchemaCollectionResult<T> = Result<T, SlotSchemaError>;
+
+impl SlotSchemaError {
+    fn into_diagnostic(self) -> CompilerDiagnostic {
+        match self {
+            SlotSchemaError::Diagnostic(diagnostic) => *diagnostic,
+            SlotSchemaError::Infrastructure(error) => compiler_error_to_diagnostic(error.as_ref()),
+        }
+    }
+}
+
+impl From<CompilerDiagnostic> for SlotSchemaError {
+    fn from(diagnostic: CompilerDiagnostic) -> Self {
+        SlotSchemaError::Diagnostic(Box::new(diagnostic))
+    }
+}
+
+impl From<Box<CompilerDiagnostic>> for SlotSchemaError {
+    fn from(diagnostic: Box<CompilerDiagnostic>) -> Self {
+        SlotSchemaError::Diagnostic(diagnostic)
+    }
+}
+
+impl From<CompilerError> for SlotSchemaError {
+    fn from(error: CompilerError) -> Self {
+        SlotSchemaError::Infrastructure(Box::new(error))
+    }
+}
+
+/// Preserves the existing composition diagnostic lane without rebuilding an
+/// internal error from its rendered diagnostic payload.
+impl From<SlotSchemaError> for Box<CompilerDiagnostic> {
+    fn from(error: SlotSchemaError) -> Self {
+        Box::new(error.into_diagnostic())
+    }
+}
+
+impl From<SlotSchemaError> for TemplateError {
+    fn from(error: SlotSchemaError) -> Self {
+        match error {
+            SlotSchemaError::Diagnostic(diagnostic) => TemplateError::Diagnostic(diagnostic),
+            SlotSchemaError::Infrastructure(error) => TemplateError::Infrastructure(error),
+        }
+    }
+}
+
+impl From<SlotSchemaError> for TemplateSlotError {
+    fn from(error: SlotSchemaError) -> Self {
+        match error {
+            SlotSchemaError::Diagnostic(diagnostic) => TemplateSlotError::Diagnostic(diagnostic),
+            SlotSchemaError::Infrastructure(error) => TemplateSlotError::Infrastructure(error),
+        }
+    }
+}
+
+/// Keeps the internal handoff lane lossless for malformed authority and
+/// preserves a source diagnostic's reason and primary location if one reaches
+/// this boundary unexpectedly.
+impl From<SlotSchemaError> for CompilerError {
+    fn from(error: SlotSchemaError) -> Self {
+        match error {
+            SlotSchemaError::Infrastructure(error) => *error,
+            SlotSchemaError::Diagnostic(diagnostic) => {
+                let diagnostic = *diagnostic;
+                CompilerError::new(
+                    format!(
+                        "TIR HIR handoff slot schema validation produced a source diagnostic: kind={:?}, payload={:?}",
+                        diagnostic.kind, diagnostic.payload
+                    ),
+                    diagnostic.primary_location,
+                    ErrorType::Compiler,
+                )
+            }
+        }
+    }
+}
+
+fn schema_infrastructure_error(message: impl Into<String>) -> SlotSchemaError {
+    SlotSchemaError::Infrastructure(Box::new(CompilerError::compiler_error(message)))
+}
 // ------------------------
 //  Slot schema
 // ------------------------
@@ -82,6 +180,23 @@ impl TirSlotSchema {
             SlotKey::Named(name) => self.named_slots.contains(name),
             SlotKey::Positional(index) => self.positional_slots.contains(index),
         }
+    }
+
+    /// Returns the loose-fill target selected by the wrapper slot schema.
+    ///
+    /// WHAT: selects the smallest positional slot when one exists, otherwise
+    ///       the default slot. Named-only schemas and slot-less schemas return
+    ///       no target because inherited loose content cannot address them.
+    /// WHY: wrapper composition and runtime handoff must agree on one
+    ///      positional-before-default policy regardless of where a slot appears
+    ///      in the structural TIR tree.
+    pub(crate) fn loose_fill_target_key(&self) -> Option<SlotKey> {
+        self.positional_slots
+            .iter()
+            .next()
+            .copied()
+            .map(SlotKey::Positional)
+            .or_else(|| self.has_default_slot.then_some(SlotKey::Default))
     }
 
     /// Returns positional slot indexes in ascending numeric order.
@@ -139,14 +254,16 @@ impl TirSlotSchema {
         &mut self,
         key: &SlotKey,
         error_location: SourceLocation,
-    ) -> SlotSchemaResult<()> {
+    ) -> SlotSchemaCollectionResult<()> {
         match key {
             SlotKey::Default => {
                 if self.has_default_slot {
-                    return Err(Box::new(CompilerDiagnostic::invalid_template_slot(
-                        InvalidTemplateSlotReason::MultipleDefaultSlots,
-                        None,
-                        error_location,
+                    return Err(SlotSchemaError::Diagnostic(Box::new(
+                        CompilerDiagnostic::invalid_template_slot(
+                            InvalidTemplateSlotReason::MultipleDefaultSlots,
+                            None,
+                            error_location,
+                        ),
                     )));
                 }
                 self.has_default_slot = true;
@@ -175,12 +292,11 @@ impl TirSlotSchema {
 pub(crate) fn collect_tir_slot_schema(
     store: &TemplateIrStore,
     template_id: TemplateIrId,
-    string_table: &StringTable,
-) -> SlotSchemaResult<TirSlotSchema> {
+) -> SlotSchemaCollectionResult<TirSlotSchema> {
     let Some(template) = store.get_template(template_id) else {
-        return Err(Box::new(internal_compiler_error(
+        return Err(schema_infrastructure_error(
             "TIR slot schema extraction: template ID was not present in the store.",
-        )));
+        ));
     };
 
     let mut schema = TirSlotSchema::default();
@@ -188,7 +304,6 @@ pub(crate) fn collect_tir_slot_schema(
         store,
         template.root,
         &mut schema,
-        string_table,
         template.location.to_owned(),
     )?;
 
@@ -202,21 +317,16 @@ pub(crate) fn collect_tir_slot_schema(
 ///       declarations are walked recursively.
 /// WHY: wrapper templates may declare slots inside branches, loops, or nested
 ///      child templates, so a single root walk must reach every reachable node.
-#[allow(
-    clippy::only_used_in_recursion,
-    reason = "string_table is threaded to recursive calls and slot-key recording; it is not consumed directly at every branch"
-)]
 fn collect_tir_slot_schema_from_node(
     store: &TemplateIrStore,
     node_id: TemplateIrNodeId,
     schema: &mut TirSlotSchema,
-    string_table: &StringTable,
     error_location: SourceLocation,
-) -> SlotSchemaResult<()> {
+) -> SlotSchemaCollectionResult<()> {
     let Some(node) = store.get_node(node_id) else {
-        return Err(Box::new(internal_compiler_error(
+        return Err(schema_infrastructure_error(
             "TIR slot schema extraction: node ID was not present in the store.",
-        )));
+        ));
     };
 
     match &node.kind {
@@ -226,7 +336,6 @@ fn collect_tir_slot_schema_from_node(
                     store,
                     *child_id,
                     schema,
-                    string_table,
                     error_location.to_owned(),
                 )?;
             }
@@ -237,24 +346,21 @@ fn collect_tir_slot_schema_from_node(
         }
 
         TemplateIrNodeKind::ChildTemplate { reference, .. } => {
-            // Nested template references declare their own slots, which the
-            // wrapper must account for during composition.
+            // Foreign child references are opaque to this store-local schema.
+            // Their owning store supplies its own schema when needed.
             let Some(template_id) = reference.template_id_in_store(store.store_id()) else {
-                return Err(Box::new(internal_compiler_error(
-                    "TIR slot schema extraction: child template reference is not in the current store.",
-                )));
+                return Ok(());
             };
             let Some(child_template) = store.get_template(template_id) else {
-                return Err(Box::new(internal_compiler_error(
+                return Err(schema_infrastructure_error(
                     "TIR slot schema extraction: child template ID was not present in the store.",
-                )));
+                ));
             };
 
             collect_tir_slot_schema_from_node(
                 store,
                 child_template.root,
                 schema,
-                string_table,
                 error_location.to_owned(),
             )?;
         }
@@ -265,7 +371,6 @@ fn collect_tir_slot_schema_from_node(
                     store,
                     branch.body,
                     schema,
-                    string_table,
                     error_location.to_owned(),
                 )?;
             }
@@ -275,20 +380,26 @@ fn collect_tir_slot_schema_from_node(
                     store,
                     *fallback_id,
                     schema,
-                    string_table,
                     error_location.to_owned(),
                 )?;
             }
         }
 
-        TemplateIrNodeKind::Loop { body, .. } => {
-            collect_tir_slot_schema_from_node(
-                store,
-                *body,
-                schema,
-                string_table,
-                error_location.to_owned(),
-            )?;
+        TemplateIrNodeKind::Loop {
+            body,
+            aggregate_wrapper,
+            ..
+        } => {
+            collect_tir_slot_schema_from_node(store, *body, schema, error_location.to_owned())?;
+
+            if let Some(aggregate_wrapper_id) = aggregate_wrapper {
+                collect_tir_slot_schema_from_node(
+                    store,
+                    *aggregate_wrapper_id,
+                    schema,
+                    error_location.to_owned(),
+                )?;
+            }
         }
 
         // InsertContribution nodes carry routed content, not slot declarations.
@@ -610,7 +721,7 @@ fn expand_tir_slot_placeholders_from_node(
                 )));
             };
 
-            let child_schema = collect_tir_slot_schema(store, child_template_id, string_table)?;
+            let child_schema = collect_tir_slot_schema(store, child_template_id)?;
 
             if !child_schema.has_any_slots() {
                 // The child template has no slot declarations of its own, so it

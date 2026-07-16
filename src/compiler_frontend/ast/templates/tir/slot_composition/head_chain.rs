@@ -172,19 +172,14 @@ fn compose_tir_head_chain_into(
     // the original root is unchanged and we can avoid allocating the head/body
     // partition vectors. This matters because many templates contain head
     // references (e.g. function calls) that are not slot-bearing wrappers.
-    if !has_tir_head_chain_receiver(store, root_children, inputs.string_table, inputs.registry)? {
+    if !has_tir_head_chain_receiver(store, root_children, inputs.registry)? {
         return Ok(root_node_id);
     }
 
     let (head_children, body_children) = partition_tir_children_by_origin(store, root_children)?;
 
-    let (root_items, layers) = build_tir_chain_graph(
-        store,
-        &head_children,
-        &body_children,
-        inputs.string_table,
-        inputs.registry,
-    )?;
+    let (root_items, layers) =
+        build_tir_chain_graph(store, &head_children, &body_children, inputs.registry)?;
 
     let resolved_root_children = resolve_tir_chain_items(store, &root_items, &layers, inputs)?;
     let original_root_children = children_of_node(store, root_node_id)?;
@@ -289,7 +284,6 @@ pub(super) fn root_sequence_children(
 fn has_tir_head_chain_receiver(
     store: &TemplateIrStore,
     children: &[TemplateIrNodeId],
-    string_table: &StringTable,
     registry: &Option<Rc<RefCell<TemplateIrRegistry>>>,
 ) -> HeadChainResult<bool> {
     let mut saw_body_origin = false;
@@ -318,7 +312,7 @@ fn has_tir_head_chain_receiver(
         }
 
         if matches!(child_node.kind, TemplateIrNodeKind::ChildTemplate { .. })
-            && is_tir_receiver(store, *child_id, string_table, registry)?.is_some()
+            && is_tir_receiver(store, *child_id, registry)?.is_some()
         {
             return Ok(true);
         }
@@ -388,7 +382,6 @@ fn partition_tir_children_by_origin(
 fn is_tir_receiver(
     store: &TemplateIrStore,
     node_id: TemplateIrNodeId,
-    string_table: &StringTable,
     registry: &Option<Rc<RefCell<TemplateIrRegistry>>>,
 ) -> HeadChainResult<Option<TemplateTirChildReference>> {
     let Some(node) = store.get_node(node_id) else {
@@ -425,7 +418,7 @@ fn is_tir_receiver(
         // chains, or loops. The cheap `slot_count` summary only counts direct
         // slots, so the schema walk is required to catch wrappers whose slots
         // are not immediate children of the root.
-        let schema = collect_tir_slot_schema(store, template_id, string_table)?;
+        let schema = collect_tir_slot_schema(store, template_id)?;
 
         return Ok(if schema.has_any_slots() {
             Some(*reference)
@@ -466,7 +459,7 @@ fn is_tir_receiver(
         return Ok(None);
     }
 
-    let schema = collect_tir_slot_schema(&foreign_store, reference.root.template_id, string_table)?;
+    let schema = collect_tir_slot_schema(&foreign_store, reference.root.template_id)?;
 
     Ok(if schema.has_any_slots() {
         Some(*reference)
@@ -487,7 +480,6 @@ fn build_tir_chain_graph(
     store: &TemplateIrStore,
     head_children: &[TemplateIrNodeId],
     body_children: &[TemplateIrNodeId],
-    string_table: &StringTable,
     registry: &Option<Rc<RefCell<TemplateIrRegistry>>>,
 ) -> HeadChainResult<(Vec<TirChainItem>, Vec<TirChainLayer>)> {
     let mut root_items = Vec::new();
@@ -495,8 +487,7 @@ fn build_tir_chain_graph(
     let mut active_layer: Option<usize> = None;
 
     for child_id in head_children {
-        if let Some(wrapper_reference) = is_tir_receiver(store, *child_id, string_table, registry)?
-        {
+        if let Some(wrapper_reference) = is_tir_receiver(store, *child_id, registry)? {
             let layer_index = layers.len();
 
             push_tir_chain_item(
@@ -661,7 +652,7 @@ fn resolve_tir_chain_layer(
     // and loop-control semantics. Structural expansion would flatten wrapper
     // text and fill content together, which breaks `continue` inside slot
     // fills and drops runtime slot-site metadata.
-    let schema = collect_tir_slot_schema(store, wrapper_template_id, inputs.string_table)?;
+    let schema = collect_tir_slot_schema(store, wrapper_template_id)?;
 
     let composed_template_id = if inputs.allow_runtime_plans
         && tir_contributions_need_runtime(
@@ -793,7 +784,7 @@ fn resolve_cross_store_tir_chain_layer(
                 )
             })?;
         let foreign_store = foreign_store_handle.borrow();
-        collect_tir_slot_schema(&foreign_store, wrapper_template_id, inputs.string_table)?
+        collect_tir_slot_schema(&foreign_store, wrapper_template_id)?
     };
 
     if !schema.has_any_slots() {
