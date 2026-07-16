@@ -576,10 +576,10 @@ Tone may include concise, acerbic humour where it lightens the mood without obsc
   ```beanstalk
   scores {String = Int} = {"ada" = 10, "bob"}
   ```
-- **Current diagnostic:** `Map literal entries must all use `key = value` syntax. Mixed collection and map entries are not allowed.`
-- **Weakness:** The entry `"bob"` is not a mixed collection entry; it is a map entry missing its value. The umbrella message is misleading.
-- **Proposed diagnostic:** Split into: `Map entry "bob" is missing a value. Use 'key = value' syntax, e.g. "bob" = 20.`
-- **Test coverage to add:** `tests/cases/map_literal_missing_value`.
+- **Current diagnostic:** The mixed-entry form reports "Map literal entries must all use `key = value` syntax. Mixed collection and map entries are not allowed." A map entry that ends after `=` reports "Map literal entry is missing a value expression after '='."
+- **Weakness:** The implementation now distinguishes the two parser branches, so the original entry must not regress to one umbrella message. The missing-value branch still does not name the key or show the exact repair.
+- **Proposed diagnostic:** Keep the branches separate. Retain the mixed-entry message, and refine the missing-value branch to `Map entry for key "ada" is missing a value. Write '"ada" = 20'.`
+- **Test coverage to add:** `tests/cases/map_literal_mixed_entries` and `tests/cases/map_literal_missing_value`, asserting distinct stable reason variants and message fragments.
 
 ### DIAG-038: Import path missing `@` is misreported as binary operator spacing
 
@@ -594,10 +594,18 @@ Tone may include concise, acerbic humour where it lightens the mood without obsc
 - **Proposed diagnostic:** `Import paths must start with '@'. Did you mean 'import @core/math'?`
 - **Test coverage to add:** `tests/cases/import_missing_at_prefix`.
 
-### DIAG-039: Legacy `#import` syntax terse output is empty
+### DIAG-039: Remove legacy `#import` compatibility instead of maintaining a diagnostic
 
-- legacy #import syntax needs to be removed completely from thr compiler without any disgnostics.
-references to the old #import should be removed and nothing should reference it anymore.
+- **Stage:** Tokenization / headers
+- **Current code:** `BST-RULE-0025`
+- **Snippet:**
+  ```beanstalk
+  #import @core/math
+  ```
+- **Current diagnostic:** "Legacy `#import` syntax is no longer supported" with no useful message body.
+- **Weakness:** This is obsolete compatibility surface, not a diagnostic that should be expanded. The old syntax, diagnostic kind, renderer text, tests, and references should disappear together.
+- **Proposed correction:** Remove the legacy `#import` parser path and all references to its diagnostic. Keep only current `import` syntax and its focused import diagnostics.
+- **Test coverage to add:** Remove legacy `#import` fixtures and add a source-tree test or repository search gate proving that the old token, stable code, and enum variant are absent. Keep modern import coverage under `tests/cases/`.
 
 ### DIAG-040: Import of external namespace member says "Unknown value name"
 
@@ -648,6 +656,282 @@ function add(left, right) {
     * A genuinely orphaned annotation continues to report MissingExportAfterSig.
     * Provider-level rendering preserves BST-IMPORT-0022, the targeted message and the JavaScript source span.
 
+### DIAG-043: `NotResultExpression` hardcodes postfix `!` for every invalid handler
+
+- **Stage:** AST result and option handling
+- **Current code:** `BST-RULE-0051`
+- **Snippets:**
+  ```beanstalk
+  value = 1 catch then 2
+  ```
+  ```beanstalk
+  value String? = "text"
+  unwrapped = value!
+  ```
+  ```beanstalk
+  value String? = "text"
+  fallback = value catch then "fallback"
+  ```
+- **Current diagnostic:** All three forms report `The '!' result-handling suffix is only valid for Result-valued expressions.`
+- **Weakness:** `catch` on an ordinary value and `!` on an optional value are different mistakes with different repairs. The message names the wrong suffix for two of the three cases and calls the language's `Error!` channel a Result.
+- **Proposed diagnostic:** Branch on the handler suffix and operand type with structured payload facts:
+  - `Cannot use 'catch' on a non-fallible expression. 'catch' handles expressions that can return Error!.`
+  - `Postfix '!' propagates Error! values, but this expression has type String?. Inspect the option with 'if value is |present| ...' instead.`
+  - `Cannot use 'catch' to recover an optional value. Use 'if value is |present| then present else fallback'.`
+- **Test coverage to add:** `tests/cases/catch_non_fallible_expression`, `tests/cases/postfix_bang_optional_expression`, and `tests/cases/catch_optional_expression`. Assert separate structured reasons and message fragments for `catch`, `!`, and optional operands.
+
+### DIAG-044: Top-level `!` propagation says "surrounding function" and gives no local fix
+
+- **Stage:** AST result handling
+- **Current code:** `BST-RULE-0051`
+- **Snippet:**
+  ```beanstalk
+  parse || -> Int, Error!:
+      return 1
+  ;
+
+  value = parse()!
+  ```
+- **Current diagnostic:** `This expression uses '!' propagation, but the surrounding function does not declare an error return slot.`
+- **Weakness:** The failing expression is in top-level code, so there is no surrounding function. The user needs the immediate alternative, not an abstract statement about a missing slot.
+- **Proposed diagnostic:** `Cannot propagate '!' from top-level code because top-level code has no Error! return slot. Use 'parse() catch then fallback', or call it inside a function that returns an Error! slot.` Keep the non-error-function variant separate when a real enclosing function exists.
+- **Test coverage to add:** `tests/cases/top_level_error_propagation` and `tests/cases/error_propagation_in_non_fallible_function`, asserting the top-level and nested-function variants point to the correct boundary and suggest `catch` or an `Error!` return slot.
+
+### DIAG-045: Extra positional argument reports only the expected count
+
+- **Stage:** AST call-shape validation
+- **Current code:** `BST-RULE-0054`
+- **Snippet:**
+  ```beanstalk
+  add |left Int, right Int| -> Int:
+      return left + right
+  ;
+
+  value = add(1, 2, 3)
+  ```
+- **Current diagnostic:** `Call to 'add' provides more positional arguments than expected (expected 2).`
+- **Weakness:** It omits the actual count and the correction. The user must count the call manually and infer which argument to remove.
+- **Proposed diagnostic:** `Call to 'add' has 3 positional arguments, but the function accepts 2. Remove the extra argument, or use named arguments for the parameters you intend to pass.` Carry the found count and the extra argument location in the structured reason.
+- **Test coverage to add:** `tests/cases/call_extra_positional_count` covering a user function, struct constructor, and choice constructor. Assert the actual and expected counts and the label on the extra argument.
+
+### DIAG-046: Mutable call diagnostics do not distinguish an immutable binding from a missing marker
+
+- **Stage:** AST call-shape and mutable-access validation
+- **Current code:** `BST-RULE-0054`
+- **Snippets:**
+  ```beanstalk
+  consume |values ~{Int}|:
+      io.line("consumed")
+  ;
+
+  values {Int} = {}
+  consume(values)
+  ```
+  ```beanstalk
+  mutate |value ~Int|:
+      value = 5
+  ;
+
+  value = 1
+  mutate(~value)
+  ```
+- **Current diagnostic:** The first form reports "Call to 'consume' requires mutable access (~) for parameter 'values', but it was not provided. Prefix an existing mutable place with ~, for example `~value`." The second reports "...an immutable place was provided. Declare the binding with ~ to allow mutation."
+- **Weakness:** In the first form, `values` is known to be immutable, so suggesting only `consume(~values)` leads directly to another error. The second form states the rule but does not show the declaration syntax or the corrected call together.
+- **Proposed diagnostic:** Branch on place mutability:
+  - `Call to 'consume' needs mutable access for 'values', but 'values' is immutable. Declare it as 'values ~{Int} = ...' and call 'consume(~values)'.`
+  - `Cannot pass immutable 'value' as mutable access. Declare 'value ~Int = 1' before calling 'mutate(~value)'.`
+- **Test coverage to add:** `tests/cases/mutable_call_missing_marker_on_immutable_binding` and `tests/cases/mutable_call_marker_on_immutable_binding`, plus a positive mutable-binding call to prevent the new branch from masking the normal missing-marker diagnostic.
+
+### DIAG-047: Unknown type names do not suggest close builtin or visible type names
+
+- **Stage:** AST type resolution
+- **Current code:** `BST-RULE-0035`
+- **Snippet:**
+  ```beanstalk
+  value Strng = "hello"
+  ```
+- **Current diagnostic:** `Unknown type name 'Strng'.`
+- **Weakness:** `Strng` is a one-character typo for the builtin `String`, but the message offers no correction. Keep the existing DIAG-033 branch for unresolved generic parameters such as `A`.
+- **Proposed diagnostic:** When a close visible type exists, report `Unknown type name 'Strng'. Did you mean 'String'?` Preserve the short generic message when no candidate is sufficiently close.
+- **Test coverage to add:** `tests/cases/unknown_type_name_suggestion` for a close builtin typo, a close user-defined type typo, and an unrelated unknown name that must not receive a bogus suggestion.
+
+### DIAG-048: Qualified namespace-member typos lose the namespace and available-member hint
+
+- **Stage:** AST namespace/member resolution
+- **Current code:** `BST-RULE-0034`
+- **Snippet:**
+  ```beanstalk
+  value = io.lnie("hello")
+  ```
+- **Current diagnostic:** `Unknown value name 'lnie'.`
+- **Weakness:** The diagnostic drops the receiver namespace and does not suggest the nearby builtin member `line`. This is different from DIAG-009, where an unqualified name should be qualified with an imported namespace.
+- **Proposed diagnostic:** `Unknown member 'lnie' on namespace 'io'. Did you mean 'line'?` Keep a receiver-aware generic form for unrelated names, such as `Unknown member 'nope' on namespace 'io'.`
+- **Test coverage to add:** `tests/cases/namespace_member_typo_suggestion` and `tests/cases/namespace_member_unknown_no_suggestion`, asserting the namespace is retained and suggestions are offered only for close candidates.
+
+### DIAG-049: Unknown choice variants in match patterns omit the choice and available variants
+
+- **Stage:** AST match-pattern resolution
+- **Current code:** `BST-RULE-0049`
+- **Snippet:**
+  ```beanstalk
+  Color ::
+      Red,
+      Blue,
+  ;
+
+  color = Color::Red
+  if color is:
+      Color::Green => io.line("green")
+      else => io.line("other")
+  ;
+  ```
+- **Current diagnostic:** `Unknown variant 'Green'.`
+- **Weakness:** The message omits the scrutinee choice and gives no `Red`/`Blue` context. The separate choice-constructor renderer already has a useful suggestion policy, but match patterns do not use it.
+- **Proposed diagnostic:** `Unknown variant 'Color::Green'. Did you mean 'Color::Red'? Available variants: [Red, Blue].` Carry the choice identity and visible variant list in the match-pattern payload. Do not suggest a variant for an unrelated name.
+- **Test coverage to add:** `tests/cases/match_unknown_choice_variant_suggestion` and `tests/cases/match_unknown_choice_variant_without_suggestion`, with a unit renderer test for the close and unrelated candidate branches.
+
+### DIAG-050: A mismatched match qualifier does not name either choice type
+
+- **Stage:** AST match-pattern resolution
+- **Current code:** `BST-RULE-0049`
+- **Snippet:**
+  ```beanstalk
+  Color ::
+      Red,
+      Blue,
+  ;
+  Size ::
+      Small,
+      Large,
+  ;
+
+  color = Color::Red
+  if color is:
+      Size::Small => io.line("small")
+      else => io.line("other")
+  ;
+  ```
+- **Current diagnostic:** `Match arm qualifier does not match the scrutinee choice.`
+- **Weakness:** The user cannot tell which qualifier was expected or which choice the compiler resolved as the scrutinee. The generic wording is especially unhelpful in imported or alias-heavy code.
+- **Proposed diagnostic:** `Match arm uses qualifier 'Size', but the scrutinee is choice 'Color'. Use a Color variant such as 'Color::Red', or omit the qualifier and write 'Red'.`
+- **Test coverage to add:** `tests/cases/match_qualifier_mismatch_context` with local names, an imported alias, and a valid qualified arm to prove the diagnostic does not reject legitimate aliases.
+
+### DIAG-051: Choice payload capture errors omit the expected field and capture count
+
+- **Stage:** AST match-pattern payload validation
+- **Current code:** `BST-RULE-0049`
+- **Snippets:**
+  ```beanstalk
+  Result ::
+      Ok | value Int |,
+      Err | message String |,
+  ;
+
+  result = Result::Ok(value = 1)
+  if result is:
+      Ok(missing) => io.line(missing)
+      else => io.line("other")
+  ;
+  ```
+  ```beanstalk
+  Result ::
+      Ok | value Int |,
+      Err | message String |,
+  ;
+
+  result = Result::Ok(value = 1)
+  if result is:
+      Ok() => io.line("empty")
+      else => io.line("other")
+  ;
+  ```
+- **Current diagnostics:** `Capture binding does not match payload field name in variant 'Ok'.` and `Too few capture bindings for variant 'Ok'.`
+- **Weakness:** Both messages omit the declared field `value`, the actual capture name or the expected versus found count. The user has to inspect the choice declaration to discover the repair.
+- **Proposed diagnostics:**
+  - `Capture 'missing' does not match field 'value' in variant 'Ok'. Use 'Ok(value)' or 'Ok(value as missing)'.`
+  - `Variant 'Ok' has 1 payload field ('value'), but this pattern captures none. Use 'Ok(value)'.`
+  Carry field names and expected/found counts as structured facts rather than reconstructing them in prose.
+- **Test coverage to add:** `tests/cases/match_payload_capture_name_mismatch` and `tests/cases/match_payload_capture_count`, plus a positive renamed-capture case using `as`.
+
+### DIAG-052: Empty non-`else` match arms are silently accepted
+
+- **Stage:** AST statement match parsing
+- **Current code:** no diagnostic
+- **Snippet:**
+  ```beanstalk
+  value = 1
+  if value is:
+      1 =>
+      else => io.line("other")
+  ;
+  ```
+- **Current diagnostic:** No error or warning.
+- **Weakness:** The language documents bodyless `else =>` as the explicit no-op arm. A normal pattern arm with no body is accepted and can silently discard the matching case, which is particularly dangerous when the next arm is mistaken for its body.
+- **Proposed diagnostic:** `Match arm for '1' has no body. Add a statement after '=>'. A bodyless no-op arm is only allowed for 'else =>'.`
+- **Test coverage to add:** `tests/cases/match_non_else_empty_body_rejected`, with a positive `tests/cases/pattern_match_bodyless_else_noop_success` regression check and a value-producing match case that must still require a value body.
+
+### DIAG-053: Function signature ending after `->` is reported as a generic type-annotation error
+
+- **Stage:** Header / AST function signature parsing
+- **Current code:** `BST-SYNTAX-0014`
+- **Snippet:**
+  ```beanstalk
+  calculate |value Int| ->
+  ```
+- **Current diagnostic:** `Expected a type annotation but found newline.`
+- **Weakness:** The user is missing a function return type after `->`, not writing an invalid declaration type. The message does not say that `:` is also required or explain the no-return alternative.
+- **Proposed diagnostic:** `Function signature is missing a return type after '->'. Add a type and ':' such as '-> Int:', or remove '->' if the function returns no values.`
+- **Test coverage to add:** `tests/cases/function_signature_missing_return_type`, covering EOF, newline, and a valid no-return signature without `->`.
+
+### DIAG-054: Declaration with `=` and no right-hand side is misreported as uninitialized
+
+- **Stage:** AST declaration parsing
+- **Current code:** `BST-RULE-0031`
+- **Snippet:**
+  ```beanstalk
+  value =
+  ```
+- **Current diagnostic:** `Uninitialized variable 'value'`
+- **Weakness:** The source contains an assignment operator, so the missing expression is the actual error. The current message suggests a declaration-state problem and does not tell the user where to add the value.
+- **Proposed diagnostic:** `Expected a value after '=' in declaration 'value'. Write 'value = expression'.`
+- **Test coverage to add:** `tests/cases/declaration_missing_initializer`, comparing `name =` with a genuinely malformed bare declaration and asserting the missing-right-hand-expression branch points at `=` or its following location.
+
+### DIAG-055: Collection loop source names the type but offers no valid loop shape
+
+- **Stage:** AST loop-header validation
+- **Current code:** `BST-SYNTAX-0029`
+- **Snippet:**
+  ```beanstalk
+  count = 1
+  loop count |item|:
+      io.line(item)
+  ;
+  ```
+- **Current diagnostic:** `Collection loop source must be a collection. Found 'Int'.`
+- **Weakness:** It identifies the mismatch but gives no correction. A user may have intended a range loop, which has different syntax from a collection loop.
+- **Proposed diagnostic:** `Collection loop source must be a collection, found 'Int'. Use a collection after 'loop', or use range syntax such as 'loop 0 to count by 1 |i|:'.`
+- **Test coverage to add:** `tests/cases/loop_non_collection_source`, asserting the found type and suggestion, with positive collection and range loop cases to protect both accepted shapes.
+
+### DIAG-056: Borrow conflicts name the alias but do not explain how to end or avoid it
+
+- **Stage:** Borrow validation / access conflict rendering
+- **Current code:** `BST-BORROW-0002` and `BST-BORROW-0003`
+- **Snippet:**
+  ```beanstalk
+  data ~= "hello"
+  first ~= data
+  second ~= data
+  io.line(first)
+  ```
+- **Current diagnostic:** `Cannot read 'data' as shared while mutable alias 'first' is still active.`
+- **Weakness:** The message identifies the two places and the incompatible access modes, but offers no repair. In dense code, users still have to infer whether to read through the alias, stop using it, or narrow its scope. The same gap exists for a shared alias blocking mutation and for a second mutable alias.
+- **Proposed diagnostics:** Keep the stable borrow code and branch the renderer by conflict facts:
+  - `Cannot read 'data' while mutable alias 'first' is active. Read through 'first' instead, or finish the mutable borrow before using 'data'.`
+  - `Cannot mutably access 'data' while shared alias 'shared' is active. Stop using 'shared' before mutating 'data', or move the mutation into a separate scope.`
+  - `Cannot mutably access 'data' because mutable alias 'first' is already active. Reuse 'first', or finish that borrow before creating another one.`
+  Preserve the existing generic fallback when no conflicting place is available.
+- **Test coverage to add:** `tests/cases/borrow_shared_alias_blocks_mutation`, `tests/cases/borrow_mutable_alias_blocks_shared_read`, and `tests/cases/borrow_duplicate_mutable_alias`. Assert the stable code, both place names, and the repair fragment for each conflict branch. Add a passing case proving that narrowing the alias scope or using the alias itself removes the diagnostic.
+
 
 ---
 
@@ -655,14 +939,14 @@ function add(left, right) {
 
 ### Highest impact
 
-1. **Fix terse renderer fallback** (DIAG-013, DIAG-027, DIAG-039). Several diagnostics render empty messages in `--terse` mode even though their descriptors have titles. This breaks CI and tooling.
+1. **Fix terse renderer fallback** (DIAG-013, DIAG-027). Several diagnostics render empty messages in `--terse` mode even though their descriptors have titles. This breaks CI and tooling.
 2. **Convert infrastructure errors to user diagnostics** (DIAG-011, DIAG-012, DIAG-035). Malformed templates, value-producing `if` without else value, and duplicate function parameters currently panic through `BST-INFRA-0001`. These should become stable `CompilerDiagnostic` errors.
-3. **Add missing diagnostics for silently accepted invalid code** (DIAG-028, DIAG-031). Invalid string escapes and multi-return assigned to single target are accepted without complaint.
+3. **Add missing diagnostics for silently accepted invalid code** (DIAG-028, DIAG-031, DIAG-052). Invalid string escapes, multi-return assigned to a single target, and empty non-`else` match arms are accepted without complaint.
 
 ### Medium impact
 
-- Improve specificity of context-aware messages: struct field writes, mutable receiver calls, map keys, catch recovery, statement match arms, operator spacing, and generic function signatures.
-- Add "did you mean" hints for imported namespace members and missing grouped imports.
+- Improve specificity of context-aware messages: result handling, mutable calls, choice patterns, map keys, catch recovery, statement match arms, operator spacing, and generic function signatures.
+- Add "did you mean" hints for type names, qualified namespace members, choice match variants, imported namespace members, and missing grouped imports.
 - Split umbrella messages (collection mutator, operator spacing, compound assignment, map literal entries) into more specific variants.
 
 ### Low impact / polish
@@ -683,5 +967,3 @@ When implementing this plan, prefer adding or splitting `CompilerDiagnostic` pay
 - [ ] Integration tests assert diagnostic codes, not exact rendered text, except where text is the explicit feature.
 - [ ] `just validate` passes after each batch of changes.
 - [ ] Progress matrix updated if any language surface changes (e.g., new rejections or newly accepted forms).
-
-
