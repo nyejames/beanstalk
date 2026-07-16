@@ -36,8 +36,7 @@ To see the current plans and priority goals of the compiler and language, see th
 
 More technical details about the language, compiler and build system.
 
-- [Codebase overview](docs/src/docs/codebase/overview.bd)
-- [Compiler design overview](docs/src/docs/codebase/compiler-design/overview.bd)
+- [Compiler design overview](docs/compiler-design-overview.md)
 - [Memory-management overview](docs/src/docs/codebase/memory-management/overview.bd)
 - [Design scope](docs/src/docs/codebase/design-scope/overview.bd)
 - [Repository index](index.md)

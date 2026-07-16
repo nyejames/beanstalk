@@ -74,6 +74,6 @@ The exact list lives in `docs/language-overview.md`. Major families include:
 
 - `docs/language-overview.md`
 - `docs/src/docs/codebase/memory-management/overview.bd`
-- `docs/src/docs/codebase/compiler-design/overview.bd`
+- `docs/compiler-design-overview.md`
 - `docs/src/docs/codebase/language/overview.bd`
 - `docs/src/docs/progress/#page.bst`

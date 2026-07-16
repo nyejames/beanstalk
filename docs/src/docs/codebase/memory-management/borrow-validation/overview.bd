@@ -17,5 +17,4 @@ Roots, joins, move safety and facts.
 ## Read next
 
 - `docs/src/docs/codebase/memory-management/borrow-validation/borrow-validation.bd`
-- `docs/src/docs/codebase/compiler-design/stages/borrow-validation/overview.bd`
 - `docs/src/docs/codebase/memory-management/ownership-and-drops/overview.bd`

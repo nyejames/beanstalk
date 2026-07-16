@@ -45,7 +45,6 @@ page_head #= theme_head
     ## Compiler and codebase internals
 
     - @./codebase (Codebase overview)
-    - @./codebase/compiler-design (Compiler design)
     - @./codebase/memory-management (Memory management)
     - @./codebase/design-scope (Design scope)
     - @./codebase/style-guide (Development standards)

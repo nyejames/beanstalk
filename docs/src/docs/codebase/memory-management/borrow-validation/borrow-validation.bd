@@ -189,9 +189,3 @@ programs or unlock more optimisation while preserving existing semantics.
 - @../ (Memory management): core memory contract
 - @../access-and-aliasing (Access and aliasing): source access semantics
 - @../ownership-and-drops (Ownership and drops): consumers of move and drop facts
-- @../../compiler-design/stages/borrow-validation
-  (Compiler Stage 6: Borrow validation): pipeline ownership
-- @../../compiler-design/stages/hir-generation
-  (Compiler Stage 5: HIR generation): validated HIR input
-- @../../compiler-design/ast/templates-tir-and-reactivity
-  (Templates, TIR and reactivity): reactive source metadata

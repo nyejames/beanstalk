@@ -203,5 +203,4 @@ covers shared reads, explicit copies and `~` access.
 
 ## Compiler ownership
 
-`docs/src/docs/codebase/compiler-design/overview.bd` routes language features
-to the compiler stages and subsystems that implement them.
+`docs/compiler-design-overview.md`

@@ -56,7 +56,7 @@ The following surfaces are intentionally outside Beanstalk's language design sco
 ## Related references
 
 - `docs/src/docs/**` — user-facing docs-site pages and real `.bst` examples
-- `docs/src/docs/codebase/compiler-design/overview.bd` — compiler stage ownership and cross-stage data flow
+- `docs/compiler-design-overview.md` — compiler design overview
 - `docs/src/docs/codebase/memory-management/overview.bd` — GC fallback, ownership optimisation and borrow-analysis strategy
 - `docs/src/docs/codebase/design-scope/overview.bd` — accepted mechanisms, constraints and outside-scope families
 - `docs/src/docs/progress/#page.bst` — current implementation status

@@ -216,8 +216,4 @@ no-shadowing rule remains in `docs/language-overview.md`.
 - @../ (Memory management): concise memory-model contract
 - @../borrow-validation (Borrow validation): how shared and exclusive access are checked
 - @../ownership-and-drops (Ownership and drops): inferred transfer after access validation
-- @../../compiler-design/ast/expressions-statements-and-terminality
-  (Expressions, statements and terminality): AST source access ownership
-- @../../compiler-design/stages/hir-generation
-  (HIR generation): hidden locals and explicit places
 - @https://github.com/nyejames/beanstalk/blob/main/docs/language-overview.md (Language overview): full source syntax

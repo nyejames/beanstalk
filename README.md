@@ -146,7 +146,7 @@ examples can grow around the language that exists and the agent will have to fol
 <br>
 <li>
     <ul>
-        <a href="https://nyejames.github.io/beanstalk/docs/codebase/compiler-design/">Compiler design</a>
+        <a href="./docs/compiler-design-overview.md">Compiler design</a>
     </ul>
 </li>
 <br>

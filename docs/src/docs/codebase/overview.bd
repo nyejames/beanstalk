@@ -1,6 +1,6 @@
 # Codebase documentation
 
-`docs/src/docs/codebase/**` owns compiler architecture, memory design, design scope, implementation style, testing and validation.
+`docs/src/docs/codebase/**` owns memory design, design scope, implementation style, testing and validation.
 
 `docs/language-overview.md` remains the complete compiler-facing language
 authority during the language documentation migration.
@@ -23,8 +23,7 @@ Read `docs/src/docs/codebase/style-guide/testing.bd` when work changes
 behaviour, diagnostics, compiler stages, backends, tests or fixtures.
 
 For compiler work, use
-`docs/src/docs/codebase/compiler-design/overview.bd` to select the smallest
-relevant set of stage and topic references.
+`docs/compiler-design-overview.md`. This remains the canonical, sourth of truth reference for the overall compiler design.
 
 For design-boundary questions, read
 `docs/src/docs/codebase/design-scope/overview.bd`.
@@ -65,5 +64,3 @@ For design-boundary questions, read
 - Prefer generic trait bounds for static reuse and choices for runtime heterogeneity.
 - Keep ownership and lifetime optimisation behind the compiler rather than in source syntax.
 - Treat deferred implementation and outside-scope design as different categories.
-
-See `docs/src/docs/codebase/design-scope/overview.bd` for the review rules and rationale.

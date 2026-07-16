@@ -179,7 +179,3 @@ and GC fallback.
 - @../borrow-validation (Borrow validation): move and drop facts
 - @../runtime-and-backend-lowering
   (Runtime and backend memory lowering): ABI realisation and GC fallback
-- @../../compiler-design/stages/borrow-validation
-  (Compiler Stage 6: Borrow validation)
-- @../../compiler-design/backend/wasm-lowering
-  (Wasm lowering)

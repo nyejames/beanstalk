@@ -20,4 +20,3 @@ Shared reads, explicit copies and `~` access.
 ## Read next
 
 - `docs/src/docs/codebase/memory-management/access-and-aliasing/access-and-aliasing.bd`
-- `docs/src/docs/codebase/compiler-design/ast/expressions-statements-and-terminality/overview.bd`
