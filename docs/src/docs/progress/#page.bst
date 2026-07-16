@@ -306,11 +306,11 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
         ]
 
         [data:
-            [: String coercion and IO/template boundaries]
+            [: Strings, coercion and IO/template boundaries]
             [: Supported]
-            [: Broad string-content coercion and IO/template rejection coverage, plus targeted external [$html:<code>StringContent</code>] signature coverage.]
+            [: Broad quoted-escape, string-content coercion and IO/template rejection coverage, plus targeted external [$html:<code>StringContent</code>] signature coverage.]
             [: Frontend / JS]
-            [: Template heads and reusable external string-content signatures accept supported string values. Console helpers such as [$html:<code>io.line(...)</code>] use the same boundary, so complex values must be extracted or interpolated into templates before output.]
+            [: Quoted strings decode only [$html:<code>\\</code>], [$html:<code>\"</code>], [$html:<code>\n</code>], [$html:<code>\r</code>] and [$html:<code>\t</code>]. Invalid escapes are rejected by the tokenizer. Template heads and reusable external string-content signatures accept supported string values. Console helpers such as [$html:<code>io.line(...)</code>] use the same boundary, so complex values must be extracted or interpolated into templates before output.]
         ]
 
         [data:

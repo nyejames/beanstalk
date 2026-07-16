@@ -214,6 +214,7 @@ impl DiagnosticPayload {
             }
 
             DiagnosticPayload::InvalidCharacter { .. }
+            | DiagnosticPayload::InvalidStringEscape { .. }
             | DiagnosticPayload::InvalidGenericApplication { .. }
             | DiagnosticPayload::InvalidPath { .. }
             | DiagnosticPayload::InvalidImportClause { .. }

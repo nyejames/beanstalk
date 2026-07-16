@@ -592,11 +592,11 @@ body {
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> String coercion and IO/template boundaries</td>
+             <td style="padding: 0.2em 0.5em;  "> Strings, coercion and IO/template boundaries</td>
      <td style="padding: 0.2em 0.5em;  "> Supported</td>
-     <td style="padding: 0.2em 0.5em;  "> Broad string-content coercion and IO/template rejection coverage, plus targeted external <code>StringContent</code> signature coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> Broad quoted-escape, string-content coercion and IO/template rejection coverage, plus targeted external <code>StringContent</code> signature coverage.</td>
      <td style="padding: 0.2em 0.5em;  "> Frontend / JS</td>
-     <td style="padding: 0.2em 0.5em;  "> Template heads and reusable external string-content signatures accept supported string values. Console helpers such as <code>io.line(...)</code> use the same boundary, so complex values must be extracted or interpolated into templates before output.</td>
+     <td style="padding: 0.2em 0.5em;  "> Quoted strings decode only <code>\\</code>, <code>\"</code>, <code>\n</code>, <code>\r</code> and <code>\t</code>. Invalid escapes are rejected by the tokenizer. Template heads and reusable external string-content signatures accept supported string values. Console helpers such as <code>io.line(...)</code> use the same boundary, so complex values must be extracted or interpolated into templates before output.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">

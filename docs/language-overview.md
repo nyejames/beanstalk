@@ -136,6 +136,20 @@ joined = [left, right]
 
 Raw backtick string slices aren't implemented in the current Alpha surface. Backticks are inline-code delimiters inside `$md` content.
 
+Quoted string slices support exactly five escapes:
+
+| Escape | Value |
+|---|---|
+| `\\` | backslash |
+| `\"` | double quote |
+| `\n` | newline |
+| `\r` | carriage return |
+| `\t` | tab |
+
+Every other escape is invalid. A backslash cannot continue a quoted string across a physical
+newline. Raw backtick tokenization does not decode escapes and preserves backslashes and logical
+newlines, but that tokenizer behaviour does not make raw backticks valid source expressions.
+
 `copy` accepts a visible binding, field projection or parenthesised place. Literals, templates, calls and computed expressions aren't copy places and are rejected.
 
 ### Function Calls, Named Arguments, and Mutable Access
@@ -636,7 +650,7 @@ Core rules:
 - The head and body are separated by `:`.
 - Authored `.bst` templates must close with `]`; truncated heads, bodies, nested child templates, and directive-argument templates produce syntax diagnostics.
 - Template bodies capture variables from the surrounding scope.
-- Backticks and Backslashes inside template bodies are ordinary body text (preserved for formatters such as `$md`). Regular quoted string literals still support escapes.
+- Backticks and backslashes inside template bodies are ordinary body text and are preserved for formatters such as `$md`. Regular quoted string literals decode only `\\`, `\"`, `\n`, `\r` and `\t`.
 - Literal template delimiters in output use ordinary string insertion, such as `[: ["[literal]"]]`.
 - Only direct top-level template expressions in an active HTML module root contribute page fragments.
 - Top-level runtime templates run in active-root `start()` order.

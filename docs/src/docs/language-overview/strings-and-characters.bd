@@ -12,8 +12,16 @@ Beanstalk has two string source forms and one character form.
 
 ### Quoted string slices
 
-Double quotes create escaped string slices. Escape sequences are interpreted by
-the string literal parser.
+Double quotes create escaped string slices. They support exactly these escapes:
+
+- `\\` for a backslash
+- `\"` for a double quote
+- `\n` for a newline
+- `\r` for a carriage return
+- `\t` for a tab
+
+Every other escape is invalid. A backslash can't continue a quoted string
+across a physical newline.
 
 ### Characters
 
@@ -28,5 +36,6 @@ Templates own interpolation, formatting, slots, wrappers and structured
 content. See @../templates (Templates) for the complete system.
 
 Quoted slices and templates both participate in the language's `String` surface.
-Expression-position raw backtick slices aren't implemented. Inside a template body,
-backticks are ordinary body text available to the active formatter.
+Expression-position raw backtick slices aren't implemented. Inside a template
+body, backticks, backslashes and physical newlines are ordinary body text
+available to the active formatter.

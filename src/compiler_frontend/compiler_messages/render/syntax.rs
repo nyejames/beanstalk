@@ -7,10 +7,37 @@
 use super::{DiagnosticRenderContext, diagnostic_type_name, token_kind_name};
 use crate::compiler_frontend::compiler_messages::{
     CommonSyntaxMistakeReason, InvalidLoopHeaderReason, InvalidMatchArmReason,
-    InvalidStandaloneStatementReason, InvalidStatementPositionReason, InvalidThisUsageReason,
-    InvalidTypeAnnotationReason, NumberLiteralErrorReason, OperatorOperandPosition,
+    InvalidStandaloneStatementReason, InvalidStatementPositionReason, InvalidStringEscapeReason,
+    InvalidThisUsageReason, InvalidTypeAnnotationReason, NumberLiteralErrorReason,
+    OperatorOperandPosition,
 };
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
+
+pub(crate) fn invalid_string_escape_message(reason: InvalidStringEscapeReason) -> String {
+    match reason {
+        InvalidStringEscapeReason::UnsupportedEscape { escaped } => format!(
+            "Unsupported string escape '{}'. Quoted strings support '\\\\', '\\\"', '\\n', '\\r' and '\\t'.",
+            invalid_escape_source_visible(escaped)
+        ),
+        InvalidStringEscapeReason::PhysicalNewline => {
+            "A backslash cannot continue a quoted string across a physical newline. Remove the backslash or use the two-character '\\n' escape.".to_owned()
+        }
+        InvalidStringEscapeReason::TrailingBackslash => {
+            "The string ends with a backslash. Add a supported escaped character or remove the backslash.".to_owned()
+        }
+    }
+}
+
+/// Render the complete authored escape without injecting control characters.
+fn invalid_escape_source_visible(escaped: char) -> String {
+    let escaped_character = if escaped.is_control() {
+        escaped.escape_default().to_string()
+    } else {
+        escaped.to_string()
+    };
+
+    format!("\\{escaped_character}")
+}
 
 pub(crate) fn invalid_number_literal_message(
     literal_text: StringId,

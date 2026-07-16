@@ -52,7 +52,7 @@ pub(crate) use diagnostic_payload::{
     InvalidMutableAccessReason, InvalidPackageFolderReason, InvalidPageMetadataReason,
     InvalidReceiverCallReason, InvalidReceiverDeclarationReason, InvalidResultHandlingReason,
     InvalidResultOperandReason, InvalidReturnShapeReason, InvalidSignatureMemberReason,
-    InvalidStandaloneStatementReason, InvalidStatementPositionReason,
+    InvalidStandaloneStatementReason, InvalidStatementPositionReason, InvalidStringEscapeReason,
     InvalidTemplateDirectiveReason, InvalidTemplateSlotReason, InvalidTemplateStructureReason,
     InvalidThisUsageReason, InvalidTraitConformanceReason, InvalidTraitIncompatibilityReason,
     InvalidTraitKeywordUsageReason, InvalidTypeAnnotationReason, NameNamespace,

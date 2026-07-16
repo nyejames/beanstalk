@@ -220,6 +220,7 @@ fn render_payload_message(
         DiagnosticPayload::InvalidCharacter { character } => {
             format!("Invalid character: '{character}'")
         }
+        DiagnosticPayload::InvalidStringEscape { reason } => invalid_string_escape_message(*reason),
         DiagnosticPayload::InvalidNumberLiteral {
             literal_text,
             reason,

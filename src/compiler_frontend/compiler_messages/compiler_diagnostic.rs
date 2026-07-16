@@ -17,7 +17,7 @@ use crate::compiler_frontend::compiler_messages::{
     InvalidImportPathReason, InvalidLoopHeaderReason, InvalidMapLiteralReason,
     InvalidMapTypeReason, InvalidMatchArmReason, InvalidMutableAccessReason,
     InvalidPageMetadataReason, InvalidResultOperandReason, InvalidSignatureMemberReason,
-    InvalidStandaloneStatementReason, InvalidStatementPositionReason,
+    InvalidStandaloneStatementReason, InvalidStatementPositionReason, InvalidStringEscapeReason,
     InvalidTemplateDirectiveReason, InvalidTemplateStructureReason, InvalidTraitConformanceReason,
     InvalidTraitIncompatibilityReason, InvalidTraitKeywordUsageReason, InvalidTypeAnnotationReason,
     NameNamespace, NamespaceTypeValueMisuseKind, NamingConvention, NumberLiteralErrorReason,
@@ -894,6 +894,17 @@ impl CompilerDiagnostic {
             DiagnosticKind::Syntax(SyntaxDiagnosticKind::UnterminatedStringLiteral),
             location,
             DiagnosticPayload::None,
+        )
+    }
+
+    pub(crate) fn invalid_string_escape(
+        reason: InvalidStringEscapeReason,
+        location: SourceLocation,
+    ) -> Self {
+        Self::new(
+            DiagnosticKind::Syntax(SyntaxDiagnosticKind::InvalidStringEscape),
+            location,
+            DiagnosticPayload::InvalidStringEscape { reason },
         )
     }
 

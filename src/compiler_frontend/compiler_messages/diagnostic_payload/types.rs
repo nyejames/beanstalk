@@ -377,6 +377,16 @@ pub enum NumberLiteralErrorReason {
     ParseOverflow,
 }
 
+/// WHAT: structured reason for an invalid quoted-string escape.
+/// WHY: the tokenizer rejects unsupported escapes, physical-newline continuation and trailing
+/// backslashes with one diagnostic family while keeping the exact cause structured for render.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum InvalidStringEscapeReason {
+    UnsupportedEscape { escaped: char },
+    PhysicalNewline,
+    TrailingBackslash,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum GenericApplicationErrorReason {
     OnNonNamedType,

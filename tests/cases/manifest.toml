@@ -1834,6 +1834,11 @@ path = "raw_backtick_string_expression_rejected"
 tags = ["integration","strings","diagnostics"]
 
 [[case]]
+id = "quoted_string_invalid_escape_rejected"
+path = "quoted_string_invalid_escape_rejected"
+tags = ["integration","strings","diagnostics"]
+
+[[case]]
 id = "config_loading"
 path = "config_loading"
 tags = ["integration","config"]

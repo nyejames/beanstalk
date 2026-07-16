@@ -114,6 +114,7 @@ pub enum SyntaxDiagnosticKind {
     InvalidStatementPosition,
     CommonSyntaxMistake,
     UnescapedImplicitTemplateClose,
+    InvalidStringEscape,
 }
 
 #[cfg(test)]
@@ -154,6 +155,7 @@ impl SyntaxDiagnosticKind {
             Self::InvalidStatementPosition,
             Self::CommonSyntaxMistake,
             Self::UnescapedImplicitTemplateClose,
+            Self::InvalidStringEscape,
         ]
         .into_iter()
     }

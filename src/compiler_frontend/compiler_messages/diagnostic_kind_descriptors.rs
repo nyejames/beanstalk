@@ -195,6 +195,11 @@ fn syntax_descriptor(kind: SyntaxDiagnosticKind) -> DiagnosticDescriptor {
             "Unescaped implicit template close",
             DiagnosticSeverity::Error,
         ),
+        SyntaxDiagnosticKind::InvalidStringEscape => DiagnosticDescriptor::new(
+            "BST-SYNTAX-0034",
+            "Invalid string escape",
+            DiagnosticSeverity::Error,
+        ),
     }
 }
 

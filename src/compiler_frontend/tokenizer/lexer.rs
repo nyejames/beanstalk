@@ -273,7 +273,8 @@ fn get_token_kind(
         //  Raw strings (backticks)
         // ------------------------
 
-        // Raw strings are used for pre-formatted text and raw template outputs.
+        // Preserve raw tokens without enabling them as source expressions. Template-body
+        // backticks are consumed as ordinary body text before this code-mode branch.
         if current_char == '`' {
             return tokenize_raw_string(stream, string_table);
         }

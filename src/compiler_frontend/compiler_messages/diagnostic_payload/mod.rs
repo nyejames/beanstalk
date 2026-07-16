@@ -271,6 +271,10 @@ pub enum DiagnosticPayload {
         character: char,
     },
 
+    InvalidStringEscape {
+        reason: InvalidStringEscapeReason,
+    },
+
     InvalidNumberLiteral {
         literal_text: StringId,
         reason: NumberLiteralErrorReason,

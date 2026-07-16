@@ -12,29 +12,32 @@ This is an implementation plan, not a research backlog. Each phase should leave 
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-diagnostics-improvement-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 1.3 complete, preparing the accepted slice commit
-LAST_ACCEPTED_COMMIT: `99ec971b9`
-WORKTREE: `main` at `99ec971b9` with the validated Phase 1.3 slice pending commit
+CURRENT_SLICE: Phase 2.1, accepted and ready to commit
+LAST_ACCEPTED_COMMIT: `2189b2107`
+WORKTREE: `main` at `2189b2107` with the reviewed Phase 2.1 implementation, tests, canonical docs, generated docs and plan updates
 REQUIRED_RELOADS: startup files, this plan and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: import syntax, package/module ownership, compiler diagnostics, testing, validation and documentation rebuild contracts
-- code: validated compatibility deletion across syntax boundaries, Stage 0 path collection, config parsing, diagnostic ownership and fixtures
+- docs: quoted-string and raw-token language surface, tokenizer ownership, diagnostics, testing, validation and documentation rebuild contracts
+- code: `tokenizer/text_modes.rs`, tokenizer tests, diagnostic taxonomy/payload/constructor/render/remap and one integration case
 ACCEPTANCE_CRITERIA:
-- compatibility-only kinds, payloads, constructors, recognisers and pre-scans are deleted
-- compatibility-only fixtures and migration prose are removed without replacement diagnostics
-- canonical documentation and generated documentation were updated through the normal compiler path
+- quoted strings decode only `\\`, `\"`, `\n`, `\r` and `\t`
+- unsupported escapes, trailing backslashes and physical LF/CRLF continuation use typed `BST-SYNTAX-0034` diagnostics with precise spans
+- raw-token behaviour is unchanged and expression-position raw backticks remain rejected
+- canonical and generated documentation state the accepted escape contract
 VALIDATION_STATE:
 - Phase 1.1 `just validate`: passed, including 3,511 Rust tests and 1,764 integration cases
 - Phase 1.2a focused compiler-message tests: passed, 36 tests
 - Phase 1.2a `just validate`: passed, including cross-target Clippy, 3,511 Rust tests, 1,766 integration cases, docs check and 28 benchmark cases
 - Phase 1.2b `just validate`: passed, including cross-target Clippy, 3,512 Rust tests, 1,767 integration cases, docs check and 28 benchmark cases
 - Phase 1.3 `just validate`: passed, including cross-target Clippy, 3,511 Rust tests, 1,755 integration cases, docs check and 28 benchmark cases
-DOCS_IMPACT: obsolete migration prose was removed from canonical and generated docs; the progress matrix was reviewed and needs no update because current syntax support and rejection status are unchanged
+- Phase 2.1 `just validate`: passed, including cross-target Clippy, 3,520 Rust tests, 1,756 integration cases, docs check and 28 benchmark cases
+- Phase 2.1 docs release build: passed, 72 files built before the final full gate
+DOCS_IMPACT: canonical string docs and the progress matrix now record the exact quoted-string escape contract, and generated docs were rebuilt through the compiler
 BLOCKERS_OR_OPEN_DECISIONS: none
 DELEGATION_DECISION: Ollama - explicitly required for every implementation worker slice
 NEXT_WORKER_ORDER: Ollama only for implementation slices
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit Phase 1.3, perform the mandatory post-commit reload and prepare the Phase 2.1 Ollama worker
+NEXT_RESUME_ACTION: commit Phase 2.1, reload the plan and startup context, then prepare the bounded Phase 2.2 Ollama worker
 
 ## Confirmed design decisions
 
@@ -83,24 +86,9 @@ NEXT_RESUME_ACTION: commit Phase 1.3, perform the mandatory post-commit reload a
 **Original findings:** DIAG-013, DIAG-027
 **Status:** Complete in `df65c9ced`
 
-`render::terse` currently emits only `RenderedPayload.message`. Payloads such as `DiagnosticPayload::None` can therefore produce an empty final field even when the diagnostic descriptor has a useful title.
-
-#### Implementation
-
-- Add one shared helper at the render boundary that returns:
-  1. the rendered payload message when non-empty
-  2. otherwise the diagnostic descriptor title
-- Use it in the terse renderer.
-- Do not duplicate fallback logic in individual diagnostic kinds.
-- Keep terminal and dev-server formatting unchanged unless their equivalent output can also become empty.
-- Add a focused unit test for representative syntax and rule diagnostics with empty payload messages.
-- Add an invariant test that the terse result always has a non-empty message field.
-
-#### Acceptance
-
-- No terse diagnostic ends after the final `|`.
-- `BST-RULE-0077`, `BST-SYNTAX-0006`, `BST-SYNTAX-0009` and other descriptor-only diagnostics render useful text.
-- The stable code, path, line and column format does not change.
+The terse renderer now uses one render-boundary fallback from an empty payload message to the
+descriptor title. Focused and all-kind invariant tests protect non-empty messages without changing
+stable codes, locations or the terminal and dev-server formats.
 
 ### 1.2 Remove stale source terminology and misleading guidance
 
@@ -180,35 +168,19 @@ Implement this in two coherent slices:
 
 **Original finding:** DIAG-039
 **Decision:** Strict removal
-**Status:** Complete
-**User expansion:** Beanstalk is early Alpha with no compatibility obligation. Remove every
-dedicated compiler path, diagnostic, fixture and migration reference for discontinued syntax.
-Current language and project syntax remain unaffected.
+**Status:** Complete in `2189b2107`
 
-#### Implementation
-
-Remove:
-
-- compatibility-only diagnostic kinds, descriptors, payloads, constructors and render branches
-- tokenizer, header and config recognition that exists only to identify discontinued syntax
-- dedicated fixtures and unit tests
-- migration documentation and comments for the removed forms
-- generated documentation references through a normal docs rebuild, never direct edits under `docs/release/**`
-
-Do not replace these with new compatibility diagnostics. The remaining current grammar may reject
-the token sequences through its ordinary syntax rules. Do not remove or weaken current syntax.
-
-#### Acceptance
-
-A repository search finds no active implementation, fixture or documentation references to the
-removed compatibility surface. Ordinary current syntax remains covered by its existing positive
-tests.
+Compatibility-only diagnostic kinds, payloads, constructors, recognisers, pre-scans, fixtures and
+migration prose for discontinued declaration syntax were deleted. Current binding, constant,
+template and module-root syntax retained its existing positive coverage. Canonical docs were
+updated and generated docs were rebuilt through the compiler.
 
 ## Phase 2: Tokenizer and structural syntax diagnostics
 
 ### 2.1 Implement the quoted-string escape contract
 
 **Original finding:** DIAG-028
+**Status:** Complete
 **Original DIAG-029 disposition:** Removed. Raw strings intentionally preserve backslashes and newlines.
 **Additional confirmed constraint:** expression-position raw backtick slices remain outside the
 accepted Alpha language surface and are already covered by
@@ -251,6 +223,9 @@ Render:
 - `The string ends with a backslash. Add a supported escaped character or remove the backslash.`
 
 The primary span should cover the backslash and escaped character where both exist. A trailing backslash should point at the backslash.
+Render `<escape>` as the complete authored escape spelling with one leading backslash. Escape
+control characters for display so a literal tab or other non-printing character never changes the
+diagnostic's layout.
 The physical-newline reason should point at the backslash without formatting the line break as
 the supported `\\n` spelling. Treat both LF and CRLF as the same source mistake.
 
@@ -318,11 +293,15 @@ struct SymbolicSpacingError {
 - Keep valid `name ~= value` tokenization unchanged. This spacing diagnostic does not decide
   whether the name is a fresh declaration. Existing-name rejection remains owned by the normal
   no-shadowing path.
+- Preserve `InvalidMutableBindingSpacing` as the declaration parser's owner for whitespace inside
+  the marker pair, such as `name ~ = value`. `SymbolicSpacingConstruct::MutableDeclaration` owns
+  only missing outer whitespace around the adjacent `~=` spelling. Do not merge these structurally
+  different mistakes or weaken the marker-adjacency check.
 - Preserve the existing `BST-SYNTAX-0031` family unless descriptor policy requires a dedicated compound-assignment code.
 
 #### Tests
 
-Cover every compound-assignment token at least once and cover before, after and both missing-side branches across the operator family. Also cover plain `=` and both sides of `~=` so neither can regress to binary-operator prose. Avoid one fixture per cosmetic variant when a tokenizer table test protects the same invariant.
+Cover every compound-assignment token at least once and cover before, after and both missing-side branches across the operator family. Also cover plain `=`, both outer sides of adjacent `~=` and the preserved internal-whitespace rejection so none can regress to binary-operator prose. Avoid one fixture per cosmetic variant when a tokenizer table test protects the same invariant.
 
 ### 2.3 Recognise a missing `@` import prefix before `/` becomes an operator error
 
@@ -336,9 +315,11 @@ bare paths as well as identifier-led paths.
 
 #### Implementation
 
-- Extend the lexer's small left-context model so `/` can recognise an identifier-led path
-  immediately following `import`, and recognise a relative `./...` spelling in the same import
-  position before the generic import-clause fallback.
+- Extend the lexer's small left-context model so it recognises a bare identifier-led path
+  immediately following `import`, including a single component such as `import core`, and
+  recognises a relative `./...` spelling in the same import position before the generic
+  import-clause fallback. A later `/` must not become the first point at which the compiler
+  realises that the prefix is missing.
 - Emit a dedicated structured `CommonSyntaxMistakeReason::ImportPathMissingAtPrefix { authored_path }` carrying the complete bare path spelling. Remap its `StringId` through the existing payload path.
 - Message:
 
@@ -352,7 +333,9 @@ bare paths as well as identifier-led paths.
 #### Tests
 
 - `import core/math`
+- a single-component bare path such as `import core`
 - a longer bare path whose rendered correction preserves every authored component
+- a bare path followed by a grouped import clause, proving the narrow scan stops before `{`
 - a relative bare path such as `import ./utils`
 - valid `import @core/math`
 - ordinary division after a value
@@ -495,7 +478,7 @@ Fallible collection and map examples must include `!` or `catch` when a complete
 
 Use one matrix covering user functions, source receiver methods, collection builtins and map builtins. Include positive fresh-rvalue calls to prevent the change from requiring illegal `~` on fresh values.
 
-### 3.2 Correct immutable field-write guidance
+### 3.2 Correct immutable assignment and field-write guidance
 
 **Original finding:** DIAG-007
 **Rejected original proposal:** `~p.x = 10` is not Beanstalk assignment syntax.
@@ -524,6 +507,18 @@ p.x = 10
 
 - A secondary label should point to the immutable declaration.
 - Keep a generic immutable-place fallback for projections whose root cannot be named cleanly.
+- Replace the vague direct-binding `ImmutableVariable` message in the same assignment-target
+  family. It currently says only to use `~`, which can be mistaken for assignment-target syntax or
+  an illegal redeclaration. Carry the original binding location and render:
+
+  > Cannot reassign `value` because its binding is immutable. Declare it with `~=` at the original declaration, then reassign it with ordinary `=`.
+
+- When an explicit type is relevant, guidance may mention the existing `name ~Type = value`
+  declaration form. Do not fabricate a full replacement declaration without its original
+  initializer and type facts.
+- Strengthen the existing direct immutable reassignment and immutable struct-field integration
+  cases so the current declaration and assignment guidance is contractual. Remove fixture
+  comments that call an ordinary immutable runtime binding a constant.
 
 ### 3.3 Diagnose `~` on assignment targets accurately
 
@@ -560,7 +555,22 @@ Add `InvalidCopyTargetReason::MutableMarkerNotAllowed`:
 
 > `copy` does not take `~`. Use `copy x` to copy the value of a mutable binding.
 
-Keep `NonPlace` for literals and computed expressions.
+Keep the internal place classification, but make every rendered correction source-visible:
+
+- `NonPlace` for literals and computed expressions:
+
+  > `copy` requires an existing binding or field projection. Bind this value first, then copy that binding.
+
+- Replace `FunctionValue`, which is inaccurate because function values aren't part of the current
+  surface, with separate function-name and function-call facts when the following `(` makes the
+  distinction available.
+- A function name isn't a copyable value. A call should explain that its returned value must be
+  received by a binding before that binding can be copied.
+- Do not use compiler-facing `place` terminology or call source bindings variables in these
+  messages.
+
+Add focused coverage for a literal, computed expression, function name, function call and
+`copy ~binding`. Keep one integration owner where the stable code and wording are user-visible.
 
 ### 3.5 Improve borrow-conflict explanations without inventing lifetimes
 
@@ -594,6 +604,25 @@ Second mutable access:
 
 Add passing counterparts that resolve the conflict by reordering the last use, reusing the active alias, narrowing a scope or using explicit `copy`.
 
+### 3.6 Remove migration state from collection and map assignment diagnostics
+
+**Additional audit finding:** `InvalidAssignmentTargetReason::{CollectionIndexedWriteRemoved,
+MapIndexedWriteRemoved, MapPropertyWriteRemoved}` and the
+`collection_indexed_write_removed` fixture encode implementation history instead of the current
+source rule. These are ordinary invalid assignment targets, not compatibility diagnostics.
+
+- Rename the reasons to factual current states such as `CollectionGetTargetNotWritable`,
+  `MapGetTargetNotWritable` and `ReadOnlyMapProperty`.
+- Render collection access as:
+
+  > Cannot assign through collection `get(...)`. Use `~items.set(index, value)!` or recover from `~items.set(index, value) catch:`.
+
+- Render map access with the equivalent `~map.set(key, value)` guidance.
+- Keep the read-only `length` message, but remove migration wording from its reason name.
+- Rename the integration fixture to describe current rejection rather than removal.
+- Preserve the existing stable diagnostic code and valid `set` coverage. Do not add a parser path
+  that recognises an older assignment feature.
+
 ## Phase 4: Error, option and value-flow diagnostics
 
 ### 4.1 Replace the umbrella `NotResultExpression` path
@@ -623,6 +652,12 @@ enum InvalidFallibleHandlingReason {
 ```
 
 Names may differ, but each branch must encode the authored handler, operand carrier and propagation boundary.
+
+Delete `RemovedBangFallbackSyntax` and `RemovedBangCatchHandlerSyntax`, their dedicated parser
+recognisers, unit tests and `result_removed_err_bang_syntax_rejected` fixture. Those paths exist
+only to identify discontinued handling syntax. The ordinary current grammar may reject the token
+sequence without a migration-specific reason. Do not carry either reason into the replacement
+matrix.
 
 #### Messages
 
@@ -873,6 +908,43 @@ Messages:
 
 Keep exact field lists bounded and deterministic.
 
+#### Optional-pattern terminology
+
+The same renderer still calls source values and captures `Option` in several match diagnostics.
+Rename the affected `InvalidMatchPatternReason` and `NonExhaustiveMatchReason` variants to
+optional-value terminology, then render:
+
+> Optional value patterns require the optional value's inner type to support equality.
+
+> An optional-present capture cannot be empty. Use `|name|` to capture the present value.
+
+> Non-exhaustive optional-value match. Add `none =>` or `|name| =>` to cover all cases.
+
+Apply the same terminology to the non-optional-scrutinee, type-annotation and missing-binding
+reasons. Internal AST `OptionPresentCapture` node names are outside this diagnostic wording slice
+and do not need a semantic refactor.
+
+### 5.6 Make scalar type-call diagnostics factual
+
+**Additional audit finding:** `InvalidBuiltinCallReason::ScalarConstructorRemoved`, several
+`*_constructor_removed` fixtures and the dead `InvalidCastReason::ScalarConstructorRemoved`
+encode history rather than the authored mistake. Unlike a discontinued compatibility-only parser
+path, the current expression parser must still handle a builtin type token followed by `(`.
+
+- Replace the builtin-call reason with a factual type-as-call reason such as
+  `ScalarTypeCalledAsFunction`.
+- Render:
+
+  > `Int` is a type, not a conversion function. Use `cast` at an explicit typed boundary.
+
+- Carry the exact builtin type name already available at the emission site.
+- Remove the unused `InvalidCastReason::ScalarConstructorRemoved` variant and render branch.
+- Rename the focused fixtures and tests around current rejection, then remove redundant
+  per-scalar coverage where one table test or one primary integration case protects the same
+  parser contract.
+- Preserve positive `cast` coverage. Do not recognise a former scalar-constructor language
+  feature or describe anything as removed.
+
 ## Phase 6: Template and external-JavaScript diagnostics
 
 ### 6.1 Report exact template-head conflicts and why they conflict
@@ -1030,6 +1102,11 @@ Message:
 > Collection loop source must be a collection, found `Int`. Use a collection after `loop`. For numeric iteration, use range syntax such as `loop 0 to count |i|:`.
 
 Do not imply every non-collection source was intended as a range.
+
+Delete `InvalidLoopHeaderReason::RemovedInSyntax`, the dedicated `reject_removed_in_loop_syntax`
+pre-scan and its migration-only unit test. Current collection and range loop forms already have
+their own structured diagnostics. A discontinued `loop <binder> in ...` token sequence may fail
+through the ordinary current grammar without a compatibility message.
 
 ### 7.4 Reject unsupported Wasm variant payloads before lowering
 

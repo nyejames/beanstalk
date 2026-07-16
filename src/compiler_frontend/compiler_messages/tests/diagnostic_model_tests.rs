@@ -9,9 +9,9 @@ use super::{
     InvalidCollectionTypeReason, InvalidConfigReason, InvalidFunctionSignatureReason,
     InvalidGenericParameterReason, InvalidImportClauseReason, InvalidResultHandlingReason,
     InvalidResultOperandReason, InvalidSignatureMemberReason, InvalidStandaloneStatementReason,
-    InvalidStatementPositionReason, InvalidTemplateDirectiveReason, InvalidTemplateStructureReason,
-    InvalidTraitKeywordUsageReason, InvalidTypeAnnotationReason, NameNamespace,
-    NumberLiteralErrorReason, PathKind, RuleDiagnosticKind, SyntaxDiagnosticKind,
+    InvalidStatementPositionReason, InvalidStringEscapeReason, InvalidTemplateDirectiveReason,
+    InvalidTemplateStructureReason, InvalidTraitKeywordUsageReason, InvalidTypeAnnotationReason,
+    NameNamespace, NumberLiteralErrorReason, PathKind, RuleDiagnosticKind, SyntaxDiagnosticKind,
     TypeAnnotationContext, TypeDiagnosticKind, TypeMismatchContext, UnsupportedOperatorCategory,
 };
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
@@ -692,6 +692,52 @@ fn type_mismatch_terse_renderer_renders_type_names_with_context() {
     assert!(line.contains("found String"));
     assert!(!line.contains("Expected type id"));
     assert!(!line.contains("Found type id"));
+}
+
+#[test]
+fn invalid_string_escape_renderer_preserves_the_authored_escape_spelling() {
+    let mut string_table = StringTable::new();
+    let source_path = InternedPath::from_single_str("main.bst", &mut string_table);
+    let render_context = DiagnosticRenderContext::new(&string_table);
+
+    for (escaped, expected) in [
+        ('q', "Unsupported string escape '\\q'."),
+        ('\t', "Unsupported string escape '\\\\t'."),
+    ] {
+        let diagnostic = CompilerDiagnostic::invalid_string_escape(
+            InvalidStringEscapeReason::UnsupportedEscape { escaped },
+            location(source_path.clone()),
+        );
+        let message =
+            terminal::format_payload_guidance(&diagnostic.payload, render_context).join("\n");
+
+        assert!(message.contains(expected), "unexpected message: {message}");
+    }
+}
+
+#[test]
+fn invalid_string_escape_renderer_distinguishes_physical_newlines_and_trailing_backslashes() {
+    let mut string_table = StringTable::new();
+    let source_path = InternedPath::from_single_str("main.bst", &mut string_table);
+    let render_context = DiagnosticRenderContext::new(&string_table);
+
+    for (reason, expected) in [
+        (
+            InvalidStringEscapeReason::PhysicalNewline,
+            "A backslash cannot continue a quoted string across a physical newline. Remove the backslash or use the two-character '\\n' escape.",
+        ),
+        (
+            InvalidStringEscapeReason::TrailingBackslash,
+            "The string ends with a backslash. Add a supported escaped character or remove the backslash.",
+        ),
+    ] {
+        let diagnostic =
+            CompilerDiagnostic::invalid_string_escape(reason, location(source_path.clone()));
+        let message =
+            terminal::format_payload_guidance(&diagnostic.payload, render_context).join("\n");
+
+        assert_eq!(message, expected);
+    }
 }
 
 #[test]

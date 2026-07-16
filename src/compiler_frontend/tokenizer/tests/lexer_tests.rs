@@ -5,7 +5,7 @@ use crate::compiler_frontend::compiler_messages::render::{
 };
 use crate::compiler_frontend::compiler_messages::{
     CommonSyntaxMistakeReason, CompilerDiagnostic, DiagnosticKind, DiagnosticPayload,
-    NumberLiteralErrorReason, SyntaxDiagnosticKind,
+    InvalidStringEscapeReason, NumberLiteralErrorReason, SyntaxDiagnosticKind,
 };
 use crate::compiler_frontend::numeric_text::token::NumericLiteralSign;
 use crate::compiler_frontend::style_directives::{
@@ -261,11 +261,108 @@ fn normal_template_body_preserves_backtick_as_literal_text() {
     assert_eq!(texts, vec!["` "]);
 }
 
+fn assert_invalid_string_escape(source: &str, expected_reason: InvalidStringEscapeReason) {
+    let (diagnostic, _string_table) = tokenize_source_error(source);
+    let expected_span_width = match expected_reason {
+        InvalidStringEscapeReason::UnsupportedEscape { .. } => 2,
+        InvalidStringEscapeReason::PhysicalNewline
+        | InvalidStringEscapeReason::TrailingBackslash => 1,
+    };
+
+    assert_eq!(
+        diagnostic.kind,
+        DiagnosticKind::Syntax(SyntaxDiagnosticKind::InvalidStringEscape)
+    );
+    assert_eq!(diagnostic.kind.code(), "BST-SYNTAX-0034");
+    assert_eq!(
+        diagnostic.primary_location.start_pos.line_number,
+        diagnostic.primary_location.end_pos.line_number
+    );
+    assert_eq!(
+        diagnostic.primary_location.end_pos.char_column
+            - diagnostic.primary_location.start_pos.char_column
+            + 1,
+        expected_span_width
+    );
+
+    match &diagnostic.payload {
+        DiagnosticPayload::InvalidStringEscape { reason } => {
+            assert_eq!(*reason, expected_reason);
+        }
+        payload => panic!("expected invalid string escape payload, found {payload:?}"),
+    }
+}
+
 #[test]
-fn quoted_string_literal_escaping_still_works() {
-    let (file_tokens, string_table) = tokenize_source(r#"value = "say \"hello\"""#);
+fn quoted_string_decodes_every_accepted_escape() {
+    // Source escapes: \\ \" \n \r \t decode to backslash, quote, newline, carriage return, tab.
+    let (file_tokens, string_table) = tokenize_source(r#"value = "a\\b\"c\nd\re\tf""#);
     let texts = collect_literal_texts(&file_tokens, &string_table);
-    assert_eq!(texts, vec!["say \"hello\""]);
+
+    assert_eq!(texts, vec!["a\\b\"c\nd\re\tf"]);
+}
+
+#[test]
+fn quoted_string_rejects_unsupported_letter_escape() {
+    assert_invalid_string_escape(
+        r#"value = "a\qb""#,
+        InvalidStringEscapeReason::UnsupportedEscape { escaped: 'q' },
+    );
+}
+
+#[test]
+fn quoted_string_rejects_unsupported_digit_escape() {
+    assert_invalid_string_escape(
+        r#"value = "a\0b""#,
+        InvalidStringEscapeReason::UnsupportedEscape { escaped: '0' },
+    );
+}
+
+#[test]
+fn quoted_string_rejects_trailing_backslash() {
+    // A backslash at end of source never receives an escaped character.
+    assert_invalid_string_escape(
+        r###"value = "ab\"###,
+        InvalidStringEscapeReason::TrailingBackslash,
+    );
+}
+
+#[test]
+fn quoted_string_without_a_trailing_backslash_stays_unterminated() {
+    let (diagnostic, _string_table) = tokenize_source_error("value = \"ab");
+
+    assert_eq!(
+        diagnostic.kind,
+        DiagnosticKind::Syntax(SyntaxDiagnosticKind::UnterminatedStringLiteral)
+    );
+}
+
+#[test]
+fn quoted_string_rejects_lf_physical_newline_continuation() {
+    // A backslash before a physical line feed is a line-continuation attempt.
+    assert_invalid_string_escape(
+        "value = \"ab\\\ncd\"",
+        InvalidStringEscapeReason::PhysicalNewline,
+    );
+}
+
+#[test]
+fn quoted_string_rejects_crlf_physical_newline_continuation() {
+    // LF and CRLF continuation are the same typed source mistake.
+    assert_invalid_string_escape(
+        "value = \"ab\\\r\ncd\"",
+        InvalidStringEscapeReason::PhysicalNewline,
+    );
+}
+
+#[test]
+fn raw_string_preserves_backslashes_and_newlines_without_escape_decoding() {
+    // Raw backtick strings keep backslashes literal and physical newlines normalized to LF,
+    // without any escape decoding or invalid-escape diagnostics.
+    let (file_tokens, string_table) = tokenize_source("`a\\nb\\qc\nd`");
+    let texts = collect_literal_texts(&file_tokens, &string_table);
+
+    assert_eq!(texts, vec!["a\\nb\\qc\nd"]);
 }
 
 #[test]
