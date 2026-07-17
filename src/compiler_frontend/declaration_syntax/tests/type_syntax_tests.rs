@@ -14,7 +14,7 @@ use crate::compiler_frontend::ast::type_resolution::{
     resolve_parsed_type_annotation, resolve_type,
 };
 use crate::compiler_frontend::compiler_messages::{
-    CompilerDiagnostic, DeferredFeatureReason, DiagnosticPayload, GenericApplicationErrorReason,
+    CompilerDiagnostic, DiagnosticPayload, GenericApplicationErrorReason,
     InvalidCollectionTypeReason, InvalidGenericInstantiationReason, InvalidMapTypeReason,
     InvalidTypeAnnotationReason, NameNamespace,
 };
@@ -368,7 +368,7 @@ fn public_option_type_syntax_is_deferred() {
     let error = resolve_type_annotation_error(
         parsed,
         &mut string_table,
-        "public Option of T syntax should be deferred",
+        "public Option of T syntax should be rejected",
     );
 
     assert_diagnostic_payload(
@@ -376,12 +376,13 @@ fn public_option_type_syntax_is_deferred() {
         |payload| {
             matches!(
                 payload,
-                DiagnosticPayload::DeferredFeature {
-                    reason: DeferredFeatureReason::PublicOptionTypeSyntax
+                DiagnosticPayload::InvalidGenericInstantiation {
+                    reason: InvalidGenericInstantiationReason::OptionTypeSyntaxNotSupported,
+                    ..
                 }
             )
         },
-        "DeferredFeature(PublicOptionTypeSyntax)",
+        "InvalidGenericInstantiation(OptionTypeSyntaxNotSupported)",
     );
 }
 
@@ -412,7 +413,7 @@ fn public_result_type_syntax_is_deferred() {
     let error = resolve_type_annotation_error(
         parsed,
         &mut string_table,
-        "public Result of T, E syntax should be deferred",
+        "public Result of T, E syntax should be rejected",
     );
 
     assert_diagnostic_payload(
@@ -420,12 +421,13 @@ fn public_result_type_syntax_is_deferred() {
         |payload| {
             matches!(
                 payload,
-                DiagnosticPayload::DeferredFeature {
-                    reason: DeferredFeatureReason::PublicResultTypeSyntax
+                DiagnosticPayload::InvalidGenericInstantiation {
+                    reason: InvalidGenericInstantiationReason::ResultTypeSyntaxNotSupported,
+                    ..
                 }
             )
         },
-        "DeferredFeature(PublicResultTypeSyntax)",
+        "InvalidGenericInstantiation(ResultTypeSyntaxNotSupported)",
     );
 }
 

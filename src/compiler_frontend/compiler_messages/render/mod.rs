@@ -554,12 +554,6 @@ fn deferred_feature_static_message(reason: &DeferredFeatureReason) -> &'static s
         DeferredFeatureReason::GenericReceiverMethod => {
             "Receiver methods on instantiated generic receiver types are not supported. Define the method on the generic type declaration using the receiver type's own parameters."
         }
-        DeferredFeatureReason::PublicOptionTypeSyntax => {
-            "Public `Option of T` type syntax is deferred for Alpha. Use the `T?` optional type suffix instead."
-        }
-        DeferredFeatureReason::PublicResultTypeSyntax => {
-            "Public `Result of T, E` type syntax is deferred for Alpha. Use a final `E!` return slot for fallible functions instead."
-        }
         DeferredFeatureReason::CheckedBlock => {
             "`checked:` blocks are reserved for future advanced validation, but are not implemented yet."
         }

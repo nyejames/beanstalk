@@ -33,8 +33,8 @@ use crate::compiler_frontend::ast::type_resolution::{
     TypeResolutionResult, aliases, context::TypeResolutionContext,
 };
 use crate::compiler_frontend::compiler_messages::{
-    CompilerDiagnostic, DeferredFeatureReason, InvalidGenericInstantiationReason,
-    InvalidTypeAnnotationReason, NameNamespace, NamespaceTypeValueMisuseKind,
+    CompilerDiagnostic, InvalidGenericInstantiationReason, InvalidTypeAnnotationReason,
+    NameNamespace, NamespaceTypeValueMisuseKind,
 };
 use crate::compiler_frontend::datatypes::generic_identity_bridge::{
     BuiltinGenericType, GenericBaseType,
@@ -320,8 +320,9 @@ pub(super) fn resolve_generic_base_type(
 ) -> TypeResolutionResult<GenericBaseType> {
     match base {
         GenericBaseType::Named(type_name) => {
-            if let Some(reason) = deferred_public_result_option_syntax(*type_name, string_table) {
-                return Err(Box::new(CompilerDiagnostic::deferred_feature_reason(
+            if let Some(reason) = invalid_carrier_type_syntax(*type_name, string_table) {
+                return Err(Box::new(CompilerDiagnostic::invalid_generic_instantiation(
+                    Some(*type_name),
                     reason,
                     location.to_owned(),
                 )));
@@ -435,16 +436,16 @@ pub(super) fn resolve_generic_base_type(
 
 /// Detect deferred public `Option` / `Result` syntax in generic position.
 ///
-/// WHAT: returns the matching deferred-feature reason when the name is `Option` or `Result`.
-/// WHY: these names are reserved for a future public option/result type syntax and must produce
-///      a consistent deferred-feature diagnostic instead of an unknown-type error.
-fn deferred_public_result_option_syntax(
+/// WHAT: returns the matching invalid-generic-instantiation reason when the name is `Option` or `Result`.
+/// WHY: `Option of T` and `Result of T, E` are not Beanstalk type syntax. Optional types use the
+///      `T?` suffix and fallible functions declare a final `E!` error return slot.
+fn invalid_carrier_type_syntax(
     type_name: StringId,
     string_table: &StringTable,
-) -> Option<DeferredFeatureReason> {
+) -> Option<InvalidGenericInstantiationReason> {
     match string_table.resolve(type_name) {
-        "Option" => Some(DeferredFeatureReason::PublicOptionTypeSyntax),
-        "Result" => Some(DeferredFeatureReason::PublicResultTypeSyntax),
+        "Option" => Some(InvalidGenericInstantiationReason::OptionTypeSyntaxNotSupported),
+        "Result" => Some(InvalidGenericInstantiationReason::ResultTypeSyntaxNotSupported),
         _ => None,
     }
 }

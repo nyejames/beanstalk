@@ -1456,8 +1456,6 @@ pub enum DeferredFeatureReason {
     NestedPayloadPattern,
     ChoiceVariantDefaultValue,
     GenericReceiverMethod,
-    PublicOptionTypeSyntax,
-    PublicResultTypeSyntax,
     CheckedBlock,
     AsyncBlock,
 }
@@ -1677,6 +1675,8 @@ pub enum InvalidGenericInstantiationReason {
         found: usize,
     },
     TypeDoesNotAcceptArguments,
+    OptionTypeSyntaxNotSupported,
+    ResultTypeSyntaxNotSupported,
     ExternalTypeArgumentsUnsupported,
     MissingTypeArguments,
     CannotInferArguments {

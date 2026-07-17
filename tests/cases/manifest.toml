@@ -3324,13 +3324,13 @@ path = "print_with_variables"
 tags = ["integration","language"]
 
 [[case]]
-id = "public_option_type_syntax_deferred"
-path = "public_option_type_syntax_deferred"
+id = "option_type_syntax_rejected"
+path = "option_type_syntax_rejected"
 tags = ["integration","language","optionals","diagnostics"]
 
 [[case]]
-id = "public_result_type_syntax_deferred"
-path = "public_result_type_syntax_deferred"
+id = "result_type_syntax_rejected"
+path = "result_type_syntax_rejected"
 tags = ["integration","language","results","diagnostics"]
 
 [[case]]

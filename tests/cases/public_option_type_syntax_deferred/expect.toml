@@ -1,5 +1,0 @@
-[backends.html]
-mode = "failure"
-warnings = "forbid"
-diagnostic_codes = ["BST-DEFERRED-0001"]
-message_contains = ["Public `Option of T` type syntax is deferred for Alpha."]

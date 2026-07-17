@@ -231,6 +231,12 @@ pub(crate) fn invalid_generic_instantiation_message(
                 if *expected == 1 { "" } else { "s" }
             )
         }
+        InvalidGenericInstantiationReason::OptionTypeSyntaxNotSupported => {
+            "`Option of T` is not Beanstalk type syntax. Use the `T?` optional suffix.".to_string()
+        }
+        InvalidGenericInstantiationReason::ResultTypeSyntaxNotSupported => {
+            "`Result of T, E` is not Beanstalk type syntax. Fallible functions declare a final `E!` error return slot.".to_string()
+        }
         InvalidGenericInstantiationReason::TypeDoesNotAcceptArguments => {
             format!("Type {type_name_str} does not accept generic arguments.")
         }

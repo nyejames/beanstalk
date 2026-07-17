@@ -464,6 +464,8 @@ impl DiagnosticPayload {
                     }
                     InvalidGenericInstantiationReason::WrongArgumentCount { .. }
                     | InvalidGenericInstantiationReason::TypeDoesNotAcceptArguments
+                    | InvalidGenericInstantiationReason::OptionTypeSyntaxNotSupported
+                    | InvalidGenericInstantiationReason::ResultTypeSyntaxNotSupported
                     | InvalidGenericInstantiationReason::ExternalTypeArgumentsUnsupported
                     | InvalidGenericInstantiationReason::MissingTypeArguments
                     | InvalidGenericInstantiationReason::RecursiveFunctionInstantiation
