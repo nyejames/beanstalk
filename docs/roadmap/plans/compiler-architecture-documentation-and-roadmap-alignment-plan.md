@@ -20,6 +20,33 @@ The result must let an implementation agent answer these questions without inven
 
 This plan updates documentation and roadmap artefacts only. It does not implement compiler behaviour.
 
+## Current state
+
+```text
+ACTIVE_PLAN: docs/roadmap/plans/compiler-architecture-documentation-and-roadmap-alignment-plan.md
+STATUS: active
+CURRENT_SLICE: Phase 2 - align canonical module plan and language overview
+LAST_ACCEPTED_COMMIT: eb671baa2 (Phase 1 monolith rewrite, pre-restoration) - commit-ready restoration pending user review
+WORKTREE: main, unstaged changes to docs/compiler-design-overview.md (restored design contracts) and this plan (writing rules + current state)
+REQUIRED_RELOADS: startup files, this plan, current source/diff
+RELEVANT_CONTEXT_NOW:
+- docs/compiler-design-overview.md: 595 lines, rewritten with restored design contracts, commit-ready for user review
+- docs/roadmap/plans/canonical-module-compilation-and-scoped-packages-plan.md: next target for Phase 2
+- docs/language-overview.md: next target for Phase 2 (project facade and support-package wording)
+- docs/roadmap/plans/final-tir-completion-plan.md: TIR accepted architecture (one store, direct emission, exact TirView)
+ACCEPTANCE_CRITERIA:
+- Phase 1: monolith follows compact outline, no tables, no em dashes, no semicolons, no lost design. DONE.
+- Phase 2: canonical module plan updated with parse-once, results, identities, fingerprints, dependency graphs, @project, command policies. Language overview updated for facade/support-package wording.
+VALIDATION_STATE:
+- cargo run --quiet -- check docs: passed (after restoration)
+DOCS_IMPACT: monolith rewrite complete with all design contracts preserved
+BLOCKERS_OR_OPEN_DECISIONS: none
+DELEGATION_DECISION: ollama for Phase 2, with parent review for lost design info after each slice
+NEXT_WORKER_ORDER: ollama, then parent-direct fallback
+STOP_REASON: none - pausing for user commit review per new instruction
+NEXT_RESUME_ACTION: after user commits Phase 1, launch Phase 2 slice for canonical module plan + language overview
+```
+
 ## Baseline
 
 Audit against the repository state at the start of execution, not against the paths or implementation snapshots recorded here.
@@ -68,9 +95,12 @@ Apply these rules to the monolith and every revised plan:
 - Keep current-state implementation snapshots inside roadmap plans, not the monolith.
 - Use conceptual Rust shapes only where ownership is clearer than prose. State that exact names may change.
 - Do not freeze current file paths as permanent architecture.
-- Do not use em dashes or curly apostrophes.
+- Do not use em dashes, curly apostrophes, semicolons or Oxford commas.
+- Use contractions naturally ("don't" instead of "do not") except where a normative rule needs hard "must" or "must not" language.
+- Mix short, punchy sentences with longer conversational ones in the same paragraph to create natural rhythm.
 - Avoid headings that contain only navigation links.
 - Do not retain text solely because it existed in the split compiler-design pages.
+- Do not drop encoded design decisions during compression. Every rewrite must preserve accepted contracts, ownership boundaries and design rules. Shorten prose, remove navigation and delete repetition, but restore any contract that the compression removed. Review every diff against the prior content for lost design before accepting.
 
 ## Non-goals
 
