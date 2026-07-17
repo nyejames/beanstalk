@@ -18,17 +18,17 @@ The work must preserve every accepted architecture decision. Compression is neve
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/compiler-architecture-documentation-and-roadmap-alignment-plan.md
 STATUS: in execution
-CURRENT_SLICE: Phase 1 - factual repair of the current compiler overview
+CURRENT_SLICE: Phase 2 and 3 - decision inventory, then create docs/build-system-design.md by preservation first
 BRANCH: main
 WORKTREE: clean at phase start
-BASELINE_COMMIT: c31ad8b558c2b4c84c39c11a10e698fabe945e17
-BASELINE_CHANGE: this replacement plan plus the compiler design overview rewrite with user-restored contracts at d9659079151bbe36229e09913db7c7ffe6b6ad48
+BASELINE_COMMIT: 121187989
+BASELINE_CHANGE: Phase 1 factual repair of the compiler overview accepted at 121187989. Phase 0 baseline refresh accepted at c6c79ece4. Original replacement plan and overview rewrite at c31ad8b558c2b4c84c39c11a10e698fabe945e17 and d9659079151bbe36229e09913db7c7ffe6b6ad48
 PRE_REWRITE_OVERVIEW: 6c513f02555f5d63e886d0047852673a1f2fab97 (lost-contract audit reference)
 CURRENT_COMPILER_AUTHORITY: docs/compiler-design-overview.md
 NEW_BUILD_AUTHORITY: docs/build-system-design.md
 BLOCKER: do not resume roadmap-plan alignment until both architecture documents pass the lost-contract audit
-VALIDATION_RECORDED_AT_BASELINE: cargo run --quiet -- check docs passed with no errors or warnings at c31ad8b558c2b4c84c39c11a10e698fabe945e17
-NEXT_ACTION: repair factual contradictions in the current compiler overview before moving any content
+VALIDATION_RECORDED_AT_BASELINE: cargo run --quiet -- check docs passed with no errors or warnings at Phase 1 completion
+NEXT_ACTION: build the section-level decision inventory, then create the build-system document without compressing moved contracts
 ```
 
 Before editing, refresh:
