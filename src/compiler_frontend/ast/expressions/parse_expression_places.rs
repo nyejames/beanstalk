@@ -193,8 +193,17 @@ fn parse_copy_place_payload(
                 .source_callable_signature(place_declaration.as_declaration())
                 .is_some()
             {
+                // A bare function name is not a copyable value; a call returns a value that
+                // must be received in a binding first. Distinguish the two by checking whether
+                // `(` follows the name, since `token_stream` is still positioned at the symbol.
+                let reason = if token_stream.peek_next_token() == Some(&TokenKind::OpenParenthesis)
+                {
+                    InvalidCopyTargetReason::FunctionCall
+                } else {
+                    InvalidCopyTargetReason::FunctionName
+                };
                 Err(CompilerDiagnostic::invalid_copy_target(
-                    InvalidCopyTargetReason::FunctionValue,
+                    reason,
                     token_stream.current_location(),
                 )
                 .into())
@@ -253,10 +262,29 @@ fn parse_copy_place_payload(
             Err(reserved_trait_keyword_error(keyword, token_stream.current_location()).into())
         }
 
+        // `copy` does not take the `~` mutable-access marker. When `~` precedes
+        // an otherwise valid binding or field projection, the marker is just
+        // unnecessary. When the operand is itself invalid (literal, call, etc.),
+        // the recursive call returns the existing factual diagnostic, since
+        // removing `~` would not make it copyable.
+        TokenKind::Mutable => {
+            let marker_location = token_stream.current_location();
+            token_stream.advance();
+
+            match parse_copy_place_payload(token_stream, context, type_interner, string_table) {
+                Ok(_) => Err(CompilerDiagnostic::invalid_copy_target(
+                    InvalidCopyTargetReason::MutableMarkerNotAllowed,
+                    marker_location,
+                )
+                .into()),
+                Err(existing_error) => Err(existing_error),
+            }
+        }
+
         // Any other token cannot begin a place expression.
         //
-        // `copy` requires a variable or field, not a literal, call, or
-        // computed expression. We emit a targeted diagnostic so the user
+        // `copy` requires a binding or field projection, not a literal, call,
+        // or computed expression. We emit a targeted diagnostic so the user
         // understands *why* `copy` rejected this token, not just that it was
         // unexpected.
         _ => Err(CompilerDiagnostic::invalid_copy_target(

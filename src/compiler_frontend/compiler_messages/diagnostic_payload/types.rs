@@ -1022,8 +1022,10 @@ pub enum InvalidReceiverCallReason {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum InvalidCopyTargetReason {
-    FunctionValue,
+    FunctionName,
+    FunctionCall,
     NonPlace,
+    MutableMarkerNotAllowed,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

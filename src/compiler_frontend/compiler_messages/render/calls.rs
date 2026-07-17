@@ -667,11 +667,17 @@ fn available_fields_hint(known_fields: &[StringId], string_table: &StringTable) 
 
 pub(crate) fn invalid_copy_target_message(reason: InvalidCopyTargetReason) -> String {
     match reason {
-        InvalidCopyTargetReason::FunctionValue => {
-            "The 'copy' keyword only accepts places, not function values or calls. Assign the result to a variable first, then copy that variable.".to_string()
+        InvalidCopyTargetReason::FunctionName => {
+            "`copy` requires an existing binding or field projection. A function name is not a copyable value. Call the function and receive the result in a binding first, then copy that binding.".to_string()
+        }
+        InvalidCopyTargetReason::FunctionCall => {
+            "`copy` requires an existing binding or field projection. A call returns a value that must be received in a binding first, then copy that binding.".to_string()
         }
         InvalidCopyTargetReason::NonPlace => {
-            "The 'copy' keyword requires a variable or field, not a literal or computed expression. Assign the value to a variable first, then copy it, for example `tmp = value` followed by `copy tmp`.".to_string()
+            "`copy` requires an existing binding or field projection. Bind this value first, then copy that binding.".to_string()
+        }
+        InvalidCopyTargetReason::MutableMarkerNotAllowed => {
+            "`copy` does not take `~`. Copy the existing binding or field projection without the access marker.".to_string()
         }
     }
 }
