@@ -61,16 +61,19 @@ fn rule_diagnostics_render_receiver_type_names() {
     assert!(field_guidance.iter().any(|line| line.contains("'Int'")));
 
     let assignment = CompilerDiagnostic::invalid_assignment_target(
-        InvalidAssignmentTargetReason::NotMutablePlace,
+        InvalidAssignmentTargetReason::TemporaryNotAssignable,
         None,
         Some(int_type),
+        None,
+        None,
+        None,
         SourceLocation::default(),
     );
     let assignment_guidance = format_payload_guidance(&assignment.payload, context);
     assert!(
         assignment_guidance
             .iter()
-            .any(|line| line.contains("'Int' is a temporary expression"))
+            .any(|line| line.contains("A temporary value cannot be assigned through"))
     );
 }
 

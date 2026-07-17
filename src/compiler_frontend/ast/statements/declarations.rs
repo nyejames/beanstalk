@@ -52,7 +52,7 @@ use crate::compiler_frontend::symbols::identifier_policy::{
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::syntax_errors::signature_position::check_signature_common_mistake;
-use crate::compiler_frontend::tokenizer::tokens::{FileTokens, Token, TokenKind};
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
 use crate::compiler_frontend::type_coercion::contextual::coerce_expression_to_explicit_type_boundary;
 use crate::compiler_frontend::type_coercion::parse_context::{
     CastTargetContext, ExpectedCollectionContext, ExpectedType, cast_target_context_for_type_id,
@@ -134,6 +134,7 @@ pub(crate) struct ResolvedDeclaration {
     pub(crate) declaration: Declaration,
     pub(crate) statement_kind: ResolvedDeclarationStatementKind,
     pub(crate) is_compile_time_binding: bool,
+    pub(crate) binding_location: SourceLocation,
 }
 
 /// Statement-level shape that declaration parsing discovered alongside the binding value.
@@ -171,6 +172,11 @@ pub(crate) fn new_declaration(
             token_stream.current_location(),
         )));
     }
+
+    // Capture the authored binding-name location before advancing past the name token.
+    // This differs from `declaration.value.location` (the initializer expression location)
+    // and is used for immutable-assignment secondary labels pointing at the original binding.
+    let binding_location = token_stream.current_location();
 
     // Move past the name
     token_stream.advance();
@@ -234,6 +240,7 @@ pub(crate) fn new_declaration(
                 body: function_body,
             },
             is_compile_time_binding: false,
+            binding_location,
         });
     }
 
@@ -288,6 +295,7 @@ pub(crate) fn new_declaration(
         declaration,
         statement_kind,
         is_compile_time_binding,
+        binding_location,
     })
 }
 

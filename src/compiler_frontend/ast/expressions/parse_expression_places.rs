@@ -27,7 +27,7 @@ use crate::compiler_frontend::compiler_messages::{
 };
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::ids::TypeId;
-use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 
 pub(super) struct ParsedCopyPlace {
@@ -288,6 +288,17 @@ pub(crate) fn place_expression_is_mutable(place: &PlaceExpression) -> bool {
         PlaceExpressionKind::Local(_) => place.value_mode.is_mutable(),
 
         PlaceExpressionKind::Field { base, .. } => place_expression_is_mutable(base),
+    }
+}
+
+/// Walks a place expression to its root local and returns the binding name.
+///
+/// WHAT: follows field-projection bases down to the underlying local, then returns its name.
+/// WHY: immutable field-write diagnostics name the root binding that must be made mutable.
+pub(crate) fn root_binding_name_of_place(place: &PlaceExpression) -> Option<StringId> {
+    match &place.kind {
+        PlaceExpressionKind::Local(path) => path.name(),
+        PlaceExpressionKind::Field { base, .. } => root_binding_name_of_place(base),
     }
 }
 

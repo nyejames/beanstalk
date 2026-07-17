@@ -71,6 +71,7 @@ use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::compiler_frontend::traits::environment::TraitEnvironment;
 use crate::compiler_frontend::traits::evidence::TraitEvidenceEnvironment;
 use crate::projects::settings::DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS;
@@ -332,7 +333,7 @@ impl ScopeContext {
     ///
     /// WHAT: exposes the current frame's local declarations for tests and diagnostics.
     ///       Ancestor declarations remain accessible through `get_reference`.
-    pub fn local_declarations(&self) -> Vec<Rc<Declaration>> {
+    pub fn local_declarations(&self) -> Vec<scope_frame::LocalDeclaration> {
         self.arena
             .borrow()
             .frame(self.current_frame_id)

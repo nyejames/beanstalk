@@ -70,6 +70,8 @@ pub enum DiagnosticLabelMessage {
     },
     /// Marks the earlier evidence that fixed a generic parameter before a later conflict.
     GenericInferencePreviousEvidence,
+    /// Marks the original immutable binding declaration for assignment-target diagnostics.
+    ImmutableBindingDeclaration,
 }
 
 impl DiagnosticLabelMessage {
@@ -90,7 +92,8 @@ impl DiagnosticLabelMessage {
             | DiagnosticLabelMessage::GenericInstantiationCallSite
             | DiagnosticLabelMessage::GenericInstantiationBodySite
             | DiagnosticLabelMessage::GenericInstantiationDeclarationSite
-            | DiagnosticLabelMessage::GenericInferencePreviousEvidence => {}
+            | DiagnosticLabelMessage::GenericInferencePreviousEvidence
+            | DiagnosticLabelMessage::ImmutableBindingDeclaration => {}
         }
     }
 }

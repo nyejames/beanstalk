@@ -12,51 +12,29 @@ This is an implementation plan, not a research backlog. Each phase should leave 
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-diagnostics-improvement-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 3.1b accepted, checkpoint ready to commit
-LAST_ACCEPTED_COMMIT: `4dc4dec5423d46105e69fbfebc199089d6761c64`
-WORKTREE: `main` at `4dc4dec5423d46105e69fbfebc199089d6761c64`
+CURRENT_SLICE: Phase 3.2 complete, checkpoint ready to commit
+LAST_ACCEPTED_COMMIT: `51f4537ae` (Phase 3.2b)
+WORKTREE: `main`, clean; unrelated docs commits `6c513f025`/`d96590791`/`c31ad8b55` are separate branch work
 REQUIRED_RELOADS: startup files, this plan and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: access-and-aliasing and assignment contracts distinguish immutable root bindings from assignment-target syntax; no general documentation edits are allowed
-- code: Phase 3.1b uses one receiver-access classifier for source methods, collection builtins and map builtins with distinct temporary, immutable, missing-marker and invalid-marker states
+- code: Phase 3.2 renamed NotMutablePlace→TemporaryNotAssignable and ImmutableVariable→ImmutableBinding, added ImmutableFieldRoot for field writes through an immutable root binding, extended the payload with field_name and root_binding_name, and preserved the authored binding location in the scope-frame so ImmutableBinding and ImmutableFieldRoot carry a secondary label at the original immutable declaration; ExpectedAssignmentOperator says binding not variable
 ACCEPTANCE_CRITERIA:
-- source methods, collection builtins and map builtins use one receiver-access classifier
-- non-place temporaries, immutable receivers, mutable receivers missing `~` and invalid authored markers remain distinct
-- authored receiver-marker failures point at `~` and named receiver guidance is shown only from factual payload data
-- const-record receiver wording uses the current `const record` source term and `ConstRecordNoRuntimeCalls`
+- temporary, immutable direct-binding and immutable field-root assignment targets use distinct reasons and clean wording without `place`/`rvalue`/`variable` terminology
+- field-write diagnostics name the field and root binding; a generic fallback exists when the root cannot be named
+- `~` is never suggested on assignment targets; reassignment guidance uses ordinary `=`
+- stable `BST-RULE-0044` is preserved; no new diagnostic code
 VALIDATION_STATE:
-- Accepted commits `df65c9ced` through `636ea3070`: every checkpoint passed its required focused checks and `just validate`; completed phase notes retain the design and correction details
-- Phase 2.4c4 Ollama correction: passed `cargo fmt`, 3,573 library tests, 1,631 HTML cases and library Clippy
-- Phase 2.4c4 parent probes: passed every missing-default boundary, specific prohibition and valid multiline form
-- Phase 2.4c4 `just validate`: passed cross-target Clippy, 3,573 Rust tests, 1,772 integration cases, docs check and 28 benchmark cases
-- Phase 2.5a initial Ollama patch: passed 3,574 library tests, 1,632 HTML cases and library Clippy; parent probes corrected true unclosed-template EOF ownership and retained the patch for a focused correction
-- Phase 2.5a Ollama correction: passed 3,575 library tests, 1,632 HTML cases and library Clippy; focused generic and `$children` boundary tests passed
-- Phase 2.5a parent probes: template-close before an expression uses `BST-SYNTAX-0021`; true EOF and begun inner templates use `BST-SYNTAX-0017`; valid templates compile
-- Phase 2.5a `just validate`: passed cross-target Clippy, 3,575 Rust tests, 1,774 integration cases, docs check and 28 benchmark cases
-- Phase 2.5b Ollama patch: passed `cargo fmt`, 3,580 library tests, 1,634 HTML cases and library Clippy
-- Phase 2.5b parent probes: function, struct, choice-payload and trait-requirement duplicates use `BST-RULE-0002` with both member locations; duplicate reserved receivers retain `BST-RULE-0040`
-- Phase 2.5b `just validate`: passed cross-target Clippy, 3,580 Rust tests, 1,776 integration cases, docs check and 28 benchmark cases
-- Phase 2.6 Ollama patch: passed `cargo fmt`, 3,580 library tests, 1,630 HTML integration cases and library Clippy
-- Phase 2.6 parent probe: all four unregistered config names use ordinary `BST-CONFIG-0001` with exact authored names and no replacement guidance
-- Phase 2.6 `just validate`: passed cross-target Clippy, 3,579 Rust tests, 1,772 integration cases, docs check and 28 benchmark cases
-- Phase 2.6b Ollama patch: passed `cargo fmt`, the focused key-span test, 3,579 library tests, 1,772 integration cases and library Clippy
-- Phase 2.6b parent probes: unknown keys underline the authored key name while invalid registered values still underline the initializer
-- Phase 2.6b `just validate`: passed cross-target Clippy, 3,579 Rust tests, 1,772 integration cases, docs check and 28 benchmark cases
-- Phase 3.1a Ollama patch: passed `cargo fmt`, 3,589 Rust tests, 1,632 HTML integration cases and library Clippy
-- Phase 3.1a Ollama wording correction: passed focused tests, 3,595 Rust tests, 1,632 HTML integration cases and library Clippy; parent review requires one classifier consolidation before acceptance
-- Phase 3.1a Ollama classifier cleanup: passed focused tests, 3,595 Rust tests, 1,632 HTML integration cases and library Clippy
-- Phase 3.1a parent probes: passed mutable/immutable marked and unmarked arguments, plain fresh values, copied fresh values, invalid marked copies, named markers and one-based unnamed host parameters
-- Phase 3.1a `just validate`: passed on the formatted tree with cross-target Clippy, 3,595 Rust tests, 1,774 integration cases, docs check and 28 benchmark cases
-- Phase 3.1b Ollama patch: finished receiver source-state classification, authored-marker location threading, const-record rename and focused coverage; parent review accepted the slice
-- Phase 3.1b parent probes: source-method missing marker, immutable with/without `~`, temporary receivers, collection/map immutable and temporary receivers, and map missing-marker all use distinct `BST-RULE-0047` wording and point authored-marker failures at `~`
-- Phase 3.1b `just validate`: passed cross-target Clippy, 3,609 Rust tests, 1,777 integration cases, docs check and 28 benchmark cases
+- Phases 1–2.6b and 3.1a–3.1b: every checkpoint passed its focused checks and `just validate`; completed phase notes retain design and correction details
+- Phase 3.2a Ollama patch: passed `cargo fmt`, 3,609 Rust tests, 1,777 integration cases and library Clippy
+- Phase 3.2a parent probes: `p.x = 99` (immutable root) renders `ImmutableFieldRoot` naming field `x` and root `p`; `value = 200` (immutable direct) renders `ImmutableBinding` with ordinary `=` guidance and no `~`; `Point(1,2).x = 5` (temporary) renders `TemporaryNotAssignable`; mutable `p ~= Point(1,2)` + `p.x = 99` compiles cleanly
+- Phase 3.2a `just validate`: passed cross-target Clippy, 3,609 Rust tests, 1,777 integration cases, docs check and 28 benchmark cases
 DOCS_IMPACT: diagnostics-plan tracking only; general design and language docs remain unchanged unless they explicitly name a diagnostic being changed
 BLOCKERS_OR_OPEN_DECISIONS: none
 DELEGATION_DECISION: Ollama - explicitly required for every implementation worker slice
 NEXT_WORKER_ORDER: Ollama only for implementation slices
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit Phase 3.1b, record its hash, then launch Phase 3.2 through Ollama
-
+NEXT_RESUME_ACTION: commit Phase 3.2b plan update, then launch Phase 3.3 (~ on assignment targets) through Ollama
 ## Confirmed design decisions
 
 - Quoted strings support exactly these escapes:
@@ -428,6 +406,8 @@ Use one matrix covering user functions, source receiver methods, collection buil
 
 **Original finding:** DIAG-007
 **Rejected original proposal:** `~p.x = 10` is not Beanstalk assignment syntax.
+
+**Phase 3.2a status:** Complete in this checkpoint. Reason taxonomy, message wording and field-write distinction are done. The secondary declaration label (scope-frame binding location) is Phase 3.2b.
 
 For:
 

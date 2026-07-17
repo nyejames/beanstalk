@@ -401,6 +401,9 @@ pub enum DiagnosticPayload {
         reason: InvalidAssignmentTargetReason,
         target_name: Option<StringId>,
         target_type: Option<TypeId>,
+        field_name: Option<StringId>,
+        root_binding_name: Option<StringId>,
+        declaration_location: Option<SourceLocation>,
     },
 
     InvalidMultiBind {

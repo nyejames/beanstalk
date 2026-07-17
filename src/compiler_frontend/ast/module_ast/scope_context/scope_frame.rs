@@ -24,6 +24,7 @@ use crate::compiler_frontend::instrumentation::add_ast_counter;
 use crate::compiler_frontend::instrumentation::frontend_counters::{
     FrontendCounter, add_frontend_counter, increment_frontend_counter,
 };
+use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
 /// Stable ID for a scope frame inside a `ScopeArena`.
 ///
@@ -130,7 +131,7 @@ impl ScopeArena {
         &self,
         frame_id: ScopeFrameId,
         name: &StringId,
-    ) -> Option<Rc<Declaration>> {
+    ) -> Option<(Rc<Declaration>, SourceLocation)> {
         let mut current_id = Some(frame_id);
         let mut steps: usize = 0;
 
@@ -138,9 +139,13 @@ impl ScopeArena {
             let frame = self.frame(id);
             if let Some(indices) = frame.local_declarations_by_name.get(name) {
                 add_ast_counter(AstCounter::ScopeFrameLookupAncestorSteps, steps);
-                return indices
-                    .last()
-                    .map(|index| Rc::clone(&frame.local_declarations[*index as usize]));
+                return indices.last().map(|index| {
+                    let entry = &frame.local_declarations[*index as usize];
+                    (
+                        Rc::clone(&entry.declaration),
+                        entry.binding_location.clone(),
+                    )
+                });
             }
 
             let Some(parent_id) = frame.parent else {
@@ -216,6 +221,18 @@ impl Default for ScopeArena {
 #[path = "scope_frame_tests.rs"]
 mod scope_frame_tests;
 
+/// A body-local declaration paired with its authored binding-name source location.
+///
+/// WHAT: stores the declaration alongside the location where the binding name was
+///       authored, which differs from `Declaration::value::location` (the initializer).
+/// WHY: immutable assignment diagnostics add a secondary label at the original
+///      binding declaration, not at the initializer expression.
+#[derive(Clone)]
+pub(crate) struct LocalDeclaration {
+    pub(crate) declaration: Rc<Declaration>,
+    pub(crate) binding_location: SourceLocation,
+}
+
 /// One layer of local declarations in the AST scope hierarchy.
 ///
 /// WHAT: owns the declarations authored in this scope layer and an index of their names.
@@ -227,10 +244,10 @@ mod scope_frame_tests;
 pub(crate) struct ScopeFrame {
     /// Declarations authored in this frame, in source order.
     ///
-    /// Local declarations are stored as `Rc<Declaration>` so that `ScopeContext::clone()`
+    /// Local declarations are stored as `LocalDeclaration` entries so that `ScopeContext::clone()`
     /// can copy the current frame without cloning the declaration payloads, while
     /// ordinary lookup can hand out a cheap `Rc<Declaration>` without holding a borrow.
-    local_declarations: Vec<Rc<Declaration>>,
+    local_declarations: Vec<LocalDeclaration>,
 
     /// Name index for the declarations in this frame only.
     local_declarations_by_name: FxHashMap<StringId, Vec<u32>>,
@@ -283,7 +300,7 @@ impl ScopeFrame {
 
     #[cfg(test)]
     /// Return the declarations authored in this frame only.
-    pub(crate) fn local_declarations(&self) -> &[Rc<Declaration>] {
+    pub(crate) fn local_declarations(&self) -> &[LocalDeclaration] {
         &self.local_declarations
     }
 
@@ -304,7 +321,7 @@ impl ScopeFrame {
     ///       records insertion for instrumentation.
     /// WHY: callers must ensure they are mutating the correct frame; this method does
     ///      not walk the parent chain because additions always belong to the current scope.
-    pub(crate) fn add_var(&mut self, declaration: Declaration) {
+    pub(crate) fn add_var(&mut self, declaration: Declaration, binding_location: SourceLocation) {
         if let Some(name) = declaration.id.name() {
             let index = self.local_declarations.len() as u32;
             self.local_declarations_by_name
@@ -312,17 +329,24 @@ impl ScopeFrame {
                 .or_default()
                 .push(index);
         }
-        self.local_declarations.push(Rc::new(declaration));
+        self.local_declarations.push(LocalDeclaration {
+            declaration: Rc::new(declaration),
+            binding_location,
+        });
     }
 
     /// Add a body-local declaration authored with `#`.
     ///
     /// WHAT: records the explicit compile-time constant flag in this frame, then inserts
     ///       the declaration like an ordinary local.
-    pub(crate) fn add_compile_time_var(&mut self, declaration: Declaration) {
+    pub(crate) fn add_compile_time_var(
+        &mut self,
+        declaration: Declaration,
+        binding_location: SourceLocation,
+    ) {
         self.explicit_compile_time_constant_declarations
             .insert(declaration.id.clone());
-        self.add_var(declaration);
+        self.add_var(declaration, binding_location);
     }
 
     /// Replace the declarations in this frame.
@@ -331,7 +355,16 @@ impl ScopeFrame {
     ///       function or start body frame is initialised with parameter declarations.
     pub(crate) fn set_local_declarations(&mut self, declarations: Vec<Declaration>) {
         self.local_declarations_by_name = build_local_declarations_index(&declarations);
-        self.local_declarations = declarations.into_iter().map(Rc::new).collect();
+        self.local_declarations = declarations
+            .into_iter()
+            .map(|declaration| {
+                let binding_location = declaration.value.location.clone();
+                LocalDeclaration {
+                    declaration: Rc::new(declaration),
+                    binding_location,
+                }
+            })
+            .collect();
     }
 }
 

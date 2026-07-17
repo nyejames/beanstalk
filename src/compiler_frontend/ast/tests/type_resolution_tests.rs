@@ -313,7 +313,7 @@ fn constant_capacity_resolves_to_fixed_collection() {
             ValueMode::ImmutableOwned,
         ),
     };
-    scope_context.add_compile_time_var(constant_declaration);
+    scope_context.add_compile_time_var(constant_declaration, SourceLocation::default());
 
     let parsed = ParsedTypeRef::Collection {
         element: Box::new(ParsedTypeRef::BuiltinInt {
@@ -363,16 +363,19 @@ fn runtime_int_binding_is_rejected_as_fixed_collection_capacity() {
         vec![],
         0,
     );
-    scope_context.add_var(Declaration {
-        id: InternedPath::from_components(vec![capacity_name]),
-        value: Expression::new(
-            ExpressionKind::Int(42),
-            location.clone(),
-            builtin_type_ids::INT,
-            DataType::Int,
-            ValueMode::ImmutableOwned,
-        ),
-    });
+    scope_context.add_var(
+        Declaration {
+            id: InternedPath::from_components(vec![capacity_name]),
+            value: Expression::new(
+                ExpressionKind::Int(42),
+                location.clone(),
+                builtin_type_ids::INT,
+                DataType::Int,
+                ValueMode::ImmutableOwned,
+            ),
+        },
+        SourceLocation::default(),
+    );
 
     let parsed = ParsedTypeRef::Collection {
         element: Box::new(ParsedTypeRef::BuiltinInt {

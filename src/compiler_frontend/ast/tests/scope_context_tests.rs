@@ -82,7 +82,7 @@ fn add_var_extends_visibility_gate_when_gate_is_set() {
             ValueMode::ImmutableOwned,
         ),
     };
-    context.add_var(declaration);
+    context.add_var(declaration, SourceLocation::default());
 
     assert!(
         context
@@ -130,7 +130,7 @@ fn add_compile_time_var_extends_visibility_gate_when_gate_is_set() {
             ValueMode::ImmutableOwned,
         ),
     };
-    context.add_compile_time_var(declaration);
+    context.add_compile_time_var(declaration, SourceLocation::default());
 
     assert!(
         context
@@ -307,16 +307,19 @@ fn parent_frame_lookup_finds_ancestor_declaration() {
 
     let name = string_table.intern("ancestor_var");
     let variable_path = InternedPath::from_components(vec![name]);
-    context.add_var(Declaration {
-        id: variable_path.to_owned(),
-        value: Expression::new(
-            ExpressionKind::NoValue,
-            SourceLocation::default(),
-            builtin_type_ids::INT,
-            DataType::Int,
-            ValueMode::ImmutableOwned,
-        ),
-    });
+    context.add_var(
+        Declaration {
+            id: variable_path.to_owned(),
+            value: Expression::new(
+                ExpressionKind::NoValue,
+                SourceLocation::default(),
+                builtin_type_ids::INT,
+                DataType::Int,
+                ValueMode::ImmutableOwned,
+            ),
+        },
+        SourceLocation::default(),
+    );
 
     let child = context.new_child_control_flow(ContextKind::Branch, &mut string_table);
     assert!(
@@ -351,16 +354,19 @@ fn child_frame_declaration_is_not_visible_to_parent() {
     let mut child = context.new_child_control_flow(ContextKind::Branch, &mut string_table);
     let name = string_table.intern("child_var");
     let variable_path = InternedPath::from_components(vec![name]);
-    child.add_var(Declaration {
-        id: variable_path.to_owned(),
-        value: Expression::new(
-            ExpressionKind::NoValue,
-            SourceLocation::default(),
-            builtin_type_ids::INT,
-            DataType::Int,
-            ValueMode::ImmutableOwned,
-        ),
-    });
+    child.add_var(
+        Declaration {
+            id: variable_path.to_owned(),
+            value: Expression::new(
+                ExpressionKind::NoValue,
+                SourceLocation::default(),
+                builtin_type_ids::INT,
+                DataType::Int,
+                ValueMode::ImmutableOwned,
+            ),
+        },
+        SourceLocation::default(),
+    );
 
     assert!(
         context.get_reference(&name).is_none(),
@@ -399,16 +405,19 @@ fn child_function_frame_does_not_capture_parent_locals() {
 
     let parent_name = string_table.intern("outer_local");
     let parent_path = InternedPath::from_components(vec![parent_name]);
-    context.add_var(Declaration {
-        id: parent_path,
-        value: Expression::new(
-            ExpressionKind::NoValue,
-            SourceLocation::default(),
-            builtin_type_ids::INT,
-            DataType::Int,
-            ValueMode::ImmutableOwned,
-        ),
-    });
+    context.add_var(
+        Declaration {
+            id: parent_path,
+            value: Expression::new(
+                ExpressionKind::NoValue,
+                SourceLocation::default(),
+                builtin_type_ids::INT,
+                DataType::Int,
+                ValueMode::ImmutableOwned,
+            ),
+        },
+        SourceLocation::default(),
+    );
 
     let function_name = string_table.intern("inner_function");
     let child = context.new_child_function(
@@ -450,26 +459,32 @@ fn same_frame_duplicate_lookup_returns_latest_declaration() {
     let first_path = InternedPath::from_components(vec![string_table.intern("first"), name]);
     let second_path = InternedPath::from_components(vec![string_table.intern("second"), name]);
 
-    context.add_var(Declaration {
-        id: first_path.to_owned(),
-        value: Expression::new(
-            ExpressionKind::NoValue,
-            SourceLocation::default(),
-            builtin_type_ids::INT,
-            DataType::Int,
-            ValueMode::ImmutableOwned,
-        ),
-    });
-    context.add_var(Declaration {
-        id: second_path.to_owned(),
-        value: Expression::new(
-            ExpressionKind::NoValue,
-            SourceLocation::default(),
-            builtin_type_ids::INT,
-            DataType::Int,
-            ValueMode::ImmutableOwned,
-        ),
-    });
+    context.add_var(
+        Declaration {
+            id: first_path.to_owned(),
+            value: Expression::new(
+                ExpressionKind::NoValue,
+                SourceLocation::default(),
+                builtin_type_ids::INT,
+                DataType::Int,
+                ValueMode::ImmutableOwned,
+            ),
+        },
+        SourceLocation::default(),
+    );
+    context.add_var(
+        Declaration {
+            id: second_path.to_owned(),
+            value: Expression::new(
+                ExpressionKind::NoValue,
+                SourceLocation::default(),
+                builtin_type_ids::INT,
+                DataType::Int,
+                ValueMode::ImmutableOwned,
+            ),
+        },
+        SourceLocation::default(),
+    );
 
     let resolved = context
         .get_reference(&name)
@@ -500,16 +515,19 @@ fn no_shadowing_across_ancestor_frames() {
 
     let name = string_table.intern("shadowed");
     let parent_path = InternedPath::from_components(vec![string_table.intern("shadowed")]);
-    context.add_var(Declaration {
-        id: parent_path.to_owned(),
-        value: Expression::new(
-            ExpressionKind::NoValue,
-            SourceLocation::default(),
-            builtin_type_ids::INT,
-            DataType::Int,
-            ValueMode::ImmutableOwned,
-        ),
-    });
+    context.add_var(
+        Declaration {
+            id: parent_path.to_owned(),
+            value: Expression::new(
+                ExpressionKind::NoValue,
+                SourceLocation::default(),
+                builtin_type_ids::INT,
+                DataType::Int,
+                ValueMode::ImmutableOwned,
+            ),
+        },
+        SourceLocation::default(),
+    );
 
     let child = context.new_child_control_flow(ContextKind::Branch, &mut string_table);
     assert!(
@@ -605,16 +623,19 @@ fn cloned_context_does_not_share_current_frame() {
     let path = InternedPath::from_components(vec![name]);
 
     let mut clone = context.clone();
-    clone.add_var(Declaration {
-        id: path.to_owned(),
-        value: Expression::new(
-            ExpressionKind::NoValue,
-            SourceLocation::default(),
-            builtin_type_ids::INT,
-            DataType::Int,
-            ValueMode::ImmutableOwned,
-        ),
-    });
+    clone.add_var(
+        Declaration {
+            id: path.to_owned(),
+            value: Expression::new(
+                ExpressionKind::NoValue,
+                SourceLocation::default(),
+                builtin_type_ids::INT,
+                DataType::Int,
+                ValueMode::ImmutableOwned,
+            ),
+        },
+        SourceLocation::default(),
+    );
 
     assert!(
         context.get_reference(&name).is_none(),
@@ -646,30 +667,36 @@ fn child_frame_shares_ancestors_but_not_current_frame() {
 
     let parent_name = string_table.intern("parent_var");
     let parent_path = InternedPath::from_components(vec![parent_name]);
-    context.add_var(Declaration {
-        id: parent_path,
-        value: Expression::new(
-            ExpressionKind::NoValue,
-            SourceLocation::default(),
-            builtin_type_ids::INT,
-            DataType::Int,
-            ValueMode::ImmutableOwned,
-        ),
-    });
+    context.add_var(
+        Declaration {
+            id: parent_path,
+            value: Expression::new(
+                ExpressionKind::NoValue,
+                SourceLocation::default(),
+                builtin_type_ids::INT,
+                DataType::Int,
+                ValueMode::ImmutableOwned,
+            ),
+        },
+        SourceLocation::default(),
+    );
 
     let mut child = context.new_child_control_flow(ContextKind::Branch, &mut string_table);
     let child_name = string_table.intern("child_var");
     let child_path = InternedPath::from_components(vec![child_name]);
-    child.add_var(Declaration {
-        id: child_path,
-        value: Expression::new(
-            ExpressionKind::NoValue,
-            SourceLocation::default(),
-            builtin_type_ids::INT,
-            DataType::Int,
-            ValueMode::ImmutableOwned,
-        ),
-    });
+    child.add_var(
+        Declaration {
+            id: child_path,
+            value: Expression::new(
+                ExpressionKind::NoValue,
+                SourceLocation::default(),
+                builtin_type_ids::INT,
+                DataType::Int,
+                ValueMode::ImmutableOwned,
+            ),
+        },
+        SourceLocation::default(),
+    );
 
     assert!(
         context.get_reference(&parent_name).is_some(),

@@ -111,6 +111,9 @@ pub(super) fn parse_map_builtin_member_typed(
                 InvalidAssignmentTargetReason::MapPropertyWriteRemoved,
                 None,
                 Some(receiver_type_id),
+                None,
+                None,
+                None,
                 token_stream.current_location(),
             )
             .into());
@@ -262,6 +265,9 @@ pub(super) fn parse_map_builtin_member_typed(
             InvalidAssignmentTargetReason::MapIndexedWriteRemoved,
             None,
             Some(value_type_id),
+            None,
+            None,
+            None,
             token_stream.current_location(),
         )
         .into());

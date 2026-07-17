@@ -1551,8 +1551,18 @@ impl CompilerDiagnostic {
         reason: crate::compiler_frontend::compiler_messages::InvalidAssignmentTargetReason,
         target_name: Option<StringId>,
         target_type: Option<crate::compiler_frontend::datatypes::ids::TypeId>,
+        field_name: Option<StringId>,
+        root_binding_name: Option<StringId>,
+        declaration_location: Option<SourceLocation>,
         location: SourceLocation,
     ) -> Self {
+        let mut labels = vec![DiagnosticLabel::primary(location.clone())];
+        if let Some(ref declaration_location) = declaration_location {
+            labels.push(DiagnosticLabel::secondary(
+                declaration_location.clone(),
+                Some(DiagnosticLabelMessage::ImmutableBindingDeclaration),
+            ));
+        }
         Self::new(
             DiagnosticKind::Rule(RuleDiagnosticKind::InvalidAssignmentTarget),
             location,
@@ -1560,8 +1570,12 @@ impl CompilerDiagnostic {
                 reason,
                 target_name,
                 target_type,
+                field_name,
+                root_binding_name,
+                declaration_location,
             },
         )
+        .with_labels(labels)
     }
 
     pub(crate) fn invalid_multi_bind(

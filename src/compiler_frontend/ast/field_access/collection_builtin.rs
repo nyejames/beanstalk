@@ -233,6 +233,9 @@ pub(super) fn parse_collection_builtin_member_typed(
             InvalidAssignmentTargetReason::CollectionIndexedWriteRemoved,
             None,
             Some(element_type_id),
+            None,
+            None,
+            None,
             token_stream.current_location(),
         )
         .into());

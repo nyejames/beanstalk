@@ -299,9 +299,12 @@ fn parse_postfix_chain_typed(
         let receiver_expression = expression_from_postfix_node(&receiver_node)?;
         if place_expression_from_expression(&receiver_expression).is_none() {
             let diagnostic = CompilerDiagnostic::invalid_assignment_target(
-                InvalidAssignmentTargetReason::NotMutablePlace,
+                InvalidAssignmentTargetReason::TemporaryNotAssignable,
                 None,
                 Some(receiver_expression.type_id),
+                None,
+                None,
+                None,
                 receiver_node.location.clone(),
             );
             return Err(diagnostic.into());

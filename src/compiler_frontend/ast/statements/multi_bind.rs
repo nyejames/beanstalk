@@ -167,6 +167,9 @@ fn validate_multi_bind_target_identifiers(
                 InvalidAssignmentTargetReason::UnavailableInCatchRecovery,
                 Some(target.name),
                 None,
+                None,
+                None,
+                None,
                 target.location.to_owned(),
             )));
         }
@@ -606,7 +609,8 @@ fn binding_target_ownership(target_syntax: &BindingTargetSyntax) -> ValueMode {
 /// Insert freshly resolved declarations into the current scope context.
 fn register_new_declarations(context: &mut ScopeContext, new_declarations: Vec<Declaration>) {
     for declaration in new_declarations {
-        context.add_var(declaration);
+        let binding_location = declaration.value.location.clone();
+        context.add_var(declaration, binding_location);
     }
 }
 

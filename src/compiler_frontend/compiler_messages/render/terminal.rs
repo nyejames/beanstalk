@@ -196,6 +196,9 @@ fn diagnostic_label_message_text(
         DiagnosticLabelMessage::GenericInferencePreviousEvidence => {
             "previous generic inference evidence here".to_owned()
         }
+        DiagnosticLabelMessage::ImmutableBindingDeclaration => {
+            "immutable binding declared here".to_owned()
+        }
     }
 }
 

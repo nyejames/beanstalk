@@ -857,7 +857,10 @@ fn declare_loop_binding(
         ),
     };
 
-    parser.scope_context.add_var(declaration.to_owned());
+    let binding_location = declaration.value.location.clone();
+    parser
+        .scope_context
+        .add_var(declaration.to_owned(), binding_location);
 
     Ok(declaration)
 }

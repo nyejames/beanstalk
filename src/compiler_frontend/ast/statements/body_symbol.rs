@@ -88,6 +88,9 @@ pub(crate) fn parse_this_statement(
             InvalidAssignmentTargetReason::UnavailableInCatchRecovery,
             Some(this_id),
             None,
+            None,
+            None,
+            None,
             token_stream.current_location(),
         )));
     }
@@ -124,9 +127,12 @@ pub(crate) fn parse_this_statement(
             if token_stream.current_token_kind().is_assignment_operator() {
                 let Some(target) = place_expression_from_expression(&accessed_node) else {
                     return Err(Box::new(CompilerDiagnostic::invalid_assignment_target(
-                        InvalidAssignmentTargetReason::NotMutablePlace,
+                        InvalidAssignmentTargetReason::TemporaryNotAssignable,
                         None,
                         Some(accessed_node.type_id),
+                        None,
+                        None,
+                        None,
                         token_stream.current_location(),
                     )));
                 };
@@ -135,6 +141,7 @@ pub(crate) fn parse_this_statement(
                     token_stream,
                     this_reference.as_declaration(),
                     target,
+                    this_reference.binding_location().cloned(),
                     context,
                     type_interner,
                     string_table,
@@ -214,6 +221,9 @@ pub(crate) fn parse_symbol_statement(
             InvalidAssignmentTargetReason::UnavailableInCatchRecovery,
             Some(symbol_id),
             None,
+            None,
+            None,
+            None,
             token_stream.current_location(),
         )));
     }
@@ -236,6 +246,7 @@ pub(crate) fn parse_symbol_statement(
                 let mutation_node = handle_mutation(
                     token_stream,
                     existing_reference.as_declaration(),
+                    existing_reference.binding_location().cloned(),
                     context,
                     type_interner,
                     string_table,
@@ -261,9 +272,12 @@ pub(crate) fn parse_symbol_statement(
                 if token_stream.current_token_kind().is_assignment_operator() {
                     let Some(target) = place_expression_from_expression(&accessed_node) else {
                         return Err(Box::new(CompilerDiagnostic::invalid_assignment_target(
-                            InvalidAssignmentTargetReason::NotMutablePlace,
+                            InvalidAssignmentTargetReason::TemporaryNotAssignable,
                             None,
                             Some(accessed_node.type_id),
+                            None,
+                            None,
+                            None,
                             token_stream.current_location(),
                         )));
                     };
@@ -272,6 +286,7 @@ pub(crate) fn parse_symbol_statement(
                         token_stream,
                         existing_reference.as_declaration(),
                         target,
+                        existing_reference.binding_location().cloned(),
                         context,
                         type_interner,
                         string_table,
@@ -461,9 +476,9 @@ pub(crate) fn parse_symbol_statement(
     }
 
     if is_compile_time_binding {
-        context.add_compile_time_var(declaration);
+        context.add_compile_time_var(declaration, resolved_declaration.binding_location);
     } else {
-        context.add_var(declaration);
+        context.add_var(declaration, resolved_declaration.binding_location);
     }
     Ok(())
 }

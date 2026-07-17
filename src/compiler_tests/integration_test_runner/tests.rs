@@ -129,8 +129,11 @@ fn failure_message_contains_uses_structured_render_output() {
     let source_path = InternedPath::from_single_str("main.bst", &mut string_table);
     let variable_name = string_table.intern("value");
     let diagnostic = CompilerDiagnostic::invalid_assignment_target(
-        InvalidAssignmentTargetReason::ImmutableVariable,
+        InvalidAssignmentTargetReason::ImmutableBinding,
         Some(variable_name),
+        None,
+        None,
+        None,
         None,
         test_location(source_path),
     );
@@ -138,7 +141,7 @@ fn failure_message_contains_uses_structured_render_output() {
     let expectation = FailureExpectation {
         warnings: WarningExpectation::Ignore,
         diagnostic_codes: vec!["BST-RULE-0044".to_string()],
-        message_contains: vec!["Cannot mutate immutable variable 'value'".to_string()],
+        message_contains: vec!["Cannot reassign `value`".to_string()],
     };
 
     let result = validate_failure_result(messages, &expectation);
@@ -152,7 +155,10 @@ fn failure_message_contains_includes_rendered_label_text() {
     let source_path = InternedPath::from_single_str("main.bst", &mut string_table);
     let label_text = string_table.intern("secondary context lives here");
     let diagnostic = CompilerDiagnostic::invalid_assignment_target(
-        InvalidAssignmentTargetReason::ImmutableVariable,
+        InvalidAssignmentTargetReason::ImmutableBinding,
+        None,
+        None,
+        None,
         None,
         None,
         test_location(source_path.clone()),

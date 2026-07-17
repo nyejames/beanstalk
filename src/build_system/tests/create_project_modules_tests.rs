@@ -2133,7 +2133,7 @@ fn rejects_duplicate_plain_config_bindings_before_config_validation() {
         matches!(
             &diagnostic.payload,
             DiagnosticPayload::InvalidAssignmentTarget {
-                reason: InvalidAssignmentTargetReason::ImmutableVariable,
+                reason: InvalidAssignmentTargetReason::ImmutableBinding,
                 ..
             }
         ),

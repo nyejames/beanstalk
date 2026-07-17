@@ -232,7 +232,7 @@ fn source_authored_template_option_capture_if_suffix_reaches_ast() {
             ValueMode::ImmutableOwned,
         ),
     };
-    context.add_var(declaration);
+    context.add_var(declaration, SourceLocation::default());
 
     let template = Template::new_with_type_interner(
         &mut token_stream,
@@ -282,7 +282,7 @@ fn template_option_capture_binding_is_not_visible_in_else_branch() {
             ValueMode::ImmutableOwned,
         ),
     };
-    context.add_var(declaration);
+    context.add_var(declaration, SourceLocation::default());
 
     let diagnostic = Template::new_with_type_interner(
         &mut token_stream,
@@ -568,7 +568,7 @@ fn template_else_if_option_capture_binding_is_branch_local() {
             ValueMode::ImmutableOwned,
         ),
     };
-    context.add_var(declaration);
+    context.add_var(declaration, SourceLocation::default());
 
     let diagnostic = Template::new_with_type_interner(
         &mut token_stream,
@@ -1790,16 +1790,19 @@ fn const_required_template_conditional_loop_reports_runtime_condition() {
     let mut type_interner = AstTypeInterner::new(&mut type_environment, &mut compatibility_cache);
     let keep_going = string_table.intern("keep_going");
 
-    context.add_var(Declaration {
-        id: token_stream.src_path.append(keep_going),
-        value: Expression::new(
-            ExpressionKind::NoValue,
-            token_stream.current_location(),
-            builtin_type_ids::BOOL,
-            DataType::Bool,
-            ValueMode::ImmutableOwned,
-        ),
-    });
+    context.add_var(
+        Declaration {
+            id: token_stream.src_path.append(keep_going),
+            value: Expression::new(
+                ExpressionKind::NoValue,
+                token_stream.current_location(),
+                builtin_type_ids::BOOL,
+                DataType::Bool,
+                ValueMode::ImmutableOwned,
+            ),
+        },
+        SourceLocation::default(),
+    );
 
     let diagnostic = Template::new_const_required_with_type_interner(
         &mut token_stream,
@@ -1833,16 +1836,19 @@ fn const_required_template_loop_reports_non_const_collection_source() {
     let mut type_interner = AstTypeInterner::new(&mut type_environment, &mut compatibility_cache);
     let items = string_table.intern("items");
 
-    context.add_var(Declaration {
-        id: token_stream.src_path.append(items),
-        value: Expression::new(
-            ExpressionKind::NoValue,
-            token_stream.current_location(),
-            collection_type_id,
-            DataType::collection(DataType::StringSlice),
-            ValueMode::ImmutableOwned,
-        ),
-    });
+    context.add_var(
+        Declaration {
+            id: token_stream.src_path.append(items),
+            value: Expression::new(
+                ExpressionKind::NoValue,
+                token_stream.current_location(),
+                collection_type_id,
+                DataType::collection(DataType::StringSlice),
+                ValueMode::ImmutableOwned,
+            ),
+        },
+        SourceLocation::default(),
+    );
 
     let diagnostic = Template::new_const_required_with_type_interner(
         &mut token_stream,
@@ -1874,16 +1880,19 @@ fn const_required_template_loop_reports_non_const_body() {
     let mut type_interner = AstTypeInterner::new(&mut type_environment, &mut compatibility_cache);
     let value = string_table.intern("value");
 
-    context.add_var(Declaration {
-        id: token_stream.src_path.append(value),
-        value: Expression::new(
-            ExpressionKind::NoValue,
-            token_stream.current_location(),
-            builtin_type_ids::STRING,
-            DataType::StringSlice,
-            ValueMode::ImmutableOwned,
-        ),
-    });
+    context.add_var(
+        Declaration {
+            id: token_stream.src_path.append(value),
+            value: Expression::new(
+                ExpressionKind::NoValue,
+                token_stream.current_location(),
+                builtin_type_ids::STRING,
+                DataType::StringSlice,
+                ValueMode::ImmutableOwned,
+            ),
+        },
+        SourceLocation::default(),
+    );
 
     let diagnostic = Template::new_const_required_with_type_interner(
         &mut token_stream,
@@ -2236,7 +2245,7 @@ fn const_required_template_option_capture_reports_runtime_scrutinee_diagnostic()
             ValueMode::ImmutableOwned,
         ),
     };
-    context.add_var(declaration);
+    context.add_var(declaration, SourceLocation::default());
 
     let mut compatibility_cache = TypeCompatibilityCache::new();
     let mut type_interner = AstTypeInterner::new(&mut type_environment, &mut compatibility_cache);
@@ -2262,16 +2271,19 @@ fn const_required_template_if_rejects_runtime_local_condition() {
         template_tokens_from_source("[if show_banner: Visible]", &mut string_table);
     let mut context = new_constant_context(token_stream.src_path.clone());
     let show_banner = string_table.intern("show_banner");
-    context.add_var(Declaration {
-        id: token_stream.src_path.append(show_banner),
-        value: Expression::new(
-            ExpressionKind::NoValue,
-            token_stream.current_location(),
-            builtin_type_ids::BOOL,
-            DataType::Bool,
-            ValueMode::ImmutableOwned,
-        ),
-    });
+    context.add_var(
+        Declaration {
+            id: token_stream.src_path.append(show_banner),
+            value: Expression::new(
+                ExpressionKind::NoValue,
+                token_stream.current_location(),
+                builtin_type_ids::BOOL,
+                DataType::Bool,
+                ValueMode::ImmutableOwned,
+            ),
+        },
+        SourceLocation::default(),
+    );
 
     let diagnostic =
         Template::new_const_required(&mut token_stream, &context, vec![], &mut string_table)

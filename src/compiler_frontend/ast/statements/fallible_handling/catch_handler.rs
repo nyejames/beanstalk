@@ -222,15 +222,19 @@ fn parse_catch_fallible_handler_body(
     if let Some(error_binding) = &error {
         let error_data_type =
             diagnostic_type_spelling(site.error_return_type_id, type_interner.environment());
-        handler_context.add_var(Declaration {
-            id: error_binding.error_binding.to_owned(),
-            value: Expression::no_value_with_type_id(
-                token_stream.current_location(),
-                error_data_type,
-                site.error_return_type_id,
-                ValueMode::ImmutableOwned,
-            ),
-        });
+        let error_binding_location = token_stream.current_location();
+        handler_context.add_var(
+            Declaration {
+                id: error_binding.error_binding.to_owned(),
+                value: Expression::no_value_with_type_id(
+                    error_binding_location.clone(),
+                    error_data_type,
+                    site.error_return_type_id,
+                    ValueMode::ImmutableOwned,
+                ),
+            },
+            error_binding_location,
+        );
     }
 
     token_stream.advance();
@@ -376,15 +380,19 @@ fn parse_inline_catch_handler_body(
     if let Some(error_binding) = &error {
         let error_data_type =
             diagnostic_type_spelling(site.error_return_type_id, type_interner.environment());
-        handler_context.add_var(Declaration {
-            id: error_binding.error_binding.to_owned(),
-            value: Expression::no_value_with_type_id(
-                token_stream.current_location(),
-                error_data_type,
-                site.error_return_type_id,
-                ValueMode::ImmutableOwned,
-            ),
-        });
+        let error_binding_location = token_stream.current_location();
+        handler_context.add_var(
+            Declaration {
+                id: error_binding.error_binding.to_owned(),
+                value: Expression::no_value_with_type_id(
+                    error_binding_location.clone(),
+                    error_data_type,
+                    site.error_return_type_id,
+                    ValueMode::ImmutableOwned,
+                ),
+            },
+            error_binding_location,
+        );
     }
 
     let produced_values = parse_produced_values_typed(ProducedValuesParseInput {

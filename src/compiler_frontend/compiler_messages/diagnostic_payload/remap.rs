@@ -329,9 +329,25 @@ impl DiagnosticPayload {
             }
 
             DiagnosticPayload::InvalidAssignmentTarget {
-                target_name: name, ..
+                target_name,
+                field_name,
+                root_binding_name,
+                declaration_location,
+                ..
+            } => {
+                if let Some(name) = target_name {
+                    *name = remap.get(*name);
+                }
+                if let Some(name) = field_name {
+                    *name = remap.get(*name);
+                }
+                if let Some(name) = root_binding_name {
+                    *name = remap.get(*name);
+                }
+                remap_optional_location(declaration_location, remap);
             }
-            | DiagnosticPayload::InvalidMultiBind {
+
+            DiagnosticPayload::InvalidMultiBind {
                 target_name: name, ..
             }
             | DiagnosticPayload::InvalidBuiltinCall {

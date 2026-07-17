@@ -199,27 +199,37 @@ pub(crate) fn invalid_return_shape_message(reason: InvalidReturnShapeReason) -> 
 pub(crate) fn invalid_assignment_target_message(
     reason: InvalidAssignmentTargetReason,
     target_name: Option<StringId>,
-    target_type: Option<TypeId>,
+    _target_type: Option<TypeId>,
+    field_name: Option<StringId>,
+    root_binding_name: Option<StringId>,
     context: DiagnosticRenderContext<'_>,
 ) -> String {
     let string_table = context.string_table;
     let target_text = named_value_or_default(target_name, string_table, "this target");
-    let target_type_text = target_type.map(|type_id| diagnostic_type_name(type_id, context));
+
+    let backtick_name = |name: Option<StringId>, fallback: &str| match name {
+        Some(name) => format!("`{}`", string_table.resolve(name)),
+        None => fallback.to_owned(),
+    };
 
     match reason {
-        InvalidAssignmentTargetReason::NotMutablePlace => match target_type_text {
-            Some(target_type_text) => {
-                format!(
-                    "Field assignment requires a mutable place receiver. '{target_type_text}' is a temporary expression, not a mutable place."
-                )
+        InvalidAssignmentTargetReason::TemporaryNotAssignable => {
+            "A temporary value cannot be assigned through. Receive it in a mutable binding first, then assign through that binding.".to_string()
+        }
+        InvalidAssignmentTargetReason::ImmutableBinding => {
+            let binding_text = backtick_name(target_name, "this binding");
+            format!("Cannot reassign {binding_text} because its binding is immutable. Make the original binding mutable, then reassign it with ordinary `=`.")
+        }
+        InvalidAssignmentTargetReason::ImmutableFieldRoot => match root_binding_name {
+            Some(_) => {
+                let field_text = backtick_name(field_name, "this field");
+                let root_text = backtick_name(root_binding_name, "the root binding");
+                format!("Cannot assign to field {field_text} because root binding {root_text} is immutable. Declare {root_text} as mutable before this assignment.")
             }
             None => {
-                "Field assignment requires a mutable place receiver. Writing through temporaries or other rvalues is not allowed.".to_string()
+                "Cannot assign to a field because the root binding is immutable. Declare the root binding as mutable before this assignment.".to_string()
             }
         },
-        InvalidAssignmentTargetReason::ImmutableVariable => {
-            format!("Cannot mutate immutable variable {target_text}. Use '~' to declare a mutable variable.")
-        }
         InvalidAssignmentTargetReason::UnavailableInCatchRecovery => {
             format!(
                 "Assignment target {target_text} is unavailable inside catch recovery for the same assignment."
@@ -235,7 +245,7 @@ pub(crate) fn invalid_assignment_target_message(
             "Map `length` is a read-only property and cannot be assigned.".to_string()
         }
         InvalidAssignmentTargetReason::ExpectedAssignmentOperator => {
-            format!("Expected assignment operator after variable {target_text}.")
+            format!("Expected assignment operator after binding {target_text}.")
         }
     }
 }

@@ -66,6 +66,9 @@ pub(super) fn parse_identifier_or_call(
             InvalidAssignmentTargetReason::UnavailableInCatchRecovery,
             Some(identifier),
             None,
+            None,
+            None,
+            None,
             token_stream.current_location(),
         )
         .into());
@@ -456,6 +459,9 @@ fn parse_this_reference(
         return Err(CompilerDiagnostic::invalid_assignment_target(
             InvalidAssignmentTargetReason::UnavailableInCatchRecovery,
             Some(this_id),
+            None,
+            None,
+            None,
             None,
             token_stream.current_location(),
         )

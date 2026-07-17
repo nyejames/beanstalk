@@ -906,8 +906,9 @@ impl InvalidTraitConformanceReason {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum InvalidAssignmentTargetReason {
-    NotMutablePlace,
-    ImmutableVariable,
+    TemporaryNotAssignable,
+    ImmutableBinding,
+    ImmutableFieldRoot,
     UnavailableInCatchRecovery,
     CollectionIndexedWriteRemoved,
     MapIndexedWriteRemoved,

@@ -781,8 +781,11 @@ fn rule_renderers_use_user_facing_messages_not_reason_debug_names() {
     let value_name = string_table.intern("value");
 
     let diagnostic = CompilerDiagnostic::invalid_assignment_target(
-        InvalidAssignmentTargetReason::ImmutableVariable,
+        InvalidAssignmentTargetReason::ImmutableBinding,
         Some(value_name),
+        None,
+        None,
+        None,
         None,
         location(source_path),
     );
@@ -792,14 +795,50 @@ fn rule_renderers_use_user_facing_messages_not_reason_debug_names() {
     let terse_line = terse::format_terse_diagnostic_with_context(&diagnostic, render_context);
 
     assert!(guidance.iter().any(|line| line
-        == "Cannot mutate immutable variable 'value'. Use '~' to declare a mutable variable."));
-    assert!(terse_line.contains("Cannot mutate immutable variable 'value'"));
+        == "Cannot reassign `value` because its binding is immutable. Make the original binding mutable, then reassign it with ordinary `=`."));
+    assert!(terse_line.contains("Cannot reassign `value`"));
     assert!(
         !guidance
             .iter()
-            .any(|line| line.contains("ImmutableVariable"))
+            .any(|line| line.contains("ImmutableBinding"))
     );
-    assert!(!terse_line.contains("ImmutableVariable"));
+    assert!(!terse_line.contains("ImmutableBinding"));
+}
+
+#[test]
+fn immutable_binding_diagnostic_carries_secondary_declaration_label() {
+    let mut string_table = StringTable::new();
+    let source_path = InternedPath::from_single_str("main.bst", &mut string_table);
+    let value_name = string_table.intern("value");
+    let declaration_location = location(source_path.clone());
+
+    let diagnostic = CompilerDiagnostic::invalid_assignment_target(
+        InvalidAssignmentTargetReason::ImmutableBinding,
+        Some(value_name),
+        None,
+        None,
+        None,
+        Some(declaration_location),
+        location(source_path.clone()),
+    );
+
+    let labels = terminal::format_label_messages(&diagnostic, &string_table);
+
+    assert!(
+        labels
+            .iter()
+            .any(|label| label.contains("immutable binding declared here")),
+        "expected secondary declaration label, got: {labels:?}"
+    );
+    assert_eq!(
+        diagnostic.labels.len(),
+        2,
+        "expected primary and secondary labels"
+    );
+    assert_eq!(
+        diagnostic.labels[1].message,
+        Some(DiagnosticLabelMessage::ImmutableBindingDeclaration),
+    );
 }
 
 #[test]
@@ -1361,8 +1400,11 @@ fn render_boundary_smoke_coverage_hides_internal_debug_names_by_family() {
             location(source_path.clone()),
         ),
         CompilerDiagnostic::invalid_assignment_target(
-            InvalidAssignmentTargetReason::ImmutableVariable,
+            InvalidAssignmentTargetReason::ImmutableBinding,
             Some(value_name),
+            None,
+            None,
+            None,
             None,
             location(source_path.clone()),
         ),
@@ -1410,7 +1452,7 @@ fn assert_rendered_diagnostic_hides_internal_names(rendered: &str) {
         "InvalidConfigReason",
         "DeferredFeatureReason",
         "WhitespaceMustBeQuoted",
-        "ImmutableVariable",
+        "ImmutableBinding",
     ] {
         assert!(
             !rendered.contains(internal_name),

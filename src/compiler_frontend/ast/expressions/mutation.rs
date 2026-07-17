@@ -31,7 +31,9 @@ use crate::compiler_frontend::ast::expressions::error::ExpressionParseError;
 use crate::compiler_frontend::ast::expressions::eval_expression::evaluate_expression;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, Operator};
 use crate::compiler_frontend::ast::expressions::expression_rpn::ExpressionRpnItem;
-use crate::compiler_frontend::ast::expressions::expression_rpn::PlaceExpression;
+use crate::compiler_frontend::ast::expressions::expression_rpn::{
+    PlaceExpression, PlaceExpressionKind,
+};
 use crate::compiler_frontend::ast::expressions::parse_expression::{
     create_expression, create_expression_with_trailing_newline_policy,
 };
@@ -39,7 +41,8 @@ use crate::compiler_frontend::ast::expressions::parse_expression_input::{
     ExpressionParseInput, ExpressionParseResources,
 };
 use crate::compiler_frontend::ast::expressions::parse_expression_places::{
-    expression_from_place_expression, place_expression_from_expression, place_expression_is_mutable,
+    expression_from_place_expression, place_expression_from_expression,
+    place_expression_is_mutable, root_binding_name_of_place,
 };
 use crate::compiler_frontend::ast::field_access::parse_field_access;
 use crate::compiler_frontend::ast::statements::value_production::receiver::try_parse_value_block_at_receiver;
@@ -53,7 +56,7 @@ use crate::compiler_frontend::compiler_messages::{
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
 use crate::compiler_frontend::type_coercion::compatibility::is_declaration_compatible;
 use crate::compiler_frontend::type_coercion::contextual::coerce_expression_to_declared_type;
 use crate::compiler_frontend::type_coercion::parse_context::{
@@ -197,6 +200,7 @@ fn build_mutation_from_target(
     token_stream: &mut FileTokens,
     variable_declaration: &Declaration,
     target: PlaceExpression,
+    declaration_location: Option<SourceLocation>,
     context: &ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
     string_table: &mut StringTable,
@@ -215,10 +219,27 @@ fn build_mutation_from_target(
     // -----------------------
 
     if !place_expression_is_mutable(&target) {
+        let (reason, field_name, root_binding_name) = match &target.kind {
+            PlaceExpressionKind::Field { field, base } => {
+                let root = root_binding_name_of_place(base);
+                (
+                    InvalidAssignmentTargetReason::ImmutableFieldRoot,
+                    Some(*field),
+                    root,
+                )
+            }
+            PlaceExpressionKind::Local(_) => {
+                (InvalidAssignmentTargetReason::ImmutableBinding, None, None)
+            }
+        };
+
         return Err(CompilerDiagnostic::invalid_assignment_target(
-            InvalidAssignmentTargetReason::ImmutableVariable,
+            reason,
             variable_declaration.id.name(),
             Some(target_type_id),
+            field_name,
+            root_binding_name,
+            declaration_location,
             location,
         )
         .into());
@@ -302,6 +323,9 @@ fn build_mutation_from_target(
                     InvalidAssignmentTargetReason::ExpectedAssignmentOperator,
                     variable_declaration.id.name(),
                     Some(target_type_id),
+                    None,
+                    None,
+                    None,
                     location,
                 )
                 .into());
@@ -341,6 +365,7 @@ pub(crate) fn handle_mutation_target(
     token_stream: &mut FileTokens,
     variable_declaration: &Declaration,
     target: PlaceExpression,
+    declaration_location: Option<SourceLocation>,
     context: &ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
     string_table: &mut StringTable,
@@ -349,6 +374,7 @@ pub(crate) fn handle_mutation_target(
         token_stream,
         variable_declaration,
         target,
+        declaration_location,
         context,
         type_interner,
         string_table,
@@ -364,6 +390,7 @@ pub(crate) fn handle_mutation_target(
 pub fn handle_mutation(
     token_stream: &mut FileTokens,
     variable_declaration: &Declaration,
+    declaration_location: Option<SourceLocation>,
     context: &ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
     string_table: &mut StringTable,
@@ -378,13 +405,12 @@ pub fn handle_mutation(
 
     let Some(target) = place_expression_from_expression(&target_expression) else {
         return Err(CompilerDiagnostic::invalid_assignment_target(
-            InvalidAssignmentTargetReason::NotMutablePlace,
-            // Field-access may not produce a named place expression
-            // (e.g. a computed index).  Passing `None` tells the
-            // diagnostic this is a structural error, not about a
-            // specific variable.
+            InvalidAssignmentTargetReason::TemporaryNotAssignable,
             None,
             Some(target_expression.type_id),
+            None,
+            None,
+            None,
             token_stream.current_location(),
         )
         .into());
@@ -394,6 +420,7 @@ pub fn handle_mutation(
         token_stream,
         variable_declaration,
         target,
+        declaration_location,
         context,
         type_interner,
         string_table,

@@ -328,7 +328,8 @@ pub(crate) fn build_option_present_capture_scope_and_pattern(
         ),
     };
 
-    arm_scope.add_var(declaration);
+    let binding_location = declaration.value.location.clone();
+    arm_scope.add_var(declaration, binding_location.clone());
 
     let pattern = MatchPattern::OptionPresentCapture {
         name: capture_name,

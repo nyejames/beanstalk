@@ -26,7 +26,10 @@ use crate::compiler_frontend::value_mode::ValueMode;
 ///      cheap owned handle without exposing a `RefCell` borrow guard. Shared declarations
 ///      can still be returned by reference because the lookup tables outlive the query.
 pub(crate) enum ScopeDeclarationRef<'a> {
-    Local(Rc<Declaration>),
+    Local {
+        declaration: Rc<Declaration>,
+        binding_location: SourceLocation,
+    },
     Shared(&'a Declaration),
 }
 
@@ -34,8 +37,19 @@ impl<'a> ScopeDeclarationRef<'a> {
     /// Return a borrowed view of the underlying declaration.
     pub(crate) fn as_declaration(&self) -> &Declaration {
         match self {
-            ScopeDeclarationRef::Local(rc) => rc.as_ref(),
+            ScopeDeclarationRef::Local { declaration, .. } => declaration.as_ref(),
             ScopeDeclarationRef::Shared(declaration) => declaration,
+        }
+    }
+
+    /// Return the authored binding-name location for a local declaration, or None
+    /// for shared (module-level) declarations.
+    pub(crate) fn binding_location(&self) -> Option<&SourceLocation> {
+        match self {
+            ScopeDeclarationRef::Local {
+                binding_location, ..
+            } => Some(binding_location),
+            ScopeDeclarationRef::Shared(_) => None,
         }
     }
 }
@@ -69,8 +83,13 @@ impl ScopeContext {
     pub(crate) fn get_reference(&self, name: &StringId) -> Option<ScopeDeclarationRef<'_>> {
         // 1. Locals (latest visible local wins). Parent-linked frames walk the chain
         //    without copying ancestor declarations into the current scope.
-        if let Some(declaration) = self.arena.borrow().lookup(self.current_frame_id, name) {
-            return Some(ScopeDeclarationRef::Local(declaration));
+        if let Some((declaration, binding_location)) =
+            self.arena.borrow().lookup(self.current_frame_id, name)
+        {
+            return Some(ScopeDeclarationRef::Local {
+                declaration,
+                binding_location,
+            });
         }
 
         // 2. Source-visible names → canonical declaration path.
