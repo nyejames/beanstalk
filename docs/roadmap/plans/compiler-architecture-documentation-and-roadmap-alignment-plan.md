@@ -17,14 +17,17 @@ The work must preserve every accepted architecture decision. Compression is neve
 
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/compiler-architecture-documentation-and-roadmap-alignment-plan.md
-STATUS: ready for execution
-CURRENT_SLICE: Phase 0 - refresh, protect the accepted baseline and reopen the document split
-BASELINE_COMMIT: d9659079151bbe36229e09913db7c7ffe6b6ad48
-BASELINE_CHANGE: compiler design overview rewrite with user-restored contracts
+STATUS: in execution
+CURRENT_SLICE: Phase 1 - factual repair of the current compiler overview
+BRANCH: main
+WORKTREE: clean at phase start
+BASELINE_COMMIT: c31ad8b558c2b4c84c39c11a10e698fabe945e17
+BASELINE_CHANGE: this replacement plan plus the compiler design overview rewrite with user-restored contracts at d9659079151bbe36229e09913db7c7ffe6b6ad48
+PRE_REWRITE_OVERVIEW: 6c513f02555f5d63e886d0047852673a1f2fab97 (lost-contract audit reference)
 CURRENT_COMPILER_AUTHORITY: docs/compiler-design-overview.md
 NEW_BUILD_AUTHORITY: docs/build-system-design.md
 BLOCKER: do not resume roadmap-plan alignment until both architecture documents pass the lost-contract audit
-VALIDATION_RECORDED_AT_BASELINE: cargo run --quiet -- check docs passed before this replacement plan
+VALIDATION_RECORDED_AT_BASELINE: cargo run --quiet -- check docs passed with no errors or warnings at c31ad8b558c2b4c84c39c11a10e698fabe945e17
 NEXT_ACTION: repair factual contradictions in the current compiler overview before moving any content
 ```
 
