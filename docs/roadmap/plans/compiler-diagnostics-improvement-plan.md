@@ -12,8 +12,8 @@ This is an implementation plan, not a research backlog. Each phase should leave 
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-diagnostics-improvement-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 3.3 complete, ready for Phase 3.4
-LAST_ACCEPTED_COMMIT: `ecae683ed` (Phase 3.3)
+CURRENT_SLICE: Phase 3.4 complete, ready for Phase 3.5
+LAST_ACCEPTED_COMMIT: `b326cde7f` (Phase 3.4)
 WORKTREE: `main`, clean; unrelated docs commits `6c513f025`/`d96590791`/`c31ad8b55` are separate branch work
 REQUIRED_RELOADS: startup files, this plan and current source/diff
 RELEVANT_CONTEXT_NOW:
@@ -34,7 +34,7 @@ BLOCKERS_OR_OPEN_DECISIONS: none
 DELEGATION_DECISION: Ollama - explicitly required for every implementation worker slice
 NEXT_WORKER_ORDER: Ollama only for implementation slices
 STOP_REASON: none
-NEXT_RESUME_ACTION: launch Phase 3.4 (copy ~place) through Ollama
+NEXT_RESUME_ACTION: launch Phase 3.5 (borrow-conflict explanations) through Ollama
 ## Confirmed design decisions
 
 - Quoted strings support exactly these escapes:
