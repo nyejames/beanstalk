@@ -8,12 +8,37 @@ Every retained item in this plan has been checked against the current language a
 
 This is an implementation plan, not a research backlog. Each phase should leave one current diagnostic path, remove superseded variants and add end-to-end coverage for the user-visible behaviour it changes.
 
+## Required authority documents
+
+- `docs/compiler-design-overview.md` for diagnostic lanes, type rendering and stage ownership
+- `docs/build-system-design.md` when config, graph or output diagnostics are in scope
+- `docs/src/docs/codebase/style-guide/style-guide.bd`, `testing.bd` and `validation.bd`
+
+## Architecture alignment
+
+This plan does not own config or graph architecture. It consumes the accepted architecture from the two authority documents.
+
+Key alignment rules:
+
+- use graph outcome terminology for diagnosed and blocked modules
+- preserve one diagnostic set per canonical module
+- keep warnings only on successful artefacts
+- keep target-contract diagnostics shared by build and check
+
+Future diagnostic coverage needed for:
+
+- config sections and section-aware schema validation
+- `@project` field collisions and provenance
+- source input contract conflicts and restricted defaults
+- package facade provenance rejection
+- output manifest conflicts
+
 ## Current state
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-diagnostics-improvement-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 4.1b complete, ready for Phase 4.1c
-LAST_ACCEPTED_COMMIT: `e8d31a338` (Phase 4.1b)
+CURRENT_SLICE: Phase 4.1b+d complete; 4.1c (multiple-success return-shape reason) remains
+LAST_ACCEPTED_COMMIT: `d7fb3654f` (Phase 4.1d)
 WORKTREE: `main`, clean; unrelated docs commits `6c513f025`/`d96590791`/`c31ad8b55` are separate branch work
 REQUIRED_RELOADS: startup files, this plan and current source/diff
 RELEVANT_CONTEXT_NOW:
@@ -34,7 +59,7 @@ BLOCKERS_OR_OPEN_DECISIONS: none
 DELEGATION_DECISION: Ollama - explicitly required for every implementation worker slice
 NEXT_WORKER_ORDER: Ollama only for implementation slices
 STOP_REASON: none
-NEXT_RESUME_ACTION: launch Phase 4.1c (multiple-success return-shape reason + ScopeContext boundary fact) through Ollama
+NEXT_RESUME_ACTION: launch Phase 4.1c (multiple-success return-shape reason + ScopeContext boundary fact), then Phase 4.2
 ## Confirmed design decisions
 
 - Quoted strings support exactly these escapes:
@@ -257,7 +282,7 @@ accepted cleanup.
 - Let those unregistered names use the ordinary `UnknownKey` diagnostic without suggesting a
   historical replacement.
 - Remove migration-only unit tests, integration fixtures and manifest entries.
-- Preserve current `entry_root` and `package_folders` positive coverage plus generic unknown-key
+- Preserve current `entry_root` positive coverage plus generic unknown-key
   coverage.
 - Do not reserve the removed names or add aliases, compatibility parsing or replacement
   diagnostics.
