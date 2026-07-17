@@ -13,8 +13,8 @@ This is an implementation plan, not a research backlog. Each phase should leave 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-diagnostics-improvement-plan.md`
 STATUS: active
 CURRENT_SLICE: Phase 3.1b accepted, checkpoint ready to commit
-LAST_ACCEPTED_COMMIT: `bd2fa6328`
-WORKTREE: `main` at `bd2fa6328` with the accepted Phase 3.1b checkpoint ready to commit
+LAST_ACCEPTED_COMMIT: `4dc4dec5423d46105e69fbfebc199089d6761c64`
+WORKTREE: `main` at `4dc4dec5423d46105e69fbfebc199089d6761c64`
 REQUIRED_RELOADS: startup files, this plan and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: access-and-aliasing and assignment contracts distinguish immutable root bindings from assignment-target syntax; no general documentation edits are allowed
