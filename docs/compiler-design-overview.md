@@ -17,7 +17,8 @@ User-facing pages under `docs/src/docs/**` teach the language. They do not repla
 
 ## Architectural invariants
 
-- A directory-scoped module is compiled once and owns local type, HIR and borrow identity.
+- One directory-scoped `#*.bst` or `+*.bst` module is the canonical semantic compilation unit. A physical module is compiled once per project or package build and owns local type, HIR and borrow identity.
+- Every normal module's dormant root code is parsed, type-checked, lowered to HIR and borrow-validated even when no current entry activates it.
 - Stage 0 owns one canonical graph, file ownership, legal topology and deterministic scheduling.
 - Tokenization and header parsing produce reusable source metadata once. Later stages do not reparse it.
 - Module interfaces use stable semantic identities, not donor-local indexes.
@@ -54,7 +55,7 @@ Boundaries that may not change:
 - failed results expose no partial interface
 - generated sidecars are separate from base module artefacts
 - entry assemblies are many-to-one with modules
-- the package facade is an assembly plan, not another module compilation
+- the project package facade compiles as an ordinary API-only module, and `ProjectPackageAssembly` is a separate assembly plan over its compiled artefact
 - backends receive the graph and link plans
 
 ### Builder and tooling surfaces
@@ -75,7 +76,7 @@ External import providers convert supported non-Beanstalk files into typed bindi
 
 Builder-supported source file kinds participate in extensionless source discovery without becoming modules. Beandown `.bd` and Markdown `.md` inputs become ordinary synthetic compile-time declarations during header preparation.
 
-`config.bst` authored config entries are top-level compile-time constants declared with `name #= value` or `name #Type = value`. Imported constants and support types may contribute to expressions but never become config entries. Config rejects project-local or relative imports, runtime declarations, mutable bindings, functions, traits, conformances, standalone templates and page fragments.
+`config.bst` authored config entries are top-level compile-time constants declared with `name #= value` or `name #Type = value`. Config permits the accepted constant and anonymous const-record surface only. It contains no source imports, runtime declarations, mutable bindings, functions, traits, conformances, standalone templates, page fragments or module exports.
 
 Style directive contract:
 
@@ -86,7 +87,9 @@ Project-specific config validation remains in the active builder's schema valida
 
 ### Project config and @project
 
-`config.bst` is build-system-owned compile-time Beanstalk source, not a module. It emits no HIR, start function or runtime artefact. It contains one required open `project` const record and private top-level helper constants where useful.
+`config.bst` is build-system-owned compile-time Beanstalk source, not a module. It emits no HIR, start function or runtime artefact. It contains one required open `project` const record, private top-level helper constants declared before values that use them and top-level builder and tooling section records.
+
+`config.bst` is one self-contained compile-time source file. It cannot contain source imports or depend on another file, package or binding. Direct `#Import` fields inside `project` remain build-input contracts and do not perform source resolution. An authored `import` declaration is rejected before path resolution with a structured diagnostic. Config parsing operates on exactly one authored source identity. Config bootstrap does not construct a package resolver, config import graph or config source set. Config uses ordinary tokenization, local declaration ordering, semantic checking and constant folding for its one file.
 
 Short shape:
 
@@ -107,21 +110,22 @@ Contracts:
 
 - `config.bst` does not select the project builder.
 - `project.name` is required and provides stable project identity.
-- Compiler-owned project fields are strictly validated. Additional fully folded project metadata and nested folded records are allowed.
-- Direct primitive or optional fields of `project` may declare `#Import` contracts. V1 `#Import` field types are `String`, `Int`, `Float`, `Bool`, `Char` and optional forms. Nested project fields do not declare `#Import` in V1.
+- Compiler-owned project fields are strictly validated. Additional fully folded project metadata is allowed: public project values may contain folded scalar values, optionals, nested anonymous const records, collections of supported folded values and folded templates represented as strings.
+- Direct primitive or optional fields of `project` may declare `#Import` contracts. V1 `#Import` field types are `String`, `Int`, `Float`, `Bool`, `Char` and optional forms. Nested project fields do not declare `#Import` in V1. Nested project fields do not provide unqualified source input values.
 - Project fields do not gain implicit sibling scope. A field initializer follows ordinary anonymous-record rules.
-- Private helper constants can derive values used by several project fields.
+- Private helper constants provide reusable derived values used by later config values.
+- The `project` record must be available before a builder or tooling section references it.
 - Top-level records other than `project` are potential builder or tooling config sections.
 - The active artefact builder section is required, even when empty. The `project` record does not select that builder.
 - The active builder section is recursively schema-validated through declarative metadata: accepted fields, nested shapes, required or defaulted values, closed domains, project or entry scope and stable identities where useful. Unknown fields inside the active section are diagnostics.
 - Inactive or unavailable builder sections are parsed, name-resolved and folded as ordinary compile-time records but are not schema-validated or retained in `ProjectCompilation`. Unknown top-level record names are therefore allowed as inactive builder or tooling sections.
 - Duplicate section names and collisions with primitive constants are rejected.
-- Builder sections cannot declare `#Import` fields. They consume values from `project`.
-- Builder project settings and builder entry settings use strict, non-overlapping schemas. There is no shared project and entry scope escape hatch. Project and entry values do not implicitly inherit, merge or override one another.
-- `#Import` is constant-source syntax, not a semantic wrapper type. Project-level `#Import` contracts are collected and validated before module AST construction.
+- Builder sections cannot declare `#Import` fields. They consume already folded values from `project` and use backend-neutral folded values rather than builder-specific nominal types.
+- Builder project settings and builder entry settings use strict, non-overlapping schemas. There is no `ProjectAndEntry` or equivalent shared-scope escape hatch. Project and entry values do not implicitly inherit, merge or override one another.
+- `#Import` is constant-source syntax, not a source import and not a semantic wrapper type. Project-level `#Import` contracts are collected and validated before module AST construction.
 - Direct imported fields inside `project` resolve before project settings are applied and before Stage 0 uses `entry_root`.
 - The project-wide barrier validates all reachable source contracts before affected modules compile.
-- A direct imported project field and every reachable same-name source `#Import` declaration form one strict contract when the project field is imported. Matching requires the same semantic type, optionality, required or default state and folded default value. Different defaults are conflicting contracts.
+- A direct imported project field and every reachable same-name source `#Import` declaration form one strict contract. Matching requires the same semantic type, optionality, required or default state and folded default value. Different defaults are conflicting contracts.
 - A fixed same-name project field is an authoritative provider for compatible source `#Import` declarations and blocks CLI override.
 - CLI inputs use repeated `--input name=value` only. Unknown inputs are diagnosed after reachable config and source contracts are known.
 - Project dependencies are recorded at field granularity.
@@ -129,8 +133,10 @@ Contracts:
 `@project`:
 
 - The folded project record produces a specialised immutable `ProjectGlobalsInterface` under the permanently reserved `@project` import root.
-- `@project` exposes direct record fields as namespace members. It does not export another value named `project`.
-- `@project` is synthetic, immutable and project-local. Normal modules and project-owned support packages may explicitly import `@project`. It is not implicitly injected into modules.
+- The interface contains stable field identities, folded backend-neutral values, source locations, field-level fingerprints and project-context provenance. It contains no AST, HIR or runtime body.
+- It is classified as project-local and Beanstalk-source-backed but is not discovered as a normal source package.
+- `@project` exposes direct project fields as namespace members. It does not export another value named `project`.
+- Normal modules and project-owned support packages may explicitly import `@project`. It is never implicitly injected into modules.
 - No child module, support package, dependency alias, Core package or Builder package may claim `@project`. `@project` cannot be directly re-exported.
 - Internal module or support-package exports may expose project-derived constants, but provenance is retained so the project package facade rejects any transitive dependency on `@project`.
 
@@ -139,7 +145,7 @@ Entry-local `config:` blocks:
 - An entry `config:` block is root-only builder metadata, not an embedded independent `config.bst` compilation unit.
 - It is valid only at the top level of a normal module root and at most once per root. It is invalid in normal files, support roots, project package facades, `export:`, executable bodies and `config.bst`.
 - The block contains config section records only. Imports, aliases, support types, helper constants and `#Import` declarations live outside the block in the normal root file.
-- The block uses the root file's ordinary compile-time visibility. It may reference imported constants, project values, same-file constants, `#Import` constants, foldable const record types and compiler or selected-builder compile-time constants visible through ordinary imports. Same-file constants must be visible before the block. Forward references remain invalid.
+- The block uses the root file's ordinary compile-time visibility. It may reference imported constants, `@project`, same-file constants declared before it, source `#Import` constants, foldable local const-record types and selected-builder compile-time values available through normal module imports. Same-file forward references remain invalid.
 - Its references participate in the module's ordinary header dependency metadata and AST constant folding. It creates no ordinary module symbol and no HIR representation.
 - It cannot contain a `project` section or change project-level builder behaviour. It may contain active artefact-builder and tooling-overlay sections.
 - Active builder entry fields are strictly schema-validated. Inactive sections are parsed and folded but not schema-validated. An entry block is optional. The active artefact-builder subsection inside it is also optional so tooling-only metadata remains possible.
@@ -200,13 +206,15 @@ Scoped support packages: a `+*.bst` support root exposes a package named by its 
 - The support facade may import ordinary files it owns, any descendant module in its private subtree, support packages from a strictly outer scope and registered packages. It may not import its parent, normal sibling consumers or same-scope support siblings.
 - Consumers see only the support facade's `export:` surface. They cannot address its private descendant modules.
 
-The project package facade can assemble the public interfaces of any descendant module below `entry_root`, regardless of ordinary lexical module visibility. It never bypasses an `export:` boundary. Its package identity comes from the canonical project config `name`. It is not visible to internal project modules, receives only each descendant's public interface and emits no route or runtime entry. A project can be both an application and a package. Without this facade the project has no externally consumable Beanstalk package surface. It cannot import `@project` or expose any declaration transitively dependent on it.
+The project-root `+*.bst` facade is a canonical compiled API-only module. It may define and export its own functions, types, constants, traits and other legal API-only declarations, and it receives a normal immutable compiled module artefact and public interface. Its package identity comes from the canonical project config `name`. It is not visible to internal project modules.
+
+The facade has a special project-wide assembly privilege: `ProjectPackageAssembly` is a separate assembly and link plan that references the already compiled facade artefact and the public interfaces of selected descendant modules below `entry_root`, regardless of ordinary lexical module visibility. Assembly never recompiles or mutates the facade module and never bypasses an `export:` boundary. The facade emits no route or runtime entry. A project can be both an application and a package. Without this facade the project has no externally consumable Beanstalk package surface. It cannot import `@project` or expose any declaration transitively dependent on it.
 
 Valid project structure is acyclic by construction, with a defensive cycle validator retained for malformed internal state and future extensions.
 
 Namespace and collision policy: no import uses precedence, nearest-match shadowing or ordered fallback. Reject overlapping visible identities between support packages, direct child modules, extensionless source files, internal directory path segments, the project package name, Core or Builder package roots, dependency aliases and case-only variants. Recognised extensionless source kinds share one namespace: `docs.bst`, `docs.bd`, `docs.md` and `docs/` cannot coexist where each would mean `@docs`. Explicit-extension provider files may coexist with a same-stem directory only when syntax remains unambiguous. The same support-package name may appear in disjoint scopes. Overlapping scopes are rejected with diagnostics pointing to both declarations.
 
-Public interfaces: a compiled module exports an immutable semantic interface containing exported declarations, canonical type identities, folded constant facts, generic templates, trait and conformance evidence, receiver surfaces and function access and effect summaries. Private declarations never receive consumer-visible identities. Aliases affect source spelling, not semantic identity. Receiver methods remain attached to their receiver type's exported source surface and aren't independently imported, aliased or re-exported.
+Public interfaces: a compiled module exports an immutable semantic interface containing exported declarations, canonical type identities, folded constant facts, generic templates, trait and conformance evidence, receiver surfaces, function access and effect summaries, runtime facts needed by consumers and provenance needed by package facades. Public interfaces use canonical cross-module type identities rather than donor-local handles. Private declarations never receive consumer-visible identities. Aliases affect source spelling, not semantic identity. Receiver methods remain attached to their receiver type's exported source surface and aren't independently imported, aliased or re-exported.
 
 Binding-backed packages are virtual typed symbols, not Beanstalk modules. They expose opaque types, constants and free functions only. All binding-backed packages use stable package and symbol IDs. Direct builder packages and provider-created packages share one identity model. External package namespace imports may expose recursive package-local paths such as `io.input.*`. Source-module namespace records remain shallow and field-access-only. External import providers resolve supported non-Beanstalk sources before AST. HIR carries stable external symbol IDs. Backends map those IDs to target helpers, imports, generated glue or native operations. Binding-backed packages don't expose source receiver methods. Use source-owned wrapper types for method-style APIs. The bare `io` name is prelude policy for `@core/io`, not a package category.
 
@@ -234,12 +242,12 @@ Parallel string-table aggregation: parallel work may fork string tables only whe
 Each successful module records separate invalidation fingerprints:
 
 - Semantic public-interface fingerprint: exported names and identities, canonical type shapes, exported folded values, generic template semantics and bounds, trait and conformance evidence, receiver surfaces, function access and effect summaries and project-context provenance. Excludes private bodies, source locations, comments, warnings, formatting-only metadata and dormant root code that is not public API.
-- Implementation fingerprint: private body changes can relink artefacts without recompiling semantic consumers.
-- Dormant root-activity fingerprint: root-activity changes relink entries that activate the module.
-- Runtime-dependency fingerprint: runtime-dependency changes update capability, glue and asset plans.
-- Documentation fingerprint: documentation-only changes regenerate documentation or editor indexes without invalidating semantic consumers or generated executable instances.
+- Implementation fingerprint: every executable body and non-interface implementation fact that can change generated code, including bodies of exported functions.
+- Dormant root-activity fingerprint: dormant start work, page fragments and entry metadata that affect entry activation.
+- Runtime-dependency fingerprint: helpers, capabilities, external calls, target-gated features, glue and tracked runtime assets.
+- Documentation fingerprint: public documentation and editor or API-index metadata.
 
-Private body changes do not recompile semantic consumers unless an exported effect or public fact changes.
+Private or exported body changes do not recompile semantic consumers unless an exported semantic fact or effect changes. Implementation changes can relink artefacts without recompiling semantic dependants. Root-activity changes relink entries that activate the module. Runtime-dependency changes update capability, glue and asset plans. Documentation-only changes regenerate documentation or editor indexes without invalidating semantic consumers or generated executable instances.
 
 Generic instances:
 
@@ -259,17 +267,23 @@ Stage 0 owns source indexing, module ownership, root roles, legal topology, name
 Flow:
 
 ```text
-config and raw inputs
--> project #Import resolution
--> folded project record and @project interface
--> canonical source index
--> token and header preparation needed to resolve imports
--> module and package graph finalisation
--> dependency-ordered compile waves
+read and parse one self-contained config.bst
+-> resolve direct project #Import fields
+-> fold and validate project plus active config sections
+-> derive entry_root and @project
+-> build the canonical source index
+-> tokenize and header-prepare project source once
+-> finalise module and package graphs
+-> collect reachable source #Import contracts
+-> resolve remaining inputs and diagnose unknown inputs
+-> compile dependency-ordered waves
 ```
 
+Project config itself has no source imports and creates no config import graph.
+
 - Stage 0 may schedule source preparation before the graph is complete. Tokenizer and header owners parse once and return retained metadata.
-- Prepared tokens, headers, imports, declaration shells, root-activity shells, diagnostics and deterministic string-table delta or remap information are retained and reused by graph construction and module compilation.
+- Prepared tokens, source-kind payloads, headers, imports, declaration shells, root-activity shells, diagnostics and deterministic string-table delta or remap information are retained and reused by graph construction and module compilation.
+- Import preparation emits two distinct edge classes: structural provider references consumed by Stage 0 graph construction and module-local symbol references consumed by AST visibility. Structural module and package edges are distinct from module-local declaration-ordering edges.
 - Stage 0 uses structural import results to finalise graph edges. The same prepared headers later enter local aggregation and Stage 3.
 - Stage 0 never owns a competing import grammar. Tokenization and header parsing remain the only syntax owners for their source surfaces.
 - Later stages do not reparse or rescan information an earlier owner already produced.
@@ -300,7 +314,7 @@ Imported module and package references resolve to stable public-interface identi
 
 Header dependency edges include every top-level declaration dependency needed before AST can resolve declarations linearly: imported declaration references, type alias targets, struct and choice field type annotations, function parameter and return type annotations, constant explicit type annotations, fixed collection capacity references in type annotations when the capacity is a visible compile-time constant, constant initializer references to other constants and structurally exposed const-template condition or control references when header parsing can identify them without parsing full template body semantics.
 
-Header parsing doesn't type-check executable bodies or fold expressions. It prefers storing normalised, validated path and reference forms instead of raw import or path syntax where enough context exists for later stages to consume. Declaration-shell parsers are shared with AST body-local declaration parsing so top-level and body-local declaration syntax stays equivalent. Header parsing records parsed type-reference shells and dependency edges; AST owns resolving those shells into canonical `TypeId`s. Header import preparation consumes the Stage 0 module graph and namespace, then builds the file-local visibility used by dependency sorting and AST. It resolves module interfaces, support packages, source assets, binding-backed packages, aliases, prelude names and collision rules without probing filesystem fallbacks.
+Header parsing doesn't type-check executable bodies or fold expressions. It prefers storing normalised, validated path and reference forms instead of raw import or path syntax where enough context exists for later stages to consume. Declaration-shell parsers are shared with AST body-local declaration parsing so top-level and body-local declaration syntax stays equivalent. Header parsing records parsed type-reference shells and dependency edges. AST owns resolving those shells into canonical `TypeId`s. Header import preparation consumes the Stage 0 module graph and namespace, then builds the file-local visibility used by dependency sorting and AST. It resolves module interfaces, support packages, source assets, binding-backed packages, aliases, prelude names and collision rules without probing filesystem fallbacks.
 
 Constants are compile-time declarations. Header parsing records symbol-shaped references found in constant initializer tokens and resolves them far enough to create dependency edges to other constants. Executable function and start body references don't participate in dependency sorting. Body-local declarations don't participate in dependency sorting. The dormant normal-root start header is always appended last.
 
@@ -315,9 +329,9 @@ Declaration shells are structured top-level header payloads, not fully resolved 
 - conformance shell: target type reference, trait references and declaration source context
 - start shell: dormant normal-root executable token body, excluded from dependency sorting
 
-Beandown `.bd` header preparation contributes one private synthetic constant declaration, `content #String`, whose initializer is a structurally built `$md` template over the original `.bd` body tokens. During AST template parsing, that Beandown source-kind context also defaults nested templates with no explicit directive to the Markdown formatter; any explicit nested template directive overrides the Beandown default. Plain Markdown `.md` preparation renders the raw Markdown to HTML and contributes the same private `content #String` declaration shape with a synthetic string-literal initializer. Later dependency sorting and AST folding treat both declarations like any other compile-time constant. There is no Beandown- or Markdown-specific AST node, HIR path, borrow-checker path or backend path.
+Beandown `.bd` header preparation contributes one private synthetic constant declaration, `content #String`, whose initializer is a structurally built `$md` template over the original `.bd` body tokens. During AST template parsing, that Beandown source-kind context also defaults nested templates with no explicit directive to the Markdown formatter. Any explicit nested template directive overrides the Beandown default. Plain Markdown `.md` preparation renders the raw Markdown to HTML and contributes the same private `content #String` declaration shape with a synthetic string-literal initializer. Later dependency sorting and AST folding treat both declarations like any other compile-time constant. There is no Beandown- or Markdown-specific AST node, HIR path, borrow-checker path or backend path.
 
-Prepared outputs feed graph construction and local aggregation. Stage 3 orders declarations inside one module. It doesn't order project modules or copy provider declarations into a consumer graph.
+Prepared outputs feed graph construction and local aggregation. Stage 3 orders declarations inside one module. It doesn't order project modules, copy provider declarations into a consumer graph or admit imported declarations as local graph nodes.
 
 ### Stage 3: local declaration ordering
 
@@ -358,7 +372,7 @@ AST owns:
 - body-local declarations
 - function terminality validation
 - contextual coercion at explicit receiving boundaries
-- generic template validation and concrete request emission
+- generic template validation and module-local concrete request emission
 - trait, conformance and generic-bound evidence validation
 - explicit cast evidence resolution and builtin folding
 - constant and const-record folding
@@ -367,7 +381,6 @@ AST owns:
 - reactive source and subscription metadata
 - module-local TIR from parser emission through finalisation
 - entry config folding through ordinary module visibility
-- project-wide generic requests
 - const anonymous records
 - Number value-to-string integration through the common frontend value-to-string path consumed by template folding and runtime lowering
 
@@ -399,7 +412,7 @@ Constants are compile-time declarations and module metadata, not runtime top-lev
 
 #### Templates
 
-AST owns all template semantics. TIR is the single AST-local structural authority from parser emission through composition, formatting, folding and finalisation. `Template` is a thin handle into the module-scoped TIR registry while AST construction is active.
+AST owns all template semantics. TIR is the single AST-local structural authority from parser emission through composition, formatting, folding and finalisation. `Template` is a thin handle carrying the durable TIR reference and source location while AST construction is active. It is not a registry handle.
 
 AST owns:
 
@@ -416,13 +429,14 @@ AST owns:
 - emitting builder-facing const top-level fragment metadata
 - exporting only folded owned const-template facts through module interfaces
 
-AST finalisation folds const templates or replaces runtime templates with neutral owned handoff payloads. The TIR registry and stores are dropped before the completed AST leaves the stage. No TIR reference, store, view, overlay or registry value crosses a module interface or enters HIR. HIR only lowers finalised runtime templates that remain after AST folding. Runtime template control flow lowers inline as ordinary HIR branches, loops, accumulator appends and AST-prepared runtime slot source and site plans in the enclosing function, not as backend-specific template control-flow nodes. HIR consumes AST-prepared slot source and site plans and owned runtime handoff payloads only. It doesn't parse directives, validate slot schemas or reconstruct TIR.
+AST finalisation folds const templates or replaces runtime templates with neutral owned handoff payloads. The one module TIR store is dropped before the completed AST leaves the stage. No TIR reference, store, view, overlay or preparation value crosses a module interface or enters HIR. HIR only lowers finalised runtime templates that remain after AST folding. Runtime template control flow lowers inline as ordinary HIR branches, loops, accumulator appends and AST-prepared runtime slot source and site plans in the enclosing function, not as backend-specific template control-flow nodes. HIR consumes AST-prepared slot source and site plans and owned runtime handoff payloads only. It doesn't parse directives, validate slot schemas or reconstruct TIR.
 
 TIR is AST-local:
 
-- One module-scoped `TemplateIrStore` with direct parser emission and module-local typed IDs.
-- An exact `TirView` is the structural authority for templates after parser emission. Folding requires the accepted prepared phase. HIR handoff requires finalised authority.
-- One semantic preparation path. Folded or owned HIR handoff.
+- One AST module build owns one `TemplateIrStore`. Parser emission writes directly into that store. All TIR IDs are module-local typed IDs.
+- The phase sequence is `Parsed -> Composed -> Formatted -> Finalized`. Folding requires `Composed` or later. AST-to-HIR handoff requires `Finalized`.
+- An exact `TirView` is the structural read authority for templates after parser emission.
+- One semantic preparation owner classifies a value as foldable, runtime or helper while validating all required authority. Preparation produces a folded string or owned HIR handoff.
 - No TIR store, ID, view, overlay or preparation type crosses into a completed compiler module, public interface, HIR or backend. HIR receives folded strings or neutral owned runtime handoff data only.
 - Missing required roots, overlays, phases or exact-view authority are internal errors, never permission to reconstruct template meaning from legacy content. There is no reconstruction fallback.
 - Number formatting doesn't add Number-specific TIR nodes.
@@ -472,7 +486,7 @@ HIR does not:
 
 Plain `HirBinOp` remains valid for booleans, comparisons and string concatenation. Runtime scalar arithmetic and unary negation must lower through `HirStatementKind::NumericOp`. HIR validation rejects regressions where numeric arithmetic survives as ordinary expression ops. HIR lowering treats user-facing source errors as already diagnosed by AST or earlier stages. HIR lowering and HIR validation use `CompilerError` for internal transformation invariants. If a non-unit function can fall through after AST terminality validation, that's a compiler invariant breach.
 
-A backend-neutral structured HIR view is derived and validated from canonical HIR when a structured lowerer needs it. The structured view isn't a second semantic IR and may be cached only as derived data. HIR validation completes before borrow or backend feature validation. Generated concrete functions produce HIR in sidecars.
+A backend-neutral structured HIR view is derived and validated from canonical HIR when a structured lowerer needs it. The structured view isn't a second semantic authority and may be cached only as derived data. HIR validation completes before borrow validation or target validation. Generated concrete functions produce HIR in sidecars.
 
 HIR validation checks definition IDs, frontend `TypeId` links, region graph shape, start-function and function-origin metadata, CFG ownership, doc fragments, module constants, reactive metadata, side-table mappings, local and place references, terminators, patterns and expression invariants. `HirExpressionKind::Float` values must be finite `f64`. `NaN` and `Infinity` literals are rejected as internal invariant breaches. Validation failures are `CompilerError` with `ErrorType::HirTransformation`, not user-facing `CompilerDiagnostic`, because they represent compiler-internal lowering invariants.
 
@@ -508,7 +522,7 @@ Reactive subscriptions are read-only source dependencies, not active borrow life
 
 ### Entry assemblies and command policies
 
-A normal module stores dormant root activity in its canonical compiled artefact. Compiling the module doesn't decide whether its root is active. Entry assembly activates dormant root work. Compilation doesn't decide activation. An `EntryAssembly` selects one normal module as the active entry and activates only that module's implicit `start()`, top-level runtime work, runtime page fragments, compile-time page fragments and entry-owned runtime dependencies. Imported normal modules expose their public interfaces without executing root work. Support modules and project package facades never have root runtime activity.
+A normal module stores dormant root activity in its canonical compiled artefact. Dormant normal-root code is fully parsed, type-checked, lowered to HIR and borrow-validated during canonical module compilation before it can be stored for later activation. Compiling the module doesn't decide whether its root is active. Entry assembly activates already-compiled dormant root work. It never triggers deferred semantic compilation. An `EntryAssembly` selects one normal module as the active entry and activates only that module's implicit `start()`, top-level runtime work, runtime page fragments, compile-time page fragments and entry-owned runtime dependencies. Imported normal modules expose their public interfaces without executing root work. Support modules and project package facades never have root runtime activity.
 
 Header parsing records normal-root top-level runtime code as a dormant `HeaderKind::StartFunction`. It's excluded from local declaration dependency sorting and emitted after sorted declarations. Page fragments split before HIR: runtime templates remain runtime code inside dormant `start()`, compile-time templates fold once into owned module artefact data, each compile-time fragment records its runtime insertion index, entry assembly merges compile-time and runtime fragments in source order, and HIR never carries compile-time fragments or document structure.
 
@@ -541,7 +555,7 @@ The HTML builder consumes entry link plans and performs deterministic function-l
 
 Physical output variants:
 
-- Variants are keyed by module identity, selected function set, target assignments, ABI and layout identities and runtime-capability requirements.
+- Variants are keyed by module identity, selected concrete function set, target assignments, ABI and layout identities, runtime capability requirements and relevant backend config fingerprint.
 - Entries with the same key reuse one variant. Different keys produce different companion or Wasm variants.
 - One source function may be JavaScript in one entry variant and Wasm in another.
 - Each module has a generated JavaScript companion facade for an entry variant. Wasm is emitted per selected module variant.

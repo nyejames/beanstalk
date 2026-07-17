@@ -122,9 +122,11 @@ Always follow `docs/src/docs/codebase/style-guide/validation.bd`
 Do not modify documentation unless the user explicitly requests documentation
 changes or explicitly approves them after they are identified. 
 
-The progress matrix is the standing exception. Update it when implementation
+The progress matrix and `index.md` are exceptions. Update the matrix when implementation
 status, rejection behavior, backend coverage, or test coverage changes. Do not
-edit it for a pure refactor or prose-only correction.
+edit it for a pure refactor or prose-only correction. 
+
+Update `index.md` whenever modules/files/folders are moved, renamed or have fundementally changed behaviour.
 
 If implementation work makes documentation inaccurate, report the affected files and required corrections as a separate follow-up. Do not edit generated files under `docs/release/**` directly, rebuild it through the compiler.
 
