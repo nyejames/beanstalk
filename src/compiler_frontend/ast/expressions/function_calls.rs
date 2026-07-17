@@ -24,6 +24,7 @@ use crate::compiler_frontend::ast::expressions::parse_expression_input::{
 };
 use crate::compiler_frontend::ast::statements::fallible_handling::{
     FallibleCallSite, FallibleHostCallSite, HandledFallibleCall, HandledFallibleHostCall,
+    call_success_is_optional, non_fallible_handler_reason,
     parse_fallible_handling_suffix_for_call_expression,
     parse_fallible_handling_suffix_for_host_call_expression,
     token_stream_starts_fallible_handling_suffix,
@@ -204,8 +205,12 @@ fn finish_function_call_expression(
             token_stream.current_token_kind(),
             TokenKind::Bang | TokenKind::Catch
         ) {
+            let operand_is_optional = call_success_is_optional(
+                call.result_type_ids.as_slice(),
+                type_interner.environment(),
+            );
             return Err(CompilerDiagnostic::invalid_fallible_handling(
-                InvalidFallibleHandlingReason::NotResultExpression,
+                non_fallible_handler_reason(token_stream.current_token_kind(), operand_is_optional),
                 token_stream.current_location(),
             )
             .into());
@@ -983,8 +988,10 @@ fn finish_external_function_call_expression(
         token_stream.current_token_kind(),
         TokenKind::Bang | TokenKind::Catch
     ) {
+        let operand_is_optional =
+            call_success_is_optional(result_type_ids.as_slice(), type_interner.environment());
         return Err(CompilerDiagnostic::invalid_fallible_handling(
-            InvalidFallibleHandlingReason::NotResultExpression,
+            non_fallible_handler_reason(token_stream.current_token_kind(), operand_is_optional),
             token_stream.current_location(),
         )
         .into());

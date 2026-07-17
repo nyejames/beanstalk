@@ -10,6 +10,9 @@ mod parser;
 mod success_types;
 mod validation;
 
+use crate::compiler_frontend::compiler_messages::InvalidFallibleHandlingReason;
+use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
+use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 
 // --------------------------
@@ -39,6 +42,47 @@ pub(crate) fn token_stream_starts_fallible_handling_suffix(token_stream: &FileTo
         || token_stream.current_token_kind() == &TokenKind::Catch
         || (matches!(token_stream.current_token_kind(), TokenKind::Symbol(_))
             && token_stream.peek_next_token() == Some(&TokenKind::Bang))
+}
+/// Selects the precise reason for applying `!` or `catch` to a non-fallible operand.
+///
+/// WHAT: maps the authored handler (`!` vs `catch`) and whether the operand carries an
+///       optional value to the matching `InvalidFallibleHandlingReason` case.
+/// WHY: the old umbrella `NotResultExpression` reason hardcoded `!` wording and called every
+///      carrier a result, so each construction site needs the exact handler and carrier pair.
+pub(crate) fn non_fallible_handler_reason(
+    handler_token: &TokenKind,
+    operand_is_optional: bool,
+) -> InvalidFallibleHandlingReason {
+    match handler_token {
+        TokenKind::Catch => {
+            if operand_is_optional {
+                InvalidFallibleHandlingReason::CatchOnOptional
+            } else {
+                InvalidFallibleHandlingReason::CatchOnNonFallible
+            }
+        }
+        // `!` (Bang), including the receiver-call `Symbol` + `Bang` spelling.
+        _ => {
+            if operand_is_optional {
+                InvalidFallibleHandlingReason::BangOnOptional
+            } else {
+                InvalidFallibleHandlingReason::BangOnNonFallible
+            }
+        }
+    }
+}
+
+/// Returns true when a call's success return is a single optional slot.
+///
+/// WHAT: a non-fallible call is only an optional operand when it has exactly one success
+///       slot whose type is `Option<_>`; multi-value or void returns are not optional.
+/// WHY: the `!`/`catch` handler matrix distinguishes optional operands from plain
+///      non-fallible ones, so every call construction site shares one carrier check.
+pub(crate) fn call_success_is_optional(
+    success_type_ids: &[TypeId],
+    type_environment: &TypeEnvironment,
+) -> bool {
+    matches!(success_type_ids, [single] if type_environment.is_option(*single))
 }
 
 #[cfg(test)]

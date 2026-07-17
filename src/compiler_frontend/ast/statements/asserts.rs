@@ -136,7 +136,7 @@ pub(crate) fn parse_assert_statement(
     // Reject `assert(...)!` — assert is not a fallible expression.
     if token_stream.current_token_kind() == &TokenKind::Bang {
         return Err(CompilerDiagnostic::invalid_fallible_handling(
-            InvalidFallibleHandlingReason::NotResultExpression,
+            InvalidFallibleHandlingReason::BangOnNonFallible,
             token_stream.current_location(),
         )
         .into());
@@ -145,7 +145,7 @@ pub(crate) fn parse_assert_statement(
     // Reject `assert(...) catch ...` — assert is not a fallible expression.
     if token_stream.current_token_kind() == &TokenKind::Catch {
         return Err(CompilerDiagnostic::invalid_fallible_handling(
-            InvalidFallibleHandlingReason::NotResultExpression,
+            InvalidFallibleHandlingReason::CatchOnNonFallible,
             token_stream.current_location(),
         )
         .into());

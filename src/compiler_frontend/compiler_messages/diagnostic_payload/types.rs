@@ -40,7 +40,7 @@ pub enum TypeMismatchContext {
     TemplateInterpolation,
     MatchScrutinee,
     MatchPattern,
-    ResultError,
+    ErrorReturn,
     Pattern,
     General,
 }
@@ -940,7 +940,7 @@ pub enum InvalidBuiltinCallReason {
     MissingParentheses,
     TakesNoArguments,
     NamedArgumentsNotSupported,
-    MustHandleFallibleResult,
+    UnhandledFallibleCall,
     DoesNotAcceptMutableAccess,
     CastMissingParentheses,
     CastMissingArgument,
@@ -1088,10 +1088,11 @@ pub enum InvalidFallibleHandlingReason {
     ExpectedCatchHandlerColon,
     EmptyCatchHandlerBinding,
     MultipleCatchHandlerBindings,
-    RemovedBangFallbackSyntax,
-    RemovedBangCatchHandlerSyntax,
     FallbackValuesForErrorOnlyResult,
-    NotResultExpression,
+    CatchOnNonFallible,
+    CatchOnOptional,
+    BangOnNonFallible,
+    BangOnOptional,
     FunctionHasNoErrorSlot,
     NotOptionExpression,
     FunctionHasNoOptionalReturn,
@@ -1143,20 +1144,24 @@ impl InvalidFallibleHandlingReason {
                 "`catch` accepts one optional error binding. Use `catch |err|:`."
             }
 
-            InvalidFallibleHandlingReason::RemovedBangFallbackSyntax => {
-                "Fallible fallbacks use `catch:` with `then` recovery values, not `! fallback`."
-            }
-
-            InvalidFallibleHandlingReason::RemovedBangCatchHandlerSyntax => {
-                "Catch handlers use `catch |err|:`, not `err!`."
-            }
-
             InvalidFallibleHandlingReason::FallbackValuesForErrorOnlyResult => {
                 "This fallible expression has no success return values, so `catch then` fallback values are not allowed here."
             }
 
-            InvalidFallibleHandlingReason::NotResultExpression => {
-                "Postfix `!` and `catch` require a fallible expression that returns `Error!`."
+            InvalidFallibleHandlingReason::CatchOnNonFallible => {
+                "`catch` handles fallible `Error!` expressions, but this expression is not fallible."
+            }
+
+            InvalidFallibleHandlingReason::CatchOnOptional => {
+                "`catch` does not recover an optional value. Inspect the optional value with an `if ... is |present| ... else ...` expression."
+            }
+
+            InvalidFallibleHandlingReason::BangOnNonFallible => {
+                "`!` propagates an `Error!` return, but this expression is not fallible."
+            }
+
+            InvalidFallibleHandlingReason::BangOnOptional => {
+                "Postfix `!` propagates an `Error!` return, but this expression is optional. Use postfix `?` only inside a compatible optional-returning function, or inspect the option explicitly."
             }
 
             InvalidFallibleHandlingReason::FunctionHasNoErrorSlot => {
@@ -1343,9 +1348,8 @@ impl DiagnosticCompoundAssignmentOperator {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum InvalidResultOperandReason {
+pub enum InvalidFallibleOperandReason {
     FallibleValueNotHandled,
-    OptionalValueNotInspected,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]

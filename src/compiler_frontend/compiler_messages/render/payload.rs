@@ -497,11 +497,11 @@ fn render_payload_message(
         DiagnosticPayload::UnsupportedOperatorTypes { operator, lhs, rhs } => {
             unsupported_operator_types_message(*operator, *lhs, *rhs, context)
         }
-        DiagnosticPayload::InvalidResultOperand {
+        DiagnosticPayload::InvalidFallibleOperand {
             reason,
             category,
             operand_type,
-        } => invalid_result_operand_message(*reason, *category, *operand_type, context),
+        } => invalid_fallible_operand_message(*reason, *category, *operand_type, context),
         DiagnosticPayload::IncompatibleChoiceComparison { reason, lhs, rhs } => {
             incompatible_choice_comparison_message(reason, *lhs, *rhs, context)
         }

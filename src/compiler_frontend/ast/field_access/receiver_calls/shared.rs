@@ -11,7 +11,10 @@ use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::error::ExpressionParseError;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::expressions::expression_kind::ExpressionKind;
-use crate::compiler_frontend::ast::statements::fallible_handling::token_stream_starts_fallible_handling_suffix;
+use crate::compiler_frontend::ast::statements::fallible_handling::{
+    call_success_is_optional, non_fallible_handler_reason,
+    token_stream_starts_fallible_handling_suffix,
+};
 use crate::compiler_frontend::ast::statements::functions::{
     FunctionReturn, FunctionSignature, ReturnSlot,
 };
@@ -80,8 +83,12 @@ pub(super) fn receiver_result_type_ids_for_call(
         token_stream.current_token_kind(),
         TokenKind::Bang | TokenKind::Catch
     ) {
+        let operand_is_optional = call_success_is_optional(
+            success_return_type_ids.as_slice(),
+            type_interner.environment(),
+        );
         return Err(CompilerDiagnostic::invalid_fallible_handling(
-            InvalidFallibleHandlingReason::NotResultExpression,
+            non_fallible_handler_reason(token_stream.current_token_kind(), operand_is_optional),
             token_stream.current_location(),
         )
         .into());

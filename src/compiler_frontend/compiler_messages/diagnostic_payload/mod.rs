@@ -475,8 +475,8 @@ pub enum DiagnosticPayload {
         rhs: Option<TypeId>,
     },
 
-    InvalidResultOperand {
-        reason: InvalidResultOperandReason,
+    InvalidFallibleOperand {
+        reason: InvalidFallibleOperandReason,
         category: UnsupportedOperatorCategory,
         operand_type: TypeId,
     },

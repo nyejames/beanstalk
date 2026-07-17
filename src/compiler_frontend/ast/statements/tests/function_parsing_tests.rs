@@ -627,7 +627,7 @@ fn parses_result_propagation_call_in_expression_position() {
 fn rejects_result_propagation_when_error_slot_types_do_not_match() {
     assert_type_mismatch_context(
         "ErrA = |\n    message String,\n|\n\nErrB = |\n    message String,\n|\n\ninner || -> Int, ErrA!:\n    return! ErrA(\"failed\")\n;\n\nouter || -> Int, ErrB!:\n    value = inner()!\n    return value\n;\n",
-        TypeMismatchContext::ResultError,
+        TypeMismatchContext::ErrorReturn,
     );
 }
 
@@ -747,20 +747,6 @@ fn parses_inline_option_present_capture_receiver_as_value_match() {
         "inline else branch should remain outside the present-capture scope"
     );
     assert_eq!(value_match.exhaustiveness, MatchExhaustiveness::HasDefault);
-}
-
-#[test]
-fn rejects_bare_removed_err_bang_handler_without_scope() {
-    let payload = parse_function_diagnostic_payload(
-        "can_error |value String| -> String, Error!:\n    return value\n;\n\nrecover |value String| -> String:\n    return can_error(value) err!\n;\n",
-    );
-
-    assert_eq!(
-        payload,
-        DiagnosticPayload::InvalidFallibleHandling {
-            reason: InvalidFallibleHandlingReason::RemovedBangCatchHandlerSyntax
-        }
-    );
 }
 
 #[test]

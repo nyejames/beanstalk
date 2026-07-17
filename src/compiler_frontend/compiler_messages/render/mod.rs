@@ -36,10 +36,10 @@ use crate::compiler_frontend::compiler_messages::{
     BorrowAccessKind, DeferredFeatureReason, DiagnosticOperator, DiagnosticPlace,
     GenericApplicationErrorReason, IncompatibleChoiceComparisonReason, InvalidChoiceVariantReason,
     InvalidCollectionTypeReason, InvalidCompileTimePathReason, InvalidConfigReason,
-    InvalidExpressionReason, InvalidGenericParameterReason, InvalidImportClauseReason,
-    InvalidImportPathReason, InvalidMapLiteralReason, InvalidMapTypeReason,
-    InvalidMutableAccessReason, InvalidPackageFolderReason, InvalidPageMetadataReason,
-    InvalidResultOperandReason, InvalidTemplateDirectiveReason, NameNamespace,
+    InvalidExpressionReason, InvalidFallibleOperandReason, InvalidGenericParameterReason,
+    InvalidImportClauseReason, InvalidImportPathReason, InvalidMapLiteralReason,
+    InvalidMapTypeReason, InvalidMutableAccessReason, InvalidPackageFolderReason,
+    InvalidPageMetadataReason, InvalidTemplateDirectiveReason, NameNamespace,
     NamespaceTypeValueMisuseKind, PathKind, RangeOperandKind, UnsupportedOperatorCategory,
 };
 use crate::compiler_frontend::datatypes::definitions::TypeDefinition;
@@ -351,8 +351,8 @@ fn generic_parameter_name(type_id: TypeId, context: DiagnosticRenderContext<'_>)
     }
 }
 
-pub(crate) fn invalid_result_operand_message(
-    reason: InvalidResultOperandReason,
+pub(crate) fn invalid_fallible_operand_message(
+    reason: InvalidFallibleOperandReason,
     category: UnsupportedOperatorCategory,
     operand_type: TypeId,
     context: DiagnosticRenderContext<'_>,
@@ -361,14 +361,9 @@ pub(crate) fn invalid_result_operand_message(
     let type_name = diagnostic_type_name(operand_type, context);
 
     match reason {
-        InvalidResultOperandReason::FallibleValueNotHandled => {
+        InvalidFallibleOperandReason::FallibleValueNotHandled => {
             format!(
                 "{category_name} operator cannot use a fallible value that has not been handled. Use postfix `!` in a compatible fallible function or recover with `catch` before applying the operator (found '{type_name}')."
-            )
-        }
-        InvalidResultOperandReason::OptionalValueNotInspected => {
-            format!(
-                "{category_name} operator cannot use an optional value that has not been inspected. Inspect it with an `if ... is |value|` branch before applying the operator (found '{type_name}')."
             )
         }
     }

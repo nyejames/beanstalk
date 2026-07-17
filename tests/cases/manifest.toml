@@ -3483,10 +3483,6 @@ id = "result_multi_success_postfix_call_arg_rejected"
 path = "result_multi_success_postfix_call_arg_rejected"
 tags = ["integration","results","diagnostics"]
 
-[[case]]
-id = "result_removed_err_bang_syntax_rejected"
-path = "result_removed_err_bang_syntax_rejected"
-tags = ["integration","results","diagnostics"]
 
 [[case]]
 id = "result_empty_catch_handler_binding_rejected"

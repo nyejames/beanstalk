@@ -323,7 +323,7 @@ pub(crate) fn invalid_builtin_call_message(
         InvalidBuiltinCallReason::NamedArgumentsNotSupported => {
             "Named arguments are not supported for builtin member calls.".to_string()
         }
-        InvalidBuiltinCallReason::MustHandleFallibleResult => {
+        InvalidBuiltinCallReason::UnhandledFallibleCall => {
             format!(
                 "Calls to {builtin_text} must be explicitly handled with postfix `!` or `catch`."
             )
@@ -398,11 +398,11 @@ pub(crate) fn invalid_cast_message(
             format!("`cast` does not automatically unwrap optional source values; found '{source}'.")
         }
         InvalidCastReason::OperandIsFallible => {
-            "`cast` only handles cast failures. Handle the operand's `Error!` result before casting."
+            "`cast` only handles cast failures. Handle the operand's `Error!` return before casting."
                 .to_owned()
         }
         InvalidCastReason::OperandArityMismatch => {
-            "`cast` converts exactly one source value. Cast each result slot separately.".to_owned()
+            "`cast` converts exactly one source value. Cast each return slot separately.".to_owned()
         }
         InvalidCastReason::TargetArityMismatch => {
             "`cast` requires exactly one target value. Cast each target slot separately.".to_owned()

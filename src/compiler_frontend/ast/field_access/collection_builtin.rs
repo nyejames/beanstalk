@@ -247,7 +247,7 @@ pub(super) fn parse_collection_builtin_member_typed(
         && !token_stream_starts_fallible_handling_suffix(token_stream)
     {
         return Err(CompilerDiagnostic::invalid_builtin_call(
-            InvalidBuiltinCallReason::MustHandleFallibleResult,
+            InvalidBuiltinCallReason::UnhandledFallibleCall,
             Some(member_name),
             token_stream.current_location(),
         )

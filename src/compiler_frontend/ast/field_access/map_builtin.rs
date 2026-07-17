@@ -277,7 +277,7 @@ pub(super) fn parse_map_builtin_member_typed(
     // rejects raw values before HIR can mistake them for ordinary runtime data.
     if builtin.is_fallible() && !token_stream_starts_fallible_handling_suffix(token_stream) {
         return Err(CompilerDiagnostic::invalid_builtin_call(
-            InvalidBuiltinCallReason::MustHandleFallibleResult,
+            InvalidBuiltinCallReason::UnhandledFallibleCall,
             Some(member_name),
             token_stream.current_location(),
         )

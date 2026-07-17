@@ -25,7 +25,8 @@ use crate::compiler_frontend::ast::generic_functions::{
 };
 use crate::compiler_frontend::ast::module_ast::scope_context::ScopeContext;
 use crate::compiler_frontend::ast::statements::fallible_handling::{
-    FallibleCallSite, HandledFallibleCall, parse_fallible_handling_suffix_for_call_expression,
+    FallibleCallSite, HandledFallibleCall, call_success_is_optional, non_fallible_handler_reason,
+    parse_fallible_handling_suffix_for_call_expression,
 };
 use crate::compiler_frontend::ast::statements::functions::{
     FunctionReturn, FunctionSignature, ReturnSlot,
@@ -290,8 +291,12 @@ fn finish_generic_function_call(
             token_stream.current_token_kind(),
             TokenKind::Bang | TokenKind::Catch
         ) {
+            let operand_is_optional = call_success_is_optional(
+                call.result_type_ids.as_slice(),
+                type_interner.environment(),
+            );
             return Err(CompilerDiagnostic::invalid_fallible_handling(
-                InvalidFallibleHandlingReason::NotResultExpression,
+                non_fallible_handler_reason(token_stream.current_token_kind(), operand_is_optional),
                 token_stream.current_location(),
             )
             .into());

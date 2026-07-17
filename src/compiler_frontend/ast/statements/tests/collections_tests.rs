@@ -304,7 +304,7 @@ fn rejects_unhandled_collection_push_result() {
     assert!(matches!(
         diagnostic.payload,
         DiagnosticPayload::InvalidBuiltinCall {
-            reason: InvalidBuiltinCallReason::MustHandleFallibleResult,
+            reason: InvalidBuiltinCallReason::UnhandledFallibleCall,
             ..
         }
     ));
@@ -424,7 +424,7 @@ fn rejects_unhandled_collection_get_result() {
     assert!(matches!(
         diagnostic.payload,
         DiagnosticPayload::InvalidBuiltinCall {
-            reason: InvalidBuiltinCallReason::MustHandleFallibleResult,
+            reason: InvalidBuiltinCallReason::UnhandledFallibleCall,
             ..
         }
     ));
@@ -437,7 +437,7 @@ fn rejects_unhandled_collection_set_result() {
     assert!(matches!(
         diagnostic.payload,
         DiagnosticPayload::InvalidBuiltinCall {
-            reason: InvalidBuiltinCallReason::MustHandleFallibleResult,
+            reason: InvalidBuiltinCallReason::UnhandledFallibleCall,
             ..
         }
     ));
@@ -1021,7 +1021,7 @@ fn rejects_unhandled_map_get_result() {
     assert!(matches!(
         diagnostic.payload,
         DiagnosticPayload::InvalidBuiltinCall {
-            reason: InvalidBuiltinCallReason::MustHandleFallibleResult,
+            reason: InvalidBuiltinCallReason::UnhandledFallibleCall,
             ..
         }
     ));
@@ -1096,7 +1096,7 @@ fn rejects_map_contains_with_fallible_suffix() {
     assert!(matches!(
         diagnostic.payload,
         DiagnosticPayload::InvalidFallibleHandling {
-            reason: InvalidFallibleHandlingReason::NotResultExpression,
+            reason: InvalidFallibleHandlingReason::BangOnNonFallible,
             ..
         }
     ));
@@ -1111,7 +1111,7 @@ fn rejects_map_clear_with_fallible_suffix() {
     assert!(matches!(
         diagnostic.payload,
         DiagnosticPayload::InvalidFallibleHandling {
-            reason: InvalidFallibleHandlingReason::NotResultExpression,
+            reason: InvalidFallibleHandlingReason::BangOnNonFallible,
             ..
         }
     ));
@@ -1126,7 +1126,7 @@ fn rejects_map_length_with_fallible_suffix() {
     assert!(matches!(
         diagnostic.payload,
         DiagnosticPayload::InvalidFallibleHandling {
-            reason: InvalidFallibleHandlingReason::NotResultExpression,
+            reason: InvalidFallibleHandlingReason::BangOnNonFallible,
             ..
         }
     ));

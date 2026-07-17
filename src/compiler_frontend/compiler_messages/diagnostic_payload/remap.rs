@@ -418,7 +418,7 @@ impl DiagnosticPayload {
 
             DiagnosticPayload::EmptyCollectionTypeAmbiguity
             | DiagnosticPayload::UnsupportedOperatorTypes { .. }
-            | DiagnosticPayload::InvalidResultOperand { .. }
+            | DiagnosticPayload::InvalidFallibleOperand { .. }
             | DiagnosticPayload::InvalidCast { .. }
             | DiagnosticPayload::InvalidReturnShape { .. } => {}
 

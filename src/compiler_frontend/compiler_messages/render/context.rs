@@ -86,8 +86,8 @@ pub(crate) fn type_mismatch_context_name(
         crate::compiler_frontend::compiler_messages::TypeMismatchContext::MatchPattern => {
             "match pattern"
         }
-        crate::compiler_frontend::compiler_messages::TypeMismatchContext::ResultError => {
-            "result error"
+        crate::compiler_frontend::compiler_messages::TypeMismatchContext::ErrorReturn => {
+            "error return"
         }
         crate::compiler_frontend::compiler_messages::TypeMismatchContext::Pattern => "pattern",
         crate::compiler_frontend::compiler_messages::TypeMismatchContext::General => "general",

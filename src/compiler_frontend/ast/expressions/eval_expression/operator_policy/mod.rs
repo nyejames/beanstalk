@@ -33,7 +33,7 @@ pub(super) fn resolve_binary_operator_type(
     location: &SourceLocation,
     type_environment: &TypeEnvironment,
 ) -> Result<ExpressionResultType, ExpressionTypingError> {
-    shared::reject_result_operands(lhs, rhs, op, location, type_environment)?;
+    shared::reject_fallible_operands(lhs, rhs, op, location, type_environment)?;
 
     if logical::is_logical_operator(op) {
         return logical::resolve_logical_operator_type(lhs, rhs, op, location, type_environment);

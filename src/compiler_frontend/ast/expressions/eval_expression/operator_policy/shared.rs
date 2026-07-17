@@ -3,24 +3,24 @@
 //! WHAT: small predicates and guards used by arithmetic, comparison, and logical
 //!      operator policy modules.
 //! WHY: operator categories share narrow rules (mixed numeric detection, plain-string
-//!      identity, result-carrier rejection) that are easier to review in one place.
+//!      identity, fallible-carrier rejection) that are easier to review in one place.
 
 use super::super::result_type::ExpressionResultType;
 use crate::compiler_frontend::ast::expressions::eval_expression::typing_error::ExpressionTypingError;
 use crate::compiler_frontend::ast::expressions::expression::{ExpressionValueShape, Operator};
 use crate::compiler_frontend::compiler_errors::SourceLocation;
 use crate::compiler_frontend::compiler_messages::{
-    CompilerDiagnostic, InvalidResultOperandReason, UnsupportedOperatorCategory,
+    CompilerDiagnostic, InvalidFallibleOperandReason, UnsupportedOperatorCategory,
 };
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 
-/// Rejects binary operators applied to unwrapped `Result` or `Option` carriers.
+/// Rejects binary operators applied to unwrapped fallible `Error!` carriers.
 ///
 /// WHAT: guards every binary operator path so that fallible carriers cannot silently
 ///      participate in arithmetic, comparison, or logical operations.
-/// WHY: unwrapped-result operators are deferred to later pipeline stages; AST typing
+/// WHY: unwrapped fallible operators are deferred to later pipeline stages; AST typing
 ///      must emit a clear diagnostic here instead of allowing an invalid type through.
-pub(super) fn reject_result_operands(
+pub(super) fn reject_fallible_operands(
     lhs: &ExpressionResultType,
     rhs: &ExpressionResultType,
     op: &Operator,
@@ -61,8 +61,8 @@ pub(super) fn reject_result_operands(
             _ => UnsupportedOperatorCategory::Other,
         };
 
-        return Err(CompilerDiagnostic::invalid_result_operand(
-            InvalidResultOperandReason::FallibleValueNotHandled,
+        return Err(CompilerDiagnostic::invalid_fallible_operand(
+            InvalidFallibleOperandReason::FallibleValueNotHandled,
             category,
             operand_type_id,
             location.clone(),

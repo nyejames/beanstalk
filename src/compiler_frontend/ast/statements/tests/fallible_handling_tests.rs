@@ -561,42 +561,6 @@ fn rejects_nested_raw_fallible_in_fallback() {
 }
 
 #[test]
-fn rejects_removed_bang_fallback_syntax() {
-    assert_invalid_fallible_handling(
-        "can_error |value String| -> String, Error!:\n    return value\n;\n\nrecover |value String| -> String:\n    return can_error(value) ! \"fallback\"\n;\n",
-        InvalidFallibleHandlingReason::RemovedBangFallbackSyntax,
-    );
-}
-
-// --------------------------
-//  Bare handler rejections
-// --------------------------
-
-#[test]
-fn rejects_invalid_bare_err_for_call_catch_handler_shape() {
-    assert_invalid_fallible_handling(
-        "can_error |value String| -> String, Error!:\n    return value\n;\n\nrecover |value String| -> String:\n    return can_error(value) err!\n;\n",
-        InvalidFallibleHandlingReason::RemovedBangCatchHandlerSyntax,
-    );
-}
-
-#[test]
-fn rejects_invalid_bare_err_for_expression_catch_handler_shape() {
-    assert_invalid_fallible_handling(
-        "read |values {Int}| -> Int:\n    return values.get(0) err!\n;\n",
-        InvalidFallibleHandlingReason::RemovedBangCatchHandlerSyntax,
-    );
-}
-
-#[test]
-fn rejects_catch_handler_without_scope_colon() {
-    assert_invalid_fallible_handling(
-        "can_error |value String| -> String, Error!:\n    return value\n;\n\nrecover |value String| -> String:\n    return can_error(value) err! \"fallback\"\n;\n",
-        InvalidFallibleHandlingReason::RemovedBangCatchHandlerSyntax,
-    );
-}
-
-#[test]
 fn rejects_empty_catch_handler_binding() {
     assert_invalid_fallible_handling(
         "can_error |value String| -> String, Error!:\n    return value\n;\n\nrecover |value String| -> String:\n    return can_error(value) catch ||:\n        then \"fallback\"\n    ;\n;\n",

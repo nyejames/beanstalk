@@ -1117,7 +1117,7 @@ fn parse_cast_expression(
             return Err(CompilerDiagnostic::type_mismatch(
                 expected_error_type_id,
                 error_type_id,
-                TypeMismatchContext::ResultError,
+                TypeMismatchContext::ErrorReturn,
                 token_stream.current_location(),
             )
             .into());

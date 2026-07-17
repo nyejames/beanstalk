@@ -13,15 +13,14 @@ use crate::compiler_frontend::compiler_messages::{
     ImportClauseKind, ImportDiagnosticKind, ImportPublicSurfaceType,
     IncompatibleChoiceComparisonReason, InvalidCastReason, InvalidChoiceVariantReason,
     InvalidCollectionTypeReason, InvalidCompileTimePathReason, InvalidConfigReason,
-    InvalidExpressionReason, InvalidFunctionSignatureReason, InvalidGenericParameterReason,
-    InvalidImportClauseReason, InvalidImportPathReason, InvalidLoopHeaderReason,
-    InvalidMapLiteralReason, InvalidMapTypeReason, InvalidMatchArmReason,
-    InvalidMutableAccessReason, InvalidPageMetadataReason, InvalidResultOperandReason,
-    InvalidSignatureMemberReason, InvalidStandaloneStatementReason, InvalidStatementPositionReason,
-    InvalidStringEscapeReason, InvalidTemplateDirectiveReason, InvalidTemplateStructureReason,
-    InvalidTraitConformanceReason, InvalidTraitIncompatibilityReason,
-    InvalidTraitKeywordUsageReason, InvalidTypeAnnotationReason, NameNamespace,
-    NamespaceTypeValueMisuseKind, NamingConvention, NumberLiteralErrorReason,
+    InvalidExpressionReason, InvalidFallibleOperandReason, InvalidFunctionSignatureReason,
+    InvalidGenericParameterReason, InvalidImportClauseReason, InvalidImportPathReason,
+    InvalidLoopHeaderReason, InvalidMapLiteralReason, InvalidMapTypeReason, InvalidMatchArmReason,
+    InvalidMutableAccessReason, InvalidPageMetadataReason, InvalidSignatureMemberReason,
+    InvalidStandaloneStatementReason, InvalidStatementPositionReason, InvalidStringEscapeReason,
+    InvalidTemplateDirectiveReason, InvalidTemplateStructureReason, InvalidTraitConformanceReason,
+    InvalidTraitIncompatibilityReason, InvalidTraitKeywordUsageReason, InvalidTypeAnnotationReason,
+    NameNamespace, NamespaceTypeValueMisuseKind, NamingConvention, NumberLiteralErrorReason,
     OperatorOperandPosition, PathKind, RangeOperandKind, RuleDiagnosticKind, SyntaxDiagnosticKind,
     TypeAnnotationContext, TypeDiagnosticKind, TypeMismatchContext, UnsupportedOperatorCategory,
 };
@@ -1780,16 +1779,16 @@ impl CompilerDiagnostic {
         )
     }
 
-    pub(crate) fn invalid_result_operand(
-        reason: InvalidResultOperandReason,
+    pub(crate) fn invalid_fallible_operand(
+        reason: InvalidFallibleOperandReason,
         category: UnsupportedOperatorCategory,
         operand_type: TypeId,
         location: SourceLocation,
     ) -> Self {
         Self::new(
-            DiagnosticKind::Type(TypeDiagnosticKind::InvalidResultOperand),
+            DiagnosticKind::Type(TypeDiagnosticKind::InvalidFallibleOperand),
             location,
-            DiagnosticPayload::InvalidResultOperand {
+            DiagnosticPayload::InvalidFallibleOperand {
                 reason,
                 category,
                 operand_type,

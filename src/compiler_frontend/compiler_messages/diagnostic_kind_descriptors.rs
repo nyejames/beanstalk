@@ -218,9 +218,9 @@ fn type_descriptor(kind: TypeDiagnosticKind) -> DiagnosticDescriptor {
             "Unsupported operator types",
             DiagnosticSeverity::Error,
         ),
-        TypeDiagnosticKind::InvalidResultOperand => DiagnosticDescriptor::new(
+        TypeDiagnosticKind::InvalidFallibleOperand => DiagnosticDescriptor::new(
             "BST-TYPE-0004",
-            "Invalid result operand",
+            "Unhandled fallible operand",
             DiagnosticSeverity::Error,
         ),
         TypeDiagnosticKind::IncompatibleChoiceComparison => DiagnosticDescriptor::new(

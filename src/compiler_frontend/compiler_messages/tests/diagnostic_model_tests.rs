@@ -8,9 +8,9 @@ use super::{
     IncompatibleChoiceComparisonReason, InfrastructureDiagnosticKind,
     InvalidAssignmentTargetReason, InvalidCallShapeReason, InvalidCastReason,
     InvalidChoiceVariantReason, InvalidCollectionTypeReason, InvalidConfigReason,
-    InvalidExpressionReason, InvalidFallibleHandlingReason, InvalidFunctionSignatureReason,
-    InvalidGenericParameterReason, InvalidImportClauseReason, InvalidReceiverCallReason,
-    InvalidResultOperandReason, InvalidSignatureMemberReason, InvalidStandaloneStatementReason,
+    InvalidExpressionReason, InvalidFallibleHandlingReason, InvalidFallibleOperandReason,
+    InvalidFunctionSignatureReason, InvalidGenericParameterReason, InvalidImportClauseReason,
+    InvalidReceiverCallReason, InvalidSignatureMemberReason, InvalidStandaloneStatementReason,
     InvalidStatementPositionReason, InvalidStringEscapeReason, InvalidTemplateDirectiveReason,
     InvalidTemplateStructureReason, InvalidTraitKeywordUsageReason, InvalidTypeAnnotationReason,
     MissingWhitespace, NameNamespace, NumberLiteralErrorReason, PathKind, ReceiverCallKind,
@@ -1198,8 +1198,8 @@ fn syntax_renderers_keep_typed_prose_without_error_conversion() {
             "Add",
         ),
         (
-            CompilerDiagnostic::invalid_result_operand(
-                InvalidResultOperandReason::FallibleValueNotHandled,
+            CompilerDiagnostic::invalid_fallible_operand(
+                InvalidFallibleOperandReason::FallibleValueNotHandled,
                 UnsupportedOperatorCategory::Arithmetic,
                 builtin_type_ids::STRING,
                 location(source_path),
@@ -1311,20 +1311,18 @@ fn phase_1_2_renderers_keep_source_language_terminology() {
             InvalidTemplateStructureReason::TemplateIfConditionNotConst,
             location(source_path.clone()),
         ),
-        CompilerDiagnostic::invalid_result_operand(
-            InvalidResultOperandReason::FallibleValueNotHandled,
-            UnsupportedOperatorCategory::Arithmetic,
-            builtin_type_ids::STRING,
-            location(source_path.clone()),
-        ),
-        CompilerDiagnostic::invalid_result_operand(
-            InvalidResultOperandReason::OptionalValueNotInspected,
+        CompilerDiagnostic::invalid_fallible_operand(
+            InvalidFallibleOperandReason::FallibleValueNotHandled,
             UnsupportedOperatorCategory::Arithmetic,
             builtin_type_ids::STRING,
             location(source_path.clone()),
         ),
         CompilerDiagnostic::invalid_fallible_handling(
-            InvalidFallibleHandlingReason::NotResultExpression,
+            InvalidFallibleHandlingReason::CatchOnOptional,
+            location(source_path.clone()),
+        ),
+        CompilerDiagnostic::invalid_fallible_handling(
+            InvalidFallibleHandlingReason::BangOnNonFallible,
             location(source_path.clone()),
         ),
         CompilerDiagnostic::invalid_config_reason(
@@ -1362,8 +1360,8 @@ fn phase_1_2_renderers_keep_source_language_terminology() {
         "top-level generic declaration header",
         "`Box of String`",
         "compatible fallible function",
-        "`if ... is |value|`",
-        "fallible expression that returns `Error!`",
+        "`if ... is |present| ... else ...`",
+        "`!` propagates an `Error!` return, but this expression is not fallible",
         "Config declarations cannot depend on runtime evaluation",
         "User-defined cast evidence must be fully evaluable at compile time",
         "`value String? = none`",

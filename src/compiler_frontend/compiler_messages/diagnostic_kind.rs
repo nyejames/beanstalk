@@ -166,7 +166,7 @@ pub enum TypeDiagnosticKind {
     TypeMismatch,
     EmptyCollectionTypeAmbiguity,
     UnsupportedOperatorTypes,
-    InvalidResultOperand,
+    InvalidFallibleOperand,
     IncompatibleChoiceComparison,
 }
 
@@ -177,7 +177,7 @@ impl TypeDiagnosticKind {
             Self::TypeMismatch,
             Self::EmptyCollectionTypeAmbiguity,
             Self::UnsupportedOperatorTypes,
-            Self::InvalidResultOperand,
+            Self::InvalidFallibleOperand,
             Self::IncompatibleChoiceComparison,
         ]
         .into_iter()

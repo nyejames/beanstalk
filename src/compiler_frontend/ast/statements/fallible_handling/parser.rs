@@ -180,8 +180,12 @@ pub(crate) fn parse_fallible_handling_suffix_for_expression(
     let Some((_success_type_ids, error_return_type_id)) =
         type_environment.fallible_carrier_slots(expression_type_id)
     else {
+        let operand_is_optional = type_environment.is_option(expression_type_id);
         return Err(CompilerDiagnostic::invalid_fallible_handling(
-            InvalidFallibleHandlingReason::NotResultExpression,
+            super::non_fallible_handler_reason(
+                token_stream.current_token_kind(),
+                operand_is_optional,
+            ),
             token_stream.current_location(),
         )
         .into());
@@ -284,15 +288,6 @@ fn parse_fallible_handling_suffix(
         )
         .map(Some),
 
-        // Reject the old `symbol!` catch syntax that was removed from the language.
-        TokenKind::Symbol(_) if token_stream.peek_next_token() == Some(&TokenKind::Bang) => {
-            Err(CompilerDiagnostic::invalid_fallible_handling(
-                InvalidFallibleHandlingReason::RemovedBangCatchHandlerSyntax,
-                token_stream.current_location(),
-            )
-            .into())
-        }
-
         // No fallible handling suffix present.
         _ => Ok(None),
     }
@@ -305,15 +300,6 @@ fn parse_postfix_propagation(
     type_environment: &TypeEnvironment,
 ) -> Result<FallibleHandling, ExpressionParseError> {
     token_stream.advance();
-
-    // Reject the old `expr!fallback` inline-fallback syntax.
-    if token_starts_removed_bang_fallback(token_stream.current_token_kind()) {
-        return Err(CompilerDiagnostic::invalid_fallible_handling(
-            InvalidFallibleHandlingReason::RemovedBangFallbackSyntax,
-            token_stream.current_location(),
-        )
-        .into());
-    }
 
     let Some(expected_error_type_id) = context.expected_error_type else {
         return Err(CompilerDiagnostic::invalid_fallible_handling(
@@ -331,7 +317,7 @@ fn parse_postfix_propagation(
         return Err(CompilerDiagnostic::type_mismatch(
             expected_error_type_id,
             site.error_return_type_id,
-            TypeMismatchContext::ResultError,
+            TypeMismatchContext::ErrorReturn,
             token_stream.current_location(),
         )
         .into());
@@ -369,26 +355,6 @@ pub(crate) fn wrap_catch_expression(
         result_type_id,
         diagnostic_type,
         crate::compiler_frontend::value_mode::ValueMode::ImmutableOwned,
-    )
-}
-
-/// Returns true for token kinds that started the old `expr!fallback` inline-fallback syntax.
-///
-/// WHY: this prevents confusing parse errors when users write removed syntax such as
-/// `result!"fallback"` or `result!{ fallback }`. A dedicated diagnostic is clearer than
-/// falling through to unexpected-token.
-fn token_starts_removed_bang_fallback(token: &TokenKind) -> bool {
-    matches!(
-        token,
-        TokenKind::Symbol(_)
-            | TokenKind::StringSliceLiteral(_)
-            | TokenKind::RawStringLiteral(_)
-            | TokenKind::NumericLiteral(_)
-            | TokenKind::CharLiteral(_)
-            | TokenKind::BoolLiteral(_)
-            | TokenKind::NoneLiteral
-            | TokenKind::OpenCurly
-            | TokenKind::TemplateHead
     )
 }
 
