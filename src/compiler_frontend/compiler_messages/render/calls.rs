@@ -247,6 +247,9 @@ pub(crate) fn invalid_assignment_target_message(
         InvalidAssignmentTargetReason::ExpectedAssignmentOperator => {
             format!("Expected assignment operator after binding {target_text}.")
         }
+        InvalidAssignmentTargetReason::MutableMarkerOnAssignmentTarget => {
+            "`~` is not written on assignment targets. Reassignment uses ordinary `=` and requires an already-mutable binding.".to_string()
+        }
     }
 }
 

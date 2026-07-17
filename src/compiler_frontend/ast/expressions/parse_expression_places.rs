@@ -23,7 +23,8 @@ use crate::compiler_frontend::compiler_messages::trait_keyword_diagnostics::{
     reserved_trait_keyword_error, reserved_trait_keyword_or_dispatch_mismatch,
 };
 use crate::compiler_frontend::compiler_messages::{
-    CompilerDiagnostic, InvalidCopyTargetReason, InvalidReceiverCallReason, NameNamespace,
+    CompilerDiagnostic, InvalidAssignmentTargetReason, InvalidCopyTargetReason,
+    InvalidReceiverCallReason, NameNamespace,
 };
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::ids::TypeId;
@@ -77,7 +78,24 @@ pub(super) fn parse_mutable_receiver_expression(
     };
 
     // The mutable marker must be followed by a field-access chain; bare `~name` is not valid.
+    // When the author wrote `~name = ...`, the intent was an assignment target, not a receiver
+    // call, so report the assignment-target reason instead of the receiver-call reason.
     if token_stream.peek_next_token() != Some(&TokenKind::Dot) {
+        if token_stream
+            .peek_next_token()
+            .is_some_and(|token| token.is_assignment_operator())
+        {
+            return Err(CompilerDiagnostic::invalid_assignment_target(
+                InvalidAssignmentTargetReason::MutableMarkerOnAssignmentTarget,
+                None,
+                None,
+                None,
+                None,
+                None,
+                marker_location,
+            )
+            .into());
+        }
         return Err(CompilerDiagnostic::invalid_receiver_call(
             InvalidReceiverCallReason::MutableMarkerOnNonReceiverCall,
             None,

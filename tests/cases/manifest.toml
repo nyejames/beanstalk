@@ -3119,6 +3119,16 @@ path = "multiple_print_statements"
 tags = ["integration","language"]
 
 [[case]]
+id = "mutable_marker_on_assignment_target_rejected"
+path = "mutable_marker_on_assignment_target_rejected"
+tags = ["integration", "language", "diagnostics", "mutability"]
+
+[[case]]
+id = "mutable_marker_on_field_assignment_target_rejected"
+path = "mutable_marker_on_field_assignment_target_rejected"
+tags = ["integration", "language", "diagnostics", "mutability"]
+
+[[case]]
 id = "mutable_reassignment_print"
 path = "mutable_reassignment_print"
 tags = ["integration","language"]

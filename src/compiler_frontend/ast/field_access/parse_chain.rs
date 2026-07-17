@@ -318,6 +318,20 @@ fn parse_postfix_chain_typed(
         let marker_location = authored_marker_location
             .clone()
             .unwrap_or_else(|| receiver_node.location.clone());
+        // When the chain is followed by an assignment operator, the author wrote `~place = ...`
+        // and intended an assignment target, not a receiver call.
+        if token_stream.current_token_kind().is_assignment_operator() {
+            return Err(CompilerDiagnostic::invalid_assignment_target(
+                InvalidAssignmentTargetReason::MutableMarkerOnAssignmentTarget,
+                None,
+                None,
+                None,
+                None,
+                None,
+                marker_location,
+            )
+            .into());
+        }
         return Err(CompilerDiagnostic::invalid_receiver_call(
             InvalidReceiverCallReason::MutableMarkerOnNonReceiverCall,
             None,

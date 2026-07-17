@@ -914,6 +914,7 @@ pub enum InvalidAssignmentTargetReason {
     MapIndexedWriteRemoved,
     MapPropertyWriteRemoved,
     ExpectedAssignmentOperator,
+    MutableMarkerOnAssignmentTarget,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
