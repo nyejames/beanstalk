@@ -12,8 +12,8 @@ This is an implementation plan, not a research backlog. Each phase should leave 
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-diagnostics-improvement-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 3.5 complete, ready for Phase 3.6
-LAST_ACCEPTED_COMMIT: `74946112c` (Phase 3.5)
+CURRENT_SLICE: Phase 3 complete, ready for Phase 4
+LAST_ACCEPTED_COMMIT: `4a0f22702` (Phase 3.6)
 WORKTREE: `main`, clean; unrelated docs commits `6c513f025`/`d96590791`/`c31ad8b55` are separate branch work
 REQUIRED_RELOADS: startup files, this plan and current source/diff
 RELEVANT_CONTEXT_NOW:
@@ -34,7 +34,7 @@ BLOCKERS_OR_OPEN_DECISIONS: none
 DELEGATION_DECISION: Ollama - explicitly required for every implementation worker slice
 NEXT_WORKER_ORDER: Ollama only for implementation slices
 STOP_REASON: none
-NEXT_RESUME_ACTION: launch Phase 3.6 (remove migration state from collection/map assignment diagnostics) through Ollama
+NEXT_RESUME_ACTION: launch Phase 4.1 (replace umbrella NotResultExpression path) through Ollama
 ## Confirmed design decisions
 
 - Quoted strings support exactly these escapes:
