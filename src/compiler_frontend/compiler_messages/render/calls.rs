@@ -235,13 +235,13 @@ pub(crate) fn invalid_assignment_target_message(
                 "Assignment target {target_text} is unavailable inside catch recovery for the same assignment."
             )
         }
-        InvalidAssignmentTargetReason::CollectionIndexedWriteRemoved => {
-            "Indexed assignment through collection `get(...)` has been removed. Use `~items.set(index, value)!` or handle `~items.set(index, value) catch:` instead.".to_string()
+        InvalidAssignmentTargetReason::CollectionGetTargetNotWritable => {
+            "Cannot assign through collection `get(...)`. Call `set(index, value)` with explicit `~` access on the collection instead, then recover with `catch` or propagate with `!` inside a compatible `Error!` function.".to_string()
         }
-        InvalidAssignmentTargetReason::MapIndexedWriteRemoved => {
-            "Indexed assignment through map `get(...)` has been removed. Use `~map.set(key, value)!` or handle `~map.set(key, value) catch:` instead.".to_string()
+        InvalidAssignmentTargetReason::MapGetTargetNotWritable => {
+            "Cannot assign through map `get(...)`. Call `set(key, value)` with explicit `~` access on the map instead, then recover with `catch` or propagate with `!` inside a compatible `Error!` function.".to_string()
         }
-        InvalidAssignmentTargetReason::MapPropertyWriteRemoved => {
+        InvalidAssignmentTargetReason::ReadOnlyMapProperty => {
             "Map `length` is a read-only property and cannot be assigned.".to_string()
         }
         InvalidAssignmentTargetReason::ExpectedAssignmentOperator => {

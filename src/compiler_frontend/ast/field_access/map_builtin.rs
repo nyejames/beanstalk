@@ -108,7 +108,7 @@ pub(super) fn parse_map_builtin_member_typed(
         // Reject assignment through `map.length`.
         if token_stream.current_token_kind().is_assignment_operator() {
             return Err(CompilerDiagnostic::invalid_assignment_target(
-                InvalidAssignmentTargetReason::MapPropertyWriteRemoved,
+                InvalidAssignmentTargetReason::ReadOnlyMapProperty,
                 None,
                 Some(receiver_type_id),
                 None,
@@ -262,7 +262,7 @@ pub(super) fn parse_map_builtin_member_typed(
         && token_stream.current_token_kind().is_assignment_operator()
     {
         return Err(CompilerDiagnostic::invalid_assignment_target(
-            InvalidAssignmentTargetReason::MapIndexedWriteRemoved,
+            InvalidAssignmentTargetReason::MapGetTargetNotWritable,
             None,
             Some(value_type_id),
             None,

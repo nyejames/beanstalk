@@ -1489,8 +1489,8 @@ path = "collection_helpers_strict_runtime_contract"
 tags = ["integration","collections","js-backend"]
 
 [[case]]
-id = "collection_indexed_write_removed"
-path = "collection_indexed_write_removed"
+id = "collection_get_assignment_rejected"
+path = "collection_get_assignment_rejected"
 tags = ["integration","collections","diagnostics"]
 
 [[case]]

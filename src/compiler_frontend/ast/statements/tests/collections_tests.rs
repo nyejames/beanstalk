@@ -410,7 +410,7 @@ fn rejects_get_index_assignment_as_removed_syntax() {
     assert!(matches!(
         diagnostic.payload,
         DiagnosticPayload::InvalidAssignmentTarget {
-            reason: InvalidAssignmentTargetReason::CollectionIndexedWriteRemoved,
+            reason: InvalidAssignmentTargetReason::CollectionGetTargetNotWritable,
             ..
         }
     ));
@@ -991,7 +991,7 @@ fn rejects_map_length_assignment() {
     assert!(matches!(
         diagnostic.payload,
         DiagnosticPayload::InvalidAssignmentTarget {
-            reason: InvalidAssignmentTargetReason::MapPropertyWriteRemoved,
+            reason: InvalidAssignmentTargetReason::ReadOnlyMapProperty,
             ..
         }
     ));
@@ -1006,7 +1006,7 @@ fn rejects_map_get_index_assignment() {
     assert!(matches!(
         diagnostic.payload,
         DiagnosticPayload::InvalidAssignmentTarget {
-            reason: InvalidAssignmentTargetReason::MapIndexedWriteRemoved,
+            reason: InvalidAssignmentTargetReason::MapGetTargetNotWritable,
             ..
         }
     ));

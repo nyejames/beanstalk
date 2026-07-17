@@ -910,9 +910,9 @@ pub enum InvalidAssignmentTargetReason {
     ImmutableBinding,
     ImmutableFieldRoot,
     UnavailableInCatchRecovery,
-    CollectionIndexedWriteRemoved,
-    MapIndexedWriteRemoved,
-    MapPropertyWriteRemoved,
+    CollectionGetTargetNotWritable,
+    MapGetTargetNotWritable,
+    ReadOnlyMapProperty,
     ExpectedAssignmentOperator,
     MutableMarkerOnAssignmentTarget,
 }
