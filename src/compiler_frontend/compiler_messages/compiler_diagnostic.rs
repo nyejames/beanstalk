@@ -398,6 +398,7 @@ impl CompilerDiagnostic {
 
     pub(crate) fn multiple_mutable_borrows(
         place: DiagnosticPlace,
+        conflicting_place: Option<DiagnosticPlace>,
         existing_location: Option<SourceLocation>,
         location: SourceLocation,
     ) -> Self {
@@ -405,7 +406,7 @@ impl CompilerDiagnostic {
         if let Some(existing_location) = existing_location.clone() {
             labels.push(DiagnosticLabel::secondary(
                 existing_location,
-                Some(DiagnosticLabelMessage::ExistingBorrow),
+                Some(DiagnosticLabelMessage::ConflictingAccess),
             ));
         }
 
@@ -414,6 +415,7 @@ impl CompilerDiagnostic {
             location,
             DiagnosticPayload::MultipleMutableBorrows {
                 place,
+                conflicting_place,
                 existing_location,
             },
         )
@@ -432,7 +434,7 @@ impl CompilerDiagnostic {
         if let Some(existing_location) = existing_location.clone() {
             labels.push(DiagnosticLabel::secondary(
                 existing_location,
-                Some(DiagnosticLabelMessage::ExistingBorrow),
+                Some(DiagnosticLabelMessage::ConflictingAccess),
             ));
         }
 

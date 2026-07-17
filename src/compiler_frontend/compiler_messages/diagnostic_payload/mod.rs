@@ -172,6 +172,7 @@ pub enum DiagnosticPayload {
 
     MultipleMutableBorrows {
         place: DiagnosticPlace,
+        conflicting_place: Option<DiagnosticPlace>,
         existing_location: Option<SourceLocation>,
     },
 

@@ -53,7 +53,7 @@ pub enum DiagnosticLabelStyle {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DiagnosticLabelMessage {
     PreviousDeclaration,
-    ExistingBorrow,
+    ConflictingAccess,
     ExpectedTypeDeclaredHere,
     ValueMovedHere,
     /// Render-ready label text for diagnostics that need local phrasing.
@@ -86,7 +86,7 @@ impl DiagnosticLabelMessage {
                 }
             }
             DiagnosticLabelMessage::PreviousDeclaration
-            | DiagnosticLabelMessage::ExistingBorrow
+            | DiagnosticLabelMessage::ConflictingAccess
             | DiagnosticLabelMessage::ExpectedTypeDeclaredHere
             | DiagnosticLabelMessage::ValueMovedHere
             | DiagnosticLabelMessage::GenericInstantiationCallSite

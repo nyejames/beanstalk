@@ -135,9 +135,17 @@ impl<'a> BorrowDiagnostics<'a> {
     pub(super) fn multiple_mutable_borrows(
         &self,
         place: DiagnosticPlace,
+        conflicting_place: Option<DiagnosticPlace>,
+        existing_location: Option<SourceLocation>,
         location: SourceLocation,
     ) -> BorrowCheckError {
-        CompilerDiagnostic::multiple_mutable_borrows(place, None, location).into()
+        CompilerDiagnostic::multiple_mutable_borrows(
+            place,
+            conflicting_place,
+            existing_location,
+            location,
+        )
+        .into()
     }
 
     pub(super) fn shared_mutable_conflict(
@@ -146,6 +154,7 @@ impl<'a> BorrowDiagnostics<'a> {
         existing_access: BorrowAccessKind,
         requested_access: BorrowAccessKind,
         conflicting_place: Option<DiagnosticPlace>,
+        existing_location: Option<SourceLocation>,
         location: SourceLocation,
     ) -> BorrowCheckError {
         CompilerDiagnostic::shared_mutable_conflict(
@@ -153,7 +162,7 @@ impl<'a> BorrowDiagnostics<'a> {
             existing_access,
             requested_access,
             conflicting_place,
-            None,
+            existing_location,
             location,
         )
         .into()

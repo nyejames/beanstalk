@@ -134,6 +134,16 @@ path = "borrow_checker_duplicate_mutable_args"
 tags = ["integration","borrows", "diagnostics"]
 
 [[case]]
+id = "borrow_conflict_resolved_by_copy"
+path = "borrow_conflict_resolved_by_copy"
+tags = ["integration","borrows","diagnostics"]
+
+[[case]]
+id = "borrow_conflict_resolved_by_reordering"
+path = "borrow_conflict_resolved_by_reordering"
+tags = ["integration","borrows","diagnostics"]
+
+[[case]]
 id = "function_call_mutable_param_requires_explicit_tilde"
 path = "function_call_mutable_param_requires_explicit_tilde"
 tags = ["integration","functions","diagnostics"]

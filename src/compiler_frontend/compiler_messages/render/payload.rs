@@ -877,9 +877,11 @@ fn borrow_payload_message(payload: &DiagnosticPayload, string_table: &StringTabl
             requested_access,
             ..
         } => borrow_conflict_message(place, *existing_access, *requested_access, string_table),
-        DiagnosticPayload::MultipleMutableBorrows { place, .. } => {
-            multiple_mutable_borrows_message(place, string_table)
-        }
+        DiagnosticPayload::MultipleMutableBorrows {
+            place,
+            conflicting_place,
+            ..
+        } => multiple_mutable_borrows_message(place, conflicting_place.as_ref(), string_table),
         DiagnosticPayload::SharedMutableConflict {
             place,
             existing_access,

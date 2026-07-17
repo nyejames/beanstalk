@@ -716,12 +716,12 @@ fn borrow_descriptor(kind: BorrowDiagnosticKind) -> DiagnosticDescriptor {
     match kind {
         BorrowDiagnosticKind::BorrowConflict => DiagnosticDescriptor::new(
             "BST-BORROW-0001",
-            "Borrow conflict",
+            "Access conflict",
             DiagnosticSeverity::Error,
         ),
         BorrowDiagnosticKind::MultipleMutableBorrows => DiagnosticDescriptor::new(
             "BST-BORROW-0002",
-            "Multiple mutable borrows",
+            "Conflicting mutable access",
             DiagnosticSeverity::Error,
         ),
         BorrowDiagnosticKind::SharedMutableConflict => DiagnosticDescriptor::new(
@@ -736,12 +736,12 @@ fn borrow_descriptor(kind: BorrowDiagnosticKind) -> DiagnosticDescriptor {
         ),
         BorrowDiagnosticKind::MoveWhileBorrowed => DiagnosticDescriptor::new(
             "BST-BORROW-0005",
-            "Move while borrowed",
+            "Ownership transfer conflicts with active access",
             DiagnosticSeverity::Error,
         ),
         BorrowDiagnosticKind::WholeObjectBorrowConflict => DiagnosticDescriptor::new(
             "BST-BORROW-0006",
-            "Whole-object borrow conflict",
+            "Whole-value access conflict",
             DiagnosticSeverity::Error,
         ),
         BorrowDiagnosticKind::InvalidMutableAccess => DiagnosticDescriptor::new(

@@ -124,7 +124,7 @@ fn descriptor_codes_are_stable_and_non_empty() {
         (
             DiagnosticKind::Borrow(BorrowDiagnosticKind::BorrowConflict),
             "BST-BORROW-0001",
-            "Borrow conflict",
+            "Access conflict",
             DiagnosticSeverity::Error,
         ),
         (

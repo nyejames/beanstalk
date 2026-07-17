@@ -7,12 +7,16 @@ use crate::compiler_frontend::analysis::borrow_checker::state::{FunctionLayout, 
 use crate::compiler_frontend::analysis::borrow_checker::types::{
     AccessKind, ValueAccessClassification, ValueBorrowFact,
 };
+use crate::compiler_frontend::compiler_errors::SourceLocation;
 use crate::compiler_frontend::hir::ids::{HirValueId, LocalId};
 use rustc_hash::FxHashMap;
 
 #[derive(Debug, Clone)]
 pub(super) struct StatementAccessTracker {
     root_access: Vec<Option<AccessKind>>,
+    // WHAT: first access location recorded per root, so same-statement conflicts can label
+    // the earlier access without changing transfer rules.
+    root_access_location: Vec<Option<SourceLocation>>,
     pub(super) shared_roots: RootSet,
     pub(super) mutable_roots: RootSet,
 }
@@ -21,6 +25,7 @@ impl StatementAccessTracker {
     pub(super) fn new(root_count: usize) -> Self {
         Self {
             root_access: vec![None; root_count],
+            root_access_location: vec![None; root_count],
             shared_roots: RootSet::empty(root_count),
             mutable_roots: RootSet::empty(root_count),
         }
@@ -37,10 +42,26 @@ impl StatementAccessTracker {
         }
     }
 
-    pub(super) fn record(&mut self, root_index: usize, access: AccessKind) {
+    // WHAT: returns the source location of the first access recorded for this root.
+    // WHY: same-statement conflicts report the earlier access as the secondary label.
+    pub(super) fn access_location(&self, root_index: usize) -> Option<&SourceLocation> {
+        self.root_access_location[root_index].as_ref()
+    }
+
+    pub(super) fn record(
+        &mut self,
+        root_index: usize,
+        access: AccessKind,
+        location: SourceLocation,
+    ) {
         match access {
             AccessKind::Shared => self.shared_roots.insert(root_index),
             AccessKind::Mutable => self.mutable_roots.insert(root_index),
+        }
+
+        // Keep the first recorded location so the conflicting (earlier) access is labelled.
+        if self.root_access_location[root_index].is_none() {
+            self.root_access_location[root_index] = Some(location);
         }
 
         let entry = &mut self.root_access[root_index];

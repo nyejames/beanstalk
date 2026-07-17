@@ -127,9 +127,11 @@ impl DiagnosticPayload {
 
             DiagnosticPayload::MultipleMutableBorrows {
                 place,
+                conflicting_place,
                 existing_location,
             } => {
-                remap_place_with_optional_location(place, existing_location, remap);
+                remap_place_with_optional_conflict(place, conflicting_place, remap);
+                remap_optional_location(existing_location, remap);
             }
 
             DiagnosticPayload::UseAfterPossibleMove {

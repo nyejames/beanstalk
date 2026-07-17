@@ -9,9 +9,9 @@ use super::*;
 pub(crate) fn diagnostic_place_name(place: &DiagnosticPlace, string_table: &StringTable) -> String {
     match place {
         DiagnosticPlace::Local(name) | DiagnosticPlace::RenderedText(name) => {
-            format!("'{}'", string_table.resolve(*name))
+            format!("`{}`", string_table.resolve(*name))
         }
-        DiagnosticPlace::Path(path) => format!("'{}'", path.to_portable_string(string_table)),
+        DiagnosticPlace::Path(path) => format!("`{}`", path.to_portable_string(string_table)),
         DiagnosticPlace::Unknown => "this value".to_string(),
     }
 }
@@ -40,12 +40,22 @@ pub(crate) fn borrow_conflict_message(
 
 pub(crate) fn multiple_mutable_borrows_message(
     place: &DiagnosticPlace,
+    conflicting_place: Option<&DiagnosticPlace>,
     string_table: &StringTable,
 ) -> String {
-    format!(
-        "Cannot mutably access {} because it is already mutably active.",
-        diagnostic_place_name(place, string_table)
-    )
+    let place_name = diagnostic_place_name(place, string_table);
+
+    match conflicting_place {
+        Some(conflicting) => {
+            let conflicting_name = diagnostic_place_name(conflicting, string_table);
+            format!(
+                "Cannot create another mutable access to {place_name} while {conflicting_name} is active. Reuse {conflicting_name}, or move the new access after its last use."
+            )
+        }
+        None => format!(
+            "Cannot create another mutable access to {place_name} while it is already mutably active. Reuse the existing access, or move the new access after its last use."
+        ),
+    }
 }
 
 pub(crate) fn shared_mutable_conflict_message(
@@ -62,13 +72,13 @@ pub(crate) fn shared_mutable_conflict_message(
 
     match (existing_access, requested_access) {
         (BorrowAccessKind::Mutable, BorrowAccessKind::Shared) => format!(
-            "Cannot read {place_name} as shared while mutable alias {conflicting_name} is still active."
+            "Cannot read {place_name} while mutable alias {conflicting_name} is still needed later. Read through {conflicting_name}, or move the later use of {conflicting_name} before this access."
         ),
         (BorrowAccessKind::Shared, BorrowAccessKind::Mutable) => format!(
-            "Cannot mutably access {place_name} while shared access to {conflicting_name} is still active."
+            "Cannot mutably access {place_name} while shared alias {conflicting_name} is still needed later. Move the mutation after the last use of {conflicting_name}, or create an explicit copy when independent data is required."
         ),
         (BorrowAccessKind::Move, _) | (_, BorrowAccessKind::Move) => format!(
-            "Cannot access {place_name} because it conflicts with a possible ownership move of {conflicting_name}."
+            "Cannot access {place_name} because it conflicts with a possible ownership transfer of {conflicting_name}."
         ),
         _ => format!(
             "Cannot access {place_name}: existing {} access conflicts with requested {} access.",
@@ -94,7 +104,7 @@ pub(crate) fn move_while_borrowed_message(
     string_table: &StringTable,
 ) -> String {
     format!(
-        "Cannot move {} while it has an active {} borrow.",
+        "Cannot transfer ownership of {} while it has an active {} access.",
         diagnostic_place_name(place, string_table),
         borrow_access_name(existing_access)
     )
@@ -106,7 +116,7 @@ pub(crate) fn whole_object_borrow_conflict_message(
     string_table: &StringTable,
 ) -> String {
     format!(
-        "Cannot borrow whole object {} while part {} is already borrowed.",
+        "Cannot access whole value {} while part {} is already active.",
         diagnostic_place_name(whole_place, string_table),
         diagnostic_place_name(part_place, string_table)
     )

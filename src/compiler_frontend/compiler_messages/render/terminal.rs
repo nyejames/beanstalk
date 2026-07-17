@@ -164,7 +164,7 @@ fn diagnostic_label_message_text(
 
     match message {
         DiagnosticLabelMessage::PreviousDeclaration => "previous declaration here".to_owned(),
-        DiagnosticLabelMessage::ExistingBorrow => "existing borrow here".to_owned(),
+        DiagnosticLabelMessage::ConflictingAccess => "earlier conflicting access here".to_owned(),
         DiagnosticLabelMessage::ExpectedTypeDeclaredHere => {
             "expected type declared here".to_owned()
         }
