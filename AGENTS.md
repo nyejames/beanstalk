@@ -15,6 +15,8 @@ Before making or reviewing a non-trivial change, read:
 
 Read `docs/src/docs/codebase/style-guide/testing.bd` when the task changes or reviews behavior, diagnostics, compiler stages, backend artifacts, tests, fixtures, or test infrastructure.
 
+Read `docs/build-system-design.md` for build-system or project orchestration: Stage 0, config, imports, modules, packages, builders, tooling, link planning, backend project assembly, outputs, incremental builds and the dev server
+
 For memory, ownership, borrow checking, allocation, GC, drops, or runtime-handle work:
 1. Read `docs/src/docs/codebase/memory-management/overview.bd`
 2. Use its task-reading guide
@@ -134,7 +136,9 @@ If implementation work makes documentation inaccurate, report the affected files
 - The progress matrix records current support, partial support, clean rejection, experimental paths, and coverage.
 - The roadmap records sequencing, active plans, and proposals not yet accepted as design.
 - Update the progress matrix when current status changed. Do not make a meaningless matrix edit for a pure refactor or prose-only correction.
-- Put compiler architecture and stage ownership in `docs/compiler-design-overview.md`. Keep memory, language-scope, testing and validation rules in their existing canonical references.
+- Compiler semantic architecture belongs in `docs/compiler-design-overview.md`
+- Build orchestration belongs in `docs/build-system-design.md`
+- Keep memory, language-scope, testing and validation rules in their existing canonical references.
 
 ## Benchmarking
 

@@ -28,6 +28,8 @@ For compiler architecture and stage ownership, use
 For design-boundary questions, read
 `docs/src/docs/codebase/design-scope/overview.bd`.
 
+For build-system or project orchestration questions, read `docs/build-system-design.md`.
+
 ## Compiler flow
 
 [codeblock, $code("text"):

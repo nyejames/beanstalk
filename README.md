@@ -152,6 +152,12 @@ examples can grow around the language that exists and the agent will have to fol
 <br>
 <li>
     <ul>
+        <a href="./docs/build-system-design.md">Build system info</a>
+    </ul>
+</li>
+<br>
+<li>
+    <ul>
         <a href="https://nyejames.github.io/beanstalk/docs/codebase/memory-management/">Memory management</a>
     </ul>
 </li>

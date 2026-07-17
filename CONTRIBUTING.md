@@ -25,18 +25,16 @@ To see the current plans and priority goals of the compiler and language, see th
 
 ### Language and current support
 
-- [Compiler-facing language overview](docs/language-overview.md)
 - [User-facing documentation](docs/src/docs/)
 - [Progress matrix](docs/src/docs/progress/#page.bst)
 - [Roadmap](docs/roadmap/roadmap.md)
-
-`docs/language-overview.md` is the current source of truth for compiler-facing language semantics. The progress matrix records what is implemented today; the roadmap records sequencing and proposals.
 
 ### Compiler and memory design
 
 More technical details about the language, compiler and build system.
 
 - [Compiler design overview](docs/compiler-design-overview.md)
+- [Build system overview](docs/build-system-design.md)
 - [Memory-management overview](docs/src/docs/codebase/memory-management/overview.bd)
 - [Design scope](docs/src/docs/codebase/design-scope/overview.bd)
 - [Repository index](index.md)
