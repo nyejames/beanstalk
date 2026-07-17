@@ -1079,7 +1079,7 @@ pub enum NonExhaustiveMatchReason {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum InvalidResultHandlingReason {
+pub enum InvalidFallibleHandlingReason {
     CatchOutsideBoundary,
     ExpectedCatchBlockOrHandler,
     ExpectedCatchHandlerOpeningPipe,
@@ -1108,108 +1108,108 @@ pub enum InvalidResultHandlingReason {
     SuccessValueDiscarded,
 }
 
-impl InvalidResultHandlingReason {
+impl InvalidFallibleHandlingReason {
     pub(crate) fn message(self) -> &'static str {
         match self {
-            InvalidResultHandlingReason::CatchOutsideBoundary => {
+            InvalidFallibleHandlingReason::CatchOutsideBoundary => {
                 "`catch` can only handle a fallible expression at an assignment, declaration, return, or statement boundary."
             }
 
-            InvalidResultHandlingReason::ExpectedCatchBlockOrHandler => {
+            InvalidFallibleHandlingReason::ExpectedCatchBlockOrHandler => {
                 "Expected `:` or `|err|:` catch-block syntax after `catch`."
             }
 
-            InvalidResultHandlingReason::ExpectedCatchHandlerOpeningPipe => {
+            InvalidFallibleHandlingReason::ExpectedCatchHandlerOpeningPipe => {
                 "Expected `|` to start the catch handler binding."
             }
 
-            InvalidResultHandlingReason::ExpectedCatchHandlerIdentifier => {
+            InvalidFallibleHandlingReason::ExpectedCatchHandlerIdentifier => {
                 "Expected a catch handler identifier between `|` markers."
             }
 
-            InvalidResultHandlingReason::ExpectedCatchHandlerClosingPipe => {
+            InvalidFallibleHandlingReason::ExpectedCatchHandlerClosingPipe => {
                 "Expected `|` after the catch handler identifier."
             }
 
-            InvalidResultHandlingReason::ExpectedCatchHandlerColon => {
+            InvalidFallibleHandlingReason::ExpectedCatchHandlerColon => {
                 "Expected ':' to start the catch handler scope."
             }
 
-            InvalidResultHandlingReason::EmptyCatchHandlerBinding => {
+            InvalidFallibleHandlingReason::EmptyCatchHandlerBinding => {
                 "`catch ||:` is invalid. Use `catch:` when the error value is unused."
             }
 
-            InvalidResultHandlingReason::MultipleCatchHandlerBindings => {
+            InvalidFallibleHandlingReason::MultipleCatchHandlerBindings => {
                 "`catch` accepts one optional error binding. Use `catch |err|:`."
             }
 
-            InvalidResultHandlingReason::RemovedBangFallbackSyntax => {
+            InvalidFallibleHandlingReason::RemovedBangFallbackSyntax => {
                 "Fallible fallbacks use `catch:` with `then` recovery values, not `! fallback`."
             }
 
-            InvalidResultHandlingReason::RemovedBangCatchHandlerSyntax => {
+            InvalidFallibleHandlingReason::RemovedBangCatchHandlerSyntax => {
                 "Catch handlers use `catch |err|:`, not `err!`."
             }
 
-            InvalidResultHandlingReason::FallbackValuesForErrorOnlyResult => {
+            InvalidFallibleHandlingReason::FallbackValuesForErrorOnlyResult => {
                 "This fallible expression has no success return values, so `catch then` fallback values are not allowed here."
             }
 
-            InvalidResultHandlingReason::NotResultExpression => {
+            InvalidFallibleHandlingReason::NotResultExpression => {
                 "Postfix `!` and `catch` require a fallible expression that returns `Error!`."
             }
 
-            InvalidResultHandlingReason::FunctionHasNoErrorSlot => {
+            InvalidFallibleHandlingReason::FunctionHasNoErrorSlot => {
                 "This expression uses '!' propagation, but the surrounding function does not declare an error return slot."
             }
 
-            InvalidResultHandlingReason::NotOptionExpression => {
+            InvalidFallibleHandlingReason::NotOptionExpression => {
                 "The '?' option-propagation suffix is only valid for optional expressions."
             }
 
-            InvalidResultHandlingReason::FunctionHasNoOptionalReturn => {
+            InvalidFallibleHandlingReason::FunctionHasNoOptionalReturn => {
                 "This expression uses '?' propagation, but the surrounding function does not return an optional success value."
             }
 
-            InvalidResultHandlingReason::OptionPropagationReturnTypeMismatch => {
+            InvalidFallibleHandlingReason::OptionPropagationReturnTypeMismatch => {
                 "This '?' propagation expression is not compatible with the surrounding function's optional return type."
             }
 
-            InvalidResultHandlingReason::OptionPropagationCatchConflict => {
+            InvalidFallibleHandlingReason::OptionPropagationCatchConflict => {
                 "`catch` handles fallible expressions. Optional values must use explicit option inspection instead of `? catch`."
             }
 
-            InvalidResultHandlingReason::CatchHandlerConflicts => {
+            InvalidFallibleHandlingReason::CatchHandlerConflicts => {
                 "Catch handler conflicts with an existing visible declaration."
             }
 
-            InvalidResultHandlingReason::CatchHandlerCanFallThrough => {
+            InvalidFallibleHandlingReason::CatchHandlerCanFallThrough => {
                 "Catch handler without fallback can fall through while success values are required."
             }
 
-            InvalidResultHandlingReason::InlineCatchMultiline => {
+            InvalidFallibleHandlingReason::InlineCatchMultiline => {
                 "Inline `catch then` recovery must fit on a single logical line."
             }
 
-            InvalidResultHandlingReason::ThenWithNoActiveValueTarget => {
+            InvalidFallibleHandlingReason::ThenWithNoActiveValueTarget => {
                 "`then` is only valid inside a value-producing block."
             }
 
-            InvalidResultHandlingReason::ThenCrossesBlockedConstruct => {
+            InvalidFallibleHandlingReason::ThenCrossesBlockedConstruct => {
                 "`then` cannot target a value-producing block across this construct."
             }
 
-            InvalidResultHandlingReason::ThenRequiresValues => "Expected a value after 'then'.",
+            InvalidFallibleHandlingReason::ThenRequiresValues => "Expected a value after 'then'.",
 
-            InvalidResultHandlingReason::DirectOptionFallbackSyntax => {
+            InvalidFallibleHandlingReason::DirectOptionFallbackSyntax => {
                 "Optional values do not support direct fallback syntax. Use `if option is |value| ... else ...`."
             }
 
-            InvalidResultHandlingReason::UnhandledErrorReturn => {
+            InvalidFallibleHandlingReason::UnhandledErrorReturn => {
                 "Calls to error-returning functions must be explicitly handled with postfix `!` or `catch`."
             }
 
-            InvalidResultHandlingReason::SuccessValueDiscarded => {
+            InvalidFallibleHandlingReason::SuccessValueDiscarded => {
                 "This fallible expression returns success values, so it cannot be used as a standalone statement."
             }
         }

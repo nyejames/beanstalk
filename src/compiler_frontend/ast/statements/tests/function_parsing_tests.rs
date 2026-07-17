@@ -11,8 +11,8 @@ use crate::compiler_frontend::ast::statements::functions::{FunctionReturn, Retur
 use crate::compiler_frontend::ast::statements::match_patterns::MatchPattern;
 use crate::compiler_frontend::ast::statements::value_production::types::ValueBlock;
 use crate::compiler_frontend::compiler_messages::{
-    DiagnosticPayload, InvalidCallShapeReason, InvalidFunctionSignatureReason,
-    InvalidReceiverCallReason, InvalidReceiverDeclarationReason, InvalidResultHandlingReason,
+    DiagnosticPayload, InvalidCallShapeReason, InvalidFallibleHandlingReason,
+    InvalidFunctionSignatureReason, InvalidReceiverCallReason, InvalidReceiverDeclarationReason,
     InvalidThisUsageReason, NameNamespace, TypeMismatchContext,
 };
 use crate::compiler_frontend::datatypes::DataType;
@@ -757,8 +757,8 @@ fn rejects_bare_removed_err_bang_handler_without_scope() {
 
     assert_eq!(
         payload,
-        DiagnosticPayload::InvalidResultHandling {
-            reason: InvalidResultHandlingReason::RemovedBangCatchHandlerSyntax
+        DiagnosticPayload::InvalidFallibleHandling {
+            reason: InvalidFallibleHandlingReason::RemovedBangCatchHandlerSyntax
         }
     );
 }
@@ -805,8 +805,8 @@ fn rejects_fallthrough_catch_handler_without_fallback_when_values_are_required()
 
     assert_eq!(
         payload,
-        DiagnosticPayload::InvalidResultHandling {
-            reason: InvalidResultHandlingReason::CatchHandlerCanFallThrough
+        DiagnosticPayload::InvalidFallibleHandling {
+            reason: InvalidFallibleHandlingReason::CatchHandlerCanFallThrough
         }
     );
 }

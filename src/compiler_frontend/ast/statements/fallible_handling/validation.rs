@@ -8,7 +8,7 @@ use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::AstNode;
 use crate::compiler_frontend::ast::expressions::error::ExpressionParseError;
 use crate::compiler_frontend::compiler_messages::{
-    CompilerDiagnostic, InvalidResultHandlingReason,
+    CompilerDiagnostic, InvalidFallibleHandlingReason,
 };
 use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::symbols::identifier_policy::{
@@ -58,8 +58,8 @@ pub(super) fn validate_catch_fallible_handler_conflict(
     location: SourceLocation,
 ) -> Result<(), ExpressionParseError> {
     if context.get_reference(&handler_name).is_some() {
-        return Err(CompilerDiagnostic::invalid_result_handling(
-            InvalidResultHandlingReason::CatchHandlerConflicts,
+        return Err(CompilerDiagnostic::invalid_fallible_handling(
+            InvalidFallibleHandlingReason::CatchHandlerConflicts,
             location,
         )
         .into());
@@ -89,8 +89,8 @@ pub(super) fn validate_catch_fallible_handler_value_requirement(
             BranchFlow::ProducesValue | BranchFlow::Terminates
         )
     {
-        return Err(CompilerDiagnostic::invalid_result_handling(
-            InvalidResultHandlingReason::CatchHandlerCanFallThrough,
+        return Err(CompilerDiagnostic::invalid_fallible_handling(
+            InvalidFallibleHandlingReason::CatchHandlerCanFallThrough,
             location,
         )
         .into());

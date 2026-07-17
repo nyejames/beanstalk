@@ -8,8 +8,8 @@ use super::{
     IncompatibleChoiceComparisonReason, InfrastructureDiagnosticKind,
     InvalidAssignmentTargetReason, InvalidCallShapeReason, InvalidCastReason,
     InvalidChoiceVariantReason, InvalidCollectionTypeReason, InvalidConfigReason,
-    InvalidExpressionReason, InvalidFunctionSignatureReason, InvalidGenericParameterReason,
-    InvalidImportClauseReason, InvalidReceiverCallReason, InvalidResultHandlingReason,
+    InvalidExpressionReason, InvalidFallibleHandlingReason, InvalidFunctionSignatureReason,
+    InvalidGenericParameterReason, InvalidImportClauseReason, InvalidReceiverCallReason,
     InvalidResultOperandReason, InvalidSignatureMemberReason, InvalidStandaloneStatementReason,
     InvalidStatementPositionReason, InvalidStringEscapeReason, InvalidTemplateDirectiveReason,
     InvalidTemplateStructureReason, InvalidTraitKeywordUsageReason, InvalidTypeAnnotationReason,
@@ -1323,8 +1323,8 @@ fn phase_1_2_renderers_keep_source_language_terminology() {
             builtin_type_ids::STRING,
             location(source_path.clone()),
         ),
-        CompilerDiagnostic::invalid_result_handling(
-            InvalidResultHandlingReason::NotResultExpression,
+        CompilerDiagnostic::invalid_fallible_handling(
+            InvalidFallibleHandlingReason::NotResultExpression,
             location(source_path.clone()),
         ),
         CompilerDiagnostic::invalid_config_reason(

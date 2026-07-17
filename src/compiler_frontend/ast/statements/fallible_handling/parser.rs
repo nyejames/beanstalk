@@ -25,7 +25,7 @@ use crate::compiler_frontend::ast::statements::value_production::types::{
 };
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_messages::{
-    CompilerDiagnostic, InvalidResultHandlingReason, TypeMismatchContext,
+    CompilerDiagnostic, InvalidFallibleHandlingReason, TypeMismatchContext,
 };
 use crate::compiler_frontend::datatypes::diagnostic_type_spelling;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
@@ -180,8 +180,8 @@ pub(crate) fn parse_fallible_handling_suffix_for_expression(
     let Some((_success_type_ids, error_return_type_id)) =
         type_environment.fallible_carrier_slots(expression_type_id)
     else {
-        return Err(CompilerDiagnostic::invalid_result_handling(
-            InvalidResultHandlingReason::NotResultExpression,
+        return Err(CompilerDiagnostic::invalid_fallible_handling(
+            InvalidFallibleHandlingReason::NotResultExpression,
             token_stream.current_location(),
         )
         .into());
@@ -286,8 +286,8 @@ fn parse_fallible_handling_suffix(
 
         // Reject the old `symbol!` catch syntax that was removed from the language.
         TokenKind::Symbol(_) if token_stream.peek_next_token() == Some(&TokenKind::Bang) => {
-            Err(CompilerDiagnostic::invalid_result_handling(
-                InvalidResultHandlingReason::RemovedBangCatchHandlerSyntax,
+            Err(CompilerDiagnostic::invalid_fallible_handling(
+                InvalidFallibleHandlingReason::RemovedBangCatchHandlerSyntax,
                 token_stream.current_location(),
             )
             .into())
@@ -308,16 +308,16 @@ fn parse_postfix_propagation(
 
     // Reject the old `expr!fallback` inline-fallback syntax.
     if token_starts_removed_bang_fallback(token_stream.current_token_kind()) {
-        return Err(CompilerDiagnostic::invalid_result_handling(
-            InvalidResultHandlingReason::RemovedBangFallbackSyntax,
+        return Err(CompilerDiagnostic::invalid_fallible_handling(
+            InvalidFallibleHandlingReason::RemovedBangFallbackSyntax,
             token_stream.current_location(),
         )
         .into());
     }
 
     let Some(expected_error_type_id) = context.expected_error_type else {
-        return Err(CompilerDiagnostic::invalid_result_handling(
-            InvalidResultHandlingReason::FunctionHasNoErrorSlot,
+        return Err(CompilerDiagnostic::invalid_fallible_handling(
+            InvalidFallibleHandlingReason::FunctionHasNoErrorSlot,
             token_stream.current_location(),
         )
         .into());
@@ -401,8 +401,8 @@ fn parse_catch_handling_suffix(
     string_table: &mut StringTable,
 ) -> Result<FallibleHandling, ExpressionParseError> {
     if !site.allow_boundary_catch {
-        return Err(CompilerDiagnostic::invalid_result_handling(
-            InvalidResultHandlingReason::CatchOutsideBoundary,
+        return Err(CompilerDiagnostic::invalid_fallible_handling(
+            InvalidFallibleHandlingReason::CatchOutsideBoundary,
             token_stream.current_location(),
         )
         .into());
@@ -441,8 +441,8 @@ fn parse_catch_handling_suffix(
             string_table,
         ),
 
-        _ => Err(CompilerDiagnostic::invalid_result_handling(
-            InvalidResultHandlingReason::ExpectedCatchBlockOrHandler,
+        _ => Err(CompilerDiagnostic::invalid_fallible_handling(
+            InvalidFallibleHandlingReason::ExpectedCatchBlockOrHandler,
             token_stream.current_location(),
         )
         .into()),
@@ -600,8 +600,8 @@ pub(crate) fn parse_fallible_handling_suffix_for_call_expression(
     )?;
 
     let Some(handling) = handling else {
-        return Err(CompilerDiagnostic::invalid_result_handling(
-            InvalidResultHandlingReason::ExpectedCatchBlockOrHandler,
+        return Err(CompilerDiagnostic::invalid_fallible_handling(
+            InvalidFallibleHandlingReason::ExpectedCatchBlockOrHandler,
             token_stream.current_location(),
         )
         .into());
@@ -641,8 +641,8 @@ pub(crate) fn parse_fallible_handling_suffix_for_host_call_expression(
     )?;
 
     let Some(handling) = handling else {
-        return Err(CompilerDiagnostic::invalid_result_handling(
-            InvalidResultHandlingReason::ExpectedCatchBlockOrHandler,
+        return Err(CompilerDiagnostic::invalid_fallible_handling(
+            InvalidFallibleHandlingReason::ExpectedCatchBlockOrHandler,
             token_stream.current_location(),
         )
         .into());

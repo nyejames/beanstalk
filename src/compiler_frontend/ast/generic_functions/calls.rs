@@ -32,7 +32,7 @@ use crate::compiler_frontend::ast::statements::functions::{
 };
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_messages::{
-    CompilerDiagnostic, InvalidResultHandlingReason,
+    CompilerDiagnostic, InvalidFallibleHandlingReason,
 };
 use crate::compiler_frontend::datatypes::diagnostic_type_spelling;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
@@ -290,8 +290,8 @@ fn finish_generic_function_call(
             token_stream.current_token_kind(),
             TokenKind::Bang | TokenKind::Catch
         ) {
-            return Err(CompilerDiagnostic::invalid_result_handling(
-                InvalidResultHandlingReason::NotResultExpression,
+            return Err(CompilerDiagnostic::invalid_fallible_handling(
+                InvalidFallibleHandlingReason::NotResultExpression,
                 token_stream.current_location(),
             )
             .into());
@@ -320,8 +320,8 @@ fn finish_generic_function_call(
         );
     }
 
-    Err(CompilerDiagnostic::invalid_result_handling(
-        InvalidResultHandlingReason::UnhandledErrorReturn,
+    Err(CompilerDiagnostic::invalid_fallible_handling(
+        InvalidFallibleHandlingReason::UnhandledErrorReturn,
         token_stream.current_location(),
     )
     .into())

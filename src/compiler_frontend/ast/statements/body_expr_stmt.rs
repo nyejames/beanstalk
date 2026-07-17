@@ -12,7 +12,7 @@ use crate::compiler_frontend::ast::expressions::parse_expression::create_express
 use crate::compiler_frontend::ast::statements::value_production::types::ValueBlock;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_messages::{
-    CompilerDiagnostic, InvalidResultHandlingReason,
+    CompilerDiagnostic, InvalidFallibleHandlingReason,
 };
 use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
@@ -82,8 +82,8 @@ fn rejects_discarded_fallible_success(expression: &Expression) -> Option<Compile
     );
 
     if is_handled_fallible && expression.type_id != builtin_type_ids::NONE {
-        return Some(CompilerDiagnostic::invalid_result_handling(
-            InvalidResultHandlingReason::SuccessValueDiscarded,
+        return Some(CompilerDiagnostic::invalid_fallible_handling(
+            InvalidFallibleHandlingReason::SuccessValueDiscarded,
             expression.location.clone(),
         ));
     }

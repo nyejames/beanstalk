@@ -33,7 +33,7 @@ use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, DeferredFeatureReason, InvalidControlFlowStatementReason,
-    InvalidMatchArmReason, InvalidResultHandlingReason, InvalidStandaloneStatementReason,
+    InvalidFallibleHandlingReason, InvalidMatchArmReason, InvalidStandaloneStatementReason,
 };
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::syntax_errors::statement_position::check_statement_common_mistake;
@@ -269,13 +269,13 @@ pub(crate) fn parse_function_body_statements(
                             | ContextKind::CatchHandler
                             | ContextKind::Template
                     ) {
-                        InvalidResultHandlingReason::ThenCrossesBlockedConstruct
+                        InvalidFallibleHandlingReason::ThenCrossesBlockedConstruct
                     } else {
-                        InvalidResultHandlingReason::ThenWithNoActiveValueTarget
+                        InvalidFallibleHandlingReason::ThenWithNoActiveValueTarget
                     };
 
                     return Err(statement_dispatch_error(
-                        CompilerDiagnostic::invalid_result_handling(reason, then_location),
+                        CompilerDiagnostic::invalid_fallible_handling(reason, then_location),
                     ));
                 };
 
@@ -283,8 +283,8 @@ pub(crate) fn parse_function_body_statements(
                     || is_missing_produced_value_boundary(token_stream.current_token_kind())
                 {
                     return Err(statement_dispatch_error(
-                        CompilerDiagnostic::invalid_result_handling(
-                            InvalidResultHandlingReason::ThenRequiresValues,
+                        CompilerDiagnostic::invalid_fallible_handling(
+                            InvalidFallibleHandlingReason::ThenRequiresValues,
                             token_stream.current_location(),
                         ),
                     ));
@@ -295,8 +295,8 @@ pub(crate) fn parse_function_body_statements(
                     && active_target.expected_arity.is_none()
                 {
                     return Err(statement_dispatch_error(
-                        CompilerDiagnostic::invalid_result_handling(
-                            InvalidResultHandlingReason::FallbackValuesForErrorOnlyResult,
+                        CompilerDiagnostic::invalid_fallible_handling(
+                            InvalidFallibleHandlingReason::FallbackValuesForErrorOnlyResult,
                             then_location,
                         ),
                     ));

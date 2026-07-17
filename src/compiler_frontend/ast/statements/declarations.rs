@@ -35,7 +35,7 @@ use crate::compiler_frontend::ast::{
 use crate::compiler_frontend::builtins::error_type::is_reserved_builtin_symbol;
 use crate::compiler_frontend::compiler_messages::{
     CompileTimeEvaluationErrorReason, CompilerDiagnostic, InvalidCollectionTypeReason,
-    InvalidDeclarationReason, InvalidResultHandlingReason, TypeMismatchContext,
+    InvalidDeclarationReason, InvalidFallibleHandlingReason, TypeMismatchContext,
 };
 
 use crate::compiler_frontend::datatypes::parsed::{ParsedCollectionCapacity, ParsedTypeRef};
@@ -640,8 +640,8 @@ pub fn resolve_declaration_syntax(
             .option_inner_type(parsed_initializer.type_id)
             .is_some()
     {
-        return Err(Box::new(CompilerDiagnostic::invalid_result_handling(
-            InvalidResultHandlingReason::DirectOptionFallbackSyntax,
+        return Err(Box::new(CompilerDiagnostic::invalid_fallible_handling(
+            InvalidFallibleHandlingReason::DirectOptionFallbackSyntax,
             initializer_stream.current_location(),
         )));
     }

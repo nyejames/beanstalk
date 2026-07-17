@@ -17,7 +17,7 @@ use crate::compiler_frontend::ast::statements::value_production::{
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::compiler_messages::{
-    CompilerDiagnostic, InvalidResultHandlingReason,
+    CompilerDiagnostic, InvalidFallibleHandlingReason,
 };
 use crate::compiler_frontend::datatypes::diagnostic_type_spelling;
 use crate::compiler_frontend::datatypes::ids::TypeId;
@@ -121,8 +121,8 @@ fn parse_catch_error_binding(
     string_table: &mut StringTable,
 ) -> Result<CatchErrorBinding, ExpressionParseError> {
     if token_stream.current_token_kind() != &TokenKind::TypeParameterBracket {
-        return Err(CompilerDiagnostic::invalid_result_handling(
-            InvalidResultHandlingReason::ExpectedCatchHandlerOpeningPipe,
+        return Err(CompilerDiagnostic::invalid_fallible_handling(
+            InvalidFallibleHandlingReason::ExpectedCatchHandlerOpeningPipe,
             token_stream.current_location(),
         )
         .into());
@@ -131,16 +131,16 @@ fn parse_catch_error_binding(
     token_stream.advance();
 
     if token_stream.current_token_kind() == &TokenKind::TypeParameterBracket {
-        return Err(CompilerDiagnostic::invalid_result_handling(
-            InvalidResultHandlingReason::EmptyCatchHandlerBinding,
+        return Err(CompilerDiagnostic::invalid_fallible_handling(
+            InvalidFallibleHandlingReason::EmptyCatchHandlerBinding,
             token_stream.current_location(),
         )
         .into());
     }
 
     let TokenKind::Symbol(handler_name) = token_stream.current_token_kind().to_owned() else {
-        return Err(CompilerDiagnostic::invalid_result_handling(
-            InvalidResultHandlingReason::ExpectedCatchHandlerIdentifier,
+        return Err(CompilerDiagnostic::invalid_fallible_handling(
+            InvalidFallibleHandlingReason::ExpectedCatchHandlerIdentifier,
             token_stream.current_location(),
         )
         .into());
@@ -165,16 +165,16 @@ fn parse_catch_error_binding(
     token_stream.advance();
 
     if token_stream.current_token_kind() == &TokenKind::Comma {
-        return Err(CompilerDiagnostic::invalid_result_handling(
-            InvalidResultHandlingReason::MultipleCatchHandlerBindings,
+        return Err(CompilerDiagnostic::invalid_fallible_handling(
+            InvalidFallibleHandlingReason::MultipleCatchHandlerBindings,
             token_stream.current_location(),
         )
         .into());
     }
 
     if token_stream.current_token_kind() != &TokenKind::TypeParameterBracket {
-        return Err(CompilerDiagnostic::invalid_result_handling(
-            InvalidResultHandlingReason::ExpectedCatchHandlerClosingPipe,
+        return Err(CompilerDiagnostic::invalid_fallible_handling(
+            InvalidFallibleHandlingReason::ExpectedCatchHandlerClosingPipe,
             token_stream.current_location(),
         )
         .into());
@@ -202,8 +202,8 @@ fn parse_catch_fallible_handler_body(
     string_table: &mut StringTable,
 ) -> Result<CatchFallibleHandler, ExpressionParseError> {
     if token_stream.current_token_kind() != &TokenKind::Colon {
-        return Err(CompilerDiagnostic::invalid_result_handling(
-            InvalidResultHandlingReason::ExpectedCatchHandlerColon,
+        return Err(CompilerDiagnostic::invalid_fallible_handling(
+            InvalidFallibleHandlingReason::ExpectedCatchHandlerColon,
             token_stream.current_location(),
         )
         .into());
@@ -323,24 +323,24 @@ fn parse_inline_catch_handler_body(
     string_table: &mut StringTable,
 ) -> Result<CatchFallibleHandler, ExpressionParseError> {
     if token_stream.current_token_kind() == &TokenKind::Newline {
-        return Err(CompilerDiagnostic::invalid_result_handling(
-            InvalidResultHandlingReason::InlineCatchMultiline,
+        return Err(CompilerDiagnostic::invalid_fallible_handling(
+            InvalidFallibleHandlingReason::InlineCatchMultiline,
             token_stream.current_location(),
         )
         .into());
     }
 
     if token_stream.current_token_kind() != &TokenKind::Then {
-        return Err(CompilerDiagnostic::invalid_result_handling(
-            InvalidResultHandlingReason::ExpectedCatchBlockOrHandler,
+        return Err(CompilerDiagnostic::invalid_fallible_handling(
+            InvalidFallibleHandlingReason::ExpectedCatchBlockOrHandler,
             token_stream.current_location(),
         )
         .into());
     }
 
     if !site.value_required || site.success_result_type_ids.is_empty() {
-        return Err(CompilerDiagnostic::invalid_result_handling(
-            InvalidResultHandlingReason::FallbackValuesForErrorOnlyResult,
+        return Err(CompilerDiagnostic::invalid_fallible_handling(
+            InvalidFallibleHandlingReason::FallbackValuesForErrorOnlyResult,
             token_stream.current_location(),
         )
         .into());
@@ -352,16 +352,16 @@ fn parse_inline_catch_handler_body(
     // A retained newline proves a multiline form. Other empty boundaries use the
     // shared missing-value diagnostic before expression evaluation.
     if token_stream.current_token_kind() == &TokenKind::Newline {
-        return Err(CompilerDiagnostic::invalid_result_handling(
-            InvalidResultHandlingReason::InlineCatchMultiline,
+        return Err(CompilerDiagnostic::invalid_fallible_handling(
+            InvalidFallibleHandlingReason::InlineCatchMultiline,
             token_stream.current_location(),
         )
         .into());
     }
 
     if is_missing_produced_value_boundary(token_stream.current_token_kind()) {
-        return Err(CompilerDiagnostic::invalid_result_handling(
-            InvalidResultHandlingReason::ThenRequiresValues,
+        return Err(CompilerDiagnostic::invalid_fallible_handling(
+            InvalidFallibleHandlingReason::ThenRequiresValues,
             token_stream.current_location(),
         )
         .into());
@@ -405,8 +405,8 @@ fn parse_inline_catch_handler_body(
     })?;
 
     if token_stream.current_token_kind() == &TokenKind::Catch {
-        return Err(CompilerDiagnostic::invalid_result_handling(
-            InvalidResultHandlingReason::ExpectedCatchBlockOrHandler,
+        return Err(CompilerDiagnostic::invalid_fallible_handling(
+            InvalidFallibleHandlingReason::ExpectedCatchBlockOrHandler,
             token_stream.current_location(),
         )
         .into());
@@ -415,8 +415,8 @@ fn parse_inline_catch_handler_body(
         .iter()
         .any(|value| value.location.start_pos.line_number != then_location.start_pos.line_number)
     {
-        return Err(CompilerDiagnostic::invalid_result_handling(
-            InvalidResultHandlingReason::InlineCatchMultiline,
+        return Err(CompilerDiagnostic::invalid_fallible_handling(
+            InvalidFallibleHandlingReason::InlineCatchMultiline,
             token_stream.current_location(),
         )
         .into());
@@ -443,8 +443,8 @@ fn reject_invalid_inline_catch_value_window(
         let token = &token_stream.tokens[index];
 
         if token.location.start_pos.line_number != then_location.start_pos.line_number {
-            return Err(CompilerDiagnostic::invalid_result_handling(
-                InvalidResultHandlingReason::InlineCatchMultiline,
+            return Err(CompilerDiagnostic::invalid_fallible_handling(
+                InvalidFallibleHandlingReason::InlineCatchMultiline,
                 token.location.clone(),
             )
             .into());
@@ -453,8 +453,8 @@ fn reject_invalid_inline_catch_value_window(
         match token.kind {
             TokenKind::Newline | TokenKind::End | TokenKind::Eof => return Ok(()),
             TokenKind::Catch => {
-                return Err(CompilerDiagnostic::invalid_result_handling(
-                    InvalidResultHandlingReason::ExpectedCatchBlockOrHandler,
+                return Err(CompilerDiagnostic::invalid_fallible_handling(
+                    InvalidFallibleHandlingReason::ExpectedCatchBlockOrHandler,
                     token.location.clone(),
                 )
                 .into());

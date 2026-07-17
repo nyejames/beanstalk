@@ -50,7 +50,7 @@ use crate::compiler_frontend::ast::statements::value_production::types::ValueRec
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 
 use crate::compiler_frontend::compiler_messages::{
-    CompilerDiagnostic, InvalidAssignmentTargetReason, InvalidResultHandlingReason,
+    CompilerDiagnostic, InvalidAssignmentTargetReason, InvalidFallibleHandlingReason,
     TypeMismatchContext,
 };
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
@@ -305,8 +305,8 @@ fn build_mutation_from_target(
                     .option_inner_type(rhs.type_id)
                     .is_some()
             {
-                return Err(CompilerDiagnostic::invalid_result_handling(
-                    InvalidResultHandlingReason::DirectOptionFallbackSyntax,
+                return Err(CompilerDiagnostic::invalid_fallible_handling(
+                    InvalidFallibleHandlingReason::DirectOptionFallbackSyntax,
                     token_stream.current_location(),
                 )
                 .into());

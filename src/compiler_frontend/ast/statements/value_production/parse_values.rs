@@ -19,7 +19,7 @@ use crate::compiler_frontend::ast::statements::value_production::types::{
 };
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_messages::{
-    CompilerDiagnostic, DiagnosticPayload, InvalidResultHandlingReason, InvalidReturnShapeReason,
+    CompilerDiagnostic, DiagnosticPayload, InvalidFallibleHandlingReason, InvalidReturnShapeReason,
     TypeMismatchContext,
 };
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
@@ -95,8 +95,8 @@ pub fn parse_produced_values_typed<'a, 'b>(
             );
         }
 
-        return Err(CompilerDiagnostic::invalid_result_handling(
-            InvalidResultHandlingReason::FallbackValuesForErrorOnlyResult,
+        return Err(CompilerDiagnostic::invalid_fallible_handling(
+            InvalidFallibleHandlingReason::FallbackValuesForErrorOnlyResult,
             token_stream.current_location(),
         )
         .into());

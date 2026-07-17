@@ -430,9 +430,9 @@ fn rule_descriptor(kind: RuleDiagnosticKind) -> DiagnosticDescriptor {
             "Non-exhaustive match",
             DiagnosticSeverity::Error,
         ),
-        RuleDiagnosticKind::InvalidResultHandling => DiagnosticDescriptor::new(
+        RuleDiagnosticKind::InvalidFallibleHandling => DiagnosticDescriptor::new(
             "BST-RULE-0051",
-            "Invalid result handling",
+            "Invalid fallible handling",
             DiagnosticSeverity::Error,
         ),
         RuleDiagnosticKind::InvalidTemplateSlot => DiagnosticDescriptor::new(

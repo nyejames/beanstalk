@@ -1724,14 +1724,14 @@ impl CompilerDiagnostic {
         )
     }
 
-    pub(crate) fn invalid_result_handling(
-        reason: crate::compiler_frontend::compiler_messages::InvalidResultHandlingReason,
+    pub(crate) fn invalid_fallible_handling(
+        reason: crate::compiler_frontend::compiler_messages::InvalidFallibleHandlingReason,
         location: SourceLocation,
     ) -> Self {
         Self::new(
-            DiagnosticKind::Rule(RuleDiagnosticKind::InvalidResultHandling),
+            DiagnosticKind::Rule(RuleDiagnosticKind::InvalidFallibleHandling),
             location,
-            DiagnosticPayload::InvalidResultHandling { reason },
+            DiagnosticPayload::InvalidFallibleHandling { reason },
         )
     }
 

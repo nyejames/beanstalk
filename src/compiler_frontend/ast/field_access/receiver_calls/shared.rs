@@ -17,7 +17,7 @@ use crate::compiler_frontend::ast::statements::functions::{
 };
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_messages::{
-    CompilerDiagnostic, InvalidResultHandlingReason,
+    CompilerDiagnostic, InvalidFallibleHandlingReason,
 };
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::diagnostic_type_spelling;
@@ -62,8 +62,8 @@ pub(super) fn receiver_result_type_ids_for_call(
 ) -> Result<Vec<TypeId>, ExpressionParseError> {
     if let Some(error_return_type_id) = error_return_type_id {
         if !token_stream_starts_fallible_handling_suffix(token_stream) {
-            return Err(CompilerDiagnostic::invalid_result_handling(
-                InvalidResultHandlingReason::UnhandledErrorReturn,
+            return Err(CompilerDiagnostic::invalid_fallible_handling(
+                InvalidFallibleHandlingReason::UnhandledErrorReturn,
                 token_stream.current_location(),
             )
             .into());
@@ -80,8 +80,8 @@ pub(super) fn receiver_result_type_ids_for_call(
         token_stream.current_token_kind(),
         TokenKind::Bang | TokenKind::Catch
     ) {
-        return Err(CompilerDiagnostic::invalid_result_handling(
-            InvalidResultHandlingReason::NotResultExpression,
+        return Err(CompilerDiagnostic::invalid_fallible_handling(
+            InvalidFallibleHandlingReason::NotResultExpression,
             token_stream.current_location(),
         )
         .into());

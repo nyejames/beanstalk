@@ -308,7 +308,7 @@ impl DiagnosticPayload {
             }
 
             DiagnosticPayload::InvalidControlFlowStatement { .. }
-            | DiagnosticPayload::InvalidResultHandling { .. }
+            | DiagnosticPayload::InvalidFallibleHandling { .. }
             | DiagnosticPayload::CompileTimeEvaluationError { .. } => {}
 
             DiagnosticPayload::InvalidDeclaration { name, reason } => {

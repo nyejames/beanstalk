@@ -12,8 +12,8 @@ use crate::compiler_frontend::builtins::CollectionBuiltinOp;
 use crate::compiler_frontend::builtins::maps::MapBuiltinOp;
 use crate::compiler_frontend::compiler_messages::{
     CommonSyntaxMistakeReason, DiagnosticPayload, InvalidAssignmentTargetReason,
-    InvalidBuiltinCallReason, InvalidCollectionTypeReason, InvalidFieldAccessReason,
-    InvalidMapLiteralReason, InvalidReceiverCallReason, InvalidResultHandlingReason,
+    InvalidBuiltinCallReason, InvalidCollectionTypeReason, InvalidFallibleHandlingReason,
+    InvalidFieldAccessReason, InvalidMapLiteralReason, InvalidReceiverCallReason,
     TypeMismatchContext,
 };
 use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
@@ -333,8 +333,8 @@ fn rejects_collection_push_fallback_value() {
 
     assert!(matches!(
         diagnostic.payload,
-        DiagnosticPayload::InvalidResultHandling {
-            reason: InvalidResultHandlingReason::FallbackValuesForErrorOnlyResult,
+        DiagnosticPayload::InvalidFallibleHandling {
+            reason: InvalidFallibleHandlingReason::FallbackValuesForErrorOnlyResult,
             ..
         }
     ));
@@ -451,8 +451,8 @@ fn rejects_collection_set_fallback_value() {
 
     assert!(matches!(
         diagnostic.payload,
-        DiagnosticPayload::InvalidResultHandling {
-            reason: InvalidResultHandlingReason::FallbackValuesForErrorOnlyResult,
+        DiagnosticPayload::InvalidFallibleHandling {
+            reason: InvalidFallibleHandlingReason::FallbackValuesForErrorOnlyResult,
             ..
         }
     ));
@@ -466,8 +466,8 @@ fn rejects_discarded_collection_remove_success() {
 
     assert!(matches!(
         diagnostic.payload,
-        DiagnosticPayload::InvalidResultHandling {
-            reason: InvalidResultHandlingReason::SuccessValueDiscarded,
+        DiagnosticPayload::InvalidFallibleHandling {
+            reason: InvalidFallibleHandlingReason::SuccessValueDiscarded,
             ..
         }
     ));
@@ -1095,8 +1095,8 @@ fn rejects_map_contains_with_fallible_suffix() {
 
     assert!(matches!(
         diagnostic.payload,
-        DiagnosticPayload::InvalidResultHandling {
-            reason: InvalidResultHandlingReason::NotResultExpression,
+        DiagnosticPayload::InvalidFallibleHandling {
+            reason: InvalidFallibleHandlingReason::NotResultExpression,
             ..
         }
     ));
@@ -1110,8 +1110,8 @@ fn rejects_map_clear_with_fallible_suffix() {
 
     assert!(matches!(
         diagnostic.payload,
-        DiagnosticPayload::InvalidResultHandling {
-            reason: InvalidResultHandlingReason::NotResultExpression,
+        DiagnosticPayload::InvalidFallibleHandling {
+            reason: InvalidFallibleHandlingReason::NotResultExpression,
             ..
         }
     ));
@@ -1125,8 +1125,8 @@ fn rejects_map_length_with_fallible_suffix() {
 
     assert!(matches!(
         diagnostic.payload,
-        DiagnosticPayload::InvalidResultHandling {
-            reason: InvalidResultHandlingReason::NotResultExpression,
+        DiagnosticPayload::InvalidFallibleHandling {
+            reason: InvalidFallibleHandlingReason::NotResultExpression,
             ..
         }
     ));

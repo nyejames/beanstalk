@@ -10,7 +10,7 @@ use crate::compiler_frontend::ast::expressions::expression::{
 };
 use crate::compiler_frontend::ast::statements::value_production::types::ValueBlock;
 use crate::compiler_frontend::compiler_messages::{
-    DiagnosticPayload, InvalidAssignmentTargetReason, InvalidResultHandlingReason,
+    DiagnosticPayload, InvalidAssignmentTargetReason, InvalidFallibleHandlingReason,
     InvalidReturnShapeReason, TypeMismatchContext,
 };
 use crate::compiler_frontend::tests::ast_fixture_support::function_body_by_name;
@@ -265,7 +265,7 @@ fn parses_catch_handler_without_fallback_when_handler_ends_with_assert_false_no_
 fn rejects_catch_handler_without_fallback_when_handler_can_fall_through() {
     assert_invalid_fallible_handling(
         "can_error |value String| -> String, Error!:\n    return! Error(\"boom\")\n;\n\nrecover |value String, route Bool| -> String:\n    return can_error(value) catch |err|:\n        if route:\n            io.line([: [err.message]])\n        else\n            io.line([: [err.code]])\n        ;\n    ;\n;\n",
-        InvalidResultHandlingReason::CatchHandlerCanFallThrough,
+        InvalidFallibleHandlingReason::CatchHandlerCanFallThrough,
     );
 }
 
@@ -273,7 +273,7 @@ fn rejects_catch_handler_without_fallback_when_handler_can_fall_through() {
 fn rejects_catch_handler_if_without_else_even_when_then_branch_returns() {
     assert_invalid_fallible_handling(
         "can_error |value String| -> String, Error!:\n    return! Error(\"boom\")\n;\n\nrecover |value String, route Bool| -> String:\n    return can_error(value) catch:\n        if route:\n            return \"fallback\"\n        ;\n    ;\n;\n",
-        InvalidResultHandlingReason::CatchHandlerCanFallThrough,
+        InvalidFallibleHandlingReason::CatchHandlerCanFallThrough,
     );
 }
 
@@ -281,7 +281,7 @@ fn rejects_catch_handler_if_without_else_even_when_then_branch_returns() {
 fn rejects_catch_handler_without_fallback_when_handler_ends_with_dynamic_assert() {
     assert_invalid_fallible_handling(
         "can_error |value String| -> String, Error!:\n    return! Error(\"boom\")\n;\n\nrecover |value String, should_stop Bool| -> String:\n    return can_error(value) catch |err|:\n        io.line([: [err.message]])\n        assert(should_stop, \"dynamic assertion can pass\")\n    ;\n;\n",
-        InvalidResultHandlingReason::CatchHandlerCanFallThrough,
+        InvalidFallibleHandlingReason::CatchHandlerCanFallThrough,
     );
 }
 
@@ -293,7 +293,7 @@ fn rejects_catch_handler_without_fallback_when_handler_ends_with_dynamic_assert(
 fn rejects_catch_handler_name_conflict_with_visible_declaration() {
     assert_invalid_fallible_handling(
         "can_error |value String| -> String, Error!:\n    return! Error(\"boom\")\n;\n\nrecover |value String| -> String:\n    err = \"taken\"\n    output = can_error(value) catch |err|:\n        io.line([: [err.message]])\n        then \"fallback\"\n    ;\n    return output\n;\n",
-        InvalidResultHandlingReason::CatchHandlerConflicts,
+        InvalidFallibleHandlingReason::CatchHandlerConflicts,
     );
 }
 
@@ -325,7 +325,7 @@ fn rejects_assignment_target_mutation_inside_catch_handler() {
 fn rejects_multiline_inline_catch_fallback_value() {
     assert_invalid_fallible_handling(
         "can_error || -> Int, Error!:\n    return 1\n;\n\nrecover || -> Int:\n    value = can_error() catch then\n        0\n    return value\n;\n",
-        InvalidResultHandlingReason::InlineCatchMultiline,
+        InvalidFallibleHandlingReason::InlineCatchMultiline,
     );
 }
 
@@ -333,7 +333,7 @@ fn rejects_multiline_inline_catch_fallback_value() {
 fn rejects_bound_inline_catch_with_line_break_before_then() {
     assert_invalid_fallible_handling(
         "can_error || -> Int, Error!:\n    return 1\n;\n\nrecover || -> Int:\n    value = can_error() catch |err|\n        then err.code\n    return value\n;\n",
-        InvalidResultHandlingReason::InlineCatchMultiline,
+        InvalidFallibleHandlingReason::InlineCatchMultiline,
     );
 }
 
@@ -341,7 +341,7 @@ fn rejects_bound_inline_catch_with_line_break_before_then() {
 fn rejects_inline_catch_handler_chaining() {
     assert_invalid_fallible_handling(
         "can_error || -> Int, Error!:\n    return 1\n;\n\nrecover || -> Int:\n    value = can_error() catch then can_error() catch then 0\n    return value\n;\n",
-        InvalidResultHandlingReason::ExpectedCatchBlockOrHandler,
+        InvalidFallibleHandlingReason::ExpectedCatchBlockOrHandler,
     );
 }
 
@@ -354,8 +354,8 @@ fn rejects_unbound_inline_catch_then_at_eof() {
 
     assert!(matches!(
         diagnostic.payload,
-        DiagnosticPayload::InvalidResultHandling { reason }
-            if reason == InvalidResultHandlingReason::ThenRequiresValues
+        DiagnosticPayload::InvalidFallibleHandling { reason }
+            if reason == InvalidFallibleHandlingReason::ThenRequiresValues
     ));
     // The primary location points at the EOF boundary past `then`, not at `then`.
     assert_eq!(diagnostic.primary_location.start_pos.line_number, 4);
@@ -373,8 +373,8 @@ fn rejects_bound_inline_catch_then_at_eof() {
 
     assert!(matches!(
         diagnostic.payload,
-        DiagnosticPayload::InvalidResultHandling { reason }
-            if reason == InvalidResultHandlingReason::ThenRequiresValues
+        DiagnosticPayload::InvalidFallibleHandling { reason }
+            if reason == InvalidFallibleHandlingReason::ThenRequiresValues
     ));
     assert_eq!(diagnostic.primary_location.start_pos.line_number, 4);
     assert_eq!(diagnostic.primary_location.start_pos.char_column, 36);
@@ -417,7 +417,7 @@ fn rejects_fallback_type_mismatch_before_hir_lowering() {
 fn rejects_then_in_zero_success_catch() {
     assert_invalid_fallible_handling(
         "fail || -> Error!:\n    return! Error(\"boom\")\n;\n\nrecover ||:\n    fail() catch:\n        then 0\n    ;\n;\n",
-        InvalidResultHandlingReason::FallbackValuesForErrorOnlyResult,
+        InvalidFallibleHandlingReason::FallbackValuesForErrorOnlyResult,
     );
 }
 
@@ -504,7 +504,7 @@ fn accepts_then_string_for_optional_success() {
 fn rejects_empty_catch_on_success_producing_call_without_then() {
     assert_invalid_fallible_handling(
         "can_error || -> Int, Error!:\n    return 1\n;\n\nrecover || -> Int:\n    return can_error() catch:\n    ;\n;\n",
-        InvalidResultHandlingReason::CatchHandlerCanFallThrough,
+        InvalidFallibleHandlingReason::CatchHandlerCanFallThrough,
     );
 }
 
@@ -556,7 +556,7 @@ fn accepts_nested_postfix_propagation_in_fallback() {
 fn rejects_nested_raw_fallible_in_fallback() {
     assert_invalid_fallible_handling(
         "inner || -> Int, Error!:\n    return 1\n;\n\nouter || -> Int, Error!:\n    return 2\n;\n\nrecover || -> Int:\n    return outer() catch:\n        then inner()\n    ;\n;\n",
-        InvalidResultHandlingReason::UnhandledErrorReturn,
+        InvalidFallibleHandlingReason::UnhandledErrorReturn,
     );
 }
 
@@ -564,7 +564,7 @@ fn rejects_nested_raw_fallible_in_fallback() {
 fn rejects_removed_bang_fallback_syntax() {
     assert_invalid_fallible_handling(
         "can_error |value String| -> String, Error!:\n    return value\n;\n\nrecover |value String| -> String:\n    return can_error(value) ! \"fallback\"\n;\n",
-        InvalidResultHandlingReason::RemovedBangFallbackSyntax,
+        InvalidFallibleHandlingReason::RemovedBangFallbackSyntax,
     );
 }
 
@@ -576,7 +576,7 @@ fn rejects_removed_bang_fallback_syntax() {
 fn rejects_invalid_bare_err_for_call_catch_handler_shape() {
     assert_invalid_fallible_handling(
         "can_error |value String| -> String, Error!:\n    return value\n;\n\nrecover |value String| -> String:\n    return can_error(value) err!\n;\n",
-        InvalidResultHandlingReason::RemovedBangCatchHandlerSyntax,
+        InvalidFallibleHandlingReason::RemovedBangCatchHandlerSyntax,
     );
 }
 
@@ -584,7 +584,7 @@ fn rejects_invalid_bare_err_for_call_catch_handler_shape() {
 fn rejects_invalid_bare_err_for_expression_catch_handler_shape() {
     assert_invalid_fallible_handling(
         "read |values {Int}| -> Int:\n    return values.get(0) err!\n;\n",
-        InvalidResultHandlingReason::RemovedBangCatchHandlerSyntax,
+        InvalidFallibleHandlingReason::RemovedBangCatchHandlerSyntax,
     );
 }
 
@@ -592,7 +592,7 @@ fn rejects_invalid_bare_err_for_expression_catch_handler_shape() {
 fn rejects_catch_handler_without_scope_colon() {
     assert_invalid_fallible_handling(
         "can_error |value String| -> String, Error!:\n    return value\n;\n\nrecover |value String| -> String:\n    return can_error(value) err! \"fallback\"\n;\n",
-        InvalidResultHandlingReason::RemovedBangCatchHandlerSyntax,
+        InvalidFallibleHandlingReason::RemovedBangCatchHandlerSyntax,
     );
 }
 
@@ -600,7 +600,7 @@ fn rejects_catch_handler_without_scope_colon() {
 fn rejects_empty_catch_handler_binding() {
     assert_invalid_fallible_handling(
         "can_error |value String| -> String, Error!:\n    return value\n;\n\nrecover |value String| -> String:\n    return can_error(value) catch ||:\n        then \"fallback\"\n    ;\n;\n",
-        InvalidResultHandlingReason::EmptyCatchHandlerBinding,
+        InvalidFallibleHandlingReason::EmptyCatchHandlerBinding,
     );
 }
 
@@ -608,7 +608,7 @@ fn rejects_empty_catch_handler_binding() {
 fn rejects_multiple_catch_handler_bindings() {
     assert_invalid_fallible_handling(
         "can_error |value String| -> String, Error!:\n    return value\n;\n\nrecover |value String| -> String:\n    return can_error(value) catch |err, other|:\n        then \"fallback\"\n    ;\n;\n",
-        InvalidResultHandlingReason::MultipleCatchHandlerBindings,
+        InvalidFallibleHandlingReason::MultipleCatchHandlerBindings,
     );
 }
 
@@ -616,7 +616,7 @@ fn rejects_multiple_catch_handler_bindings() {
 fn rejects_then_outside_catch_block() {
     assert_invalid_fallible_handling(
         "recover || -> Int:\n    then 0\n;\n",
-        InvalidResultHandlingReason::ThenWithNoActiveValueTarget,
+        InvalidFallibleHandlingReason::ThenWithNoActiveValueTarget,
     );
 }
 
@@ -642,7 +642,7 @@ fn accepts_statement_after_then_as_unreachable_handler_tail() {
 fn rejects_catch_inside_function_call_argument() {
     assert_invalid_fallible_handling(
         "can_error |value String| -> String, Error!:\n    return value\n;\n\nrender |value String| -> String:\n    return value\n;\n\nrecover || -> String:\n    return render(can_error(\"x\") catch:\n        then \"fallback\"\n    ;)\n;\n",
-        InvalidResultHandlingReason::CatchOutsideBoundary,
+        InvalidFallibleHandlingReason::CatchOutsideBoundary,
     );
 }
 
@@ -650,7 +650,7 @@ fn rejects_catch_inside_function_call_argument() {
 fn rejects_catch_inside_parenthesized_arithmetic_expression() {
     assert_invalid_fallible_handling(
         "can_error || -> Int, Error!:\n    return 1\n;\n\nrecover || -> Int:\n    value = 1 + (can_error() catch:\n        then 0\n    ;)\n    return value\n;\n",
-        InvalidResultHandlingReason::CatchOutsideBoundary,
+        InvalidFallibleHandlingReason::CatchOutsideBoundary,
     );
 }
 
@@ -658,7 +658,7 @@ fn rejects_catch_inside_parenthesized_arithmetic_expression() {
 fn rejects_catch_inside_parenthesized_field_access_base() {
     assert_invalid_fallible_handling(
         "User = |\n    name String,\n|\n\nload_user || -> User, Error!:\n    return User(\"Ana\")\n;\n\nrecover || -> String:\n    default_user = User(\"fallback\")\n    return (load_user() catch:\n        then default_user\n    ;).name\n;\n",
-        InvalidResultHandlingReason::CatchOutsideBoundary,
+        InvalidFallibleHandlingReason::CatchOutsideBoundary,
     );
 }
 
@@ -666,7 +666,7 @@ fn rejects_catch_inside_parenthesized_field_access_base() {
 fn rejects_catch_inside_collection_literal_item() {
     assert_invalid_fallible_handling(
         "can_error || -> Int, Error!:\n    return 1\n;\n\nrecover || -> {Int}:\n    return {can_error() catch:\n        then 0\n    ;}\n;\n",
-        InvalidResultHandlingReason::CatchOutsideBoundary,
+        InvalidFallibleHandlingReason::CatchOutsideBoundary,
     );
 }
 
@@ -674,7 +674,7 @@ fn rejects_catch_inside_collection_literal_item() {
 fn rejects_catch_inside_if_condition() {
     assert_invalid_fallible_handling(
         "can_error || -> Bool, Error!:\n    return true\n;\n\nrecover || -> String:\n    if can_error() catch:\n        then false\n    ;:\n        return \"yes\"\n    else\n        return \"no\"\n    ;\n;\n",
-        InvalidResultHandlingReason::CatchOutsideBoundary,
+        InvalidFallibleHandlingReason::CatchOutsideBoundary,
     );
 }
 
@@ -682,7 +682,7 @@ fn rejects_catch_inside_if_condition() {
 fn rejects_catch_inside_loop_condition() {
     assert_invalid_fallible_handling(
         "can_error || -> Bool, Error!:\n    return false\n;\n\nrecover || -> Int:\n    count ~= 0\n    loop can_error() catch:\n        then false\n    ;:\n        count = count + 1\n    ;\n    return count\n;\n",
-        InvalidResultHandlingReason::CatchOutsideBoundary,
+        InvalidFallibleHandlingReason::CatchOutsideBoundary,
     );
 }
 
@@ -690,7 +690,7 @@ fn rejects_catch_inside_loop_condition() {
 fn rejects_catch_inside_range_loop_bound() {
     assert_invalid_fallible_handling(
         "can_error || -> Int, Error!:\n    return 3\n;\n\nrecover || -> Int:\n    count ~= 0\n    loop 0 to can_error() catch:\n        then 3\n    ; |value|:\n        count = count + value\n    ;\n    return count\n;\n",
-        InvalidResultHandlingReason::CatchOutsideBoundary,
+        InvalidFallibleHandlingReason::CatchOutsideBoundary,
     );
 }
 
@@ -698,7 +698,7 @@ fn rejects_catch_inside_range_loop_bound() {
 fn rejects_catch_inside_collection_loop_source() {
     assert_invalid_fallible_handling(
         "can_error || -> {Int}, Error!:\n    return {1, 2}\n;\n\nrecover || -> Int:\n    count ~= 0\n    loop can_error() catch:\n        then {0}\n    ; |value|:\n        count = count + value\n    ;\n    return count\n;\n",
-        InvalidResultHandlingReason::CatchOutsideBoundary,
+        InvalidFallibleHandlingReason::CatchOutsideBoundary,
     );
 }
 
@@ -706,16 +706,16 @@ fn rejects_catch_inside_collection_loop_source() {
 fn rejects_catch_inside_template_interpolation() {
     assert_invalid_fallible_handling(
         "can_error || -> String, Error!:\n    return \"ok\"\n;\n\nrecover || -> String:\n    return [:value=[can_error() catch:\n        then \"fallback\"\n    ;]]\n;\n",
-        InvalidResultHandlingReason::CatchOutsideBoundary,
+        InvalidFallibleHandlingReason::CatchOutsideBoundary,
     );
 }
 
-fn assert_invalid_fallible_handling(source: &str, expected_reason: InvalidResultHandlingReason) {
+fn assert_invalid_fallible_handling(source: &str, expected_reason: InvalidFallibleHandlingReason) {
     let diagnostic = parse_single_file_ast_diagnostic(source);
 
     assert!(matches!(
         diagnostic.payload,
-        DiagnosticPayload::InvalidResultHandling { reason } if reason == expected_reason
+        DiagnosticPayload::InvalidFallibleHandling { reason } if reason == expected_reason
     ));
 }
 

@@ -15,7 +15,7 @@ use crate::compiler_frontend::ast::expressions::parse_expression_input::{
 use crate::compiler_frontend::ast::statements::condition_validation::ensure_boolean_condition;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_messages::{
-    CompilerDiagnostic, InvalidBuiltinCallReason, InvalidResultHandlingReason,
+    CompilerDiagnostic, InvalidBuiltinCallReason, InvalidFallibleHandlingReason,
 };
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
@@ -135,8 +135,8 @@ pub(crate) fn parse_assert_statement(
 
     // Reject `assert(...)!` — assert is not a fallible expression.
     if token_stream.current_token_kind() == &TokenKind::Bang {
-        return Err(CompilerDiagnostic::invalid_result_handling(
-            InvalidResultHandlingReason::NotResultExpression,
+        return Err(CompilerDiagnostic::invalid_fallible_handling(
+            InvalidFallibleHandlingReason::NotResultExpression,
             token_stream.current_location(),
         )
         .into());
@@ -144,8 +144,8 @@ pub(crate) fn parse_assert_statement(
 
     // Reject `assert(...) catch ...` — assert is not a fallible expression.
     if token_stream.current_token_kind() == &TokenKind::Catch {
-        return Err(CompilerDiagnostic::invalid_result_handling(
-            InvalidResultHandlingReason::NotResultExpression,
+        return Err(CompilerDiagnostic::invalid_fallible_handling(
+            InvalidFallibleHandlingReason::NotResultExpression,
             token_stream.current_location(),
         )
         .into());

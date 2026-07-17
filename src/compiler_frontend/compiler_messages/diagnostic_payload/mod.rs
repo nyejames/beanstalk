@@ -453,8 +453,8 @@ pub enum DiagnosticPayload {
         missing_variants: Vec<StringId>,
     },
 
-    InvalidResultHandling {
-        reason: InvalidResultHandlingReason,
+    InvalidFallibleHandling {
+        reason: InvalidFallibleHandlingReason,
     },
 
     InvalidTemplateSlot {

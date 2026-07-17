@@ -34,7 +34,7 @@ use crate::compiler_frontend::builtins::error_type::resolve_builtin_error_type_t
 use crate::compiler_frontend::compiler_errors::{CompilerError, SourceLocation};
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, InvalidBuiltinCallReason, InvalidCallShapeReason,
-    InvalidGenericInstantiationReason, InvalidResultHandlingReason,
+    InvalidFallibleHandlingReason, InvalidGenericInstantiationReason,
 };
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
@@ -204,8 +204,8 @@ fn finish_function_call_expression(
             token_stream.current_token_kind(),
             TokenKind::Bang | TokenKind::Catch
         ) {
-            return Err(CompilerDiagnostic::invalid_result_handling(
-                InvalidResultHandlingReason::NotResultExpression,
+            return Err(CompilerDiagnostic::invalid_fallible_handling(
+                InvalidFallibleHandlingReason::NotResultExpression,
                 token_stream.current_location(),
             )
             .into());
@@ -230,8 +230,8 @@ fn finish_function_call_expression(
         );
     }
 
-    Err(CompilerDiagnostic::invalid_result_handling(
-        InvalidResultHandlingReason::UnhandledErrorReturn,
+    Err(CompilerDiagnostic::invalid_fallible_handling(
+        InvalidFallibleHandlingReason::UnhandledErrorReturn,
         token_stream.current_location(),
     )
     .into())
@@ -972,8 +972,8 @@ fn finish_external_function_call_expression(
             );
         }
 
-        return Err(CompilerDiagnostic::invalid_result_handling(
-            InvalidResultHandlingReason::UnhandledErrorReturn,
+        return Err(CompilerDiagnostic::invalid_fallible_handling(
+            InvalidFallibleHandlingReason::UnhandledErrorReturn,
             token_stream.current_location(),
         )
         .into());
@@ -983,8 +983,8 @@ fn finish_external_function_call_expression(
         token_stream.current_token_kind(),
         TokenKind::Bang | TokenKind::Catch
     ) {
-        return Err(CompilerDiagnostic::invalid_result_handling(
-            InvalidResultHandlingReason::NotResultExpression,
+        return Err(CompilerDiagnostic::invalid_fallible_handling(
+            InvalidFallibleHandlingReason::NotResultExpression,
             token_stream.current_location(),
         )
         .into());
