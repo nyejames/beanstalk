@@ -28,8 +28,8 @@ Stage 0 owns:
 - allowing config imports only from Core or Builder packages
 - rejecting project-local and relative config imports by design
 - stopping config compilation at AST because config doesn't need HIR
-- building one source-tree index after config establishes `entry_root`, `package_folders` and output folders
-- selecting exactly one cosmetic non-config `#*.bst` root per module directory
+- building one source-tree index after config establishes `entry_root`
+- selecting exactly one cosmetic non-config `#*.bst` or `+*.bst` root per module directory
 - expanding each module to reachable `.bst` files and builder-supported source assets through imports
 - preparing canonical source-backed package roots and their unique hash-root public-surface files before resolver construction
 - recognising external package prefixes so virtual imports aren't treated as filesystem paths

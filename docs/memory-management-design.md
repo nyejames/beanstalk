@@ -56,6 +56,7 @@ Use the split pages for task-focused reading:
 - `docs/language-overview.md` for user-facing syntax such as `~`, explicit
   copies, and no-shadowing.
 - `docs/compiler-design-overview.md` for compiler stage ownership and where borrow validation fits in the pipeline.
+- `docs/build-system-design.md` for project and backend orchestration where memory lowering crosses build boundaries.
 - `docs/src/docs/progress/#page.bst` for current implementation status.
 
 Implementation map:

@@ -745,7 +745,7 @@ body {
      <td style="padding: 0.2em 0.5em;  "> Partial</td>
      <td style="padding: 0.2em 0.5em;  "> Targeted config-defined package folders, import resolution, generic hash-root, and public-surface coverage.</td>
      <td style="padding: 0.2em 0.5em;  "> Frontend / HTML</td>
-     <td style="padding: 0.2em 0.5em;  "> Project-local source-backed packages are discovered from <code>package_folders</code>, with `/lib` as the default convention. Each direct child folder becomes a package prefix and Stage 0 requires exactly one direct <code>#*.bst</code> root with a non-empty cosmetic name. The filename after <code>#</code> has no semantic role and the root's strict <code>export:</code> block defines its public surface.</td>
+     <td style="padding: 0.2em 0.5em;  "> Project-local source-backed packages are discovered structurally from scoped <code>+*.bst</code> support packages and the optional project-root facade. No <code>package_folders</code> config setting exists. Each support package's containing directory supplies its name. Stage 0 requires exactly one direct <code>#*.bst</code> or <code>+*.bst</code> root with a non-empty cosmetic name. The filename after <code>#</code> or <code>+</code> has no semantic role and the root's strict <code>export:</code> block defines its public surface.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">

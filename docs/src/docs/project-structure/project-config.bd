@@ -1,77 +1,57 @@
-`config.bst` is the single project config file. It lives at the project root, is loaded before source-tree discovery, and accepts only known compile-time config keys.
+`config.bst` is the single project config file. It lives at the project root, is loaded before source-tree discovery, and is one self-contained compile-time source file with no source imports or package resolution.
 
 ### Canonical config
 
 [codeblock, $code("bst"):
-    project #= "html"
-    entry_root #= "src"
-    dev_folder #= "dev"
-    output_folder #= "release"
-    package_folders #= {
-        "lib",
-    }
-    template_const_loop_iteration_limit #= 10_000
+    default_channel #= "alpha"
+
+    project #= |
+        name = "beanstalk_docs",
+        version #Import of String = "0.1.0",
+        entry_root = "src",
+        metadata = |
+            channel = default_channel,
+        |,
+    |
+
+    html #= |
+        dev_output = "dev",
+        release_output = "release",
+    |
 ]
 
-### Strict key rules
+### Structure
 
-- Only known top-level compile-time constants declared with `name #= value` or
-  `name #Type = value` are accepted as config entries.
-- Unknown keys are rejected with `BST-CONFIG-0001`.
-- Values must fold at compile time.
-- Config-key constants may reference earlier config keys or constants imported from Core or Builder source-backed packages.
-- Config values fully fold before source-tree discovery begins.
+- One required open `project` const record provides stable project identity.
+- `project.name` is required and must be a valid package-style identifier.
+- Private helper constants declared before use are allowed.
+- Top-level builder and tooling section records are allowed.
+- All sections are folded, but only active sections are schema-validated.
+- The active builder project section is required, even when empty.
+- Inactive sections are parsed and folded, then discarded.
+- Project and entry schemas are separate with no shared fields.
+- Project fields may contain folded scalar values, optionals, nested anonymous const records, collections and folded template strings.
+- Builder sections use backend-neutral folded values and cannot declare `#Import`.
+- Output settings are builder-owned.
 
-### Key value shapes
+### Direct project #Import fields
 
-- String settings accept string literals and folded templates.
-- `project` currently accepts only `"html"`.
-- Boolean HTML settings such as `redirect_index_html` require folded `Bool`, not strings.
-- `package_folders` accepts one string or a collection of strings.
-- `template_const_loop_iteration_limit` requires a positive folded `Int` no greater than `1_000_000`. The default is `10_000`.
+A direct primitive or optional field of `project` may declare a build-input contract using `#Import of T`. Nested project fields cannot declare imports.
 
-### Support declarations
+Accepted imported-value types are `String`, `Int`, `Float`, `Bool`, `Char` and optional forms of those types.
 
-`config.bst` may contain type aliases, structs and choices as support declarations. Every authored value-producing declaration must still be a known config key.
+See `docs/build-system-design.md` for the full `#Import` and `@project` contract.
 
 ### Rejected in config
 
-- Plain top-level bindings are runtime syntax and are rejected.
-- Mutable bindings, functions, calls, host calls, runtime statements and non-key helper constants are rejected.
-- Traits, trait conformances and trait incompatibility declarations are rejected.
-- Standalone templates and top-level const page fragments are rejected.
-- Project-local and relative imports are rejected.
-- Config-local helper constants that are not config keys are rejected, even when they hold folded values.
-
-### Const-record projection
-
-Config-key constants can use const-record field projection when the expression fully folds. The const record must be constructed inline in the config-key expression.
-
-[codeblock, $code("bst"):
-    Defaults = |
-        entry_root String,
-    |
-
-    entry_root #= Defaults("src").entry_root
-]
-
-A separate helper constant such as `defaults #= Defaults("src")` is rejected because `defaults` is not a known config key.
-
-### Important settings
-
-- `entry_root`: the source folder searched for module roots. Usually `"src"`.
-- `package_folders`: configures project-local source-backed package scan roots. Each direct child directory becomes a package prefix. `/lib` is the default when omitted.
-- `dev_folder`: where development builds are written.
-- `output_folder`: where release builds are written.
-- `template_const_loop_iteration_limit`: per-loop compile-time template expansion guard.
-
-### HTML-specific settings
-
-Settings such as `origin`, `html_lang`, `html_title_postfix`, `page_url_style` and `redirect_index_html` are interpreted by the HTML builder, not the compiler frontend. They are builder-owned config keys registered by the HTML builder. Other builders may expose different config keys.
+- Every source import, including relative, project, Core, Builder, dependency and binding-backed imports.
+- Runtime declarations, mutable bindings, functions, named support types, traits, conformances.
+- Standalone templates and top-level const page fragments.
+- `export:`.
 
 ### Config is loaded before module discovery
 
-`entry_root` and `package_folders` shape how the project is searched and how imports resolve. Config is parsed and validated before Stage 0 source-tree indexing begins.
+The command selects the builder before config schema validation. `config.bst` does not select the builder. Config is parsed and folded before Stage 0 source-tree indexing begins.
 
 ### Related concepts
 

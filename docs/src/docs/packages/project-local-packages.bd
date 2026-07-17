@@ -1,14 +1,4 @@
-Project-local source-backed packages are normal Beanstalk source roots discovered from configured package folders. Each direct child directory becomes an import prefix.
-
-### Configuration
-
-[codeblock, $code("bst"):
-    package_folders #= {
-        "lib",
-    }
-]
-
-When `package_folders` is omitted, `/lib` is the default scan folder.
+Project-local source-backed packages are scoped `+*.bst` support packages discovered structurally from the project source tree. No config folder scanning or `package_folders` setting exists.
 
 ### Directory structure
 
@@ -16,50 +6,48 @@ When `package_folders` is omitted, `/lib` is the default scan folder.
     project-root/
     ├── config.bst
     ├── src/
-    │   └── #page.bst
-    └── lib/
-        └── helper/
-            ├── #api.bst
-            └── utils.bst
+    │   ├── #site.bst
+    │   ├── markdown/
+    │   │   ├── +package.bst
+    │   │   ├── parser/
+    │   │   │   └── #parser.bst
+    │   │   └── rendering/
+    │   │       └── #rendering.bst
+    │   └── pages/
+    │       └── #pages.bst
+    └── +package.bst
 ]
 
-The direct child folder `lib/helper` becomes the `@helper` package prefix. The package's public surface is controlled by its module root (`#api.bst`).
+The `markdown` directory contains a `+package.bst` root, making `@markdown` a scoped support package visible to `#site`, `#pages` and their descendants.
 
-### Generic hash-root naming
+### Scoped visibility
 
-The package root filename after `#` has no semantic role. `#api.bst`, `#mod.bst` and `#page.bst` are all equivalent root spellings for a source-backed package. See @../project-structure/#module-roots (Module roots).
+For a support package `S` whose nearest ancestor normal module is `P`:
 
-### One root per package module
-
-Each package directory may contain at most one `#*.bst` root file. Two or more hash-root files in one package directory are rejected with `BST-CONFIG-0001`.
+- `S` is visible to `P`
+- `S` is visible to normal sibling modules of `S` and their descendants
+- `S` is not visible above `P`
+- `S` is not visible outside `P`'s subtree
+- `S` is not visible inside its own private implementation subtree
+- another support package in the same owner scope cannot import `S`
 
 ### Public surface
 
-Outside importers can only see declarations and grouped re-exports marked public by the package root's `export:` block. Internal implementation files are not public unless the root re-exports them.
+Outside importers can only see declarations and grouped re-exports marked public by the support root's `export:` block. Internal implementation files are hidden unless the root re-exports them.
 
-### Internal child files
+### Private subtrees
 
-Files without `#` in the package directory are normal source files within the package module. They are hidden from cross-prefix imports unless the package root re-exports them.
+The support facade may import ordinary files it owns, any descendant module in its private subtree, support packages from a strictly outer scope and registered packages. It may not import its parent, normal sibling consumers or same-scope support siblings.
 
-### Custom scan roots
-
-`package_folders` accepts one string or a collection of strings. Each configured folder becomes a scan root. Its direct child directories become import prefixes.
-
-### Duplicate or ambiguous prefixes
-
-Duplicate package folders are rejected. Absolute paths and paths containing `..` are rejected. Nested paths such as `lib/helpers` are rejected. Each entry must be a direct folder name relative to the project root.
-
-### Project-local packages compile as Beanstalk source
-
-Project-local source-backed packages are not opaque bindings. They are normal Beanstalk source files compiled through the same frontend pipeline.
+Consumers see only the support facade's `export:` surface. They cannot address `@markdown/parser` or another implementation path.
 
 ### Imported package roots do not produce routes
 
-A source-backed package root is imported rather than activated as an HTML route. Its top-level runtime body and page fragments remain inactive in the consuming project, even when authored content exists. It exports declarations but produces no HTML artifact. See @../project-structure/#html-routing-and-artifacts (HTML routing and artifacts).
+A support package root is imported rather than activated as an HTML route. Its top-level runtime body and page fragments remain inactive in the consuming project. It exports declarations but produces no HTML artifact. See @../project-structure/#html-routing-and-artifacts (HTML routing and artifacts).
 
 ### Origin and backing are separate
 
-Configured package-folder children are ProjectLocal packages backed by Beanstalk source. `@html` is also source-backed but has Builder origin. `@core/math` and `@web/canvas` are binding-backed packages with Core and Builder origins respectively. See @#package-origins-and-backing (Package origins and backing).
+Scoped `+*.bst` packages are ProjectLocal packages backed by Beanstalk source. `@html` is also source-backed but has Builder origin. `@core/math` and `@web/canvas` are binding-backed packages with Core and Builder origins respectively. See @#package-origins-and-backing (Package origins and backing).
 
 ### Related concepts
 

@@ -14,10 +14,10 @@ Files within the same module can import each other's declarations directly. A mo
 
 [codeblock, $code("bst"):
     -- lib/components/#api.bst (same module)
-    import @./utils {internal_value, internal_fn}
+    import @utils {internal_value, internal_fn}
 
     export:
-        import @./utils {internal_value}
+        import @utils {internal_value}
     ;
 ]
 

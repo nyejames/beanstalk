@@ -15,7 +15,7 @@ Before making or reviewing a non-trivial change, read:
 
 Read `docs/src/docs/codebase/style-guide/testing.bd` when the task changes or reviews behavior, diagnostics, compiler stages, backend artifacts, tests, fixtures, or test infrastructure.
 
-Read `docs/build-system-design.md` for build-system or project orchestration: Stage 0, config, imports, modules, packages, builders, tooling, link planning, backend project assembly, outputs, incremental builds and the dev server
+Read `docs/build-system-design.md` for build-system or project orchestration: Stage 0, config, imports, modules, packages, builders, tooling, link planning, backend project assembly, outputs, incremental builds and the dev server.
 
 For memory, ownership, borrow checking, allocation, GC, drops, or runtime-handle work:
 1. Read `docs/src/docs/codebase/memory-management/overview.bd`
@@ -30,7 +30,7 @@ For language syntax, semantics and user-visible behavior, read:
 
 Use:
 - `docs/src/docs/progress/#page.bst` for current implementation status and coverage
-- `docs/roadmap/roadmap.md` for sequencing, active plans, and unaccepted proposals
+- `docs/roadmap/roadmap.md` for sequencing, active plans, and genuinely deferred design
 - `index.md` only as a file and module locator
 
 ## Instruction priority
@@ -41,6 +41,8 @@ Use:
 4. Existing implementation behavior
 
 A narrow leaf document takes precedence over a broad overview within the same documentation area.
+
+`docs/compiler-design-overview.md` is the authority for compiler semantics and stage contracts. `docs/build-system-design.md` is the authority for project and build orchestration. A plan that crosses compiler and build ownership must read both documents. Roadmap plans cannot override either authority.
 
 Code may lag accepted design. When implementation conflicts with the relevant design document, call out the conflict rather than silently treating the code as authoritative.
 
@@ -128,13 +130,13 @@ The progress matrix and `index.md` are exceptions. Update the matrix when implem
 status, rejection behavior, backend coverage, or test coverage changes. Do not
 edit it for a pure refactor or prose-only correction. 
 
-Update `index.md` whenever modules/files/folders are moved, renamed or have fundementally changed behaviour.
+Update `index.md` whenever modules, files or folders are moved, renamed or have fundamentally changed behaviour.
 
 If implementation work makes documentation inaccurate, report the affected files and required corrections as a separate follow-up. Do not edit generated files under `docs/release/**` directly, rebuild it through the compiler.
 
 - Codebase design documents may describe accepted end-state architecture that has not fully landed.
 - The progress matrix records current support, partial support, clean rejection, experimental paths, and coverage.
-- The roadmap records sequencing, active plans, and proposals not yet accepted as design.
+- The roadmap records sequencing, active plans, and genuinely deferred design.
 - Update the progress matrix when current status changed. Do not make a meaningless matrix edit for a pure refactor or prose-only correction.
 - Compiler semantic architecture belongs in `docs/compiler-design-overview.md`
 - Build orchestration belongs in `docs/build-system-design.md`

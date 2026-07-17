@@ -52,7 +52,7 @@ These Beandown files are the development-standard references. The generated web 
 ## Contribution workflow
 
 1. Discuss broad design or architecture changes before implementing a large slice.
-2. Read the relevant language, compiler, memory, style, testing, and validation documents.
+2. Read the relevant language, compiler, memory, style, testing, and validation documents. Build-system work also requires reading `docs/build-system-design.md`.
 3. Find the existing owner of the behavior before adding a new path.
 4. Keep the change focused and remove obsolete paths instead of preserving compatibility scaffolding.
 5. Add or update tests according to the testing standards.
@@ -95,15 +95,13 @@ Run `cargo fmt` when Rust files changed.
 
 ## Command guide
 
-| Command | Use |
-|---|---|
-| `cargo run build docs --release` | Required final gate for a strictly documentation-only change |
-| `cargo run --quiet -- tests` | Fast integration-suite iteration |
-| `just validate` | Required final gate for code-bearing changes |
-| `just bench-check` | Non-recording performance sanity check |
-| `just bench` | Intentional benchmark-history recording |
-| `just bench-report` | Inspect local benchmark history |
-| `just profile-case <case> [filter]` | Profile a selected benchmark case |
+- `cargo run build docs --release` - required final gate for a strictly documentation-only change
+- `cargo run --quiet -- tests` - fast integration-suite iteration
+- `just validate` - required final gate for code-bearing changes
+- `just bench-check` - non-recording performance sanity check
+- `just bench` - intentional benchmark-history recording
+- `just bench-report` - inspect local benchmark history
+- `just profile-case <case> [filter]` - profile a selected benchmark case
 
 ## Benchmarks and profiling
 

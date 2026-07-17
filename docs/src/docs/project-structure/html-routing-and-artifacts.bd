@@ -29,7 +29,7 @@ The HTML builder owns route and artifact policy. The frontend remains builder-ne
 
 ### Output folders
 
-Output folders are generated and manifest-managed. The `dev_folder` (usually `dev`) holds development builds. The `output_folder` (usually `release`) holds release builds. Generated output folders should be treated as build artifacts, not source.
+Output folders are generated and manifest-managed. Builder sections in `config.bst` own output settings. HTML defaults are development `dev` and release `release`. Generated output folders should be treated as build artifacts, not source.
 
 ### Release versus development output
 

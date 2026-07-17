@@ -9,7 +9,7 @@ authority during the language documentation migration.
 replacement references as they are prepared and reviewed against that
 authority.
 
-Use the progress matrix for current support. Use the roadmap for sequencing and unaccepted proposals.
+Use the progress matrix for current support. Use the roadmap for sequencing, active plans and genuinely deferred design.
 
 ## Core reading
 
@@ -33,17 +33,17 @@ For build-system or project orchestration questions, read `docs/build-system-des
 ## Compiler flow
 
 [codeblock, $code("text"):
-    project files
-        -> Stage 0: canonical project graph and source ownership
-        -> Stage 1: tokenization
-        -> Stage 2: header parsing
-        -> Stage 3: dependency sorting
-        -> Stage 4: AST construction
-        -> Stage 5: HIR generation
-        -> Stage 6: borrow validation
-        -> Stage 7: project assembly and backend lowering
-        -> output files
+    command and Stage 0 build orchestration
+        -> tokenization and header syntax preparation
+        -> provider graph compilation
+        -> interface binding and local declaration ordering
+        -> AST
+        -> HIR and validation
+        -> borrow validation
+        -> build-owned link planning and backend lowering
 ]
+
+Keep detailed contracts in `docs/compiler-design-overview.md` and `docs/build-system-design.md`.
 
 ## Core architectural rules
 

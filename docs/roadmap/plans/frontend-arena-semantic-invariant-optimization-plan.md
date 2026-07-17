@@ -31,6 +31,7 @@ This plan is deliberately staged. Each phase must produce benchmark/profile evid
 - [x] Use five repeated benchmark invocations and compare medians. The existing benchmark runner’s internal warmup/measured iteration model should remain unless a later phase explicitly justifies changing it.
 - [x] Use Samply for targeted profiles, not every fixture.
 - [x] Require semantic/output equivalence checks for every phase.
+- [x] Optimisation must never change graph identity, fingerprints or diagnostic order.
 - [x] Keep arena-specific types, capacity heuristics, counters, and optimisation helpers out of core pipeline files when they grow beyond small orchestration glue.
 
 ---
@@ -208,24 +209,27 @@ Optimisation use:
 - [ ] Add new top-level dependency edges to header/dependency sorting instead of compensating in AST.
 - [ ] Treat missing sorted-order assumptions as bugs or missing header edges.
 
-### Header-built visibility is authoritative
+### Header syntax preparation plus interface binding
 
-Header import preparation builds file-local visibility. AST consumes it through scope lookup.
+Header syntax preparation builds declaration shells, import shells and local ordering hints. Interface binding later resolves retained import shells against completed provider interfaces to produce final visibility.
 
 Optimisation use:
 
 - [ ] Scope frames store body-local declarations only.
-- [ ] Immutable file/module visibility tables are shared by reference/ID.
+- [ ] Immutable file and module visibility tables are shared by reference or ID.
 - [ ] Avoid copying import visibility into every child context.
+- [ ] Immutable provider interfaces are shared rather than cloned per consumer.
+- [ ] Build-owned mutable provider state is separate from reusable builder capability definitions.
 
-### One entry start path
+### Normal-root dormant activity
 
-Only the module entry file owns top-level runtime code. Non-entry files contribute declarations only.
+A normal root owns dormant top-level runtime work and page fragments. Support roots and the project package facade are API-only with no implicit start.
 
 Optimisation use:
 
-- [ ] Allocate start-specific structures only when `HeaderKind::StartFunction` exists.
-- [ ] Use entry runtime/const fragment counts from file preparation instead of rescanning all files later.
+- [ ] Allocate start-specific structures only when the module root role has dormant activity.
+- [ ] Use root runtime and const fragment counts from file preparation instead of rescanning all files later.
+- [ ] Entry-local module assumptions are replaced by canonical module artefacts compiled once per project or package boundary.
 
 ### Generics resolve before HIR
 

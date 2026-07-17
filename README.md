@@ -49,7 +49,7 @@ They are the main way you create strings, but are far more powerful than regular
 
 ![Beanstalk code snippet](./docs/assets/code-snippet.webp)
 
-Beanstalk's custom falvor of Markdown can live inside normal templates, so content can capture values, compose styles and fold straight into HTML at compile time.
+Beanstalk's custom flavor of Markdown can live inside normal templates, so content can capture values, compose styles and fold straight into HTML at compile time.
 
 This makes content-heavy pages quick to build and easy to format. 
 
@@ -84,7 +84,7 @@ The dev server hot-reloads the project when files change automatically.
 bean build . --release
 ```
 
-This compiles the project using the configured Beanstalk builder and writes output to the configured release directory.
+This compiles the project using the command-selected builder and writes output to the configured release directory.
 
 <br>
 
@@ -152,7 +152,7 @@ examples can grow around the language that exists and the agent will have to fol
 <br>
 <li>
     <ul>
-        <a href="./docs/build-system-design.md">Build system info</a>
+        <a href="./docs/build-system-design.md">Build-system design</a>
     </ul>
 </li>
 <br>

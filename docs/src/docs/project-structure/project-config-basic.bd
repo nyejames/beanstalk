@@ -1,25 +1,29 @@
-`config.bst` at the project root controls build settings with strict keys.
+`config.bst` at the project root controls build settings. It is one self-contained compile-time source file with no source imports.
 
 ### A minimal config
 
 [codeblock, $code("bst"):
-    project #= "html"
-    entry_root #= "src"
+    project #= |
+        name = "my_project",
+        entry_root = "src",
+    |
+
+    html #= |
+        dev_output = "dev",
+        release_output = "release",
+    |
 ]
 
-### Strict keys
+### Structure
 
-Only known config keys are accepted. Unknown keys are rejected. Every value must fold at compile time.
-
-Common keys:
-
-- `project`: selects the builder, currently only `"html"`.
-- `entry_root`: the source folder, usually `"src"`.
-- `package_folders`: where to find project-local source-backed packages. Defaults to `lib` when omitted.
-- `dev_folder` and `output_folder`: where builds are written.
+- One required `project` record provides project identity and settings.
+- `project.name` is required for stable identity.
+- Builder sections like `html` hold builder-specific settings.
+- The command selects the builder before config validation. `config.bst` does not select the builder.
+- Only active sections are schema-validated.
 
 ### Remember
 
 - Only `config.bst` has config semantics.
 - Values must be compile-time constants.
-- HTML-specific settings belong to the HTML builder.
+- Output settings are builder-owned, not global project fields.

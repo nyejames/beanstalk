@@ -454,7 +454,7 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
             [: Partial]
             [: Targeted config-defined package folders, import resolution, generic hash-root, and public-surface coverage.]
             [: Frontend / HTML]
-            [: Project-local source-backed packages are discovered from [$html:<code>package_folders</code>], with `/lib` as the default convention. Each direct child folder becomes a package prefix and Stage 0 requires exactly one direct [$html:<code>#*.bst</code>] root with a non-empty cosmetic name. The filename after [$html:<code>#</code>] has no semantic role and the root's strict [$html:<code>export:</code>] block defines its public surface.]
+            [: Project-local source-backed packages are discovered structurally from scoped [$html:<code>+*.bst</code>] support packages and the optional project-root facade. No [$html:<code>package_folders</code>] config setting exists. Each support package's containing directory supplies its name. Stage 0 requires exactly one direct [$html:<code>#*.bst</code>] or [$html:<code>+*.bst</code>] root with a non-empty cosmetic name. The filename after [$html:<code>#</code>] or [$html:<code>+</code>] has no semantic role and the root's strict [$html:<code>export:</code>] block defines its public surface.]
         ]
 
         [data:

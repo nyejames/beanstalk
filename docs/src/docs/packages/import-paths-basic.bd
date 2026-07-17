@@ -1,24 +1,25 @@
-Imports make names visible. Each path reaches a declaration surface.
+Imports make names visible. Every source import resolves from the importing file's owning module root, not the file's directory.
 
-### A relative import
-
-[codeblock, $code("bst"):
-    import @./card {render_card}
-]
-
-`@./card` resolves to `card.bst` in the same directory as the importing file.
-
-### A package prefix import
+### A module-root-relative import
 
 [codeblock, $code("bst"):
-    import @helper {double}
+    import @card {render_card}
 ]
 
-`@helper` resolves from a configured source-backed package folder. Each direct child directory of `lib/` becomes a prefix.
+`@card` resolves to `card.bst` under the importing file's owning module root, regardless of how deep the importing file is inside the module.
+
+### A support package import
+
+[codeblock, $code("bst"):
+    import @markdown {render}
+]
+
+`@markdown` resolves to a scoped `+*.bst` support package visible in the importing module's lexical scope.
 
 ### Remember
 
-- `@./` means same directory.
+- Imports resolve from the owning module root, not the importing file's directory.
+- `@./` has no supported meaning.
 - `@../` is not supported.
 - Source imports omit the file extension.
 - JavaScript imports keep `.js`.

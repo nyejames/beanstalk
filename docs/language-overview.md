@@ -19,7 +19,7 @@ makes the programmer-facing model simpler, safer, and more predictable.
 This document separates future work into two categories:
 
 - **Deferred**: fits Beanstalk's language design but is not implemented yet or is not part of the
-  current Alpha surface.
+  current source surface.
 - **Outside language design scope**: intentionally not planned because it would make the language
   broader, more implicit, more solver-heavy, or harder to reason about.
 
@@ -134,7 +134,7 @@ right = "world"
 joined = [left, right]
 ```
 
-Raw backtick string slices aren't implemented in the current Alpha surface. Backticks are inline-code delimiters inside `$md` content.
+Raw backtick string slices aren't implemented in the current source surface. Backticks are inline-code delimiters inside `$md` content.
 
 Quoted string slices support exactly five escapes:
 
@@ -507,7 +507,7 @@ Rules:
 
 ### Hash Maps
 
-Hash maps are insertion-ordered key/value groups. V1 targets the HTML JavaScript backend; HTML-Wasm rejects reachable map use before backend lowering.
+Hash maps are insertion-ordered key/value groups. The current source surface targets the HTML JavaScript backend; HTML-Wasm rejects reachable map use before backend lowering.
 
 ```beanstalk
 scores ~= {"Ada" = 10, "Grace" = 12} -- {String = Int}
@@ -629,7 +629,7 @@ HTML-JS maps console helpers to the browser console and input helpers to window/
 keyboard and pointer polling. HTML-Wasm and other targets reject reachable Core IO calls before
 backend lowering until they implement equivalent lowerings. Browser event delivery still depends
 on returning to the host event loop, so a synchronous infinite Beanstalk loop can prevent new
-input events from being observed. V1 does not add callbacks, promises, async tasks, frame/tick
+input events from being observed. The current source surface does not add callbacks, promises, async tasks, frame/tick
 APIs, targeted DOM/canvas input sources, event queues, filesystem/path IO, fetch/network IO,
 timers, text entry/IME, touch gestures, gamepads, drag/drop, clipboard, wheel scrolling, or file
 picker APIs.
@@ -749,12 +749,12 @@ Named inserts may be authored directly in an application. Storing a named insert
 
 Nested `$children(...)` wrappers remain scoped to direct children, so row/cell-style helpers can be layered without wrapper leakage.
 
-### Reactivity V1
+### Reactivity
 
-Reactivity V1 is a constrained template/UI mechanism, not a general closure or
+Reactivity is a constrained template/UI mechanism, not a general closure or
 function-value support.
 
-Current V1 syntax:
+Current reactivity syntax:
 - reactive declarations: `name $Type = value` and `name $= value`
 - reactive parameters: `param $Type`
 - template subscriptions: `$(source)` in template head/capture positions only
@@ -764,7 +764,7 @@ Rules:
 - Reactive identity is binding/source metadata, not semantic `TypeId` identity.
 - A reactive declaration owns stable mutation-capable runtime storage in its declaring scope.
 - A reactive parameter is a read/subscription handle to an existing source; it does not grant mutation permission.
-- `$(source)` accepts exactly one bare reactive source identifier in V1.
+- `$(source)` accepts exactly one bare reactive source identifier in the current source surface.
 - `$(source)` captures stable source identity and read-only subscription metadata; it never captures
   a mutable borrow, copied value, or computed expression.
 - Top-level runtime HTML fragments in the HTML-JS builder are the first live sink. The backend
@@ -922,8 +922,8 @@ Rules:
 - `.md` files are never page entries, module roots, config files, or standalone project types.
 - `.md` files have no Beanstalk imports, declarations, interpolation, templates, frontmatter, or metadata.
 - `.md` files do not see same-directory module-root constants or `@html` constants. They have no Beanstalk scope.
-- Raw HTML is preserved in V1. This feature does not add a sanitizer or raw-HTML policy key.
-- Markdown links and images render literal `href` and `src` values in V1. They are not tracked assets and are not rewritten.
+- Raw HTML is preserved in the current source surface. This feature does not add a sanitizer or raw-HTML policy key.
+- Markdown links and images render literal `href` and `src` values in the current source surface. They are not tracked assets and are not rewritten.
 - `.bd` remains the Beanstalk-aware content format. Use `.bd` when content needs `$md`,
   nested templates, or the restricted same-directory module-root constant scope.
 
@@ -1097,7 +1097,7 @@ Rules:
 - Bare `This` and `~This` are receiver-only and valid only as the first requirement parameter.
 - Direct non-receiver `This` parameters must be named, for example `other This`.
 - Direct return `This` is supported.
-- Composed `This` forms such as `This?`, `{This}`, and `Box of This` are rejected in the Alpha surface.
+- Composed `This` forms such as `This?`, `{This}`, and `Box of This` are rejected in the current source surface.
 - `This` is trait-local syntax and is rejected outside trait declarations.
 - `Type must TRAIT` declares explicit conformance. It is bodyless and newline-terminated; do not add a semicolon.
 - A matching method without `Type must TRAIT` is not conformance.
@@ -1268,7 +1268,7 @@ StringIntPair as Pair of String, Int
 value Box of StringIntPair = Box(Pair("count", 3))
 ```
 
-Rejected or deferred in the current Alpha surface:
+Rejected or deferred in the current source surface:
 - explicit call-site syntax such as `identity of Int(42)`, `identity<Int>(42)`, `identity[Int](42)`, or `identity(42 Int)`
 - inline generic sugar such as `|value type A|`
 - receiver methods on concrete generic instances
@@ -1313,28 +1313,68 @@ A module is a directory-scoped set of Beanstalk source files compiled together. 
 `config.bst`:
 - lives at the project root;
 - uses normal declaration syntax;
-- accepts only known top-level compile-time constants declared with `name #= value` or
-  `name #Type = value` as config entries;
-- requires values to fold at compile time;
-- may reference earlier compile-time config keys or constants imported from core/builder source-backed packages;
-- may contain core/builder imports, type aliases, structs, and choices as support declarations;
-- rejects plain top-level bindings because they are runtime/start-body syntax;
-- rejects project-local/relative imports, mutable bindings, functions, calls, host calls, runtime statements, non-key helper constants, traits, trait conformances, trait incompatibility declarations, standalone templates, and `#[...]` page fragments.
+- is one self-contained compile-time source file with no source imports or package resolution;
+- accepts one required open `project` const record, private helper constants declared before use, and top-level builder and tooling section records;
+- may contain folded scalar values, optionals, nested anonymous const records, collections and folded template strings as project fields;
+- requires `project.name` as a valid package-style identifier for stable project identity;
+- rejects every source import including relative, project, Core, Builder, dependency and binding-backed imports;
+- rejects runtime declarations, mutable bindings, functions, named support types, traits, conformances, standalone templates, `#[...]` page fragments and `export:`.
 
-Known config key shapes include:
-- string settings: string literals or folded templates;
-- `project`: currently only `"html"`;
-- boolean HTML settings: folded `Bool`, not strings;
-- `template_const_loop_iteration_limit`: positive folded `Int`, default `10_000`, max `1_000_000`.
+The command selects the builder before config schema validation. `config.bst` does not select the builder.
+
+Only active sections are schema-validated. Inactive sections are parsed and folded but discarded. The active builder project section is required, even when empty.
+
+Builder sections use backend-neutral folded values and cannot declare `#Import`. Output settings are builder-owned.
 
 ```beanstalk
-project #= "html"
-entry_root #= "src"
-dev_folder #= "dev"
-output_folder #= "release"
+default_channel #= "alpha"
+
+project #= |
+    name = "beanstalk_docs",
+    version #Import of String = "0.1.0",
+    entry_root = "src",
+    metadata = |
+        channel = default_channel,
+    |,
+|
+
+html #= |
+    dev_output = "dev",
+    release_output = "release",
+|
 ```
 
-Config-key constants can use const-record field projection when the expression fully folds, for example `entry_root #= Defaults().entry_root`. Structured typed config values such as `project #= Project::Html(...)` remain deferred.
+Direct project `#Import` fields use the accepted primitive and optional domain: `String`, `Int`, `Float`, `Bool`, `Char` and optional forms. Nested project fields cannot declare imports.
+
+See `docs/build-system-design.md` for the full config, `@project` and source `#Import` contract.
+
+### Entry-local config blocks
+
+A normal module root may contain one optional `config:` block for root-local builder metadata. It is not an embedded `config.bst` file.
+
+```beanstalk
+config:
+    title #= "Docs"
+    description #= "Documentation pages"
+    head #= default_head
+;
+```
+
+Rules:
+- valid only at the top level of a normal module root
+- at most one block per normal root
+- invalid in normal non-root files, support roots, the project package facade, inside `export:`, inside executable bodies and in `config.bst`
+- contains section records only: no imports, aliases, helper constants, support types or `#Import` declarations inside the block
+- these live outside the block in the normal root file
+- uses the root file's ordinary compile-time visibility: imported constants, `@project`, same-file constants declared before the block and resolved source `#Import` constants are available through normal visibility
+- same-file forward references remain invalid
+- creates no ordinary module symbol, HIR or project-global value
+- cannot contain `project` or change project-level builder behaviour
+- active entry sections are schema-validated; inactive sections are folded but not validated
+- every normal module selected into the command's semantic graph has its block validated whether or not an entry activates it
+- imported modules never apply their entry metadata to an importer
+
+See `docs/build-system-design.md` "Entry-local config: blocks" for the full contract.
 
 ### Import syntax and rules
 

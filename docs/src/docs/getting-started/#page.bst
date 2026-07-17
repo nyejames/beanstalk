@@ -356,7 +356,7 @@ page_head #= language_theme_head
         [data:
             [: Missing File or Directory]
             [: The project references a file, directory, import path, or output path that cannot be resolved.]
-            [: Check spelling, relative paths, [$html:<code>entry_root</code>], [$html:<code>package_folders</code>] and project config.]
+            [: Check spelling, relative paths, [$html:<code>entry_root</code>] and project config.]
         ]
 
         [data:

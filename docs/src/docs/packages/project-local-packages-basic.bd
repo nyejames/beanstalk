@@ -1,15 +1,16 @@
-Source-backed packages are Beanstalk source under `lib/`. Each direct child folder becomes an import prefix.
+Scoped support packages are `+*.bst` roots in the project source tree. The containing directory supplies the package name.
 
-### A simple package
+### A simple support package
 
 [codeblock, $code("text"):
-    lib/
+    src/
+    ├── #site.bst
     └── blog/
-        ├── #api.bst
+        ├── +package.bst
         └── helpers/dates.bst
 ]
 
-`#api.bst` is just a cosmetic root filename. Any `#*.bst` name works.
+`+package.bst` makes `@blog` a scoped support package visible to `#site` and its sibling modules.
 
 ### Importing from a package
 
@@ -17,11 +18,11 @@ Source-backed packages are Beanstalk source under `lib/`. Each direct child fold
     import @blog {post_title}
 ]
 
-`@blog` resolves to `lib/blog/`. The package's public surface comes from its export block.
+`@blog` resolves to the `blog` directory's support root. The package's public surface comes from its `export:` block.
 
 ### Remember
 
-- `lib/` is the default package folder.
-- Each direct child becomes a prefix.
+- `+package.bst` in a directory creates a scoped support package.
+- The package is visible to its nearest ancestor normal module and siblings.
 - Internal files are hidden unless re-exported.
 - Imported package roots do not become HTML routes.

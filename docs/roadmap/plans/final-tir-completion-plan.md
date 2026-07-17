@@ -18,6 +18,12 @@ The final implementation must preserve template behaviour while deleting multi-s
 
 TIR remains AST-local. No TIR store, ID, view, overlay or preparation type may cross into HIR, a backend or a completed compiler module.
 
+## Required authority documents
+
+- `docs/compiler-design-overview.md` for AST ownership, TIR boundary and HIR handoff contracts
+- `docs/build-system-design.md` for build orchestration context only; TIR ownership stays in the compiler document
+- `docs/src/docs/codebase/style-guide/style-guide.bd`, `testing.bd` and `validation.bd`
+
 ## Current state
 
 ```text
@@ -30,6 +36,25 @@ BRANCH: main
 ```
 
 Use `069a29acb` as the implementation and regression base. Do not continue extending `FoldAuthorityWalk`, foreign-store traversal, external expression-overlay stacks or prepared foreign-wrapper proofs.
+
+## Downstream handoffs
+
+Final TIR completion unblocks:
+
+- the Number plan, which consumes the shared value-to-string path and one-store folding
+- the entry config plan, which folds `config:` blocks through the ordinary module AST path
+- the canonical module plan, which requires stable template folding before immutable module artefacts can carry folded constants
+
+## Deletion obligations
+
+Final completion must delete:
+
+- registry and multi-store ownership (`TemplateIrRegistry`, `RegisteredTemplateIrStore`)
+- foreign-store paths (`foreign_slot_insert_proxy.rs`, foreign child, wrapper, slot-source and fold paths)
+- overlay-stack reconstruction (`TemplateOverlaySet`, `TemplateOverlaySetId`, external expression-overlay stacks)
+- content fallback (detached content, per-template stores, `TemplateContent` fallback)
+- duplicate classification (`fold_safety.rs`, `FoldAuthorityWalk`, authority tokens)
+- compatibility names (`TemplateRef`, `TemplateNodeRef`, `TemplateWrapperSetRef`, store-qualified IDs)
 
 ## Final architecture
 

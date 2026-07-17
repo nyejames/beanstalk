@@ -6,7 +6,7 @@ Origin describes ownership and distribution:
 
 - **Core**: compiler-owned packages such as `@core/io` and `@core/math`.
 - **Builder**: packages selected by a project builder, including `@html` and `@web/canvas`.
-- **ProjectLocal**: configured package-folder children and annotated project-local JavaScript imports.
+- **ProjectLocal**: scoped `+*.bst` support packages, the project-root package facade and annotated project-local JavaScript imports.
 - **Standard** and **Dependency**: reserved for future package-system support.
 
 ### Package backing
@@ -26,7 +26,8 @@ Backing describes implementation:
     [td: [:`@html`] [: Builder] [: BeanstalkSource]]
     [td: [:`@core/collections`, `@core/io`, `@core/math`, `@core/text`, `@core/random`, `@core/time`] [: Core] [: ExternalBinding]]
     [td: [:`@web/canvas`] [: Builder] [: ExternalBinding]]
-    [td: [: Configured package-folder child] [: ProjectLocal] [: BeanstalkSource]]
+    [td: [: Scoped `+*.bst` support package] [: ProjectLocal] [: BeanstalkSource]]
+    [td: [: Project-root `+*.bst` facade] [: ProjectLocal] [: BeanstalkSource]]
     [td: [: Annotated project-local `.js` import] [: ProjectLocal] [: ExternalBinding]]
 ]
 
@@ -48,7 +49,7 @@ The HTML-Wasm mode has a stricter backend surface. A reachable JS-backed package
 
 ### No package manager yet
 
-There is no remote fetching, lockfile or version resolution yet. Use `lib/<name>/#*.bst` for project-local source-backed packages, builder-provided package imports for built-in capabilities and annotated `.js` wrappers for direct browser integration.
+There is no remote fetching, lockfile or version resolution yet. Use `+*.bst` support packages for project-local source-backed packages, builder-provided package imports for built-in capabilities and annotated `.js` wrappers for direct browser integration.
 
 ### Related concepts
 

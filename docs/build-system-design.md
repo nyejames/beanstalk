@@ -162,7 +162,7 @@ The completed `project` record must be available before a builder or tooling sec
 
 A direct primitive or optional field of `project` may declare a build-input contract.
 
-Accepted V1 types are:
+Accepted imported-value types are:
 
 - `String`
 - `Int`
@@ -228,7 +228,7 @@ Project field dependencies are recorded at field granularity. A field change inv
 
 Source `#Import` is intentionally narrow so every project-wide contract can be validated before module AST compilation.
 
-A source declaration may use only the V1 primitive or optional types listed for project fields.
+A source declaration may use only the accepted primitive or optional types listed for project fields.
 
 A source default must be self-contained. The only accepted forms are:
 

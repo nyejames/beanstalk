@@ -1,8 +1,7 @@
-
 Build systems provide a `BackendBuilder` and wrap it in a `ProjectBuilder`.
 
 The frontend compiles modules up to HIR and borrow validation.
-The backend builder consumes those compiled modules and emits project artifacts.
+The backend builder consumes a compiled project graph and emits project artifacts.
 That split is strict.
 
 Backend builders don't load source files, discover modules, load or parse `config.bst`, perform semantic frontend compilation or write final output files directly.
@@ -10,31 +9,9 @@ They declare the build surface the frontend is allowed to see.
 
 ## BackendBuilder
 
-[codeblock, $code("rust"):
-    pub trait BackendBuilder {
-        fn build_backend(
-            &self,
-            modules: Vec<Module>,
-            config: &Config,
-            flags: &[Flag],
-            string_table: &mut StringTable,
-        ) -> Result<Project, CompilerMessages>;
+The accepted architecture has the backend consume a success-only `ProjectCompilation` rather than a flat `Vec<Module>`. The current implementation still passes `Vec<Module>`; the canonical module plan owns that migration.
 
-        fn validate_project_config(
-            &self,
-            config: &Config,
-            string_table: &mut StringTable,
-        ) -> Result<(), ProjectConfigError>;
-
-        fn frontend_style_directives(&self) -> Vec<StyleDirectiveSpec>;
-
-        fn frontend_surface(&self) -> BuilderSurface;
-    }
-
-    pub struct ProjectBuilder {
-        pub backend: Box<dyn BackendBuilder + Send>,
-    }
-]
+See `docs/build-system-design.md` "Success-only ProjectCompilation" for the accepted payload shape and `docs/compiler-design-overview.md` "Backend-facing compiler handoff" for what backends receive.
 
 A backend builder declares these frontend-visible surfaces:
 
@@ -46,80 +23,43 @@ A backend builder declares these frontend-visible surfaces:
 - builder runtime packages
 - supported source file kinds
 
-It receives a validated `Config`, may validate backend-owned config keys and lowers compiled `Module` values into artifacts.
-The frontend doesn't know the final project layout.
-The backend doesn't know how raw source files were discovered.
+It receives a validated `Config`, may validate backend-owned config keys and lowers compiled module artefacts into project output records. The frontend doesn't know the final project layout. The backend doesn't know how raw source files were discovered.
 
 ## BuilderSurface
 
 `BuilderSurface` is the build surface exposed to the frontend.
 It carries typed registries, not loose callbacks or strings.
 
-[codeblock, $code("rust"):
-    pub struct BuilderSurface {
-        pub binding_packages: ExternalPackageRegistry,
-        pub source_packages: SourcePackageRegistry,
-        pub config_keys: ProjectConfigKeyRegistry,
-        pub external_import_providers: ExternalImportProviderRegistry,
-        pub external_import_cache: ExternalImportProviderCache,
-        pub external_import_resolution_table: ExternalImportResolutionTable,
-        pub builder_runtime_packages: Vec<BuilderRuntimePackageMetadata>,
-        pub source_file_kinds: SourceFileKindRegistry,
-    }
-]
+The accepted architecture separates reusable immutable builder capability definition from one build-owned provider cache and one build-owned external import resolution table. The current implementation mixes both in `BuilderSurface`; the canonical module plan owns that migration.
+
+See `docs/build-system-design.md` "Selected command and capability surface" for the accepted capability surface contract.
 
 `ProjectConfigKeyRegistry` is declarative Stage 0 metadata.
-It lists allowed core and backend-owned keys plus value shapes so `config.bst` can reject unknown declarations, shape-invalid folded values and closed-domain string values before core fields are applied or backend settings are stored.
+The accepted architecture replaces flat config keys with one section-aware recursive schema. The current implementation uses flat keys; the project config plan owns that migration.
 
 Source and binding registries stay separate because their resolution paths differ. Both carry shared `PackageMetadata`, whose independent `PackageOrigin` and `PackageBacking` axes let the frontend classify packages without conflating ownership with implementation. Config keys, providers and supported source kinds are builder surface too. Binding-specific lowering metadata remains with the binding and provider owners.
 
 ## Config compilation
 
 `config.bst` is build-system-owned compile-time Beanstalk source.
-It uses the frontend up to AST so config values can use normal compile-time constants, folded templates, core/builder imports and typed diagnostics.
+It is one self-contained source file with no source imports or package resolution.
+It uses the frontend up to AST so config values can use normal compile-time constants, folded templates and typed diagnostics.
 
 It isn't compiled as a module.
 It doesn't produce HIR.
 It doesn't create runtime `start` semantics.
 It doesn't export language-visible declarations.
 
-Authored config entries must be known top-level compile-time constants declared with
-`name #= value` or `name #Type = value`.
-Plain top-level bindings are runtime Beanstalk syntax and are rejected in config.
-Imported constants and support types may participate in config expressions, but imported declarations are support surface only and never become config entries.
+The accepted config model uses one required open `project` record, private helper constants and top-level builder and tooling section records. Only active sections are schema-validated. The current implementation uses flat known config keys; the project config plan owns that migration.
 
-Config may contain these support declarations:
+See `docs/build-system-design.md` "Self-contained config.bst" for the full config contract.
 
-- imports from Core or Builder packages
-- type aliases
-- structs
-- choices
+Config rejects by design:
 
-Config rejects these by design:
-
-- project-local imports
-- relative imports
-- mutable bindings
-- functions
-- calls that require runtime behaviour
-- runtime statements
-- local helper constants that are not known config keys
-- traits
-- trait conformances
-- trait incompatibility declarations
-- standalone templates
-- direct top-level const-template page fragments
-
-For example, config rejects this active-module-root-only page-fragment form:
-
-[codeblock, $code("bst"):
-    #[$md:
-        # Page title
-    ]
-]
-
-Config-key constants can use const-record field projection when the expression fully folds.
-Structured typed config values are still deferred.
+- every source import, including relative, project, Core, Builder, dependency and binding-backed imports
+- runtime declarations, mutable bindings, functions, named support types, traits and conformances
+- standalone templates and top-level const page fragments
+- `export:`
 
 ## External import providers
 
