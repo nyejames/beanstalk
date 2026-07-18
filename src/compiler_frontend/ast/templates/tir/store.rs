@@ -15,7 +15,6 @@
 //! the AST stage finishes template processing for that module.
 
 use crate::compiler_frontend::arena::capacity::FrontendArenaCapacityEstimate;
-use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::templates::error::TemplateError;
 use crate::compiler_frontend::ast::templates::template::{
     ReactiveSubscription, SlotPlaceholder, TemplateType,
@@ -31,13 +30,12 @@ use crate::compiler_frontend::ast::templates::tir::node::{
     TirSlotPlaceholder,
 };
 use crate::compiler_frontend::ast::templates::tir::overlays::{
-    TemplateViewContext, TirExpressionOverlay, TirExpressionOverlayId, TirSlotResolutionOverlay,
+    TirExpressionOverlay, TirExpressionOverlayId, TirSlotResolutionOverlay,
     TirSlotResolutionOverlayId, TirWrapperContextOverlay, TirWrapperContextOverlayId,
 };
 use crate::compiler_frontend::ast::templates::tir::refs::TemplateWrapperReference;
 use crate::compiler_frontend::ast::templates::tir::slot_plan::TemplateSlotPlan;
 use crate::compiler_frontend::ast::templates::tir::wrapper_sets::wrapper_sets_are_equivalent;
-use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::instrumentation::{AstCounter, increment_ast_counter};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use std::collections::HashSet;
@@ -688,33 +686,6 @@ impl TemplateIrStore {
         id: TirWrapperContextOverlayId,
     ) -> Option<&TirWrapperContextOverlay> {
         self.wrapper_context_overlays.get(id.index())
-    }
-
-    /// Resolves a site through value-carried contexts in outer-to-inner order.
-    /// The first matching context wins, preserving the existing root-first
-    /// expression-stack behavior.
-    pub(crate) fn expression_for_context_stack(
-        &self,
-        contexts: &[TemplateViewContext],
-        site_id: ExpressionSiteId,
-    ) -> Result<Option<&Expression>, CompilerError> {
-        for context in contexts.iter().copied() {
-            let Some(overlay_id) = context.expression_overlay else {
-                continue;
-            };
-
-            let overlay = self.expression_overlay(overlay_id).ok_or_else(|| {
-                CompilerError::compiler_error(format!(
-                    "TIR expression resolution referenced missing expression overlay {overlay_id}"
-                ))
-            })?;
-
-            if let Some(expression) = overlay.expression_for_site(site_id) {
-                return Ok(Some(expression));
-            }
-        }
-
-        Ok(None)
     }
 }
 

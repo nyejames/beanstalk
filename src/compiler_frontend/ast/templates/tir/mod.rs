@@ -172,6 +172,7 @@ pub(crate) use expression_payload_walker::walk_tir_view_expression_payloads;
 // Mutation is retained only for focused TIR walker tests.
 pub(crate) use expression_payload_walker::{
     collect_effective_tir_expression_overlay_payloads,
+    collect_effective_tir_expression_overlay_payloads_with_phase,
     walk_expression_payloads_with_nested_tir_views,
 };
 
@@ -186,6 +187,7 @@ pub(crate) use store::TemplateIrStore;
 pub(crate) use summary::TemplateIrSummary;
 
 pub(crate) use refs::{TemplateTirReference, TemplateWrapperReference};
+pub(crate) use view::{TirView, TirViewIdentity};
 pub(crate) use wrapper_sets::{attach_wrapper_context_overlay, wrapper_reference_for_template};
 
 // Final view context and expression-overlay types consumed by production
@@ -273,4 +275,4 @@ pub(crate) use slot_plan::{
 };
 
 // Central read API over structural roots in the store and value-carried view contexts.
-pub(crate) use view::{TemplateTirPhase, TirView, finalized_tir_view_for_template};
+pub(crate) use view::{TemplateTirPhase, finalized_tir_view_for_template};

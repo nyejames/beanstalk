@@ -184,22 +184,24 @@ pub(crate) fn finalized_tir_view_for_template<'a>(
 /// Use [`TirView::new`] for a basic view that validates the root template and
 /// view context exist. Use [`TirView::with_minimum_phase`] when the consumer
 /// additionally requires the root to have reached a particular pipeline phase.
-/// Use [`TirView::child_view`] to construct a view over a child template
-/// referenced from the current root.
+/// Use the named transition methods to construct views over referenced roots.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct TirViewIdentity {
+    pub(crate) root: TemplateIrId,
+    pub(crate) phase: TemplateTirPhase,
+    pub(crate) context: TemplateViewContext,
+}
+
 #[derive(Clone)]
 pub(crate) struct TirView<'a> {
     store: &'a TemplateIrStore,
-    root: TemplateIrId,
-    phase: TemplateTirPhase,
-    context: TemplateViewContext,
+    identity: TirViewIdentity,
 }
 
 impl<'a> fmt::Debug for TirView<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("TirView")
-            .field("root", &self.root)
-            .field("phase", &self.phase)
-            .field("context", &self.context)
+            .field("identity", &self.identity)
             .finish()
     }
 }
@@ -234,9 +236,11 @@ impl<'a> TirView<'a> {
 
         Ok(TirView {
             store,
-            root,
-            phase,
-            context,
+            identity: TirViewIdentity {
+                root,
+                phase,
+                context,
+            },
         })
     }
 
@@ -265,36 +269,114 @@ impl<'a> TirView<'a> {
         Self::new(store, root, phase, context)
     }
 
-    /// Constructs a child view over a module-local child `TemplateIrId`.
+    /// Enters a structural child while retaining the current complete expression overlay.
     ///
-    /// WHAT: creates a new `TirView` for a child template referenced from the
-    ///       current root, sharing the same store borrow. The child's
-    ///       `phase` and `context` are provided by the caller because a
-    ///       child template may carry a different pipeline phase and overlay
-    ///       context than its parent.
-    /// WHY: child-template composition needs to descend into child roots with
-    ///      their own overlay context. Routing this through a constructor
-    ///      ensures the child root and view context are validated exactly like
-    ///      the parent, preventing ad hoc store traversal at call sites.
-    pub(crate) fn child_view(
+    /// Parsed references cannot yet authorize their slot or wrapper dimensions. Composed and
+    /// later references carry those dimensions, while the current root overlay remains the
+    /// expression authority for the complete structural subtree.
+    pub(crate) fn structural_child(
         &self,
-        child: TemplateIrId,
+        reference: super::refs::TemplateTirChildReference,
+    ) -> Result<TirView<'a>, CompilerError> {
+        self.structural_transition(
+            reference.root,
+            reference.phase,
+            reference.context,
+            "structural_child",
+        )
+    }
+
+    /// Enters a wrapper through the same structural transition as a child template.
+    pub(crate) fn wrapper(
+        &self,
+        reference: super::refs::TemplateWrapperReference,
+    ) -> Result<TirView<'a>, CompilerError> {
+        self.structural_transition(
+            reference.root,
+            reference.phase,
+            reference.context,
+            "wrapper",
+        )
+    }
+
+    /// Enters a resolved slot source while retaining the current exact view context.
+    pub(crate) fn resolved_slot_source(
+        &self,
+        root: TemplateIrId,
+    ) -> Result<TirView<'a>, CompilerError> {
+        self.transition(root, self.phase(), self.context(), "resolved_slot_source")
+    }
+
+    /// Enters an `InsertContribution` helper as a structural root.
+    pub(crate) fn structural_helper(
+        &self,
+        root: TemplateIrId,
+    ) -> Result<TirView<'a>, CompilerError> {
+        self.transition(root, self.phase(), self.context(), "structural_helper")
+    }
+
+    /// Enters an independently owned nested template value.
+    ///
+    /// Nested AST template values use their durable reference in full. They do not inherit the
+    /// containing structural root's expression overlay.
+    pub(crate) fn nested_template_value(
+        &self,
+        reference: super::refs::TemplateTirReference,
+    ) -> Result<TirView<'a>, CompilerError> {
+        self.transition(
+            reference.root,
+            reference.phase,
+            reference.context,
+            "nested_template_value",
+        )
+    }
+
+    fn structural_transition(
+        &self,
+        root: TemplateIrId,
+        phase: TemplateTirPhase,
+        referenced_context: TemplateViewContext,
+        owner: &str,
+    ) -> Result<TirView<'a>, CompilerError> {
+        let context = TemplateViewContext {
+            // Structural descendants read the current complete root overlay.
+            // Referenced expression overlays belong to independently owned
+            // nested values, not to structural child or wrapper transitions.
+            expression_overlay: self.context().expression_overlay,
+            slot_resolution: phase
+                .is_at_least(TemplateTirPhase::Composed)
+                .then_some(referenced_context.slot_resolution)
+                .flatten(),
+            wrapper_context: phase
+                .is_at_least(TemplateTirPhase::Composed)
+                .then_some(referenced_context.wrapper_context)
+                .flatten(),
+        };
+        self.transition(root, phase, context, owner)
+    }
+
+    fn transition(
+        &self,
+        root: TemplateIrId,
         phase: TemplateTirPhase,
         context: TemplateViewContext,
+        owner: &str,
     ) -> Result<TirView<'a>, CompilerError> {
-        // Skip store.template() validation: the caller already verified the
-        // child template exists in the store. Calling store.template() here
-        // would borrow the store's RefCell, which panics when the caller holds a
-        // mutable store borrow (e.g. during effective-view classification).
-        // view context validation only touches store-internal Vecs, so it is
-        // safe under any store borrow state.
-        validate_context(self.store, context, "TirView::child_view")?;
+        if self.store.get_template(root).is_none() {
+            return Err(CompilerError::compiler_error(format!(
+                "TirView::{owner}: missing root_template {root}; it does not exist in the store"
+            )));
+        }
+
+        validate_context(self.store, context, &format!("TirView::{owner}"))?;
 
         Ok(TirView {
             store: self.store,
-            root: child,
-            phase,
-            context,
+            identity: TirViewIdentity {
+                root,
+                phase,
+                context,
+            },
         })
     }
 
@@ -304,17 +386,22 @@ impl<'a> TirView<'a> {
 
     /// Returns the module-local root ID this view was built over.
     pub(crate) fn root_ref(&self) -> TemplateIrId {
-        self.root
+        self.identity.root
     }
 
     /// Returns the pipeline phase carried by this view.
     pub(crate) fn phase(&self) -> TemplateTirPhase {
-        self.phase
+        self.identity.phase
     }
 
     /// Returns the exact value context carried by this view.
     pub(crate) fn context(&self) -> TemplateViewContext {
-        self.context
+        self.identity.context
+    }
+
+    /// Returns the exact identity that determines every effective view read.
+    pub(crate) fn identity(&self) -> TirViewIdentity {
+        self.identity
     }
 
     /// Borrows the module-local store that owns this view's structural root.
@@ -334,10 +421,10 @@ impl<'a> TirView<'a> {
     ///       `TemplateIr` through the store.  Returns `CompilerError` if the
     ///       root is no longer resolvable (an internal invariant violation).
     pub(crate) fn root_template(&self) -> Result<&'a TemplateIr, CompilerError> {
-        self.store.get_template(self.root).ok_or_else(|| {
+        self.store.get_template(self.identity.root).ok_or_else(|| {
             CompilerError::compiler_error(format!(
                 "TirView::root_template: root {} was valid at construction but is now missing; this is a compiler bug",
-                self.root
+                self.identity.root
             ))
         })
     }
@@ -402,7 +489,7 @@ impl<'a> TirView<'a> {
     pub(crate) fn expression_overlay(
         &self,
     ) -> Result<Option<&'a TirExpressionOverlay>, CompilerError> {
-        let Some(overlay_id) = self.context.expression_overlay else {
+        let Some(overlay_id) = self.identity.context.expression_overlay else {
             return Ok(None);
         };
 
@@ -426,7 +513,7 @@ impl<'a> TirView<'a> {
     pub(crate) fn slot_resolution_overlay(
         &self,
     ) -> Result<Option<&'a TirSlotResolutionOverlay>, CompilerError> {
-        let Some(overlay_id) = self.context.slot_resolution else {
+        let Some(overlay_id) = self.identity.context.slot_resolution else {
             return Ok(None);
         };
 
@@ -453,7 +540,7 @@ impl<'a> TirView<'a> {
     pub(crate) fn wrapper_context_overlay(
         &self,
     ) -> Result<Option<&'a TirWrapperContextOverlay>, CompilerError> {
-        let Some(overlay_id) = self.context.wrapper_context else {
+        let Some(overlay_id) = self.identity.context.wrapper_context else {
             return Ok(None);
         };
 
@@ -568,8 +655,8 @@ impl<'a> TirView<'a> {
     // descendants to recover a `SourceLocation` from a slot occurrence,
     // child-template occurrence, or expression site. They do not cross into
     // referenced child templates or insert-contribution templates: a caller
-    // that needs a location inside a child root should construct a `child_view`
-    // for that child. Not crossing avoids ambiguity when separate template
+    // that needs a location inside a child root should construct the appropriate
+    // named transition view for that child. Not crossing avoids ambiguity when separate template
     // roots reuse numeric occurrence/site IDs.
 
     /// Returns a slot occurrence source location for focused view tests.

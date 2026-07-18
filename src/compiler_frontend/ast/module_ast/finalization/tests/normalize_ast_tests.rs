@@ -1662,8 +1662,8 @@ fn finalization_accepts_supported_nested_wrapper_exact_view() {
 
     assert_eq!(
         string_table.resolve(folded),
-        "outer-overlayinner-beforenestedinner-afterparentouter-after",
-        "supported exact-view wrapper traversal must preserve fold output and wrapper order"
+        "outer-structuralinner-beforenestedinner-afterparentouter-after",
+        "supported exact-view wrapper traversal must preserve structural expression authority and wrapper order"
     );
 }
 

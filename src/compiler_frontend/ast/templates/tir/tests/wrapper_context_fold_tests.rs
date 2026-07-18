@@ -919,7 +919,7 @@ fn wrapper_context_overlay_folds_inherited_wrapper() {
 }
 
 #[test]
-fn fold_tir_view_applies_nested_wrapper_context_after_entering_exact_wrapper_view() {
+fn fold_tir_view_keeps_parent_expression_authority_through_nested_wrappers() {
     let mut string_table = StringTable::new();
     let fixture = build_nested_virtual_wrapper_fixture(&mut string_table);
 
@@ -930,8 +930,8 @@ fn fold_tir_view_applies_nested_wrapper_context_after_entering_exact_wrapper_vie
     };
     assert_eq!(
         string_table.resolve(output_id),
-        "outer-overlayinner-beforenestedinner-afterparentouter-after",
-        "nested wrapper contexts must apply inside the virtual wrapper using its exact overlays"
+        "outer-structuralinner-beforenestedinner-afterparentouter-after",
+        "nested structural wrappers must retain the parent expression authority"
     );
 
     let handoff = handoff_fixture(&fixture, &mut string_table);
@@ -942,11 +942,11 @@ fn fold_tir_view_applies_nested_wrapper_context_after_entering_exact_wrapper_vie
     assert_eq!(children.len(), 4);
 
     let OwnedRuntimeTemplateNode::DynamicExpression { expression, .. } = &children[0] else {
-        panic!("expected the exact outer expression overlay in the handoff");
+        panic!("expected the structural outer expression in the handoff");
     };
     assert!(matches!(
         expression.kind,
-        ExpressionKind::StringSlice(text) if string_table.resolve(text) == "outer-overlay"
+        ExpressionKind::StringSlice(text) if string_table.resolve(text) == "outer-structural"
     ));
 
     let OwnedRuntimeTemplateNode::Sequence {
@@ -1133,7 +1133,7 @@ fn wrapper_safety_preserves_outer_runtime_expression_override_in_handoff() {
 }
 
 #[test]
-fn preparation_falls_back_for_runtime_wrapper_dynamic_expression() {
+fn preparation_ignores_runtime_referenced_wrapper_expression_overlay() {
     let mut string_table = StringTable::new();
     let wrapper_text = string_table.intern("same-store-overlay");
     let (fixture, site_id) = build_expression_wrapper_fixture(
@@ -1175,19 +1175,33 @@ fn preparation_falls_back_for_runtime_wrapper_dynamic_expression() {
         let view = TirView::new(&store, fixture.parent, phase, fixture.context)
             .expect("parent view should construct");
         prepare_tir_view_fold(&view, &store, &string_table)
-            .expect("runtime wrapper expression should be a semantic fallback")
+            .expect("referenced wrapper expression should be ignored by the structural transition")
             .fallback_reason()
     };
     assert_eq!(
-        fallback_reason,
-        Some(TirFoldFallbackReason::WrapperContextOverlay),
-        "effective runtime wrapper expressions must not be folded away"
+        fallback_reason, None,
+        "a referenced wrapper expression must not change the parent fold decision"
     );
 
     let handoff = handoff_fixture(&fixture, &mut string_table);
+    let wrapped = expect_single_render_child(&handoff.body);
+    let OwnedRuntimeTemplateNode::Sequence { children } = wrapped else {
+        panic!("expected wrapper handoff sequence, got {wrapped:?}");
+    };
+    let expression_node = match children.first() {
+        Some(OwnedRuntimeTemplateNode::DynamicExpression { .. }) => &children[0],
+        Some(OwnedRuntimeTemplateNode::Sequence { children }) if children.len() == 1 => {
+            &children[0]
+        }
+        Some(other) => panic!("expected structural wrapper expression, got {other:?}"),
+        None => panic!("expected structural wrapper expression"),
+    };
+    let OwnedRuntimeTemplateNode::DynamicExpression { expression, .. } = expression_node else {
+        panic!("expected wrapper expression node, got {expression_node:?}");
+    };
     assert!(
-        format!("{:?}", handoff.body).contains("DynamicExpression"),
-        "owned handoff must retain the runtime wrapper expression"
+        matches!(expression.kind, ExpressionKind::StringSlice(text) if text == wrapper_text),
+        "owned handoff must retain the structural wrapper expression"
     );
 }
 

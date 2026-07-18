@@ -35,7 +35,8 @@ use crate::compiler_frontend::ast::templates::template_control_flow::{
 use crate::compiler_frontend::ast::templates::tir::{
     ExpressionSiteId, TemplateIrId, TemplateIrNodeId, TemplateIrNodeKind, TemplateIrStore,
     TemplateLoopHeaderExpressionSites, TemplateSlotPlanId, TemplateSlotSiteRenderPiece,
-    TemplateTirPhase, TemplateViewContext, TirExpressionOverlay,
+    TemplateTirPhase, TemplateViewContext, TirExpressionOverlay, TirView, TirViewIdentity,
+    collect_effective_tir_expression_overlay_payloads_with_phase,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
@@ -84,12 +85,27 @@ struct EnvironmentAwarePayload {
 ///      the environment active inside that body, not a flattened scope.
 fn collect_environment_aware_tir_expression_payloads(
     store: &TemplateIrStore,
+    root_template_id: TemplateIrId,
     root: TemplateIrNodeId,
+    root_phase: TemplateTirPhase,
     root_context: TemplateViewContext,
     base_environment: &ReactiveTemplateValueEnvironment,
     flows: &FxHashMap<InternedPath, FunctionTemplateFlow>,
 ) -> Result<Vec<EnvironmentAwarePayload>, CompilerError> {
-    let mut collector = EnvironmentAwarePayloadCollector::new(store, flows, root_context)?;
+    // This is a construction-time merge input used to annotate one complete
+    // root overlay. It is not a durable read context; recursive reads remain
+    // owned by the exact `TirView` below.
+    let effective_expressions = collect_effective_tir_expression_overlay_payloads_with_phase(
+        store,
+        root_template_id,
+        root_phase,
+        root_context,
+    )?
+    .into_iter()
+    .collect();
+    let root_view = TirView::new(store, root_template_id, root_phase, root_context)?;
+    let mut collector =
+        EnvironmentAwarePayloadCollector::new(store, flows, root_view, effective_expressions);
     collector.collect_node(root, base_environment)?;
     Ok(collector.into_payloads())
 }
@@ -149,24 +165,6 @@ fn compose_expression_overlays(
     Ok(current_context.merge(expression_context))
 }
 
-fn validate_expression_overlay_authority(
-    store: &TemplateIrStore,
-    context: TemplateViewContext,
-) -> Result<(), CompilerError> {
-    if let Some(expression_overlay_id) = context.expression_overlay {
-        store
-            .expression_overlay(expression_overlay_id)
-            .ok_or_else(|| {
-                CompilerError::compiler_error(format!(
-                    "TIR environment-aware payload collection referenced missing expression overlay {}",
-                    expression_overlay_id
-                ))
-            })?;
-    }
-
-    Ok(())
-}
-
 /// Environment-aware TIR expression-payload collector.
 ///
 /// WHAT: walks same-store TIR nodes, recording one `EnvironmentAwarePayload`
@@ -178,28 +176,31 @@ fn validate_expression_overlay_authority(
 struct EnvironmentAwarePayloadCollector<'store, 'flow> {
     store: &'store TemplateIrStore,
     flows: &'flow FxHashMap<InternedPath, FunctionTemplateFlow>,
-    context_stack: Vec<TemplateViewContext>,
+    view: TirView<'store>,
+    // Temporary normalization input for the root overlay being constructed.
+    // Durable effective-expression reads belong to `TirView`, not this map.
+    effective_expressions: FxHashMap<ExpressionSiteId, Expression>,
     payloads: Vec<EnvironmentAwarePayload>,
-    active_nodes: HashSet<TemplateIrNodeId>,
-    completed_nodes: HashSet<TemplateIrNodeId>,
-    active_templates: HashSet<TemplateIrId>,
-    completed_templates: HashSet<TemplateIrId>,
-    active_slot_plans: HashSet<TemplateSlotPlanId>,
-    completed_slot_plans: HashSet<TemplateSlotPlanId>,
+    active_nodes: HashSet<(TemplateIrNodeId, TirViewIdentity)>,
+    completed_nodes: HashSet<(TemplateIrNodeId, TirViewIdentity)>,
+    active_templates: HashSet<TirViewIdentity>,
+    completed_templates: HashSet<TirViewIdentity>,
+    active_slot_plans: HashSet<(TemplateSlotPlanId, TirViewIdentity)>,
+    completed_slot_plans: HashSet<(TemplateSlotPlanId, TirViewIdentity)>,
 }
 
 impl<'store, 'flow> EnvironmentAwarePayloadCollector<'store, 'flow> {
     fn new(
         store: &'store TemplateIrStore,
         flows: &'flow FxHashMap<InternedPath, FunctionTemplateFlow>,
-        root_context: TemplateViewContext,
-    ) -> Result<Self, CompilerError> {
-        validate_expression_overlay_authority(store, root_context)?;
-
-        Ok(Self {
+        view: TirView<'store>,
+        effective_expressions: FxHashMap<ExpressionSiteId, Expression>,
+    ) -> Self {
+        Self {
             store,
             flows,
-            context_stack: vec![root_context],
+            view,
+            effective_expressions,
             payloads: Vec::new(),
             active_nodes: HashSet::new(),
             completed_nodes: HashSet::new(),
@@ -207,7 +208,7 @@ impl<'store, 'flow> EnvironmentAwarePayloadCollector<'store, 'flow> {
             completed_templates: HashSet::new(),
             active_slot_plans: HashSet::new(),
             completed_slot_plans: HashSet::new(),
-        })
+        }
     }
 
     fn into_payloads(self) -> Vec<EnvironmentAwarePayload> {
@@ -220,8 +221,8 @@ impl<'store, 'flow> EnvironmentAwarePayloadCollector<'store, 'flow> {
         structural_expression: &Expression,
     ) -> Result<Expression, CompilerError> {
         Ok(self
-            .store
-            .expression_for_context_stack(&self.context_stack, site_id)?
+            .effective_expressions
+            .get(&site_id)
             .cloned()
             .unwrap_or_else(|| structural_expression.clone()))
     }
@@ -231,11 +232,12 @@ impl<'store, 'flow> EnvironmentAwarePayloadCollector<'store, 'flow> {
         template_id: TemplateIrId,
         environment: &ReactiveTemplateValueEnvironment,
     ) -> Result<(), CompilerError> {
-        if self.completed_templates.contains(&template_id) {
+        let traversal_key = self.view.identity();
+        if self.completed_templates.contains(&traversal_key) {
             return Ok(());
         }
 
-        if !self.active_templates.insert(template_id) {
+        if !self.active_templates.insert(traversal_key) {
             return Err(CompilerError::compiler_error(
                 "TIR environment-aware payload collection found a recursive child-template reference.",
             ));
@@ -258,9 +260,9 @@ impl<'store, 'flow> EnvironmentAwarePayloadCollector<'store, 'flow> {
             self.collect_node(root, environment)
         };
 
-        self.active_templates.remove(&template_id);
+        self.active_templates.remove(&traversal_key);
         if result.is_ok() {
-            self.completed_templates.insert(template_id);
+            self.completed_templates.insert(traversal_key);
         }
         result
     }
@@ -271,11 +273,12 @@ impl<'store, 'flow> EnvironmentAwarePayloadCollector<'store, 'flow> {
         slot_plan_id: TemplateSlotPlanId,
         environment: &ReactiveTemplateValueEnvironment,
     ) -> Result<(), CompilerError> {
-        if self.completed_slot_plans.contains(&slot_plan_id) {
+        let traversal_key = (slot_plan_id, self.view.identity());
+        if self.completed_slot_plans.contains(&traversal_key) {
             return self.collect_node(wrapper_root, environment);
         }
 
-        if !self.active_slot_plans.insert(slot_plan_id) {
+        if !self.active_slot_plans.insert(traversal_key) {
             return Err(CompilerError::compiler_error(
                 "TIR environment-aware payload collection found a recursive runtime slot plan.",
             ));
@@ -293,9 +296,9 @@ impl<'store, 'flow> EnvironmentAwarePayloadCollector<'store, 'flow> {
             Ok(())
         });
 
-        self.active_slot_plans.remove(&slot_plan_id);
+        self.active_slot_plans.remove(&traversal_key);
         if result.is_ok() {
-            self.completed_slot_plans.insert(slot_plan_id);
+            self.completed_slot_plans.insert(traversal_key);
         }
         result
     }
@@ -344,11 +347,12 @@ impl<'store, 'flow> EnvironmentAwarePayloadCollector<'store, 'flow> {
         node_id: TemplateIrNodeId,
         environment: &ReactiveTemplateValueEnvironment,
     ) -> Result<(), CompilerError> {
-        if self.completed_nodes.contains(&node_id) {
+        let traversal_key = (node_id, self.view.identity());
+        if self.completed_nodes.contains(&traversal_key) {
             return Ok(());
         }
 
-        if !self.active_nodes.insert(node_id) {
+        if !self.active_nodes.insert(traversal_key) {
             return Err(CompilerError::compiler_error(
                 "TIR environment-aware payload collection found a recursive node reference.",
             ));
@@ -356,9 +360,9 @@ impl<'store, 'flow> EnvironmentAwarePayloadCollector<'store, 'flow> {
 
         let result = self.collect_node_payload_and_children(node_id, environment);
 
-        self.active_nodes.remove(&node_id);
+        self.active_nodes.remove(&traversal_key);
         if result.is_ok() {
-            self.completed_nodes.insert(node_id);
+            self.completed_nodes.insert(traversal_key);
         }
         result
     }
@@ -451,20 +455,24 @@ impl<'store, 'flow> EnvironmentAwarePayloadCollector<'store, 'flow> {
             }
 
             TemplateIrNodeKind::ChildTemplate { reference, .. } => {
-                if reference.phase.is_at_least(TemplateTirPhase::Composed)
-                    && let template_id = reference.root
-                {
-                    validate_expression_overlay_authority(self.store, reference.context)?;
-                    self.context_stack.push(reference.context);
-                    let result = self.collect_template(template_id, environment);
-                    self.context_stack.pop();
+                if reference.phase.is_at_least(TemplateTirPhase::Composed) {
+                    let child_view = self.view.structural_child(*reference)?;
+                    let parent_view = self.view.clone();
+                    self.view = child_view;
+                    let result = self.collect_template(reference.root, environment);
+                    self.view = parent_view;
                     result?;
                 }
                 Ok(())
             }
 
             TemplateIrNodeKind::InsertContribution { template } => {
-                self.collect_template(*template, environment)?;
+                let child_view = self.view.structural_helper(*template)?;
+                let parent_view = self.view.clone();
+                self.view = child_view;
+                let result = self.collect_template(*template, environment);
+                self.view = parent_view;
+                result?;
                 Ok(())
             }
 
@@ -1236,7 +1244,9 @@ fn annotate_template_tir_root(
 
     let environment_aware_payloads = collect_environment_aware_tir_expression_payloads(
         store,
+        reference.root,
         root,
+        reference.phase,
         reference.context,
         value_environment,
         flows,

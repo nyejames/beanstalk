@@ -42,7 +42,9 @@ use crate::compiler_frontend::ast::templates::tir::slot_plan::{
     TemplateSlotPlan, TemplateSlotSiteRenderPiece,
 };
 use crate::compiler_frontend::ast::templates::tir::store::TemplateIrStore;
-use crate::compiler_frontend::ast::templates::tir::view::{TemplateTirPhase, TirView};
+use crate::compiler_frontend::ast::templates::tir::view::{
+    TemplateTirPhase, TirView, TirViewIdentity,
+};
 use crate::compiler_frontend::ast::templates::tir::{
     fold_tir_view, tir_view_is_empty_overlay_linear_fold_safe,
 };
@@ -64,7 +66,7 @@ impl TemplateIrStore {
         view: &TirView<'_>,
     ) -> Result<Option<OwnedRuntimeSlotApplicationHandoff>, CompilerError> {
         let template_id = self.template_id_for_view(view)?;
-        let mut materializer = RuntimeHandoffMaterializer::new_with_overlay(self, view.context());
+        let mut materializer = RuntimeHandoffMaterializer::new_with_view(self, view, None);
         materializer.owned_runtime_slot_handoff_for_template(template_id)
     }
 
@@ -77,8 +79,7 @@ impl TemplateIrStore {
     ) -> Result<OwnedRuntimeTemplateHandoff, CompilerError> {
         let template_id = self.template_id_for_view(view)?;
         let mut materializer =
-            RuntimeHandoffMaterializer::new_with_fold_context(self, fold_context);
-        materializer.context_stack.push(view.context());
+            RuntimeHandoffMaterializer::new_with_view(self, view, Some(fold_context));
         materializer.owned_runtime_template_handoff_for_template(template_id)
     }
 
@@ -96,38 +97,22 @@ impl TemplateIrStore {
 struct RuntimeHandoffMaterializer<'store, 'context, 'fold> {
     store: &'store TemplateIrStore,
     fold_context: Option<&'context mut TemplateFoldContext<'fold>>,
-    /// Stack of value-carried contexts for the templates currently being materialized.
-    ///
-    /// WHAT: the top entry is the context that applies to the current subtree.
-    ///       The top-level view pushes its context first and each nested child
-    ///       temporarily pushes its own context.
-    /// WHY: one finalized root overlay covers every expression site reachable
-    ///      within a template, while child templates retain separate effective
-    ///      identities.
-    context_stack: Vec<TemplateViewContext>,
-    template_stack: Vec<TemplateIrId>,
-    node_stack: Vec<TemplateIrNodeId>,
+    /// Exact view for the structural root currently being materialized.
+    effective_view: Option<TirView<'store>>,
+    template_stack: Vec<TirViewIdentity>,
+    node_stack: Vec<(TemplateIrNodeId, TirViewIdentity)>,
 }
 
 impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold> {
-    fn new_with_fold_context(
+    fn new_with_view(
         store: &'store TemplateIrStore,
-        fold_context: &'context mut TemplateFoldContext<'fold>,
+        view: &TirView<'store>,
+        fold_context: Option<&'context mut TemplateFoldContext<'fold>>,
     ) -> Self {
         Self {
             store,
-            fold_context: Some(fold_context),
-            context_stack: Vec::new(),
-            template_stack: Vec::new(),
-            node_stack: Vec::new(),
-        }
-    }
-
-    fn new_with_overlay(store: &'store TemplateIrStore, context: TemplateViewContext) -> Self {
-        Self {
-            store,
-            fold_context: None,
-            context_stack: vec![context],
+            fold_context,
+            effective_view: Some(view.clone()),
             template_stack: Vec::new(),
             node_stack: Vec::new(),
         }
@@ -162,19 +147,25 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
         Ok(())
     }
 
-    /// Temporarily activates one exact context while materializing a
-    /// nested root, restoring the parent stack even when traversal fails.
-    fn with_context<T>(
+    /// Temporarily activates one exact view while materializing a nested root.
+    fn with_view<T>(
         &mut self,
-        context: TemplateViewContext,
+        view: TirView<'store>,
         build: impl FnOnce(&mut Self) -> Result<T, CompilerError>,
     ) -> Result<T, CompilerError> {
-        self.validate_context(context)?;
-        self.context_stack.push(context);
+        self.validate_context(view.context())?;
+        let parent_view = self.effective_view.replace(view);
         let result = build(self);
-        let popped_context = self.context_stack.pop();
-        debug_assert_eq!(popped_context, Some(context));
+        self.effective_view = parent_view;
         result
+    }
+
+    fn current_view(&self) -> Result<&TirView<'store>, CompilerError> {
+        self.effective_view.as_ref().ok_or_else(|| {
+            CompilerError::compiler_error(
+                "TIR HIR handoff materialization requires an exact TirView.",
+            )
+        })
     }
 
     fn owned_runtime_slot_handoff_for_template(
@@ -516,10 +507,12 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
                 }
 
                 TemplateIrNodeKind::InsertContribution { template } => {
+                    let helper_view = materializer.current_view()?.structural_helper(template)?;
+                    let helper_handoff = materializer.with_view(helper_view, |materializer| {
+                        materializer.materialize_template(template, active_slot_plan, None)
+                    })?;
                     Ok(OwnedRuntimeTemplateNode::ChildTemplate {
-                        template: Box::new(
-                            materializer.materialize_template(template, active_slot_plan, None)?,
-                        ),
+                        template: Box::new(helper_handoff),
                     })
                 }
             }
@@ -534,13 +527,21 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
         template_ref: TemplateIrId,
         build: impl FnOnce(&mut Self) -> Result<T, CompilerError>,
     ) -> Result<T, CompilerError> {
-        if self.template_stack.contains(&template_ref) {
+        let traversal_key = self.current_view()?.identity();
+        if traversal_key.root != template_ref {
+            return Err(CompilerError::compiler_error(format!(
+                "TIR HIR handoff materialization view root {} does not match template {}.",
+                traversal_key.root, template_ref
+            )));
+        }
+
+        if self.template_stack.contains(&traversal_key) {
             return Err(CompilerError::compiler_error(
                 "TIR HIR handoff materialization found a recursive child template.",
             ));
         }
 
-        self.template_stack.push(template_ref);
+        self.template_stack.push(traversal_key);
         let result = build(self);
         self.template_stack.pop();
         result
@@ -551,13 +552,14 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
         id: TemplateIrNodeId,
         build: impl FnOnce(&mut Self) -> Result<T, CompilerError>,
     ) -> Result<T, CompilerError> {
-        if self.node_stack.contains(&id) {
+        let traversal_key = (id, self.current_view()?.identity());
+        if self.node_stack.contains(&traversal_key) {
             return Err(CompilerError::compiler_error(
                 "TIR HIR handoff materialization found a recursive node reference.",
             ));
         }
 
-        self.node_stack.push(id);
+        self.node_stack.push(traversal_key);
         let result = build(self);
         self.node_stack.pop();
         result
@@ -583,16 +585,10 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
         self.get_node(id).cloned()
     }
 
-    /// Resolves the effective expression for a site from the active root-first
-    /// template overlay stack.
+    /// Resolves the effective expression for a site from the current exact view.
     ///
-    /// WHAT: searches active view contexts from the finalized outer root toward
-    ///       nested child-template references and returns the first expression
-    ///       override for `site_id`. Falls back to the structural expression
-    ///       when no active overlay owns the site.
-    /// WHY: finalization writes one root expression overlay for every reachable
-    ///      site. Child references still own their slot and wrapper dimensions,
-    ///      but must not hide a root-level annotation or normalization override.
+    /// WHAT: reads the complete root overlay through `TirView` and falls back
+    ///       to the structural expression when the site has no override.
     fn effective_expression(
         &self,
         site_id: ExpressionSiteId,
@@ -607,17 +603,14 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
         &self,
         site_id: ExpressionSiteId,
     ) -> Result<Option<Expression>, CompilerError> {
-        if self.context_stack.is_empty() {
-            return Ok(None);
-        }
         Ok(self
-            .store
-            .expression_for_context_stack(&self.context_stack, site_id)?
+            .current_view()?
+            .effective_expression_for_site(site_id)?
             .cloned())
     }
 
     /// Resolves the effective wrapper context for a child-template occurrence,
-    /// preferring the override at the top of the body-root overlay stack.
+    /// preferring the override carried by the current exact view.
     ///
     /// WHAT: reads the active value-carried view context and resolves its
     ///       wrapper-context overlay ID through the module store, returning a
@@ -631,28 +624,14 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
         &self,
         occurrence_id: ChildTemplateOccurrenceId,
     ) -> Result<Option<TirWrapperContext>, CompilerError> {
-        let Some(context) = self.context_stack.last().copied() else {
-            return Ok(None);
-        };
-        let Some(wrapper_context_overlay_id) = context.wrapper_context else {
-            return Ok(None);
-        };
-        let wrapper_context_overlay = self
-            .store
-            .wrapper_context_overlay(wrapper_context_overlay_id)
-            .ok_or_else(|| {
-                CompilerError::compiler_error(format!(
-                    "HIR handoff materialization referenced missing wrapper-context overlay {}",
-                    wrapper_context_overlay_id
-                ))
-            })?;
-        Ok(wrapper_context_overlay
-            .context_for_occurrence(occurrence_id)
+        Ok(self
+            .current_view()?
+            .effective_wrapper_context(occurrence_id)?
             .cloned())
     }
 
     /// Resolves the effective slot resolution for a slot occurrence,
-    /// preferring the resolution at the top of the body-root overlay stack.
+    /// preferring the resolution carried by the current exact view.
     ///
     /// WHAT: reads the active value-carried view context and resolves its
     ///       slot-resolution overlay ID through the module store, returning a
@@ -668,23 +647,9 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
         &self,
         occurrence_id: SlotOccurrenceId,
     ) -> Result<Option<super::overlays::TirSlotResolution>, CompilerError> {
-        let Some(context) = self.context_stack.last().copied() else {
-            return Ok(None);
-        };
-        let Some(slot_resolution_overlay_id) = context.slot_resolution else {
-            return Ok(None);
-        };
-        let slot_resolution_overlay = self
-            .store
-            .slot_resolution_overlay(slot_resolution_overlay_id)
-            .ok_or_else(|| {
-                CompilerError::compiler_error(format!(
-                    "HIR handoff materialization referenced missing slot-resolution overlay {}",
-                    slot_resolution_overlay_id
-                ))
-            })?;
-        Ok(slot_resolution_overlay
-            .resolution_for_occurrence(occurrence_id)
+        Ok(self
+            .current_view()?
+            .effective_slot_resolution(occurrence_id)?
             .cloned())
     }
 
@@ -765,7 +730,8 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
     /// Materializes a `ChildTemplate` node into an owned runtime handoff node,
     /// preferring the stable folded-text shortcut when it is available.
     ///
-    /// WHAT: tries `materialize_folded_child_text` first so const-foldable
+    /// WHAT: enters the exact structural child view once, then tries
+    ///       `materialize_folded_view_text` so const-foldable
     ///       children become owned `Text` nodes, then materializes the
     ///       store-local child structurally when folding is unavailable.
     /// WHY: both the wrapper-context and non-wrapper-context paths need the same
@@ -778,32 +744,35 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
         active_slot_plan: Option<TemplateSlotPlanId>,
         injection: Option<(&SlotKey, &OwnedRuntimeTemplateNode)>,
     ) -> Result<OwnedRuntimeTemplateNode, CompilerError> {
+        let child_view = self.current_view()?.structural_child(*reference)?;
+        self.materialize_child_template_node_with_view(
+            reference.root,
+            child_view,
+            location,
+            active_slot_plan,
+            injection,
+        )
+    }
+
+    fn materialize_child_template_node_with_view(
+        &mut self,
+        template_id: TemplateIrId,
+        child_view: TirView<'store>,
+        location: &SourceLocation,
+        active_slot_plan: Option<TemplateSlotPlanId>,
+        injection: Option<(&SlotKey, &OwnedRuntimeTemplateNode)>,
+    ) -> Result<OwnedRuntimeTemplateNode, CompilerError> {
         // Folded-text shortcut: inline stable const-foldable children as owned
         // `Text` nodes before any structural materialization.
         if injection.is_none()
-            && let Some(text_node) = self.materialize_folded_child_text(reference, location)?
+            && let Some(text_node) = self.materialize_folded_view_text(&child_view, location)?
         {
             return Ok(text_node);
         }
 
-        // Resolve the module-local child ID and materialize through the current
-        // materializer, preserving the parent's active slot plan for runtime-
-        // slot-site validation.
-        let template_id = reference.root;
-
-        // Push the child's view context so effective expression, slot
-        // resolution, and wrapper context lookups during materialization
-        // read through the child's overlay context rather than the parent's.
-        // Without this, child templates with expression or slot overlays
-        // would materialize from stale structural payloads. The scoped helper
-        // validates overlay authority and restores the stack on errors.
-        let handoff = if reference.phase.is_at_least(TemplateTirPhase::Composed) {
-            self.with_context(reference.context, |materializer| {
-                materializer.materialize_template(template_id, active_slot_plan, injection)
-            })
-        } else {
-            self.materialize_template(template_id, active_slot_plan, injection)
-        };
+        let handoff = self.with_view(child_view, |materializer| {
+            materializer.materialize_template(template_id, active_slot_plan, injection)
+        });
 
         Ok(OwnedRuntimeTemplateNode::ChildTemplate {
             template: Box::new(handoff?),
@@ -848,26 +817,26 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
 
     /// Materializes one resolved slot source into an owned runtime handoff node.
     ///
-    /// WHAT: constructs a module-local `TemplateTirChildReference` from the resolved
-    ///       `TemplateIrId` and delegates to `materialize_child_template_node` so
-    ///       const-foldable sources inline as owned `Text` nodes and runtime sources
-    ///       become nested `ChildTemplate` handoffs.
-    /// WHY: slot-resolution overlays carry bare `TemplateIrId` sources without phase
-    ///      or overlay context; routing them through the same child-materialization
-    ///      path as `ChildTemplate` nodes keeps fold shortcuts and authority
-    ///      validation consistent.
+    /// WHAT: enters the resolved source exactly once, then materializes that exact
+    ///       view so const-foldable sources can inline as owned `Text` nodes and
+    ///       runtime sources retain the owned `ChildTemplate` handoff shape.
+    /// WHY: slot-resolution overlays carry bare `TemplateIrId` sources. Their
+    ///      phase and context are supplied by the active parent view, so a
+    ///      synthetic child reference would apply the structural transition twice.
     fn materialize_resolved_slot_source(
         &mut self,
         source: &TemplateIrId,
         location: &SourceLocation,
         active_slot_plan: Option<TemplateSlotPlanId>,
     ) -> Result<OwnedRuntimeTemplateNode, CompilerError> {
-        let child_reference = TemplateTirChildReference::new(
+        let source_view = self.current_view()?.resolved_slot_source(*source)?;
+        self.materialize_child_template_node_with_view(
             *source,
-            TemplateTirPhase::Composed,
-            TemplateViewContext::default(),
-        );
-        self.materialize_child_template_node(&child_reference, location, active_slot_plan, None)
+            source_view,
+            location,
+            active_slot_plan,
+            None,
+        )
     }
 
     /// Applies a wrapper-context overlay entry to an already-materialized child
@@ -1030,21 +999,15 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
             .map_err(CompilerError::from)?;
         let fill_target_key = schema.loose_fill_target_key();
 
-        if wrapper_reference
-            .phase
-            .is_at_least(TemplateTirPhase::Composed)
-        {
-            self.with_context(wrapper_reference.context, |materializer| {
-                Self::materialize_wrapper_with_child(
-                    materializer,
-                    wrapper_root,
-                    fill_target_key,
-                    child_handoff,
-                )
-            })
-        } else {
-            Self::materialize_wrapper_with_child(self, wrapper_root, fill_target_key, child_handoff)
-        }
+        let wrapper_view = self.current_view()?.wrapper(wrapper_reference)?;
+        self.with_view(wrapper_view, |materializer| {
+            Self::materialize_wrapper_with_child(
+                materializer,
+                wrapper_root,
+                fill_target_key,
+                child_handoff,
+            )
+        })
     }
 
     fn get_slot_plan(&self, id: TemplateSlotPlanId) -> Result<&TemplateSlotPlan, CompilerError> {
@@ -1055,16 +1018,19 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
         })
     }
 
-    fn materialize_folded_child_text(
+    fn materialize_folded_view_text(
         &mut self,
-        reference: &TemplateTirChildReference,
+        child_view: &TirView<'store>,
         location: &SourceLocation,
     ) -> Result<Option<OwnedRuntimeTemplateNode>, CompilerError> {
         // Child below Composed: the fold shortcut requires a composed child
         // root, so younger children fall through to structural handoff.
-        if !reference.phase.is_at_least(TemplateTirPhase::Composed) {
+        if !child_view.phase().is_at_least(TemplateTirPhase::Composed) {
             return Ok(None);
         }
+
+        // The shortcut is safe only when the exact child view has no
+        // expression or slot authority that the owned handoff would need.
 
         // No fold context: the direct-by-ID and slot-handoff paths have no
         // fold context, so the text shortcut is unavailable.
@@ -1077,39 +1043,18 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
         if !fold_context.bindings.is_empty() {
             return Ok(None);
         }
-
-        // The shortcut builds a view for the child's own view context, while
-        // structural handoff resolves the full root-first overlay stack. An
-        // outer expression or slot overlay must stay on the structural path
-        // so a valid root-level override is not lost. Wrapper-context-only
-        // overlays remain safe because the caller applies them after the
-        // folded child emission is produced.
-        for active_context in self.context_stack.iter().copied() {
-            if active_context == reference.context {
-                continue;
-            }
-
-            if active_context.expression_overlay.is_some()
-                || active_context.slot_resolution.is_some()
-            {
-                return Ok(None);
-            }
+        if child_view.context().expression_overlay.is_some()
+            || child_view.context().slot_resolution.is_some()
+        {
+            return Ok(None);
         }
 
         // Propagate child root, phase and view context authority failures.
         // A malformed child overlay must not silently fall through to
         // structural materialization.
-        let child_view = TirView::with_minimum_phase(
-            self.store,
-            reference.root,
-            reference.phase,
-            TemplateTirPhase::Composed,
-            reference.context,
-        )?;
-
         // Unsafe fold shape: non-linear or overlay-bearing shapes that the
         // const-fold shortcut cannot handle fall through to structural handoff.
-        let fold_safe = tir_view_is_empty_overlay_linear_fold_safe(&child_view, self.store)?;
+        let fold_safe = tir_view_is_empty_overlay_linear_fold_safe(child_view, self.store)?;
         if !fold_safe {
             return Ok(None);
         }
@@ -1118,7 +1063,7 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
         // ordinary runtime-expression ineligibility through `TemplateError`.
         // Neither invalidates the structural handoff path. Required view
         // authority failures have already propagated above.
-        match fold_tir_view(&child_view, self.store, fold_context) {
+        match fold_tir_view(child_view, self.store, fold_context) {
             Ok(TemplateEmission::Output(text)) => {
                 let byte_len = fold_context.string_table.resolve(text).len() as u32;
                 Ok(Some(OwnedRuntimeTemplateNode::Text {

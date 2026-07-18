@@ -35,7 +35,9 @@ use crate::compiler_frontend::ast::templates::tir::refs::{
 };
 use crate::compiler_frontend::ast::templates::tir::store::TemplateIrStore;
 use crate::compiler_frontend::ast::templates::tir::summary::TemplateIrSummary;
-use crate::compiler_frontend::ast::templates::tir::view::{TemplateTirPhase, TirView};
+use crate::compiler_frontend::ast::templates::tir::view::{
+    TemplateTirPhase, TirView, TirViewIdentity,
+};
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
@@ -50,9 +52,11 @@ fn empty_location() -> SourceLocation {
 
 fn sample_key() -> TirFoldCacheKey {
     TirFoldCacheKey {
-        root: TemplateIrId::new(0),
-        phase: TemplateTirPhase::Parsed,
-        context: TemplateViewContext::default(),
+        identity: TirViewIdentity {
+            root: TemplateIrId::new(0),
+            phase: TemplateTirPhase::Parsed,
+            context: TemplateViewContext::default(),
+        },
         loop_iteration_limit: 1024,
         bindings_empty: true,
     }
@@ -66,15 +70,15 @@ fn cache_key_equality_for_identical_fields() {
 #[test]
 fn cache_key_inequality_for_each_identity_dimension() {
     let mut root = sample_key();
-    root.root = TemplateIrId::new(1);
+    root.identity.root = TemplateIrId::new(1);
     assert_ne!(sample_key(), root);
 
     let mut phase = sample_key();
-    phase.phase = TemplateTirPhase::Formatted;
+    phase.identity.phase = TemplateTirPhase::Formatted;
     assert_ne!(sample_key(), phase);
 
     let mut overlay = sample_key();
-    overlay.context = TemplateViewContext {
+    overlay.identity.context = TemplateViewContext {
         expression_overlay: Some(TirExpressionOverlayId::new(7)),
         ..TemplateViewContext::default()
     };
@@ -201,9 +205,11 @@ fn fold_view_caches_empty_binding_result() {
     let first =
         fold_tir_view(&view, &fixture.store, &mut context).expect("first fold should succeed");
     let key = TirFoldCacheKey {
-        root: fixture.template_id,
-        phase: TemplateTirPhase::Composed,
-        context: fixture.context,
+        identity: TirViewIdentity {
+            root: fixture.template_id,
+            phase: TemplateTirPhase::Composed,
+            context: fixture.context,
+        },
         loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
         bindings_empty: true,
     };
@@ -254,9 +260,11 @@ fn fold_view_does_not_cache_active_bindings() {
     fold_tir_view(&view, &fixture.store, &mut context)
         .expect("active-binding fold should still succeed");
     let active_binding_key = TirFoldCacheKey {
-        root: fixture.template_id,
-        phase: TemplateTirPhase::Composed,
-        context: fixture.context,
+        identity: TirViewIdentity {
+            root: fixture.template_id,
+            phase: TemplateTirPhase::Composed,
+            context: fixture.context,
+        },
         loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
         bindings_empty: false,
     };
@@ -633,9 +641,11 @@ fn fold_tir_view_repeated_child_template_folding_hits_cache() {
     let first =
         fold_tir_view(&view, &store, &mut context).expect("first child fold should succeed");
     let cache_key = TirFoldCacheKey {
-        root: child_template_id,
-        phase: TemplateTirPhase::Composed,
-        context: view_context,
+        identity: TirViewIdentity {
+            root: child_template_id,
+            phase: TemplateTirPhase::Composed,
+            context: view_context,
+        },
         loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
         bindings_empty: true,
     };

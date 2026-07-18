@@ -22,8 +22,8 @@ use crate::compiler_frontend::ast::templates::tir::node::{
     TemplateIr, TemplateIrBranch, TemplateIrNode, TemplateIrNodeKind, TirSlotPlaceholder,
 };
 use crate::compiler_frontend::ast::templates::tir::overlays::{
-    TemplateViewContext, TirExpressionOverlay, TirExpressionOverlayId, TirSlotResolution,
-    TirSlotResolutionOverlay, TirWrapperContext, TirWrapperContextOverlay,
+    TemplateViewContext, TirExpressionOverlay, TirSlotResolution, TirSlotResolutionOverlay,
+    TirSlotResolutionOverlayId, TirWrapperContext, TirWrapperContextOverlay,
 };
 use crate::compiler_frontend::ast::templates::tir::refs::{
     TemplateTirChildReference, TemplateWrapperReference,
@@ -1014,13 +1014,18 @@ fn inherited_same_store_wrapper_handoff_applies_wrapper_overlay() {
                 Expression::bool(true, empty_location(), ValueMode::ImmutableOwned),
             )],
         );
-        build_parent_with_inherited_wrapper_and_overlay(
+        let (parent_id, context) = build_parent_with_inherited_wrapper_and_overlay(
             &mut store_ref,
             wrapper_template_id,
             empty_context,
             wrapper_context,
             &mut strings,
-        )
+        );
+        // Wrapper references are structural transitions and therefore use the
+        // active parent's complete expression overlay. Keep the override on
+        // that parent view rather than relying on the referenced wrapper
+        // context to import it.
+        (parent_id, context.merge(wrapper_context))
     };
 
     let body = materialize_parent_handoff(store, parent_id, &mut strings, context);
@@ -1036,7 +1041,13 @@ fn inherited_same_store_wrapper_handoff_applies_wrapper_overlay() {
         matches!(expression.kind, ExpressionKind::Bool(true)),
         "same-store wrapper overlay should override the wrapper expression"
     );
-    assert_owned_text_node(&children[1], "child", &strings);
+    let OwnedRuntimeTemplateNode::ChildTemplate { template } = &children[1] else {
+        panic!("expected child handoff, got {:?}", children[1]);
+    };
+    let OwnedRuntimeTemplateBody::Render(child_body) = &template.body else {
+        panic!("expected rendered child handoff, got {:?}", template.body);
+    };
+    assert_owned_text_node(child_body, "child", &strings);
 }
 
 #[test]
@@ -1105,9 +1116,9 @@ fn malformed_child_view_context_propagates_view_failure() {
         let mut store_ref = store.borrow_mut();
         let valid_context = TemplateViewContext::default();
         let child_template_id = text_template(&mut store_ref, &mut strings, "child text");
-        // Use an unallocated expression overlay so child-view construction fails.
+        // Use an unallocated slot overlay so the Composed child transition fails.
         let invalid_context = TemplateViewContext {
-            expression_overlay: Some(TirExpressionOverlayId::new(99)),
+            slot_resolution: Some(TirSlotResolutionOverlayId::new(99)),
             ..TemplateViewContext::default()
         };
         let child_node = child_template_node_id(
@@ -1122,8 +1133,8 @@ fn malformed_child_view_context_propagates_view_failure() {
         .expect_err("malformed child overlay should produce a CompilerError");
 
     assert!(
-        error.msg.contains("expression overlay"),
-        "expected error about missing expression overlay, got: {}",
+        error.msg.contains("slot resolution overlay"),
+        "expected error about missing slot resolution overlay, got: {}",
         error.msg
     );
 }

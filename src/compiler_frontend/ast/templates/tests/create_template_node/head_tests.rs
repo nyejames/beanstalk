@@ -2658,15 +2658,12 @@ fn const_required_validation_reports_missing_effective_node_as_internal_error() 
 }
 
 #[test]
-fn const_required_validation_uses_exact_child_overlay_identity() {
-    // Active recursion into the same TemplateIrId under a distinct overlay must
-    // be validated instead of mistaken for a cycle. Root-only detection would
-    // skip that recursive child; exact root + phase + overlay identity enters it.
-    //
+fn const_required_validation_ignores_referenced_child_expression_overlay() {
     // The recursive template first evaluates a structurally const branch, then
-    // references itself with an overlay that makes that selector runtime-only.
-    // The overlaid view references itself again with the same identity, which
-    // remains a real cycle and terminates normally after the selector is checked.
+    // references itself with an expression overlay that would make the selector
+    // runtime-only if imported. Structural transitions deliberately retain the
+    // parent expression authority, so the referenced overlay is ignored and the
+    // exact child view is a real cycle after the structural selector is checked.
     let (valid_template, context, mut string_table) =
         parse_const_required_template("[if true: body]");
 
@@ -2748,19 +2745,8 @@ fn const_required_validation_uses_exact_child_overlay_identity() {
     };
 
     let store = context.template_ir_store.borrow();
-    let error = validate_const_required_template_control_flow(
-        &recursive_template,
-        &store,
-        &string_table,
-    )
-    .expect_err(
-        "non-const child overlay must be visited under distinct overlay identity and rejected",
-    );
-
-    assert_invalid_template_structure(
-        &error,
-        InvalidTemplateStructureReason::TemplateIfConditionNotConst,
-    );
+    validate_const_required_template_control_flow(&recursive_template, &store, &string_table)
+        .expect("referenced child expression overlays must be ignored by structural validation");
 }
 
 #[test]

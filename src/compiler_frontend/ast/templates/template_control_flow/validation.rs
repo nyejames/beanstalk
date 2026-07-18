@@ -11,8 +11,8 @@ use crate::compiler_frontend::ast::templates::error::TemplateError;
 use crate::compiler_frontend::ast::templates::template::Template;
 use crate::compiler_frontend::ast::templates::template::TemplateType;
 use crate::compiler_frontend::ast::templates::tir::{
-    TemplateIrBranch, TemplateIrId, TemplateIrNodeId, TemplateIrNodeKind, TemplateIrStore,
-    TemplateLoopHeaderExpressionSites, TemplateTirPhase, TemplateViewContext, TirView,
+    TemplateIrBranch, TemplateIrNodeId, TemplateIrNodeKind, TemplateIrStore,
+    TemplateLoopHeaderExpressionSites, TemplateTirPhase, TirView, TirViewIdentity,
     effective_branch_selector_for_view, effective_loop_header_for_view,
     tir_view_expression_is_const_evaluable_value_with_bindings,
     tir_view_option_capture_presence_is_const_decidable, tir_view_subtree_is_const_evaluable_value,
@@ -110,32 +110,6 @@ fn validate_const_required_template_control_flow_with_bindings(
     validate_const_required_tir_view_control_flow(&view, store, loop_binding_paths, string_table)
 }
 
-/// Cycle-detection key for runtime and const-required child-view traversal.
-///
-/// WHAT: uniquely identifies a child view by its module-local root, pipeline
-///       phase and view context so the same root visited under a different
-///       overlay context is still checked.
-/// WHY: child templates may reference each other; the cycle key prevents infinite
-///      recursion while preserving each reference's exact identity. Runtime and
-///      const-required traversal share the same cycle semantics, so one key type
-///      serves both paths.
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-struct TirViewCycleKey {
-    root: TemplateIrId,
-    phase: TemplateTirPhase,
-    context: TemplateViewContext,
-}
-
-impl TirViewCycleKey {
-    fn for_view(view: &TirView<'_>) -> Self {
-        Self {
-            root: view.root_ref(),
-            phase: view.phase(),
-            context: view.context(),
-        }
-    }
-}
-
 #[derive(Clone, Copy)]
 enum RuntimeControlFlowArtifact {
     UnresolvedSlot,
@@ -159,7 +133,7 @@ fn validate_runtime_tir_view_control_flow_slot_artifacts(
     view: &TirView<'_>,
 ) -> Result<(), TemplateError> {
     let root_node_id = view.root_template()?.root;
-    let mut visiting = HashSet::from([TirViewCycleKey::for_view(view)]);
+    let mut visiting = HashSet::from([view.identity()]);
 
     validate_runtime_tir_view_node(view, root_node_id, &mut visiting)
 }
@@ -174,7 +148,7 @@ fn validate_runtime_tir_view_control_flow_slot_artifacts(
 fn validate_runtime_tir_view_node(
     view: &TirView<'_>,
     node_ref: TemplateIrNodeId,
-    visiting: &mut HashSet<TirViewCycleKey>,
+    visiting: &mut HashSet<TirViewIdentity>,
 ) -> Result<(), TemplateError> {
     let node = view.effective_node(node_ref)?;
     match &node.kind {
@@ -219,25 +193,13 @@ fn validate_runtime_tir_view_node(
         }
 
         TemplateIrNodeKind::ChildTemplate { reference, .. } => {
-            let reference = *reference;
-            validate_runtime_qualified_child_view(
-                view,
-                reference.root,
-                reference.phase,
-                reference.context,
-                visiting,
-            )?;
+            let child_view = view.structural_child(*reference)?;
+            validate_runtime_qualified_child_view(child_view, visiting)?;
         }
 
         TemplateIrNodeKind::InsertContribution { template } => {
-            let template_id = *template;
-            validate_runtime_qualified_child_view(
-                view,
-                template_id,
-                view.phase(),
-                view.context(),
-                visiting,
-            )?;
+            let helper_view = view.structural_helper(*template)?;
+            validate_runtime_qualified_child_view(helper_view, visiting)?;
         }
 
         TemplateIrNodeKind::Text { .. }
@@ -254,27 +216,19 @@ fn validate_runtime_tir_view_node(
 /// Recurses into a module-store child view to validate nested control-flow
 /// bodies.
 ///
-/// WHAT: constructs a child `TirView` preserving the child reference's exact
-///       root, phase and overlay identity, then recurses into
+/// WHAT: receives the exact child `TirView` produced by the caller's named
+///       structural transition, then recurses into
 ///       [`validate_runtime_tir_view_node`]. The cycle key prevents infinite
 ///       recursion through mutually-referencing child templates.
 fn validate_runtime_qualified_child_view(
-    parent_view: &TirView<'_>,
-    child_root: TemplateIrId,
-    child_phase: TemplateTirPhase,
-    child_context: TemplateViewContext,
-    visiting: &mut HashSet<TirViewCycleKey>,
+    child_view: TirView<'_>,
+    visiting: &mut HashSet<TirViewIdentity>,
 ) -> Result<(), TemplateError> {
-    let cycle_key = TirViewCycleKey {
-        root: child_root,
-        phase: child_phase,
-        context: child_context,
-    };
+    let cycle_key = child_view.identity();
     if !visiting.insert(cycle_key) {
         return Ok(());
     }
 
-    let child_view = parent_view.child_view(child_root, child_phase, child_context)?;
     let child_root_node = child_view.root_template()?.root;
     let result = validate_runtime_tir_view_node(&child_view, child_root_node, visiting);
 
@@ -293,7 +247,7 @@ fn validate_runtime_tir_view_control_flow_body(
     location: &SourceLocation,
 ) -> Result<(), TemplateError> {
     let body_ref = body_root;
-    let root_cycle_key = TirViewCycleKey::for_view(view);
+    let root_cycle_key = view.identity();
     let mut escaped_insert_visiting = HashSet::from([root_cycle_key]);
 
     if tir_view_subtree_contains_runtime_artifact(
@@ -339,7 +293,7 @@ fn tir_view_subtree_contains_runtime_artifact(
     view: &TirView<'_>,
     node_ref: TemplateIrNodeId,
     artifact: RuntimeControlFlowArtifact,
-    visiting: &mut HashSet<TirViewCycleKey>,
+    visiting: &mut HashSet<TirViewIdentity>,
 ) -> Result<bool, TemplateError> {
     let node = view.effective_node(node_ref)?;
     match &node.kind {
@@ -407,27 +361,13 @@ fn tir_view_subtree_contains_runtime_artifact(
         }
 
         TemplateIrNodeKind::ChildTemplate { reference, .. } => {
-            let reference = *reference;
-            runtime_child_view_contains_artifact(
-                view,
-                reference.root,
-                reference.phase,
-                reference.context,
-                artifact,
-                visiting,
-            )
+            let child_view = view.structural_child(*reference)?;
+            runtime_child_view_contains_artifact(child_view, artifact, visiting)
         }
 
         TemplateIrNodeKind::InsertContribution { template } => {
-            let template_id = *template;
-            runtime_child_view_contains_artifact(
-                view,
-                template_id,
-                view.phase(),
-                view.context(),
-                artifact,
-                visiting,
-            )
+            let helper_view = view.structural_helper(*template)?;
+            runtime_child_view_contains_artifact(helper_view, artifact, visiting)
         }
 
         TemplateIrNodeKind::Text { .. }
@@ -440,29 +380,20 @@ fn tir_view_subtree_contains_runtime_artifact(
 
 /// Checks a module-store child view for the requested runtime artifact.
 ///
-/// WHAT: constructs a child `TirView` preserving the child reference's exact
-///       root, phase and overlay identity. For `EscapedInsert`, a child template
+/// WHAT: receives a child `TirView` from the caller's named structural
+///       transition. For `EscapedInsert`, a child template
 ///       whose kind is `SlotInsert` is itself an escaped insert. The child view's
 ///       subtree is then checked recursively. The cycle key prevents infinite
 ///       recursion through mutually-referencing child templates.
 fn runtime_child_view_contains_artifact(
-    parent_view: &TirView<'_>,
-    child_root: TemplateIrId,
-    child_phase: TemplateTirPhase,
-    child_context: TemplateViewContext,
+    child_view: TirView<'_>,
     artifact: RuntimeControlFlowArtifact,
-    visiting: &mut HashSet<TirViewCycleKey>,
+    visiting: &mut HashSet<TirViewIdentity>,
 ) -> Result<bool, TemplateError> {
-    let cycle_key = TirViewCycleKey {
-        root: child_root,
-        phase: child_phase,
-        context: child_context,
-    };
+    let cycle_key = child_view.identity();
     if !visiting.insert(cycle_key) {
         return Ok(false);
     }
-
-    let child_view = parent_view.child_view(child_root, child_phase, child_context)?;
 
     if matches!(artifact, RuntimeControlFlowArtifact::EscapedInsert) {
         let child_template = child_view.root_template()?;
@@ -538,7 +469,7 @@ fn validate_const_required_tir_view_control_flow(
         .map(|template| template.root)
         .map_err(|error| TemplateError::from(error).into_diagnostic())?;
     let root_node_ref = root_node_id;
-    let mut visiting = HashSet::from([TirViewCycleKey::for_view(view)]);
+    let mut visiting = HashSet::from([view.identity()]);
 
     validate_const_required_tir_view_node(
         view,
@@ -556,7 +487,7 @@ fn validate_const_required_tir_view_node(
     node_ref: TemplateIrNodeId,
     loop_binding_paths: &[InternedPath],
     string_table: &StringTable,
-    visiting: &mut HashSet<TirViewCycleKey>,
+    visiting: &mut HashSet<TirViewIdentity>,
 ) -> Result<(), CompilerDiagnostic> {
     let node = view
         .effective_node(node_ref)
@@ -616,12 +547,11 @@ fn validate_const_required_tir_view_node(
         }
 
         TemplateIrNodeKind::ChildTemplate { reference, .. } => {
-            let reference = *reference;
+            let child_view = view
+                .structural_child(*reference)
+                .map_err(|error| TemplateError::from(error).into_diagnostic())?;
             validate_const_required_qualified_child_view(
-                view,
-                reference.root,
-                reference.phase,
-                reference.context,
+                child_view,
                 loop_binding_paths,
                 string_table,
                 visiting,
@@ -629,12 +559,11 @@ fn validate_const_required_tir_view_node(
         }
 
         TemplateIrNodeKind::InsertContribution { template } => {
-            let template_id = *template;
+            let helper_view = view
+                .structural_helper(*template)
+                .map_err(|error| TemplateError::from(error).into_diagnostic())?;
             validate_const_required_qualified_child_view(
-                view,
-                template_id,
-                view.phase(),
-                view.context(),
+                helper_view,
                 loop_binding_paths,
                 string_table,
                 visiting,
@@ -653,26 +582,16 @@ fn validate_const_required_tir_view_node(
 }
 
 fn validate_const_required_qualified_child_view(
-    parent_view: &TirView<'_>,
-    child_root: TemplateIrId,
-    child_phase: TemplateTirPhase,
-    child_context: TemplateViewContext,
+    child_view: TirView<'_>,
     loop_binding_paths: &[InternedPath],
     string_table: &StringTable,
-    visiting: &mut HashSet<TirViewCycleKey>,
+    visiting: &mut HashSet<TirViewIdentity>,
 ) -> Result<(), CompilerDiagnostic> {
-    let cycle_key = TirViewCycleKey {
-        root: child_root,
-        phase: child_phase,
-        context: child_context,
-    };
+    let cycle_key = child_view.identity();
     if !visiting.insert(cycle_key) {
         return Ok(());
     }
 
-    let child_view = parent_view
-        .child_view(child_root, child_phase, child_context)
-        .map_err(|error| TemplateError::from(error).into_diagnostic())?;
     let child_store = child_view.store();
     let child_root_node = child_view
         .root_template()
@@ -697,7 +616,7 @@ fn validate_const_required_tir_view_branch_chain(
     inputs: ConstRequiredTirViewBranchInputs<'_>,
     loop_binding_paths: &[InternedPath],
     string_table: &StringTable,
-    visiting: &mut HashSet<TirViewCycleKey>,
+    visiting: &mut HashSet<TirViewIdentity>,
 ) -> Result<(), CompilerDiagnostic> {
     for branch in inputs.branches {
         let effective_selector =
@@ -771,7 +690,7 @@ fn validate_const_required_tir_view_loop(
     inputs: ConstRequiredTirViewLoopInputs<'_>,
     loop_binding_paths: &[InternedPath],
     string_table: &StringTable,
-    visiting: &mut HashSet<TirViewCycleKey>,
+    visiting: &mut HashSet<TirViewIdentity>,
 ) -> Result<(), CompilerDiagnostic> {
     let effective_header = effective_loop_header_for_view(view, inputs.header, inputs.header_sites)
         .map_err(TemplateError::into_diagnostic)?;

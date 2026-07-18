@@ -204,6 +204,42 @@ fn structural_collection_includes_dynamic_and_branch_payloads() {
 }
 
 #[test]
+fn structural_collection_ignores_child_expression_overlay() {
+    let mut store = TemplateIrStore::new();
+    let child_root = dynamic_node(&mut store, 1);
+    let child_site_id = dynamic_site_id(&store, child_root);
+    let child_template = push_template(&mut store, child_root, TemplateType::StringFunction);
+    let child_expression_overlay = store.allocate_expression_overlay(TirExpressionOverlay {
+        overrides: vec![(child_site_id, Box::new(expression(9)))],
+    });
+    let child_context = TemplateViewContext {
+        expression_overlay: Some(child_expression_overlay),
+        slot_resolution: None,
+        wrapper_context: None,
+    };
+    let occurrence_id = store.next_child_template_occurrence_id();
+    let child_node = store.push_node(TemplateIrNode::new(
+        TemplateIrNodeKind::ChildTemplate {
+            reference: TemplateTirChildReference::new(
+                child_template,
+                TemplateTirPhase::Composed,
+                child_context,
+            ),
+            occurrence_id,
+        },
+        empty_location(),
+    ));
+    let parent_template = push_template(&mut store, child_node, TemplateType::StringFunction);
+
+    let payloads = collect_tir_expression_overlay_payloads(&store, parent_template)
+        .expect("structural collection should succeed");
+
+    assert_eq!(payloads.len(), 1);
+    assert_eq!(payloads[0].0, child_site_id);
+    assert!(matches!(payloads[0].1.kind, ExpressionKind::Int(1)));
+}
+
+#[test]
 fn effective_collection_reads_same_store_child_overlay() {
     let mut store = TemplateIrStore::new();
     let child_root = dynamic_node(&mut store, 1);
@@ -1068,7 +1104,7 @@ fn view_walker_reads_loop_header_overlay() {
 }
 
 #[test]
-fn view_walker_distinguishes_overlay_contexts_for_the_same_child_root() {
+fn view_walker_uses_parent_overlay_for_the_same_child_root() {
     let mut store = TemplateIrStore::new();
     let empty_context = TemplateViewContext::default();
 
@@ -1134,14 +1170,17 @@ fn view_walker_distinguishes_overlay_contexts_for_the_same_child_root() {
 
     let payloads = collect_view(&view).expect("walk should succeed");
 
-    assert_eq!(payloads.len(), 2);
+    // Structural child transitions ignore referenced expression overlays. Both
+    // occurrences therefore enter the same exact child view and are visited
+    // once, retaining only the structural expression.
+    assert_eq!(payloads.len(), 1);
     assert!(
         payloads
             .iter()
             .any(|expression| matches!(expression.kind, ExpressionKind::Int(1)))
     );
     assert!(
-        payloads
+        !payloads
             .iter()
             .any(|expression| matches!(expression.kind, ExpressionKind::Int(42)))
     );

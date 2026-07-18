@@ -27,7 +27,7 @@ use crate::compiler_frontend::ast::templates::template_slots::RuntimeSlotSiteId;
 use crate::compiler_frontend::ast::templates::tir::{
     ExpressionSiteId, TemplateIrId, TemplateIrNodeId, TemplateIrNodeKind, TemplateIrStore,
     TemplateLoopHeaderExpressionSites, TemplateSlotPlanId, TemplateSlotSiteRenderPiece,
-    TemplateSlotSiteRenderPlan, TemplateTirPhase, TemplateViewContext, TirView,
+    TemplateSlotSiteRenderPlan, TemplateTirPhase, TirView, TirViewIdentity,
     finalized_tir_view_for_template,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
@@ -601,8 +601,8 @@ pub(crate) fn merge_reactive_template_metadata_with_store(
 
 #[derive(Default)]
 struct TirViewMetadataTraversal {
-    active_views: HashSet<(TemplateIrId, TemplateTirPhase, TemplateViewContext)>,
-    completed_views: HashSet<(TemplateIrId, TemplateTirPhase, TemplateViewContext)>,
+    active_views: HashSet<TirViewIdentity>,
+    completed_views: HashSet<TirViewIdentity>,
 }
 
 /// Merges reactive metadata by walking the finalized effective `TirView`.
@@ -619,7 +619,7 @@ fn merge_reactive_template_metadata_from_tir_view(
     resolver: &mut ReactiveMetadataResolver<'_>,
     traversal: &mut TirViewMetadataTraversal,
 ) -> Result<(), CompilerError> {
-    let identity = (view.root_ref(), view.phase(), view.context());
+    let identity = view.identity();
     if traversal.completed_views.contains(&identity) {
         return Ok(());
     }
@@ -748,7 +748,7 @@ fn merge_tir_view_node_metadata(
         TemplateIrNodeKind::ChildTemplate { reference, .. } => {
             let reference = *reference;
 
-            let child_view = view.child_view(reference.root, reference.phase, reference.context)?;
+            let child_view = view.structural_child(reference)?;
             merge_reactive_template_metadata_from_tir_view(
                 &child_view,
                 metadata,
@@ -759,7 +759,7 @@ fn merge_tir_view_node_metadata(
 
         TemplateIrNodeKind::InsertContribution { template } => {
             let template_id = *template;
-            let insert_view = view.child_view(template_id, view.phase(), view.context())?;
+            let insert_view = view.structural_helper(template_id)?;
             merge_reactive_template_metadata_from_tir_view(
                 &insert_view,
                 metadata,

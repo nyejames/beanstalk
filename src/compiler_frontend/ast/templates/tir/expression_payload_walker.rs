@@ -25,9 +25,10 @@ use crate::compiler_frontend::ast::templates::tir::ids::ExpressionSiteId;
 use crate::compiler_frontend::ast::templates::tir::node::{
     TemplateIrNodeKind, TemplateLoopHeaderExpressionSites,
 };
+use crate::compiler_frontend::ast::templates::tir::refs::TemplateTirChildReference;
 use crate::compiler_frontend::ast::templates::tir::slot_plan::TemplateSlotSiteRenderPiece;
 use crate::compiler_frontend::ast::templates::tir::store::TemplateIrStore;
-use crate::compiler_frontend::ast::templates::tir::view::TirView;
+use crate::compiler_frontend::ast::templates::tir::view::{TirView, TirViewIdentity};
 use crate::compiler_frontend::ast::templates::tir::{
     TemplateIrId, TemplateIrNodeId, TemplateSlotPlanId,
 };
@@ -35,6 +36,7 @@ use crate::compiler_frontend::ast::templates::tir::{
     TemplateTirPhase, TemplateTirReference, TemplateViewContext,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
+use rustc_hash::FxHashMap;
 
 /// Mutator for expression payloads discovered during a strict TIR walk.
 ///
@@ -80,7 +82,7 @@ pub(crate) fn walk_tir_view_expression_payloads(
 /// WHAT: same structural coverage as [`walk_tir_view_expression_payloads`], but
 ///       accepts an external visited set so callers that also enter TIR views
 ///       through nested `ExpressionKind` paths can share one cycle-prevention
-///       set keyed by `(TemplateIrId, TemplateTirPhase, TemplateViewContext)`.
+///       set keyed by exact `TirViewIdentity` values.
 /// WHY: the nested-expression walker needs a single visited set across both
 ///      TIR-view child-template references and `ExpressionKind::Template`
 ///      re-entries; extracting this entry point avoids duplicating the
@@ -89,9 +91,9 @@ pub(crate) fn walk_tir_view_expression_payloads(
 fn walk_tir_view_expression_payloads_with_visited(
     view: &TirView<'_>,
     visitor: &mut impl FnMut(&Expression) -> Result<(), CompilerError>,
-    visited_templates: &mut HashSet<(TemplateIrId, TemplateTirPhase, TemplateViewContext)>,
+    visited_templates: &mut HashSet<TirViewIdentity>,
 ) -> Result<(), CompilerError> {
-    let identity = (view.root_ref(), view.phase(), view.context());
+    let identity = view.identity();
     if !visited_templates.insert(identity) {
         return Ok(());
     }
@@ -107,7 +109,7 @@ fn walk_tir_view_expression_payloads_with_visited(
 
 /// Walks every expression payload reachable from `expression`, including nested
 /// `ExpressionKind` internals and template-valued TIR views, using one shared
-/// visited set keyed by `(TemplateIrId, TemplateTirPhase, TemplateViewContext)`.
+/// visited set keyed by exact `TirViewIdentity` values.
 ///
 /// WHAT: starts from an AST expression, recursively inspects `ExpressionKind`
 ///       internals (`Runtime` operands, `Coerced` values), and enters the
@@ -153,15 +155,22 @@ pub(crate) fn walk_expression_payloads_with_nested_tir_views(
 fn drain_pending_template_views(
     store: &TemplateIrStore,
     visitor: &mut impl FnMut(&Expression) -> Result<(), CompilerError>,
-    visited_templates: &mut HashSet<(TemplateIrId, TemplateTirPhase, TemplateViewContext)>,
+    visited_templates: &mut HashSet<TirViewIdentity>,
     pending_template_views: &mut Vec<TemplateTirReference>,
 ) -> Result<(), CompilerError> {
     while let Some(reference) = pending_template_views.pop() {
-        let identity = (reference.root, reference.phase, reference.context);
+        let identity = TirViewIdentity {
+            root: reference.root,
+            phase: reference.phase,
+            context: reference.context,
+        };
         if visited_templates.contains(&identity) {
             continue;
         }
 
+        // This is a worklist entry from an independently owned nested AST
+        // value, so its durable reference supplies the complete root context.
+        // Structural descendants below that entry still use named transitions.
         let view = TirView::new(store, reference.root, reference.phase, reference.context)?;
 
         let mut expression_visitor = |expression: &Expression| {
@@ -220,7 +229,7 @@ fn walk_tir_view_expression_payload_node(
     view: &TirView<'_>,
     node_ref: TemplateIrNodeId,
     visitor: &mut impl FnMut(&Expression) -> Result<(), CompilerError>,
-    visited_templates: &mut HashSet<(TemplateIrId, TemplateTirPhase, TemplateViewContext)>,
+    visited_templates: &mut HashSet<TirViewIdentity>,
 ) -> Result<(), CompilerError> {
     let node = view.effective_node(node_ref)?;
 
@@ -295,10 +304,8 @@ fn walk_tir_view_expression_payload_node(
 
         TemplateIrNodeKind::ChildTemplate { reference, .. } => {
             let reference = *reference;
-            let effective_identity = (reference.root, reference.phase, reference.context);
-            if visited_templates.insert(effective_identity) {
-                let child_view =
-                    view.child_view(reference.root, reference.phase, reference.context)?;
+            let child_view = view.structural_child(reference)?;
+            if visited_templates.insert(child_view.identity()) {
                 let child_root_node_id = {
                     let child_root_template = child_view.root_template()?;
                     child_root_template.root
@@ -319,14 +326,12 @@ fn walk_tir_view_expression_payload_node(
 
         TemplateIrNodeKind::InsertContribution { template } => {
             let template_id = *template;
-            let insert_root = template_id;
-            let effective_identity = (insert_root, view.phase(), view.context());
-            if visited_templates.insert(effective_identity) {
+            let insert_view = view.structural_helper(template_id)?;
+            if visited_templates.insert(insert_view.identity()) {
                 // Insert contributions inherit the parent phase and view context,
                 // so they recurse through a child `TirView` instead of a raw
                 // same-store walk. A missing insert template or view context is an
-                // explicit internal error from `child_view` / `root_template`.
-                let insert_view = view.child_view(insert_root, view.phase(), view.context())?;
+                // explicit internal error from the structural-helper transition.
                 let insert_root_node_id = {
                     let insert_root_template = insert_view.root_template()?;
                     insert_root_template.root
@@ -461,6 +466,8 @@ where
 ///       `ExpressionSiteId`.
 /// WHY: focused walker tests compare raw structural coverage with the effective
 ///      production collector without exposing collector internals.
+/// This test-only entry intentionally remains raw structural collection: it
+/// does not manufacture a durable view or import overlay authority.
 #[cfg(test)]
 pub(crate) fn collect_tir_expression_overlay_payloads(
     store: &TemplateIrStore,
@@ -474,12 +481,10 @@ pub(crate) fn collect_tir_expression_overlay_payloads(
 /// Collects effective expression payloads from one template root.
 ///
 /// WHAT: traverses the same structural coverage as
-///       [`collect_tir_expression_overlay_payloads`] while resolving each site
-///       through a root-first overlay stack. Same-store child-template
-///       references temporarily add their own overlay identity, and runtime
-///       slot-plan roots retain the active owning-template stack. Completion is
-///       keyed by the active context stack, and each site is retained once with
-///       the strongest effective override discovered for it.
+///       [`collect_tir_expression_overlay_payloads`] through one exact root
+///       view. Structural references enter named `TirView` transitions, so the
+///       complete root expression overlay remains authoritative without a
+///       second context representation.
 /// WHY: finalization writes one new root overlay, but must normalize the
 ///      effective result of every earlier root and child overlay rather than
 ///      replacing child-specific expressions with stale structural payloads.
@@ -488,7 +493,29 @@ pub(crate) fn collect_effective_tir_expression_overlay_payloads(
     template_id: TemplateIrId,
     root_context: TemplateViewContext,
 ) -> Result<Vec<(ExpressionSiteId, Expression)>, CompilerError> {
-    let mut collector = ExpressionOverlayPayloadCollector::new_effective(store, root_context)?;
+    collect_effective_tir_expression_overlay_payloads_with_phase(
+        store,
+        template_id,
+        TemplateTirPhase::Finalized,
+        root_context,
+    )
+}
+
+/// Collects effective expression payloads from a root at its actual TIR phase.
+///
+/// The phase-preserving entry point is used by pre-normalization annotation so
+/// structural transitions apply the same Parsed-versus-Composed rules as the
+/// durable root reference. The legacy finalized entry point above remains for
+/// the finalized normalization consumer.
+pub(crate) fn collect_effective_tir_expression_overlay_payloads_with_phase(
+    store: &TemplateIrStore,
+    template_id: TemplateIrId,
+    root_phase: TemplateTirPhase,
+    root_context: TemplateViewContext,
+) -> Result<Vec<(ExpressionSiteId, Expression)>, CompilerError> {
+    let root_view = TirView::new(store, template_id, root_phase, root_context)?;
+    let mut collector = ExpressionOverlayPayloadCollector::new(store);
+    collector.effective_view = Some(root_view);
     collector.collect_template(template_id)?;
     Ok(collector.into_payloads())
 }
@@ -733,23 +760,33 @@ enum TirExpressionWalkChild {
 
 enum ExpressionOverlayCollectionChild {
     Node(TemplateIrNodeId),
-    Template {
-        template_id: TemplateIrId,
-        context: Option<TemplateViewContext>,
-    },
+    StructuralChild(TemplateTirChildReference),
+    StructuralHelper(TemplateIrId),
 }
 
-type ExpressionOverlayTraversalKey = Vec<TemplateViewContext>;
+// These maps and traversal keys exist only while normalizing one complete root
+// expression overlay. They are merge input, not a second durable read context;
+// production consumers read effective expressions through `TirView`.
+type ExpressionOverlayTraversalKey = Option<TirViewIdentity>;
+type ExpressionOverlayAuthority = FxHashMap<ExpressionSiteId, (Expression, usize)>;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+struct ExpressionOverlayTemplateTraversalKey {
+    template_id: TemplateIrId,
+    view: ExpressionOverlayTraversalKey,
+}
 
 struct ExpressionOverlayPayloadCollector<'store> {
     store: &'store TemplateIrStore,
-    context_stack: Vec<TemplateViewContext>,
+    // Temporary exact view used to collect a normalized root overlay. It is
+    // restored after each named transition and is never retained by a caller.
+    effective_view: Option<TirView<'store>>,
     payloads: Vec<(ExpressionSiteId, Expression, Option<usize>)>,
-    active_nodes: HashSet<TemplateIrNodeId>,
+    active_nodes: HashSet<(TemplateIrNodeId, ExpressionOverlayTraversalKey)>,
     completed_nodes: HashSet<(TemplateIrNodeId, ExpressionOverlayTraversalKey)>,
-    active_templates: HashSet<TemplateIrId>,
-    completed_templates: HashSet<(TemplateIrId, ExpressionOverlayTraversalKey)>,
-    active_slot_plans: HashSet<TemplateSlotPlanId>,
+    active_templates: HashSet<ExpressionOverlayTemplateTraversalKey>,
+    completed_templates: HashSet<ExpressionOverlayTemplateTraversalKey>,
+    active_slot_plans: HashSet<(TemplateSlotPlanId, ExpressionOverlayTraversalKey)>,
     completed_slot_plans: HashSet<(TemplateSlotPlanId, ExpressionOverlayTraversalKey)>,
 }
 
@@ -757,7 +794,7 @@ impl<'store> ExpressionOverlayPayloadCollector<'store> {
     fn new(store: &'store TemplateIrStore) -> Self {
         Self {
             store,
-            context_stack: Vec::new(),
+            effective_view: None,
             payloads: Vec::new(),
             active_nodes: HashSet::new(),
             completed_nodes: HashSet::new(),
@@ -766,15 +803,6 @@ impl<'store> ExpressionOverlayPayloadCollector<'store> {
             active_slot_plans: HashSet::new(),
             completed_slot_plans: HashSet::new(),
         }
-    }
-
-    fn new_effective(
-        store: &'store TemplateIrStore,
-        root_context: TemplateViewContext,
-    ) -> Result<Self, CompilerError> {
-        let mut collector = Self::new(store);
-        collector.context_stack.push(root_context);
-        Ok(collector)
     }
 
     fn into_payloads(self) -> Vec<(ExpressionSiteId, Expression)> {
@@ -788,21 +816,16 @@ impl<'store> ExpressionOverlayPayloadCollector<'store> {
         &self,
         site_id: ExpressionSiteId,
         structural_expression: &Expression,
+        authority: &ExpressionOverlayAuthority,
     ) -> Result<(Expression, Option<usize>), CompilerError> {
-        for (context_index, context) in self.context_stack.iter().copied().enumerate() {
-            let Some(overlay_id) = context.expression_overlay else {
-                continue;
-            };
+        if let Some(view) = &self.effective_view
+            && let Some(expression) = view.effective_expression_for_site(site_id)?
+        {
+            return Ok((expression.clone(), Some(0)));
+        }
 
-            let overlay = self.store.expression_overlay(overlay_id).ok_or_else(|| {
-                CompilerError::compiler_error(format!(
-                    "TIR expression overlay collection referenced missing expression overlay {overlay_id}"
-                ))
-            })?;
-
-            if let Some(expression) = overlay.expression_for_site(site_id) {
-                return Ok((expression.clone(), Some(context_index)));
-            }
+        if let Some((expression, precedence)) = authority.get(&site_id) {
+            return Ok((expression.clone(), Some(*precedence)));
         }
 
         Ok((structural_expression.clone(), None))
@@ -835,12 +858,24 @@ impl<'store> ExpressionOverlayPayloadCollector<'store> {
     }
 
     fn collect_template(&mut self, template_id: TemplateIrId) -> Result<(), CompilerError> {
-        let traversal_key = (template_id, self.context_stack.clone());
-        if self.completed_templates.contains(&traversal_key) {
+        let authority = ExpressionOverlayAuthority::default();
+        self.collect_template_with_authority(template_id, &authority)
+    }
+
+    fn collect_template_with_authority(
+        &mut self,
+        template_id: TemplateIrId,
+        authority: &ExpressionOverlayAuthority,
+    ) -> Result<(), CompilerError> {
+        let traversal_key = ExpressionOverlayTemplateTraversalKey {
+            template_id,
+            view: self.current_view_identity(),
+        };
+        if self.effective_view.is_none() && self.completed_templates.contains(&traversal_key) {
             return Ok(());
         }
 
-        if !self.active_templates.insert(template_id) {
+        if !self.active_templates.insert(traversal_key) {
             return Err(CompilerError::compiler_error(
                 "TIR expression overlay collection found a recursive child-template reference.",
             ));
@@ -856,12 +891,12 @@ impl<'store> ExpressionOverlayPayloadCollector<'store> {
                 )
             })?;
         let result = if let Some(slot_plan_id) = runtime_slot_plan {
-            self.collect_runtime_slot_application(root, slot_plan_id)
+            self.collect_runtime_slot_application(root, slot_plan_id, authority)
         } else {
-            self.collect_node(root)
+            self.collect_node(root, authority)
         };
 
-        self.active_templates.remove(&template_id);
+        self.active_templates.remove(&traversal_key);
         if result.is_ok() {
             self.completed_templates.insert(traversal_key);
         }
@@ -873,13 +908,14 @@ impl<'store> ExpressionOverlayPayloadCollector<'store> {
         &mut self,
         wrapper_root: TemplateIrNodeId,
         slot_plan_id: TemplateSlotPlanId,
+        authority: &ExpressionOverlayAuthority,
     ) -> Result<(), CompilerError> {
-        let traversal_key = (slot_plan_id, self.context_stack.clone());
-        if self.completed_slot_plans.contains(&traversal_key) {
-            return self.collect_node(wrapper_root);
+        let traversal_key = (slot_plan_id, self.current_view_identity());
+        if self.effective_view.is_none() && self.completed_slot_plans.contains(&traversal_key) {
+            return self.collect_node(wrapper_root, authority);
         }
 
-        if !self.active_slot_plans.insert(slot_plan_id) {
+        if !self.active_slot_plans.insert(traversal_key) {
             return Err(CompilerError::compiler_error(
                 "TIR expression overlay collection found a recursive runtime slot plan.",
             ));
@@ -888,19 +924,19 @@ impl<'store> ExpressionOverlayPayloadCollector<'store> {
         let (contribution_roots, site_render_roots) =
             runtime_slot_plan_roots(self.store, slot_plan_id)?;
 
-        let result = self.collect_node(wrapper_root).and_then(|()| {
+        let result = self.collect_node(wrapper_root, authority).and_then(|()| {
             for root in contribution_roots {
-                self.collect_node(root)?;
+                self.collect_node(root, authority)?;
             }
 
             for root in site_render_roots {
-                self.collect_node(root)?;
+                self.collect_node(root, authority)?;
             }
 
             Ok(())
         });
 
-        self.active_slot_plans.remove(&slot_plan_id);
+        self.active_slot_plans.remove(&traversal_key);
         if result.is_ok() {
             self.completed_slot_plans.insert(traversal_key);
         }
@@ -908,38 +944,52 @@ impl<'store> ExpressionOverlayPayloadCollector<'store> {
         result
     }
 
-    fn collect_node(&mut self, node_id: TemplateIrNodeId) -> Result<(), CompilerError> {
-        let traversal_key = (node_id, self.context_stack.clone());
-        if self.completed_nodes.contains(&traversal_key) {
+    fn collect_node(
+        &mut self,
+        node_id: TemplateIrNodeId,
+        authority: &ExpressionOverlayAuthority,
+    ) -> Result<(), CompilerError> {
+        let traversal_key = (node_id, self.current_view_identity());
+        if self.effective_view.is_none() && self.completed_nodes.contains(&traversal_key) {
             return Ok(());
         }
 
-        if !self.active_nodes.insert(node_id) {
+        if !self.active_nodes.insert(traversal_key) {
             return Err(CompilerError::compiler_error(
                 "TIR expression overlay collection found a recursive node reference.",
             ));
         }
 
-        let children = self.collect_node_payload_and_children(node_id);
+        let children = self.collect_node_payload_and_children(node_id, authority);
         let result = match children {
             Ok(children) => {
                 for child in children {
                     match child {
                         ExpressionOverlayCollectionChild::Node(node_id) => {
-                            self.collect_node(node_id)?;
+                            self.collect_node(node_id, authority)?;
                         }
-                        ExpressionOverlayCollectionChild::Template {
-                            template_id,
-                            context,
-                        } => {
-                            if let Some(context) = context {
-                                self.context_stack.push(context);
-                            }
-                            let result = self.collect_template(template_id);
-                            if context.is_some() {
-                                self.context_stack.pop();
-                            }
-                            result?;
+                        ExpressionOverlayCollectionChild::StructuralChild(reference) => {
+                            // Only effective root-overlay construction merges a
+                            // descendant reference's pre-completion payload.
+                            // The test-only structural entry deliberately reads
+                            // the stored expressions without overlay authority.
+                            let child_authority = if self.effective_view.is_some() {
+                                self.authority_for_reference(authority, reference.context)?
+                            } else {
+                                authority.clone()
+                            };
+                            self.collect_in_transition(
+                                reference.root,
+                                Some(|view: &TirView<'store>| view.structural_child(reference)),
+                                &child_authority,
+                            )?;
+                        }
+                        ExpressionOverlayCollectionChild::StructuralHelper(template_id) => {
+                            self.collect_in_transition(
+                                template_id,
+                                Some(|view: &TirView<'store>| view.structural_helper(template_id)),
+                                authority,
+                            )?;
                         }
                     }
                 }
@@ -949,7 +999,7 @@ impl<'store> ExpressionOverlayPayloadCollector<'store> {
             Err(error) => Err(error),
         };
 
-        self.active_nodes.remove(&node_id);
+        self.active_nodes.remove(&traversal_key);
         if result.is_ok() {
             self.completed_nodes.insert(traversal_key);
         }
@@ -957,9 +1007,58 @@ impl<'store> ExpressionOverlayPayloadCollector<'store> {
         result
     }
 
+    fn current_view_identity(&self) -> ExpressionOverlayTraversalKey {
+        self.effective_view.as_ref().map(TirView::identity)
+    }
+
+    fn collect_in_transition(
+        &mut self,
+        template_id: TemplateIrId,
+        transition: Option<impl FnOnce(&TirView<'store>) -> Result<TirView<'store>, CompilerError>>,
+        authority: &ExpressionOverlayAuthority,
+    ) -> Result<(), CompilerError> {
+        let parent_view = self.effective_view.take();
+        let child_view = match (parent_view.as_ref(), transition) {
+            (Some(parent_view), Some(transition)) => Some(transition(parent_view)?),
+            _ => None,
+        };
+        self.effective_view = child_view;
+        let result = self.collect_template_with_authority(template_id, authority);
+        self.effective_view = parent_view;
+        result
+    }
+
+    fn authority_for_reference(
+        &self,
+        authority: &ExpressionOverlayAuthority,
+        context: TemplateViewContext,
+    ) -> Result<ExpressionOverlayAuthority, CompilerError> {
+        let Some(overlay_id) = context.expression_overlay else {
+            return Ok(authority.clone());
+        };
+        let overlay = self.store.expression_overlay(overlay_id).ok_or_else(|| {
+            CompilerError::compiler_error(format!(
+                "TIR expression overlay collection referenced missing expression overlay {overlay_id}"
+            ))
+        })?;
+        let precedence = authority
+            .values()
+            .map(|(_, precedence)| precedence.saturating_add(1))
+            .max()
+            .unwrap_or(1);
+        let mut next_authority = authority.clone();
+        for (site_id, expression) in &overlay.overrides {
+            next_authority
+                .entry(*site_id)
+                .or_insert_with(|| (expression.as_ref().clone(), precedence));
+        }
+        Ok(next_authority)
+    }
+
     fn collect_node_payload_and_children(
         &mut self,
         node_id: TemplateIrNodeId,
+        authority: &ExpressionOverlayAuthority,
     ) -> Result<Vec<ExpressionOverlayCollectionChild>, CompilerError> {
         let node = self.store.get_node(node_id).ok_or_else(|| {
             CompilerError::compiler_error(
@@ -979,7 +1078,8 @@ impl<'store> ExpressionOverlayPayloadCollector<'store> {
                 site_id,
                 ..
             } => {
-                let (expression, precedence) = self.effective_expression(*site_id, expression)?;
+                let (expression, precedence) =
+                    self.effective_expression(*site_id, expression, authority)?;
                 self.record_payload(*site_id, expression, precedence);
                 Ok(Vec::new())
             }
@@ -991,6 +1091,7 @@ impl<'store> ExpressionOverlayPayloadCollector<'store> {
                     let (expression, precedence) = self.effective_expression(
                         branch.selector_site_id,
                         branch.condition_expression(),
+                        authority,
                     )?;
                     self.record_payload(branch.selector_site_id, expression, precedence);
                     children.push(ExpressionOverlayCollectionChild::Node(branch.body));
@@ -1010,7 +1111,7 @@ impl<'store> ExpressionOverlayPayloadCollector<'store> {
                 aggregate_wrapper,
                 ..
             } => {
-                self.collect_loop_header_payloads(header, header_sites)?;
+                self.collect_loop_header_payloads(header, header_sites, authority)?;
 
                 let mut children = Vec::with_capacity(1 + usize::from(aggregate_wrapper.is_some()));
                 children.push(ExpressionOverlayCollectionChild::Node(*body));
@@ -1023,17 +1124,15 @@ impl<'store> ExpressionOverlayPayloadCollector<'store> {
             }
 
             TemplateIrNodeKind::ChildTemplate { reference, .. } => {
-                Ok(vec![ExpressionOverlayCollectionChild::Template {
-                    template_id: reference.root,
-                    context: Some(reference.context),
-                }])
+                Ok(vec![ExpressionOverlayCollectionChild::StructuralChild(
+                    *reference,
+                )])
             }
 
             TemplateIrNodeKind::InsertContribution { template } => {
-                Ok(vec![ExpressionOverlayCollectionChild::Template {
-                    template_id: *template,
-                    context: None,
-                }])
+                Ok(vec![ExpressionOverlayCollectionChild::StructuralHelper(
+                    *template,
+                )])
             }
 
             TemplateIrNodeKind::Text { .. }
@@ -1048,13 +1147,15 @@ impl<'store> ExpressionOverlayPayloadCollector<'store> {
         &mut self,
         header: &TemplateLoopHeader,
         header_sites: &TemplateLoopHeaderExpressionSites,
+        authority: &ExpressionOverlayAuthority,
     ) -> Result<(), CompilerError> {
         match (header, header_sites) {
             (
                 TemplateLoopHeader::Conditional { condition },
                 TemplateLoopHeaderExpressionSites::Conditional { condition: site_id },
             ) => {
-                let (expression, precedence) = self.effective_expression(*site_id, condition)?;
+                let (expression, precedence) =
+                    self.effective_expression(*site_id, condition, authority)?;
                 self.record_payload(*site_id, expression, precedence);
             }
 
@@ -1062,16 +1163,18 @@ impl<'store> ExpressionOverlayPayloadCollector<'store> {
                 TemplateLoopHeader::Range { range, .. },
                 TemplateLoopHeaderExpressionSites::Range { start, end, step },
             ) => {
-                let (expression, precedence) = self.effective_expression(*start, &range.start)?;
+                let (expression, precedence) =
+                    self.effective_expression(*start, &range.start, authority)?;
                 self.record_payload(*start, expression, precedence);
 
-                let (expression, precedence) = self.effective_expression(*end, &range.end)?;
+                let (expression, precedence) =
+                    self.effective_expression(*end, &range.end, authority)?;
                 self.record_payload(*end, expression, precedence);
 
                 match (step, &range.step) {
                     (Some(step_site_id), Some(step_expression)) => {
                         let (expression, precedence) =
-                            self.effective_expression(*step_site_id, step_expression)?;
+                            self.effective_expression(*step_site_id, step_expression, authority)?;
                         self.record_payload(*step_site_id, expression, precedence);
                     }
                     (None, None) => {}
@@ -1087,7 +1190,8 @@ impl<'store> ExpressionOverlayPayloadCollector<'store> {
                 TemplateLoopHeader::Collection { iterable, .. },
                 TemplateLoopHeaderExpressionSites::Collection { iterable: site_id },
             ) => {
-                let (expression, precedence) = self.effective_expression(*site_id, iterable)?;
+                let (expression, precedence) =
+                    self.effective_expression(*site_id, iterable, authority)?;
                 self.record_payload(*site_id, expression, precedence);
             }
 

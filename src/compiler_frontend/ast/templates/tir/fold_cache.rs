@@ -1,7 +1,7 @@
 //! AST-phase-local fold cache for TIR templates.
 //!
-//! WHAT: stores the result of folding a specific TIR view (root + phase + overlay
-//!       set + safe fold-context dimensions) so that repeated folds of the same
+//! WHAT: stores the result of folding a specific TIR view (exact identity plus
+//!       safe fold-context dimensions) so that repeated folds of the same
 //!       effective view can reuse the previous result.
 //!
 //! WHY: parent templates can reference the same child template multiple times,
@@ -19,9 +19,7 @@
 //! ## Key safety
 //!
 //! The key includes only dimensions that are stable and identity-bearing today:
-//! - module-local root `TemplateIrId`;
-//! - pipeline `TemplateTirPhase`;
-//! - value-carried `TemplateViewContext`;
+//! - exact `TirViewIdentity` (module-local root, pipeline phase and view context);
 //! - const-loop iteration limit;
 //! - whether the active fold-binding stack is empty.
 //!
@@ -34,9 +32,7 @@
 use std::collections::HashMap;
 
 use crate::compiler_frontend::ast::templates::template_folding::TemplateEmission;
-use crate::compiler_frontend::ast::templates::tir::overlays::TemplateViewContext;
-use crate::compiler_frontend::ast::templates::tir::refs::TemplateIrId;
-use crate::compiler_frontend::ast::templates::tir::view::TemplateTirPhase;
+use crate::compiler_frontend::ast::templates::tir::view::TirViewIdentity;
 
 // -------------------------
 //  Cache key
@@ -48,19 +44,13 @@ use crate::compiler_frontend::ast::templates::tir::view::TemplateTirPhase;
 ///       cached fold result. Two folds with equal keys must produce equal output.
 ///
 /// WHY: the cache must not return stale results when the input view or context
-///      changes. Including phase and view context alongside the root makes the
-///      key precise; recording loop-limit and empty-bindings guards makes the
-///      remaining context dimensions explicit.
+///      changes. Embedding the exact view identity makes the key precise;
+///      recording loop-limit and empty-bindings guards keeps the remaining
+///      context dimensions explicit.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct TirFoldCacheKey {
-    /// Module-local root template ID.
-    pub(crate) root: TemplateIrId,
-
-    /// Pipeline phase of the root.
-    pub(crate) phase: TemplateTirPhase,
-
-    /// view context applied to the root.
-    pub(crate) context: TemplateViewContext,
+    /// Exact module-local view identity.
+    pub(crate) identity: TirViewIdentity,
 
     /// Const-loop iteration limit active during folding.
     pub(crate) loop_iteration_limit: usize,

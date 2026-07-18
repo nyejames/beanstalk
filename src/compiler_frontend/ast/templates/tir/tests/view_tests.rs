@@ -18,8 +18,11 @@ use super::super::ids::{
 use super::super::node::TemplateIrNodeKind;
 use super::super::overlays::{
     TemplateViewContext, TirExpressionOverlay, TirExpressionOverlayId, TirSlotResolution,
-    TirSlotResolutionOverlay, TirWrapperApplicationMode, TirWrapperContext,
-    TirWrapperContextOverlay,
+    TirSlotResolutionOverlay, TirSlotResolutionOverlayId, TirWrapperApplicationMode,
+    TirWrapperContext, TirWrapperContextOverlay,
+};
+use super::super::refs::{
+    TemplateTirChildReference, TemplateTirReference, TemplateWrapperReference,
 };
 use super::super::store::TemplateIrStore;
 use super::super::summary::TemplateIrSummary;
@@ -708,7 +711,7 @@ fn effective_node_errors_for_invalid_node_ref() {
 // -------------------------
 
 #[test]
-fn child_view_constructs_a_valid_view_for_a_child_template() {
+fn structural_child_constructs_a_valid_view_for_a_child_template() {
     let mut store = TemplateIrStore::new();
 
     let parent_id = { build_empty_template(&mut store) };
@@ -722,7 +725,11 @@ fn child_view_constructs_a_valid_view_for_a_child_template() {
         .expect("parent view should construct");
 
     let child_view = parent_view
-        .child_view(child_ref, TemplateTirPhase::Parsed, context)
+        .structural_child(TemplateTirChildReference::new(
+            child_ref,
+            TemplateTirPhase::Parsed,
+            context,
+        ))
         .expect("child view should construct");
 
     assert_eq!(child_view.root_ref(), child_ref);
@@ -730,7 +737,7 @@ fn child_view_constructs_a_valid_view_for_a_child_template() {
 }
 
 #[test]
-fn child_view_rejects_a_missing_view_context() {
+fn structural_child_rejects_a_missing_view_context() {
     let TestStore {
         store,
         root_ref,
@@ -741,22 +748,184 @@ fn child_view_rejects_a_missing_view_context() {
     let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, context)
         .expect("view should construct");
 
-    // child_view no longer validates template existence through the store
-    // (that would borrow the store's RefCell, which panics when the caller holds
-    // a mutable store borrow). It validates the view context only.
     let missing_context = TemplateViewContext {
-        expression_overlay: Some(TirExpressionOverlayId::new(999)),
+        slot_resolution: Some(TirSlotResolutionOverlayId::new(999)),
         ..TemplateViewContext::default()
     };
     let error = view
-        .child_view(
+        .structural_child(TemplateTirChildReference::new(
             TemplateIrId::new(0),
-            TemplateTirPhase::Parsed,
+            TemplateTirPhase::Composed,
             missing_context,
-        )
+        ))
         .expect_err("missing view context should be rejected");
 
     assert!(error.msg.contains("does not exist"));
+}
+
+#[test]
+fn named_view_transitions_preserve_their_documented_overlay_authority() {
+    let mut store = TemplateIrStore::new();
+    let parent_id = build_empty_template(&mut store);
+    let child_id = build_empty_template(&mut store);
+
+    let expression_overlay = store.allocate_expression_overlay(TirExpressionOverlay::default());
+    let slot_overlay = store.allocate_slot_resolution_overlay(TirSlotResolutionOverlay::default());
+    let wrapper_overlay =
+        store.allocate_wrapper_context_overlay(TirWrapperContextOverlay::default());
+    let parent_context = TemplateViewContext {
+        expression_overlay: Some(expression_overlay),
+        slot_resolution: None,
+        wrapper_context: None,
+    };
+    let referenced_context = TemplateViewContext {
+        expression_overlay: None,
+        slot_resolution: Some(slot_overlay),
+        wrapper_context: Some(wrapper_overlay),
+    };
+    let parent_view = TirView::new(
+        &store,
+        parent_id,
+        TemplateTirPhase::Composed,
+        parent_context,
+    )
+    .expect("parent view should construct");
+
+    let parsed_child = parent_view
+        .structural_child(TemplateTirChildReference::new(
+            child_id,
+            TemplateTirPhase::Parsed,
+            referenced_context,
+        ))
+        .expect("parsed child transition should construct");
+    assert_eq!(
+        parsed_child.context(),
+        TemplateViewContext {
+            expression_overlay: Some(expression_overlay),
+            slot_resolution: None,
+            wrapper_context: None,
+        }
+    );
+
+    let composed_child = parent_view
+        .structural_child(TemplateTirChildReference::new(
+            child_id,
+            TemplateTirPhase::Composed,
+            referenced_context,
+        ))
+        .expect("composed child transition should construct");
+    assert_eq!(
+        composed_child.context().expression_overlay,
+        Some(expression_overlay)
+    );
+    assert_eq!(composed_child.context().slot_resolution, Some(slot_overlay));
+    assert_eq!(
+        composed_child.context().wrapper_context,
+        Some(wrapper_overlay)
+    );
+
+    let nested_context = TemplateViewContext {
+        expression_overlay: None,
+        slot_resolution: Some(slot_overlay),
+        wrapper_context: Some(wrapper_overlay),
+    };
+    let nested = parent_view
+        .nested_template_value(TemplateTirReference {
+            root: child_id,
+            phase: TemplateTirPhase::Composed,
+            context: nested_context,
+        })
+        .expect("nested template transition should construct");
+    assert_eq!(nested.context(), nested_context);
+
+    let wrapper = parent_view
+        .wrapper(TemplateWrapperReference::new(
+            child_id,
+            TemplateTirPhase::Composed,
+            referenced_context,
+        ))
+        .expect("wrapper transition should construct");
+    assert_eq!(
+        wrapper.context().expression_overlay,
+        Some(expression_overlay)
+    );
+    assert_eq!(wrapper.context().slot_resolution, Some(slot_overlay));
+    assert_eq!(wrapper.context().wrapper_context, Some(wrapper_overlay));
+}
+
+#[test]
+fn structural_transition_does_not_import_referenced_expression_overlay() {
+    let mut store = TemplateIrStore::new();
+    let parent_id = build_empty_template(&mut store);
+    let child_id = build_empty_template(&mut store);
+    let child_expression_overlay =
+        store.allocate_expression_overlay(TirExpressionOverlay::default());
+
+    let parent_view = TirView::new(
+        &store,
+        parent_id,
+        TemplateTirPhase::Composed,
+        TemplateViewContext::default(),
+    )
+    .expect("parent view should construct");
+    let referenced_context = TemplateViewContext {
+        expression_overlay: Some(child_expression_overlay),
+        ..TemplateViewContext::default()
+    };
+    let child_view = parent_view
+        .structural_child(TemplateTirChildReference::new(
+            child_id,
+            TemplateTirPhase::Composed,
+            referenced_context,
+        ))
+        .expect("child view should construct");
+    let wrapper_view = parent_view
+        .wrapper(TemplateWrapperReference::new(
+            child_id,
+            TemplateTirPhase::Composed,
+            referenced_context,
+        ))
+        .expect("wrapper view should construct");
+
+    for structural_view in [child_view, wrapper_view] {
+        assert_eq!(structural_view.context().expression_overlay, None);
+    }
+}
+
+#[test]
+fn resolved_slot_source_and_structural_helper_preserve_exact_parent_view() {
+    let mut store = TemplateIrStore::new();
+    let parent_id = build_empty_template(&mut store);
+    let source_id = build_empty_template(&mut store);
+    let expression_overlay = store.allocate_expression_overlay(TirExpressionOverlay::default());
+    let slot_overlay = store.allocate_slot_resolution_overlay(TirSlotResolutionOverlay::default());
+    let wrapper_overlay =
+        store.allocate_wrapper_context_overlay(TirWrapperContextOverlay::default());
+    let parent_context = TemplateViewContext {
+        expression_overlay: Some(expression_overlay),
+        slot_resolution: Some(slot_overlay),
+        wrapper_context: Some(wrapper_overlay),
+    };
+    let parent_view = TirView::new(
+        &store,
+        parent_id,
+        TemplateTirPhase::Formatted,
+        parent_context,
+    )
+    .expect("parent view should construct");
+
+    let resolved_source = parent_view
+        .resolved_slot_source(source_id)
+        .expect("resolved source transition should construct");
+    let helper = parent_view
+        .structural_helper(source_id)
+        .expect("structural helper transition should construct");
+
+    for view in [resolved_source, helper] {
+        assert_eq!(view.root_ref(), source_id);
+        assert_eq!(view.phase(), TemplateTirPhase::Formatted);
+        assert_eq!(view.context(), parent_context);
+    }
 }
 
 // -------------------------

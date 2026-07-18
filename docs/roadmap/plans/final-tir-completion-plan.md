@@ -29,28 +29,35 @@ TIR remains AST-local. No TIR store, ID, view, overlay or preparation type may c
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/final-tir-completion-plan.md
 STATUS: active
-CURRENT_SLICE: R2B accepted; checkpoint ready to commit before R2C
-LAST_ACCEPTED_COMMIT: ee30d9aef (R2A value-carried view context)
-WORKTREE: main at ee30d9aef with accepted uncommitted R2B source, tests and plan changes; concurrent user documentation is the separate preceding commit 5fa9bb32f
+CURRENT_SLICE: R2C accepted; checkpoint ready to commit
+LAST_ACCEPTED_COMMIT: 144568587 (R2B complete root expression overlays)
+WORKTREE: main at 144568587 with the accepted uncommitted R2C source, tests and plan checkpoint; concurrent user documentation is the separate earlier commit 5fa9bb32f
 REQUIRED_RELOADS: startup files, this plan, and current TIR source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: compiler-design-overview.md one-store TIR contract and this plan's R2 exact-view contract
-- code: finalization now writes one canonical complete root expression overlay; ExpressionOverlayPayloadCollector has context-exact completion and outer-precedence site deduplication; TemplateIrStore rejects unallocated expression sites; R2C still owns all transition centralization and expression-stack deletion
+- code: view.rs owns TirViewIdentity and every structural-child, wrapper, resolved-source, structural-helper and nested-value transition; fold, handoff, classification, validation, formatting, metadata and overlay completion use those transitions; the temporary overlay-completion precedence map is construction input only
 ACCEPTANCE_CRITERIA:
-- commit only the accepted R2B source, focused tests and this plan
-- preserve complete-overlay, outer-precedence, structural-fallback and module-global site invariants
-- begin R2C by centralizing exact TirView identity and transitions; do not begin preparation
+- TirView owns TirViewIdentity and the only structural-child, wrapper, resolved-source, structural-helper and nested-value transitions
+- structural transitions retain the current complete expression overlay; Parsed references ignore referenced slot/wrapper context and Composed-or-later references use it; nested AST values use their full referenced context
+- delete generic child_view, all expression/context stacks used for overlay authority, store expression_for_context_stack and raw tuple cycle/cache identity
+- resolved slot sources, formatter children and all view-based cycle paths use named transitions and exact TirViewIdentity without synthetic child references or root-only keys
+- the root-overlay completion collector may keep only a temporary site-keyed precedence map required to merge pre-completion descendant overlays; it must not become a durable read context or alter the raw structural test collector contract
+- keep non-overlay algorithm stacks such as active nodes/templates and fold bindings when they have distinct ownership
+- preserve complete-overlay semantics and do not begin preparation, prepared fold/handoff or finalization redesign
 VALIDATION_STATE:
-- cargo fmt --check and git diff --check: passed for R2B
+- R2C worker cargo fmt, cargo check and 3420 unit tests: passed
+- R2C parent focused transition, raw/effective overlay, control-flow and wrapper-handoff tests: passed
+- R2C just validate: passed; cross-target Clippy, 3421 unit tests, 1784 integration cases, docs check and 28 benchmark sanity cases; -7ms average, 23 faster and 0 slower
+- TIR line inventory: 19,963 production and 17,094 test lines (R2B: 20,102 and 16,851; 069a29acb: 24,274 and 27,231)
 - deleted overlay-set, stale ownership, compatibility-parameter, and HIR/backend TIR-boundary greps: passed
 - TIR line inventory: 20,102 production and 16,851 test lines (R2A: 20,048 and 16,727; 069a29acb: 24,274 and 27,231); R2C deletion remains before phase acceptance
 - R2B just validate: passed; cross-target Clippy, 3417 unit tests, 1784 integration cases, docs check, and 28 benchmark sanity cases; -7ms average, 23 faster and 0 slower
 DOCS_IMPACT: none beyond this parent-managed plan checkpoint; R2B is an internal refactor
 BLOCKERS_OR_OPEN_DECISIONS: none
-DELEGATION_DECISION: codex-cli for R2C - the prior Ollama slice is complete and the user requires Codex CLI for subsequent worker slices
+DELEGATION_DECISION: codex-cli implementation completed and parent corrections accepted
 NEXT_WORKER_ORDER: codex-cli (user-required provider)
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit R2B with explicit staging, reload the plan, then launch the smallest R2C Codex CLI slice
+NEXT_RESUME_ACTION: commit the accepted R2C checkpoint, reload, then select the first coherent R3 preparation slice through Codex CLI
 ```
 
 Use `069a29acb` as the implementation and regression base. Do not continue extending `FoldAuthorityWalk`, foreign-store traversal, external expression-overlay stacks or prepared foreign-wrapper proofs.
@@ -631,6 +638,16 @@ Focused invariants:
 - No overlay context exists outside `TirView` or a TIR reference.
 - No overlay-set table or expression stack remains.
 - Common code gate passes.
+
+R2C accepted on the pre-commit `144568587` worktree. `TirViewIdentity` is now the exact cache and
+view-semantic cycle identity, and `TirView` owns the structural child, wrapper, resolved slot
+source, structural helper and nested-value transitions. Structural transitions retain only the
+current complete expression overlay, Parsed references ignore referenced slot/wrapper dimensions
+and independently nested AST values start from their durable full context. Overlay stacks, the
+store stack resolver, generic `child_view` and synthetic resolved-source child transitions are
+deleted. The final tracked-file inventory is 19,963 production and 17,094 test lines. `just
+validate` passed with 3,421 unit tests, 1,784 integration cases, docs checking and all 28 benchmark
+sanity cases.
 
 ### Phase R3 - Introduce one preparation pass
 
