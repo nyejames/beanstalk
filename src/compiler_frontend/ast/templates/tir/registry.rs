@@ -95,12 +95,8 @@ impl TemplateIrRegistry {
         }
     }
 
-    /// Allocates a new empty store and returns its registry-level ID.
-    ///
-    /// WHAT: the returned store starts in `TemplateStoreState::Building` and can
-    /// be retrieved through `store`/`store_mut`/`store_handle`.
-    /// WHY: callers that need a fresh TIR store (parser construction, derived
-    /// root creation) ask the registry rather than constructing stores directly.
+    /// Allocates an empty registry store for migration-era cross-store fixtures.
+    #[cfg(test)]
     pub(crate) fn allocate_store(&mut self) -> TemplateStoreId {
         self.adopt_store(Rc::new(RefCell::new(TemplateIrStore::new())))
     }
@@ -635,12 +631,8 @@ pub(crate) struct RegisteredTemplateIrStore {
 }
 
 impl RegisteredTemplateIrStore {
-    /// Allocate a new store in the registry and couple the result.
-    ///
-    /// WHAT: calls `allocate_store` on the registry and retrieves the matching
-    ///       store handle through a checked lookup.
-    /// WHY: establishes the registry-store relationship by allocation so the
-    ///      handle is guaranteed to match the registry entry.
+    /// Allocates a coupled registry store for migration-era cross-store fixtures.
+    #[cfg(test)]
     pub(crate) fn allocate_in(registry: Rc<RefCell<TemplateIrRegistry>>) -> Self {
         let store_id = registry.borrow_mut().allocate_store();
         Self::from_registry_and_store_id(registry, store_id)

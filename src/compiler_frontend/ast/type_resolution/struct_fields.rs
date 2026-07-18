@@ -313,6 +313,11 @@ fn inline_visible_constant_references_impl(
 
             let mut current_type = ExpectedType::Known(expression.type_id);
 
+            let registered_template_ir_store = RegisteredTemplateIrStore::from_registry_and_store(
+                Rc::clone(template_ir_registry),
+                Rc::clone(template_ir_store),
+            )?;
+
             let mut evaluation_context = ScopeContext::new(
                 ContextKind::ConstantHeader,
                 expression.location.scope.to_owned(),
@@ -320,12 +325,7 @@ fn inline_visible_constant_references_impl(
                 Arc::new(ExternalPackageRegistry::new()),
                 Vec::new(),
                 0,
-            )
-            .with_registered_template_ir_store(
-                RegisteredTemplateIrStore::from_registry_and_store(
-                    Rc::clone(template_ir_registry),
-                    Rc::clone(template_ir_store),
-                )?,
+                registered_template_ir_store,
             );
 
             if let Some(visible) = visible_declaration_ids {

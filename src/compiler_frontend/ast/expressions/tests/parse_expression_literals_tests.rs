@@ -108,7 +108,7 @@ fn parse_whole_number_token(
 ) -> Result<LiteralParseOutcome, ExpressionParseError> {
     let mut string_table = StringTable::new();
     let scope = InternedPath::from_single_str("test.bst", &mut string_table);
-    let context = ScopeContext::new(
+    let context = ScopeContext::new_for_tests(
         ContextKind::Expression,
         scope.clone(),
         Rc::new(TopLevelDeclarationTable::new(vec![])),

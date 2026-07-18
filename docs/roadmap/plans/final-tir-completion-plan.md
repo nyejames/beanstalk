@@ -29,25 +29,28 @@ TIR remains AST-local. No TIR store, ID, view, overlay or preparation type may c
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/final-tir-completion-plan.md
 STATUS: active
-CURRENT_SLICE: R1A - require the shared store handle in ScopeContext construction
-LAST_ACCEPTED_COMMIT: c1ecc2c58
-WORKTREE: main at 3b17bad3f; only this plan is modified for the accepted R0 checkpoint
+CURRENT_SLICE: R1B - merge registry storage into the module TIR store
+LAST_ACCEPTED_COMMIT: 2ea171ead (R0 ownership inventory)
+WORKTREE: main at 2ea171ead; reviewed R1A implementation and plan update pending commit
 REQUIRED_RELOADS: startup files, this plan, and current TIR source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: compiler-design-overview.md one-store TIR contract and this plan's R1A constructor requirement
-- code: module_ast/build_context.rs owns the module store; scope_context.rs and production constructors must receive it explicitly
+- docs: compiler-design-overview.md one-store TIR contract and this plan's R1B owner collapse
+- code: templates/tir/registry.rs and store.rs; contexts now require one RegisteredTemplateIrStore
 ACCEPTANCE_CRITERIA:
-- ScopeContext construction requires the module RegisteredTemplateIrStore
-- every production constant, type, trait, signature, and body context passes the same handle
-- replacement-style production store injection is removed; isolated test setup stays test-local
+- move overlay arenas and APIs into TemplateIrStore
+- replace registry/store pairs with the one shared store handle
+- delete TemplateIrRegistry and RegisteredTemplateIrStore without a forwarding owner
 VALIDATION_STATE:
 - R0 read-only inventory: passed; exact paths and historical counts reviewed by parent
+- R1A cargo fmt: passed
+- R1A cargo test --quiet -- --format terse: passed; 3605 tests
+- R1A just validate: passed; 1784 integration cases and 28 benchmark sanity cases
 DOCS_IMPACT: none beyond this plan checkpoint
 BLOCKERS_OR_OPEN_DECISIONS: none
-DELEGATION_DECISION: undecided - resolve the R1A implementation worker after committing R0
+DELEGATION_DECISION: undecided - resolve the R1B implementation worker after committing R1A
 NEXT_WORKER_ORDER: ollama, codex-cli, parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit the accepted R0 inventory checkpoint, then launch R1A
+NEXT_RESUME_ACTION: commit accepted R1A, then scope R1B by final owner
 ```
 
 Use `069a29acb` as the implementation and regression base. Do not continue extending `FoldAuthorityWalk`, foreign-store traversal, external expression-overlay stacks or prepared foreign-wrapper proofs.
@@ -517,6 +520,11 @@ TIR directory; `069a29acb` contains 24,274 production and 27,231 test lines.
 - Remove default scratch registry/store allocation from `ScopeContext::new`.
 - Update constant, type, trait, function-signature and body-emission contexts to pass the same handle.
 - Keep test-only isolated store construction in local test helpers, not production constructors.
+
+R1A complete. `ScopeContext::new` now requires the module's registered store, every production
+constructor passes that handle directly and the scratch allocation and production replacement
+setter are gone. Migration-era multi-store helpers remain compiled only for their existing tests
+until R1B deletes the registry owner.
 
 #### R1B - Merge registry storage into the store
 

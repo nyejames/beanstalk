@@ -50,7 +50,7 @@ fn context_for_source_file(
     source_file: InternedPath,
     receiver_methods: ReceiverMethodCatalog,
 ) -> ScopeContext {
-    ScopeContext::new(
+    ScopeContext::new_for_tests(
         ContextKind::Function,
         InternedPath::new(),
         Rc::new(TopLevelDeclarationTable::new(vec![])),

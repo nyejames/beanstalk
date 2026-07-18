@@ -824,7 +824,7 @@ fn parser_tir_preserves_reactive_head_and_nested_child_metadata() {
     };
 
     let mut token_stream = template_tokens_from_source("[$(source): body]", &mut string_table);
-    let context = ScopeContext::new(
+    let context = ScopeContext::new_for_tests(
         ContextKind::Template,
         token_stream.src_path.to_owned(),
         Rc::new(TopLevelDeclarationTable::new(vec![declaration])),
@@ -2426,7 +2426,7 @@ fn parser_tir_records_same_store_template_valued_head_reference_as_child_templat
     };
 
     let mut parent_tokens = template_tokens_from_source("[wrapper: body]", &mut string_table);
-    let parent_context = ScopeContext::new(
+    let parent_context = ScopeContext::new_for_tests(
         ContextKind::Constant,
         parent_tokens.src_path.to_owned(),
         Rc::new(TopLevelDeclarationTable::new(vec![declaration])),
@@ -2501,7 +2501,7 @@ fn parser_tir_recursively_materializes_cross_store_template_valued_head() {
     };
 
     let mut parent_tokens = template_tokens_from_source("[wrapper: body]", &mut string_table);
-    let parent_context = ScopeContext::new(
+    let parent_context = ScopeContext::new_for_tests(
         ContextKind::Constant,
         parent_tokens.src_path.to_owned(),
         Rc::new(TopLevelDeclarationTable::new(vec![declaration])),

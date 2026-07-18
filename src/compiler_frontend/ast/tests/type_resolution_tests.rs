@@ -295,7 +295,7 @@ fn constant_capacity_resolves_to_fixed_collection() {
     let capacity_name = string_table.intern("capacity");
 
     // Build a scope context with a local constant declaration.
-    let mut scope_context = ScopeContext::new(
+    let mut scope_context = ScopeContext::new_for_tests(
         ContextKind::Function,
         InternedPath::new(),
         declaration_table.clone(),
@@ -355,7 +355,7 @@ fn runtime_int_binding_is_rejected_as_fixed_collection_capacity() {
 
     let location = SourceLocation::default();
     let capacity_name = string_table.intern("capacity");
-    let mut scope_context = ScopeContext::new(
+    let mut scope_context = ScopeContext::new_for_tests(
         ContextKind::Function,
         InternedPath::new(),
         declaration_table.clone(),

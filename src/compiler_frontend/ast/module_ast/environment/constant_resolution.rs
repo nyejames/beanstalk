@@ -116,8 +116,8 @@ pub(crate) fn parse_constant_header_declaration(
         Arc::clone(external_package_registry),
         vec![],
         0,
+        registered_template_ir_store,
     )
-    .with_registered_template_ir_store(registered_template_ir_store)
     .with_style_directives(style_directives)
     .with_build_profile(build_profile)
     .with_project_path_resolver(project_path_resolver)

@@ -1302,7 +1302,7 @@ fn runtime_template_loop_with_continue_as_slot_fill_parses() {
         ),
     };
     let context = with_test_path_context(
-        ScopeContext::new(
+        ScopeContext::new_for_tests(
             ContextKind::Template,
             scope.to_owned(),
             Rc::new(TopLevelDeclarationTable::new(vec![

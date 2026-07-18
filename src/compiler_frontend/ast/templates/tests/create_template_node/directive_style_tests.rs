@@ -51,7 +51,7 @@ fn test_context(scope: InternedPath) -> ScopeContext {
         &crate::builder_surface::SourceFileKindRegistry::default(),
     )
     .expect("test path resolver should be valid");
-    ScopeContext::new(
+    ScopeContext::new_for_tests(
         ContextKind::Constant,
         scope.clone(),
         Rc::new(TopLevelDeclarationTable::new(vec![])),

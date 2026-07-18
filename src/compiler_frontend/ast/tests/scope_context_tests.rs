@@ -32,7 +32,7 @@ fn empty_scope(string_table: &mut StringTable) -> InternedPath {
 fn scope_context_new_leaves_no_visibility_gate() {
     let mut string_table = StringTable::new();
     let scope = empty_scope(&mut string_table);
-    let context = ScopeContext::new(
+    let context = ScopeContext::new_for_tests(
         ContextKind::Function,
         scope,
         Rc::new(TopLevelDeclarationTable::new(vec![])),
@@ -59,7 +59,7 @@ fn add_var_extends_visibility_gate_when_gate_is_set() {
 
     let mut string_table = StringTable::new();
     let scope = empty_scope(&mut string_table);
-    let mut context = ScopeContext::new(
+    let mut context = ScopeContext::new_for_tests(
         ContextKind::Function,
         scope,
         Rc::new(TopLevelDeclarationTable::new(vec![])),
@@ -108,7 +108,7 @@ fn add_compile_time_var_extends_visibility_gate_when_gate_is_set() {
 
     let mut string_table = StringTable::new();
     let scope = empty_scope(&mut string_table);
-    let mut context = ScopeContext::new(
+    let mut context = ScopeContext::new_for_tests(
         ContextKind::Function,
         scope,
         Rc::new(TopLevelDeclarationTable::new(vec![])),
@@ -157,7 +157,7 @@ fn add_compile_time_var_extends_visibility_gate_when_gate_is_set() {
 fn new_template_parsing_context_preserves_constant_kind() {
     let mut string_table = StringTable::new();
     let scope = empty_scope(&mut string_table);
-    let context = ScopeContext::new(
+    let context = ScopeContext::new_for_tests(
         ContextKind::Constant,
         scope,
         Rc::new(TopLevelDeclarationTable::new(vec![])),
@@ -177,7 +177,7 @@ fn new_template_parsing_context_preserves_constant_kind() {
 fn new_template_parsing_context_converts_function_kind_to_template() {
     let mut string_table = StringTable::new();
     let scope = empty_scope(&mut string_table);
-    let context = ScopeContext::new(
+    let context = ScopeContext::new_for_tests(
         ContextKind::Function,
         scope,
         Rc::new(TopLevelDeclarationTable::new(vec![])),
@@ -197,7 +197,7 @@ fn new_template_parsing_context_converts_function_kind_to_template() {
 fn new_template_parsing_context_propagates_expected_error_type() {
     let mut string_table = StringTable::new();
     let scope = empty_scope(&mut string_table);
-    let mut context = ScopeContext::new(
+    let mut context = ScopeContext::new_for_tests(
         ContextKind::Function,
         scope,
         Rc::new(TopLevelDeclarationTable::new(vec![])),
@@ -224,7 +224,7 @@ fn new_template_parsing_context_propagates_expected_error_type() {
 fn new_child_control_flow_increments_loop_depth_for_loop_kind() {
     let mut string_table = StringTable::new();
     let scope = empty_scope(&mut string_table);
-    let context = ScopeContext::new(
+    let context = ScopeContext::new_for_tests(
         ContextKind::Function,
         scope,
         Rc::new(TopLevelDeclarationTable::new(vec![])),
@@ -256,7 +256,7 @@ fn new_child_control_flow_increments_loop_depth_for_loop_kind() {
 fn new_constant_inherits_parent_visibility_gate() {
     let mut string_table = StringTable::new();
     let scope = empty_scope(&mut string_table);
-    let mut context = ScopeContext::new(
+    let mut context = ScopeContext::new_for_tests(
         ContextKind::Function,
         scope.to_owned(),
         Rc::new(TopLevelDeclarationTable::new(vec![])),
@@ -296,7 +296,7 @@ fn parent_frame_lookup_finds_ancestor_declaration() {
 
     let mut string_table = StringTable::new();
     let scope = empty_scope(&mut string_table);
-    let mut context = ScopeContext::new(
+    let mut context = ScopeContext::new_for_tests(
         ContextKind::Function,
         scope,
         Rc::new(TopLevelDeclarationTable::new(vec![])),
@@ -342,7 +342,7 @@ fn child_frame_declaration_is_not_visible_to_parent() {
 
     let mut string_table = StringTable::new();
     let scope = empty_scope(&mut string_table);
-    let context = ScopeContext::new(
+    let context = ScopeContext::new_for_tests(
         ContextKind::Function,
         scope,
         Rc::new(TopLevelDeclarationTable::new(vec![])),
@@ -394,7 +394,7 @@ fn child_function_frame_does_not_capture_parent_locals() {
 
     let mut string_table = StringTable::new();
     let scope = empty_scope(&mut string_table);
-    let mut context = ScopeContext::new(
+    let mut context = ScopeContext::new_for_tests(
         ContextKind::Function,
         scope,
         Rc::new(TopLevelDeclarationTable::new(vec![])),
@@ -446,7 +446,7 @@ fn same_frame_duplicate_lookup_returns_latest_declaration() {
 
     let mut string_table = StringTable::new();
     let scope = empty_scope(&mut string_table);
-    let mut context = ScopeContext::new(
+    let mut context = ScopeContext::new_for_tests(
         ContextKind::Function,
         scope,
         Rc::new(TopLevelDeclarationTable::new(vec![])),
@@ -504,7 +504,7 @@ fn no_shadowing_across_ancestor_frames() {
 
     let mut string_table = StringTable::new();
     let scope = empty_scope(&mut string_table);
-    let mut context = ScopeContext::new(
+    let mut context = ScopeContext::new_for_tests(
         ContextKind::Function,
         scope,
         Rc::new(TopLevelDeclarationTable::new(vec![])),
@@ -544,7 +544,7 @@ fn no_shadowing_across_ancestor_frames() {
 fn new_child_control_flow_inherits_visibility_gate() {
     let mut string_table = StringTable::new();
     let scope = empty_scope(&mut string_table);
-    let mut context = ScopeContext::new(
+    let mut context = ScopeContext::new_for_tests(
         ContextKind::Function,
         scope,
         Rc::new(TopLevelDeclarationTable::new(vec![])),
@@ -573,7 +573,7 @@ fn new_child_control_flow_inherits_visibility_gate() {
 fn new_child_expression_propagates_expected_result_type_ids() {
     let mut string_table = StringTable::new();
     let scope = empty_scope(&mut string_table);
-    let mut context = ScopeContext::new(
+    let mut context = ScopeContext::new_for_tests(
         ContextKind::Function,
         scope,
         Rc::new(TopLevelDeclarationTable::new(vec![])),
@@ -610,7 +610,7 @@ fn cloned_context_does_not_share_current_frame() {
 
     let mut string_table = StringTable::new();
     let scope = empty_scope(&mut string_table);
-    let context = ScopeContext::new(
+    let context = ScopeContext::new_for_tests(
         ContextKind::Function,
         scope,
         Rc::new(TopLevelDeclarationTable::new(vec![])),
@@ -656,7 +656,7 @@ fn child_frame_shares_ancestors_but_not_current_frame() {
 
     let mut string_table = StringTable::new();
     let scope = empty_scope(&mut string_table);
-    let mut context = ScopeContext::new(
+    let mut context = ScopeContext::new_for_tests(
         ContextKind::Function,
         scope,
         Rc::new(TopLevelDeclarationTable::new(vec![])),

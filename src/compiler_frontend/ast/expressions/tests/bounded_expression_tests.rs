@@ -29,7 +29,7 @@ use std::sync::Arc;
 
 fn test_scope(string_table: &mut StringTable) -> (InternedPath, ScopeContext) {
     let scope = InternedPath::from_single_str("test.bst", string_table);
-    let context = ScopeContext::new(
+    let context = ScopeContext::new_for_tests(
         ContextKind::Expression,
         scope.clone(),
         Rc::new(TopLevelDeclarationTable::new(vec![])),

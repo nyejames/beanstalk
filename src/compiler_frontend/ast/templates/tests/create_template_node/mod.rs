@@ -137,7 +137,7 @@ fn new_constant_context_with_style_directives(
     style_directives: &StyleDirectiveRegistry,
 ) -> ScopeContext {
     let parent = with_test_path_context(
-        ScopeContext::new(
+        ScopeContext::new_for_tests(
             ContextKind::Constant,
             scope.to_owned(),
             Rc::new(TopLevelDeclarationTable::new(vec![])),
@@ -215,7 +215,7 @@ fn runtime_template_context_with_style_directives(
     };
 
     with_test_path_context(
-        ScopeContext::new(
+        ScopeContext::new_for_tests(
             ContextKind::Template,
             scope.to_owned(),
             Rc::new(TopLevelDeclarationTable::new(vec![declaration])),
@@ -239,7 +239,7 @@ fn constant_template_context_with_style_directives(
     style_directives: &StyleDirectiveRegistry,
 ) -> ScopeContext {
     with_test_path_context(
-        ScopeContext::new(
+        ScopeContext::new_for_tests(
             ContextKind::Constant,
             scope.to_owned(),
             Rc::new(TopLevelDeclarationTable::new(declarations.to_vec())),

@@ -44,7 +44,7 @@ use std::sync::Arc;
 
 fn test_scope(string_table: &mut StringTable) -> (InternedPath, ScopeContext) {
     let scope = InternedPath::from_single_str("test.bst", string_table);
-    let context = ScopeContext::new(
+    let context = ScopeContext::new_for_tests(
         ContextKind::Expression,
         scope.clone(),
         Rc::new(TopLevelDeclarationTable::new(vec![])),
@@ -247,7 +247,7 @@ fn hash_from_tokenized_source_rejected() {
     let scope = InternedPath::from_single_str("test.bst", &mut string_table);
     let mut stream = FileTokens::new(scope.clone(), expr_tokens);
 
-    let context = ScopeContext::new(
+    let context = ScopeContext::new_for_tests(
         ContextKind::Expression,
         scope.clone(),
         Rc::new(TopLevelDeclarationTable::new(vec![])),
@@ -331,7 +331,7 @@ fn constant_identifier_uses_foreign_effective_tir() {
         location: location.clone(),
     };
 
-    let mut context = ScopeContext::new(
+    let mut context = ScopeContext::new_for_tests(
         ContextKind::Constant,
         scope.clone(),
         Rc::new(TopLevelDeclarationTable::new(vec![])),

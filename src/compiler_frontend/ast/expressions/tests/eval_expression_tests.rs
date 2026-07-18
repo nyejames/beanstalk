@@ -84,7 +84,7 @@ fn ordinary_expression_rejects_path_string_concatenation() {
             kind: CompileTimePathKind::File,
         }],
     };
-    let context = ScopeContext::new(
+    let context = ScopeContext::new_for_tests(
         ContextKind::Template,
         source_scope.clone(),
         Rc::new(TopLevelDeclarationTable::new(vec![])),
@@ -413,7 +413,7 @@ fn template_shaped_string_operand_is_rejected() {
         },
     ];
 
-    let context = ScopeContext::new(
+    let context = ScopeContext::new_for_tests(
         ContextKind::Template,
         InternedPath::from_single_str("#page.bst", &mut string_table),
         Rc::new(TopLevelDeclarationTable::new(vec![])),

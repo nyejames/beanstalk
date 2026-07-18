@@ -201,7 +201,7 @@ fn constant_context_template_head_with_constant_references_folds_to_string_slice
 
     let style_directives = frontend_test_style_directives();
     let context = with_test_path_context(
-        ScopeContext::new(
+        ScopeContext::new_for_tests(
             ContextKind::Constant,
             scope.to_owned(),
             Rc::new(TopLevelDeclarationTable::new(declarations.clone())),

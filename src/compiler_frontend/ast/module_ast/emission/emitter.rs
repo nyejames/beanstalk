@@ -230,8 +230,8 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
             Arc::clone(&self.context.external_package_registry),
             Vec::<TypeId>::new(),
             input.scope_frame_capacity,
+            self.context.registered_template_ir_store.clone(),
         )
-        .with_registered_template_ir_store(self.context.registered_template_ir_store.clone())
         .with_style_directives(self.context.style_directives)
         .with_build_profile(self.context.build_profile)
         .with_file_visibility(input.visibility)

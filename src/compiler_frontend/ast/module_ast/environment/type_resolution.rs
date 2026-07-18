@@ -1167,8 +1167,8 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
             Arc::clone(&self.context.external_package_registry),
             vec![],
             0,
+            self.context.registered_template_ir_store.clone(),
         )
-        .with_registered_template_ir_store(self.context.registered_template_ir_store.clone())
         .with_style_directives(self.context.style_directives)
         .with_build_profile(self.context.build_profile)
         .with_project_path_resolver(self.context.project_path_resolver.clone())

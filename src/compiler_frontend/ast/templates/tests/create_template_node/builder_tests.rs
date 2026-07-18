@@ -317,7 +317,7 @@ fn builder_registered_handler_directive_rejects_foreign_runtime_template_argumen
         &mut string_table,
     );
     let context = with_test_path_context(
-        ScopeContext::new(
+        ScopeContext::new_for_tests(
             ContextKind::Template,
             token_stream.src_path.to_owned(),
             Rc::new(TopLevelDeclarationTable::new(declarations)),

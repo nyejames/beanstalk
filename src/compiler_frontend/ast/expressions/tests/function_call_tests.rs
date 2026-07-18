@@ -45,7 +45,7 @@ fn parse_args(
         tokens.advance();
     }
 
-    let context = ScopeContext::new(
+    let context = ScopeContext::new_for_tests(
         ContextKind::Function,
         InternedPath::new(),
         Rc::new(TopLevelDeclarationTable::new(vec![])),
@@ -101,7 +101,7 @@ fn parse_args_diagnostic(source: &str) -> CompilerDiagnostic {
         tokens.advance();
     }
 
-    let context = ScopeContext::new(
+    let context = ScopeContext::new_for_tests(
         ContextKind::Function,
         InternedPath::new(),
         Rc::new(TopLevelDeclarationTable::new(vec![])),

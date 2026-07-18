@@ -40,9 +40,7 @@ use crate::compiler_frontend::ast::module_ast::environment::{
 };
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::templates::template_folding::TemplateFoldContext;
-use crate::compiler_frontend::ast::templates::tir::{
-    RegisteredTemplateIrStore, TemplateIrRegistry, TirFoldCache,
-};
+use crate::compiler_frontend::ast::templates::tir::{RegisteredTemplateIrStore, TirFoldCache};
 use crate::compiler_frontend::ast::type_resolution::ResolvedTypeAnnotation;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
@@ -363,11 +361,18 @@ impl ScopeContext {
     /// the completed AST environment is available.
     ///
     /// WHAT: seeds shared services with empty/default lookup tables plus the
-    /// provided declaration table and external package registry.
+    /// provided declaration table, external package registry, and the shared
+    /// module `RegisteredTemplateIrStore`.
     /// WHY: constant-header parsing runs while the environment is still being
     /// built, so it supplies visibility, aliases, and nominal type maps through
     /// builder setters. Body emission must replace these synthetic lookups with
     /// `with_lookups` before parsing function/start/template bodies.
+    ///
+    /// The registered TIR store is a required input, not a scratch default: every
+    /// production context must share the one module-level store allocated by
+    /// `AstPhaseContext::from_build_context` so store-qualified identity stays
+    /// coherent across the whole scope tree. Isolated tests that do not own a
+    /// module store should use `ScopeContext::new_for_tests`.
     pub(crate) fn new(
         kind: ContextKind,
         scope: InternedPath,
@@ -375,6 +380,7 @@ impl ScopeContext {
         external_package_registry: Arc<ExternalPackageRegistry>,
         expected_result_type_ids: Vec<TypeId>,
         scope_frame_capacity: usize,
+        registered_template_ir_store: RegisteredTemplateIrStore,
     ) -> ScopeContext {
         increment_ast_counter(AstCounter::ScopeContextsCreated);
 
@@ -432,10 +438,6 @@ impl ScopeContext {
         )));
         let root_frame_id = arena.borrow_mut().alloc_root_frame_with_capacity(0);
         record_scope_frame_depth(0);
-
-        let registered_template_ir_store = RegisteredTemplateIrStore::allocate_in(Rc::new(
-            RefCell::new(TemplateIrRegistry::new()),
-        ));
 
         ScopeContext {
             kind,

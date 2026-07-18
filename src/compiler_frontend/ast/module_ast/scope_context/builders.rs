@@ -13,15 +13,57 @@
 use super::*;
 
 #[cfg(test)]
-use crate::compiler_frontend::ast::templates::tir::TemplateIrStore;
+use crate::compiler_frontend::ast::templates::tir::{TemplateIrRegistry, TemplateIrStore};
+
+#[cfg(test)]
 impl ScopeContext {
-    /// Install the registry-owned primary TIR store for this scope tree.
+    /// Build a scope context backed by a fresh isolated TIR store for tests
+    /// that do not own the shared module-level store.
     ///
-    /// WHAT: replaces the context's default registered store with the module-level
-    ///       `RegisteredTemplateIrStore` from `AstPhaseContext`.
-    /// WHY: production AST phases allocate one capacity-sized primary store through the
-    ///      registry; child scope contexts must share the same registry owner and store
-    ///      identity so store-qualified refs resolve consistently.
+    /// WHAT: adopts an empty `TemplateIrStore` into a fresh registry so the
+    ///       context satisfies the required-store constructor invariant of
+    ///       `ScopeContext::new` without borrowing a production module store.
+    /// WHY: `ScopeContext::new` requires the shared module
+    ///      `RegisteredTemplateIrStore`; tests that exercise non-template scope
+    ///      behaviour need an isolated store without assembling one inline at
+    ///      every call site. Tests that must share a specific store should build
+    ///      that store explicitly and pass it to `ScopeContext::new`, or swap it
+    ///      in with `with_template_ir_store`.
+    pub(crate) fn new_for_tests(
+        kind: ContextKind,
+        scope: InternedPath,
+        top_level_declarations: Rc<TopLevelDeclarationTable>,
+        external_package_registry: Arc<ExternalPackageRegistry>,
+        expected_result_type_ids: Vec<TypeId>,
+        scope_frame_capacity: usize,
+    ) -> ScopeContext {
+        let registered_template_ir_store = RegisteredTemplateIrStore::adopt_into(
+            Rc::new(RefCell::new(TemplateIrRegistry::new())),
+            Rc::new(RefCell::new(TemplateIrStore::new())),
+        );
+        ScopeContext::new(
+            kind,
+            scope,
+            top_level_declarations,
+            external_package_registry,
+            expected_result_type_ids,
+            scope_frame_capacity,
+            registered_template_ir_store,
+        )
+    }
+}
+
+impl ScopeContext {
+    /// Swap the registered TIR store on an already-built scope context.
+    ///
+    /// WHAT: replaces the context's registered store with another
+    ///       `RegisteredTemplateIrStore`. Test-only: production contexts receive
+    ///       the shared module store through `ScopeContext::new` and never
+    ///       replace it after construction.
+    /// WHY: isolated tests assemble a context through a shared helper and then
+    ///      need to share another context's store so template refs resolve
+    ///      against the same registry owner. Production has no replacement path.
+    #[cfg(test)]
     pub(crate) fn with_registered_template_ir_store(
         mut self,
         registered_store: RegisteredTemplateIrStore,
@@ -36,8 +78,8 @@ impl ScopeContext {
     ///       context never carries a store handle without a matching registry owner.
     /// WHY: tests and isolated contexts construct a store directly and then need a
     ///      registry-backed identity so the context does not drift into two unrelated
-    ///      ownership paths. Production callers should prefer
-    ///      `with_registered_template_ir_store` to share the module-level registry.
+    ///      ownership paths. Production callers receive the shared module store
+    ///      through `ScopeContext::new` instead.
     #[cfg(test)]
     pub(crate) fn with_template_ir_store(
         mut self,
