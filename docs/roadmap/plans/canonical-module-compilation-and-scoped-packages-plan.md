@@ -18,6 +18,7 @@ IMPLEMENTATION_SCOPE: compiler frontend, build system, backends
 ## Hard prerequisites
 
 - final TIR completion must be accepted so template folding and handoff are stable
+- the mandatory post-TIR roadmap review checkpoint must be complete and recorded against the current repository
 - this plan must land before the HTML Wasm backend plan so backend work consumes a stable graph
 
 ## Required authority documents
@@ -63,6 +64,7 @@ Module artefacts (see `docs/compiler-design-overview.md` "Compiled module artefa
 - `ModuleExecutable`, `ModuleLinkFacts` and `ModuleCompilerMetadata` as separate data lanes
 - five base-module fingerprints: public-interface, implementation, dormant root-activity, runtime-dependency, documentation
 - per-function link facts as the compiler's linking authority
+- per-function project-context provenance sufficient to reject every package export whose semantic facts or reachable implementation depend on private `@project`
 - immutable binding-backed semantic interfaces
 - stable origin identities and `ExportBinding`
 
@@ -168,7 +170,7 @@ Each phase must leave one coherent path and include focused tests. Reference the
 
 Context: this plan was authored while the TIR plan was active. Starting from stale paths would create bad APIs around code that no longer exists.
 
-- Confirm TIR finalisation is accepted and template folding and handoff are stable.
+- Confirm TIR finalisation is accepted, the mandatory post-TIR roadmap review checkpoint is complete and template folding and handoff are stable.
 - Record `git rev-parse HEAD`, branch and `git status --short` in the context capsule.
 - Re-read every path in the current implementation inventory above and replace stale files or symbols.
 - Reconcile the final TIR handoff: exported const templates cross module interfaces only as folded owned facts, never TIR identities.
@@ -244,6 +246,8 @@ Context: a public interface contains only facts a semantic consumer may observe.
 See `docs/compiler-design-overview.md` "Public semantic interfaces" and "Stable semantic identities" for the full contracts.
 
 - Build `PublicSemanticInterface` with exported origin identities, `ExportBinding`, canonical type shapes, folded constants, generic templates, trait evidence, receiver surfaces, access and effect summaries, project-context provenance.
+- Record project-context provenance on public semantic facts and per-function link facts.
+- Propagate executable provenance through source and generated call edges so an exported function cannot hide a private `@project` dependency behind another helper.
 - Backend planning facts do not belong in this interface. Per-function calls, helper requirements and runtime assets live in `ModuleLinkFacts`.
 - Replace donor-local `TypeId` with canonical cross-module type identities. Each consumer may intern compact local `TypeId` handles for imported canonical types.
 - HIR represents cross-module calls with explicit stable module-function targets. The callee body is never copied into the caller.
@@ -272,6 +276,7 @@ See `docs/build-system-design.md` "Success-only ProjectCompilation" and "Entry a
 - Assemble `ProjectCompilation` only when every artefact required by selected entries or package surface succeeded.
 - Build `EntryAssembly` for each active normal module: activate only that module's dormant `start`, runtime fragments, compile-time fragments and resolved entry settings.
 - Build `ProjectPackageAssembly` over the compiled facade artefact, selected descendant public interfaces, reachable generated functions and permitted runtime requirements.
+- Before assembly succeeds, reject every selected declaration whose public facts or reachable source or generated implementation directly or transitively depend on private `@project`.
 - Entry and package assembly never trigger parsing, type checking, HIR generation, generic inference or borrow validation.
 - The implicit `start` is non-exported, non-importable and infallible.
 
@@ -352,6 +357,13 @@ Cover:
 - no source or provider fallback to `@./`
 - no API-only sentinel start
 - artefact-lane validation
+- dependency facade rejects an exported constant derived from private `@project`
+- dependency facade rejects an exported function whose body reads private `@project`
+- dependency facade rejects an exported function that transitively calls a private project-dependent helper
+- dependency facade rejects a generated function reachable from an export when its template or concrete body depends on private `@project`
+- private unreachable dependency implementation may use its own `@project`
+- a consuming project's CLI or programmatic input does not satisfy a dependency `#Import` contract
+- dependency contracts resolve only from the dependency's own config, defaults and compatible builder globals
 
 ## Documentation and progress-matrix impact
 
@@ -383,13 +395,14 @@ Before marking this plan complete, verify:
 - generated functions use sidecars, not base module mutation
 - entry and package assembly never trigger semantic compilation
 - the Wasm plan can start without redesigning frontend modules
+- no declaration exposed through a dependency facade depends on private `@project` in either public facts or reachable implementation
+- dependency input namespaces remain isolated from consuming-project inputs
 - source, tests, docs, progress matrix and roadmap agree
 
 ## Deliberately deferred work
 
 - persistent module and package artefact serialisation
-- source-hash and public-interface-hash invalidation policy
-- retained dev-server module artefacts across rebuilds
+- persistent artefact hash encoding, on-disk cache layout, eviction and migration policy
 - cross-project dependency declarations and local path dependencies
 - package registries, remote fetching, versions and lockfiles
 - precompiled dependency package caches

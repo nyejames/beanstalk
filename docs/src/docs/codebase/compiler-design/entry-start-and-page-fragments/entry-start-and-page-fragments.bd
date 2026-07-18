@@ -1,108 +1,27 @@
+This page is a supplementary teaching scaffold for dormant root work and entry assembly.
 
-The active module root has an implicit `start()` function for top-level runtime code.
-Imported module roots contribute their public declaration surface without replaying root code. Normal files contribute declarations only.
+## Compilation versus activation
 
-Page fragments split before HIR.
-Runtime fragments remain code.
-Compile-time fragments become builder metadata.
+Every selected normal module compiles its dormant root work once.
 
-## Active-root start
+The compiler synthesises a non-exported, non-importable and infallible `start` for top-level runtime work. Compilation does not execute it.
 
-Header parsing captures the active module root's top-level runtime code as a `HeaderKind::StartFunction`.
-The implicit `start` header isn't part of dependency sorting.
-It's appended after sorted declarations and lowered by AST.
+An entry assembly later selects one already compiled normal module and activates only that module's root work and entry metadata.
 
-That means top-level declaration order and active-root runtime order stay separate:
+There are no active-root and imported-root parser modes. Importers never receive or suppress another module's root payload.
 
-- constants, type aliases, structs, choices, function signatures and type annotations can affect dependency sorting
-- executable body references don't affect top-level declaration order
-- active-root runtime code runs through implicit `start`
-- imported-root runtime code and direct fragments are suppressed in the importer
-- normal files can't contain top-level runtime statements
+## Page fragments
 
-## Runtime and const fragments
+- Runtime fragments remain executable work in `start`.
+- Compile-time fragments fold into module compiler metadata.
+- Each folded fragment records its runtime insertion index.
+- The HTML builder merges compile-time and runtime fragments in source order.
+- HIR does not carry compile-time document structure.
 
-Active-root page fragments are split like this:
+Support modules and the project package facade have no root activity.
 
-- top-level runtime templates remain runtime code inside `start()`
-- `start()` returns runtime fragment strings in source order
-- active-root top-level const templates fold in AST into compile-time fragments
-- each compile-time fragment records a runtime insertion index
-- builders merge compile-time fragments into the runtime fragment list
-- HIR doesn't carry compile-time page fragments or a separate ordered start-fragment stream
+## Rewrite focus
 
-This keeps HIR backend-facing and semantic.
-Page assembly stays with builders.
+Explain compilation versus linking, dormant initialisers, entry points and why document assembly belongs outside semantic IR.
 
-## Simple shape
-
-The wrong shape defines a named constant template and later emits it at top level:
-
-[codeblock, $code("bst"):
-    page_title #= "Demo"
-
-    intro #= [$md:
-        # Hello
-    ]
-
-    message = [:
-        Runtime content
-    ]
-
-    [intro]
-    [message]
-]
-
-Here `intro` is a named constant template and a top-level reference to it is an ordinary runtime expression. This does **not** make `intro` a compile-time page fragment. The correct compile-time fragment form is the direct active-root-only const-template shown below:
-
-[codeblock, $code("bst"):
-    page_title #= "Demo"
-
-    #[$md:
-        # Hello
-    ]
-
-    message = [:
-        Runtime content
-    ]
-
-    [message]
-]
-
-This direct top-level const-template form is active-root-only. It must fold and
-may become a compile-time page fragment.
-
-A reference to `message` at top level is runtime code inside the implicit `start`. A constant template referenced through an ordinary runtime top-level expression doesn't become a compile-time fragment merely because its value can fold.
-
-Templates assigned to variables or returned from functions are not page fragments by themselves. Only direct top-level const-template forms of the shape shown above in an active HTML module root contribute compile-time page fragments.
-
-## Imported root suppression
-
-Header preparation assigns each file one explicit role: active module root, imported module root or normal. Both root roles may contain `export:` declarations, but only the active root produces a start header and fragment activity. An imported root's top-level runtime body is skipped before AST, so importing a public API cannot execute or emit the imported module's page content.
-
-## Builder merge
-
-Builders receive resolved const top-level fragments and `ModuleRootActivity`, including the runtime fragment count.
-They own route-level assembly.
-
-The HTML builder merges compile-time fragments into the runtime fragment list, creates runtime fragment slots for active-root `start()` output and then assembles the final page artifacts.
-
-HIR only models the runtime code needed to produce runtime fragments.
-It doesn't need to know that the HTML builder is making a document.
-
-This fragment plan is shared by HTML-JS and HTML-Wasm. The selected execution artifact and runtime bridge differ, but the builder-owned insertion and hydration order doesn't.
-
-Reactive mounting is separate and remains an HTML-JS-only runtime concern.
-
-## Why this split matters
-
-The split prevents three common bugs:
-
-- treating compile-time page fragments like runtime HIR statements
-- making HIR own HTML page assembly
-- letting backends parse top-level template syntax again to recover fragment order
-
-AST folds and records fragment metadata.
-HIR lowers runtime templates.
-Builders assemble project artifacts.
-Each layer stays small.
+Canonical details live in both architecture authorities.

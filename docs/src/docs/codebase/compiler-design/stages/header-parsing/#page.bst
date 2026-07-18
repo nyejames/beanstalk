@@ -1,18 +1,18 @@
 import @./header-parsing {content as reference_content}
 import @styles/docs {navbar, section, codebase_theme_head}
 
-page_title #= "Stage 2: Header parsing"
-page_description #= "How Beanstalk discovers top-level declarations and builds dependency edges."
+page_title #= "Stage 2: Header syntax and interface binding"
+page_description #= "How syntax is retained once, then bound to completed provider interfaces."
 page_head #= codebase_theme_head
 
 #[navbar]
 
 #[section, $md:
-    @../../ (Compiler design) / @../ (Pipeline stages) / Stage 2: Header parsing
+    @../../ (Compiler design) / @../ (Compiler pipeline) / Stage 2: Header syntax and interface binding
 
-    # Stage 2: Header parsing
+    # Stage 2: Header syntax and interface binding
 
-    Header parsing parses declaration shells once so AST doesn't have to rediscover them from raw tokens. That is the whole point.
+    Syntax preparation records declaration and import shells once. Interface binding later resolves those shells against immutable provider interfaces.
 ]
 
 #[section, reference_content]

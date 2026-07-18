@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light dark">
     <title>Compiler design overview | Beanstalk</title>
-    <meta name="description" content="Staged compiler architecture, pipeline map and cross-cutting design references.">
+    <meta name="description" content="Supplementary teaching outlines for Beanstalk's compiler and build pipeline.">
     <style>
 /*!
   BS CSS CORE (absolute basics CSS reset)
@@ -388,8 +388,8 @@ body {
             </a>
         </div>
     </nav>
-    <section class="container"><p><a href="../">Codebase</a> / Compiler design overview</p><h1>Compiler design overview</h1><p>Beanstalk&#39;s compiler moves through a staged frontend, then crosses a strict handoff into project assembly and target lowering. Each stage narrows the data it receives so later stages can rely on clear, checked contracts.</p></section>
-    <section class="container"><h2>Compiler flow</h2><pre style="
+    <section class="container"><p><a href="../">Codebase</a> / Compiler design overview</p><h1>Compiler design overview</h1><p>These pages are supplementary teaching scaffolding. The canonical architecture remains in <code>docs/compiler-design-overview.md</code> and <code>docs/build-system-design.md</code>.</p></section>
+    <section class="container"><h2>Pipeline</h2><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -397,23 +397,19 @@ body {
         white-space: pre;
         overflow-x: auto;
     "><code class='codeblock'>
-    project files
-        <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Stage</span> <span class='bst-code-number'>0</span><span class='bst-code-operator'>:</span> project structure and source discovery
+    command and <span class='bst-code-struct'>Stage</span> <span class='bst-code-number'>0</span> build orchestration
         <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Stage</span> <span class='bst-code-number'>1</span><span class='bst-code-operator'>:</span> tokenization
-        <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Stage</span> <span class='bst-code-number'>2</span><span class='bst-code-operator'>:</span> header parsing
-        <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Stage</span> <span class='bst-code-number'>3</span><span class='bst-code-operator'>:</span> dependency sorting
-        <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Stage</span> <span class='bst-code-number'>4</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>AST</span> construction
-        <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Stage</span> <span class='bst-code-number'>5</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>HIR</span> generation
+        <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Stage</span> <span class='bst-code-number'>2</span><span class='bst-code-operator'>:</span> header syntax and interface binding
+        <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Stage</span> <span class='bst-code-number'>3</span><span class='bst-code-operator'>:</span> local declaration ordering
+        <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Stage</span> <span class='bst-code-number'>4</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>AST</span> semantics
+        <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Stage</span> <span class='bst-code-number'>5</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>HIR</span> and validation
         <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Stage</span> <span class='bst-code-number'>6</span><span class='bst-code-operator'>:</span> borrow validation
-        <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Stage</span> <span class='bst-code-number'>7</span><span class='bst-code-operator'>:</span> backend lowering
-        <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> output files
+        <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> build<span class='bst-code-operator'>-</span>owned target planning and backend lowering
+        <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> output artefacts
     </code></pre></section>
-    <section class="container"><h2>Explore by area</h2><ul><li><a href="./stages">Pipeline stages</a>: follow source from project discovery through backend lowering</li><li><a href="./ast">AST internals</a>: see where declarations, expressions, constants, templates, generics, traits and casts gain semantic meaning</li><li><a href="./backend">Backend handoff</a>: see how validated HIR becomes project artifacts and target code</li></ul></section>
-    <section class="container"><h2>Stage pages</h2><ul><li><a href="./stages/project-structure">Stage 0: Project structure</a></li><li><a href="./stages/tokenization">Stage 1: Tokenization</a></li><li><a href="./stages/header-parsing">Stage 2: Header parsing</a></li><li><a href="./stages/dependency-sorting">Stage 3: Dependency sorting</a></li><li><a href="./stages/ast-construction">Stage 4: AST construction</a></li><li><a href="./stages/hir-generation">Stage 5: HIR generation</a></li><li><a href="./stages/borrow-validation">Stage 6: Borrow validation</a></li><li><a href="./stages/backend-lowering">Stage 7: Backend lowering</a></li></ul></section>
-    <section class="container"><h2>AST pages</h2><ul><li><a href="./ast/environment-and-type-resolution">AST environment and type resolution</a></li><li><a href="./ast/expressions-statements-and-terminality">Expressions, statements and terminality</a></li><li><a href="./ast/constants-and-folding">Constants and folding</a></li><li><a href="./ast/templates-tir-and-reactivity">Templates, TIR and reactivity</a></li><li><a href="./ast/generics-traits-and-casts">Generics, traits and casts</a></li></ul></section>
-    <section class="container"><h2>Backend pages</h2><ul><li><a href="./backend/validation-and-output-writing">Backend validation and output writing</a></li><li><a href="./backend/html-project-assembly">HTML project assembly</a></li><li><a href="./backend/js-lowering">JavaScript lowering</a></li><li><a href="./backend/wasm-lowering">Wasm lowering</a></li><li><a href="./backend/external-js-and-runtime-assets">External JavaScript and runtime assets</a></li><li><a href="./backend/tracked-assets">Tracked assets</a></li></ul></section>
-    <section class="container"><h2>Cross-cutting design</h2><ul><li><a href="./build-system-and-frontend-boundary">Build-system and frontend boundary</a></li><li><a href="./diagnostics-paths-and-symbols">Diagnostics, paths and symbols</a></li><li><a href="./type-identity-and-coercion">Type identity and coercion</a></li><li><a href="./imports-packages-and-bindings">Imports, packages and bindings</a></li><li><a href="./entry-start-and-page-fragments">Active-root start and page fragments</a></li><li><a href="./parallelism-and-determinism">Parallelism and determinism</a></li><li><a href="../memory-management">Memory management</a></li></ul></section>
-    <section class="container"><h2>Current implementation</h2><p>See <a href="../../progress">Progress matrix</a> for current support, partial coverage, experimental paths and major gaps.</p></section>
+    <section class="container"><h2>Explore by area</h2><ul><li><a href="./stages">Pipeline stages</a>: learn how source and retained metadata move through the pipeline</li><li><a href="./ast">AST semantics</a>: learn where source meaning, constants, templates, generics, traits and casts are resolved</li><li><a href="./backend">Target and backend concepts</a>: learn how validated semantic artefacts become target output</li></ul></section>
+    <section class="container"><h2>Cross-cutting concepts</h2><ul><li><a href="./build-system-and-frontend-boundary">Build-system and compiler boundary</a></li><li><a href="./diagnostics-paths-and-symbols">Diagnostics, paths and symbols</a></li><li><a href="./type-identity-and-coercion">Type identity and coercion</a></li><li><a href="./imports-packages-and-bindings">Imports, packages and bindings</a></li><li><a href="./entry-start-and-page-fragments">Entry activation and page fragments</a></li><li><a href="./parallelism-and-determinism">Parallelism and determinism</a></li><li><a href="../memory-management">Memory management</a></li></ul></section>
+    <section class="container"><h2>Authority</h2><p>These pages explain concepts. They do not override the architecture authorities, language authorities, memory authorities or <a href="../../progress">Progress matrix</a>.</p></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;

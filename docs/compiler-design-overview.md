@@ -138,6 +138,7 @@ pub struct CompiledModuleArtifact {
 - numeric and cast operations
 - map and other target-gated features
 - runtime path and asset requirements
+- per-function project-context provenance
 - generated-function requests
 
 `ModuleCompilerMetadata` contains non-HIR compiler and builder-facing metadata:
@@ -332,23 +333,23 @@ Aliases affect source spelling. They do not replace semantic origin identity.
 
 Receiver methods remain attached to their receiver type's exported source surface. They are not independent free namespace entries and cannot be imported, aliased or re-exported separately.
 
-### Public-surface validation
+### Public-surface and package-export validation
 
-AST rejects every exported surface that transitively exposes an unavailable semantic identity.
+AST rejects every exported semantic surface that transitively exposes an unavailable identity or prohibited project context.
 
-Validation covers:
+Semantic surface validation covers:
 
 - function parameters and returns
 - struct and choice fields
 - type aliases
 - exported constants and const records
-- generic bounds
+- generic bounds and templates
 - trait requirements
 - receiver methods
 - reusable conformance evidence
 - access and effect summaries
 
-An exported surface cannot leak:
+An exported semantic surface cannot leak:
 
 - a private nominal type
 - a private trait or evidence identity
@@ -357,6 +358,10 @@ An exported surface cannot leak:
 - a project-context fact prohibited by the active package facade policy
 
 A runtime anonymous record uses a hidden nominal type local to its source site. It cannot escape through an exported signature, field, alias, return, receiver method or trait evidence.
+
+The compiler also records project-context provenance for executable source and generated functions in per-function link facts. Provenance follows direct value use, compile-time-derived implementation facts and source or generated call edges.
+
+For external package eligibility, the build system rejects any declaration whose public semantic facts or reachable executable implementation directly or transitively depend on private `@project`. This includes an exported function that calls a private project-dependent helper. The validator does not treat implementation-only dependence as a reusable package specialisation mechanism.
 
 ### Synthetic compile-time interfaces
 

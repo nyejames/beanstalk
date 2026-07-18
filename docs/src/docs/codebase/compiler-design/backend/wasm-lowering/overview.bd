@@ -6,7 +6,7 @@ HIR-to-Wasm ownership and HTML-Wasm boundary.
 
 - Input: validated HIR and companion metadata
 - Output: Wasm LIR, runtime contracts and optional binary artifacts
-- Decides: HIR-to-Wasm lowering, helper exports, ownership projection
+- Decides: HIR-to-Wasm lowering, runtime capability plans and ownership projection
 - Must not decide: HTML route assembly, frontend semantics
 - Invariant: ownership-aware lowering preserves the GC semantic baseline
 

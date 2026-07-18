@@ -1439,7 +1439,7 @@ export:
 | imported normal module | Provides only its `export:` public surface and never executes root runtime |
 | implicit `start` | Contains active-root top-level runtime code; build-system-only; not importable |
 | normal `.bst` files | Declarations only; no top-level executable statements |
-| `config.bst` | Affects build behavior; creates no language-visible imports |
+| `config.bst` | Not a module and cannot be imported directly; Stage 0 derives the synthetic `@project` interface from its folded `project` record |
 
 Execution and visibility:
 - An entry assembly activates one normal module's top-level runtime code and page fragments exactly once.

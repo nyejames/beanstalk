@@ -758,11 +758,11 @@ A dependency never sees the consuming project's `@project`.
 
 Dependencies compile against the active target builder's frontend capability surface. Compatibility records the Core and Builder capability interfaces actually used rather than only a builder class name.
 
-Consumers use the dependency package facade and immutable package artefacts. A dependency with no project-private implementation inputs may be reused across builders when its required capability fingerprints match.
+Consumers use the dependency package facade and immutable package artefacts.
 
-A public semantic fact exposed by a dependency facade cannot depend on that dependency's private `@project`.
+No declaration exposed through a dependency package facade may directly or transitively depend on that dependency's private `@project`.
 
-This prohibition covers:
+The prohibition applies to both public semantic facts and executable implementation. It covers:
 
 - exported constants and defaults
 - canonical public types
@@ -770,9 +770,14 @@ This prohibition covers:
 - trait evidence
 - receiver surfaces
 - access and effect summaries
-- other public-interface facts
+- exported function bodies
+- source or generated functions reachable from an exported declaration
+- compile-time-derived implementation facts
+- every other public-interface or executable fact selected by the facade
 
-Implementation-only dependence inside an exported function body may be allowed. Such an artefact is package-instance-specific, includes the dependency config in its implementation and compatibility fingerprints and cannot be reused as a config-independent artefact.
+A declaration that depends on private `@project` remains internal to the dependency. It cannot be selected by the external facade, re-exported through the facade or reached from an exported function.
+
+Private declarations may use the dependency's own `@project` only when no external package export can reach or expose them. Their config dependence remains part of the dependency's implementation and compatibility fingerprints.
 
 Persistent or precompiled dependency artefacts may later replace source compilation without changing this semantic model.
 
@@ -1262,7 +1267,7 @@ Entries relink or regenerate when a linked input changes, including:
 
 Documentation-only changes regenerate documentation or editor indexes without invalidating semantic consumers or executable instances.
 
-A dependency implementation that uses its private `@project` includes the dependency config in its implementation and compatibility keys.
+Private dependency implementation may use the dependency's own `@project` only when no external package export reaches it. Its config dependence contributes to implementation and compatibility keys. Any exported declaration with direct or transitive dependence is rejected before package assembly.
 
 ### Persistent compatibility
 

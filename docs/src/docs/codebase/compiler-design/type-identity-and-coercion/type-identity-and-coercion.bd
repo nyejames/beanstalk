@@ -1,146 +1,26 @@
+This page is a supplementary teaching scaffold for type identity and coercion.
 
-`TypeEnvironment` owns semantic type identity for a module.
+## Semantic identity
 
-`TypeId` equality in the active `TypeEnvironment` is the semantic comparison rule.
-`DataType` is parse-only or diagnostic-only once a semantic type exists.
+A type checker needs identities that survive beyond source spelling.
 
-This rule is everywhere.
-AST, HIR, borrow validation, backends and diagnostics all depend on it.
+- Each module owns local `TypeId` handles.
+- Cross-module interfaces use canonical identities.
+- Aliases change spelling, not identity.
+- Fixed collection capacity is part of type identity.
+- Maps are their own constructed type shape.
+- Unknown external parameters use an explicit unknown state rather than fake IDs.
 
-## Core paths
+## Coercion
 
-- `src/compiler_frontend/datatypes/` owns `TypeEnvironment`, builtin type IDs, constructed type shapes and semantic type lookup.
-- `src/compiler_frontend/type_coercion/` owns implicit contextual compatibility and promotion rules layered on top of type identity.
-- `src/compiler_frontend/value_mode.rs` tracks frontend access classification for bindings, expressions, call arguments and receivers.
-- `src/compiler_frontend/ast/type_resolution/` resolves parsed type references to canonical `TypeId`s.
+Expression checking determines a natural type.
 
-`DataType` is syntax.
-`TypeId` is semantics.
-Keep that line sharp.
+Contextual coercion is applied only by an explicit receiving boundary such as a declaration, assignment, return, parameter, field or typed collection entry.
 
-## What TypeEnvironment owns
+Access mode is not type identity. `~` describes exclusive access at a boundary rather than a separate runtime type.
 
-`TypeEnvironment` contains the canonical module-local view of semantic types:
+## Rewrite focus
 
-- builtins
-- nominal structs
-- choices
-- options
-- growable collections
-- fixed-capacity collections
-- hashmaps
-- generic parameters and concrete generic instances
-- external package types that have frontend mappings
+Explain nominal versus constructed types, local handles, canonical identity, contextual typing and the difference between coercion and explicit cast.
 
-AST builds the environment during AST environment construction.
-HIR stores compact frontend `TypeId`s, then the lowered module travels with the paired `TypeEnvironment`.
-Borrow validation and backends use that pair for semantic type queries.
-
-## DataType boundaries
-
-`DataType` remains useful at the syntax and diagnostic edge:
-
-- parsed type annotations before semantic resolution
-- source spelling in diagnostics when no semantic type exists yet
-- helper payloads where the compiler is still reporting syntax shape
-
-It must not be used for semantic decisions in executable AST or HIR.
-If a semantic type exists, use `TypeId`.
-
-## Collections and maps
-
-Collection type identity is a canonical `TypeEnvironment` shape.
-Growable `{T}` and fixed `{N T}` collections are distinct `TypeId`s.
-Backends recover element type and optional fixed capacity through collection-shape queries, not parse syntax or backend side tables.
-
-Hashmap type identity is a separate canonical constructed shape.
-`{K = V}` maps store key and value `TypeId`s directly.
-They are not represented as collection capacity variants.
-They are not backend side tables.
-
-This matters for both semantic checks and backend feature validation.
-A backend can reject reachable hashmap use by querying validated HIR and the paired type environment, not by re-reading source literals.
-
-## Nominal types and members
-
-`TypeEnvironment` is built during AST environment construction and populated before AST body emission begins.
-Early nominal registration records identity and generic parameter metadata first, so constructors are name-resolvable before every field and variant shell has been semantically checked.
-
-Canonical field and variant members are written after AST-owned constructor shells resolve to semantic `TypeId`s.
-Unresolved field and variant shells stay in AST-owned side tables until then.
-
-Member queries should use borrowed field/variant views and direct lookup helpers.
-AST, HIR and backend-facing lowering should not clone member lists just to do semantic lookup.
-
-## Function signatures
-
-Function signatures store canonical `TypeId`s on `ReturnSlot` and `Declaration` after resolution.
-Parallel `DataType` values may remain available for diagnostics only.
-
-That lets call validation, HIR lowering and backend validation use semantic identity while diagnostics can still render useful source-level names.
-
-## External package types
-
-External package types with frontend mappings get normal semantic `TypeId`s.
-External package parameters that have no frontend mapping use `ExpectedParameterType::UnknownExternal` instead of sentinel type IDs.
-Call validation skips ordinary type compatibility for unknown external parameters because the frontend has no semantic type to compare.
-
-Don't invent fake `TypeId`s for unknown externals.
-Unknown external means exactly that.
-
-## Contextual coercion
-
-Expression evaluation determines the natural type of an expression and stays strict.
-Contextual coercion applies only at frontend sites that own a boundary.
-
-Boundary owners include:
-
-- declarations
-- assignments
-- returns
-- template/string content
-- explicit `cast` target boundaries
-- backend/prelude call contracts
-- struct and choice fields
-- typed collection and map entries
-- default values
-
-`type_coercion` owns implicit contextual compatibility and promotion rules.
-Explicit `cast` resolution is AST-owned and uses compiler-owned cast policy/evidence metadata instead of the coercion path.
-
-## Value mode isn't type identity
-
-`value_mode.rs` tracks frontend access classification.
-It helps classify bindings, expressions, call arguments and receiver use.
-
-It keeps mutability/reference state separate from `DataType`.
-Runtime ownership is a later borrow/lowering concern.
-
-That split is deliberate.
-A `~T` parameter and a `T` parameter don't mean the type system has two runtime type identities for `T`.
-They mean the call boundary has a different access mode.
-
-## HIR and validation
-
-HIR `HirStruct` and `HirChoice` carry `frontend_type_id` to trace lowering-local layouts back to the canonical `TypeEnvironment` entry.
-Validation asserts those IDs resolve to real type definitions.
-
-HIR validation also checks frontend `TypeId` links, expression invariants and region graph shape before borrow validation or backend feature validation sees the module.
-A broken type link in HIR is a compiler invariant failure, not a user diagnostic.
-
-## Common mistakes
-
-- Comparing types through `DataType` after semantic resolution.
-- Formatting type names early instead of rendering through `DiagnosticRenderContext`.
-- Treating fixed collection capacity as an allocation hint rather than semantic type identity.
-- Modelling hashmaps as collection variants.
-- Letting a backend recover type meaning from parse syntax.
-- Using mutability/access mode as if it were a separate type identity.
-- Creating sentinel `TypeId`s for unknown external package parameters.
-
-## Related reading
-
-- @../stages/ast-construction (Stage 4: AST construction): where `TypeEnvironment` is built
-- @../ast/environment-and-type-resolution (AST environment and type resolution): type resolution and public module API validation
-- @../stages/hir-generation (Stage 5: HIR generation): `frontend_type_id` links and HIR validation
-- @../diagnostics-paths-and-symbols (Diagnostics, paths and symbols): rendering type names through `DiagnosticRenderContext`
+Canonical details live in `docs/compiler-design-overview.md`.

@@ -1,24 +1,33 @@
 # Compiler design overview
 
-Beanstalk's compiler is a staged frontend with a builder-owned backend handoff. The frontend turns source files into validated HIR and borrow facts. Project builders assemble backend-specific artifacts from those compiled modules.
+These pages are supplementary educational scaffolding. They explain compiler and computer-science concepts through Beanstalk, but they do not define architecture or current implementation status.
 
-These pages are an educational explanation layer for compiler concepts and their relationship to Beanstalk. They are not architecture or implementation authorities.
+Canonical authorities:
 
-They do not override `docs/compiler-design-overview.md`, `docs/build-system-design.md`, the language authorities, the memory authorities or `docs/src/docs/progress/#page.bst`.
+- `docs/compiler-design-overview.md` for compiler semantics and stage contracts
+- `docs/build-system-design.md` for project discovery, graphs, builders, linking and outputs
+- `docs/src/docs/progress/#page.bst` for current support
 
-They are not an implementation-status report. Use `docs/src/docs/progress/#page.bst` for current support, partial coverage, experimental paths and major gaps.
+## Learning path
 
-## Concepts covered
+The pages follow four questions:
 
-The current pages discuss:
+1. How does the build system turn a project tree into deterministic compiler inputs?
+2. How does the compiler move from source text to validated semantic IR?
+3. How do analysis and target validation prove later stages can trust that IR?
+4. How do builders and lowerers turn explicit link plans into artefacts?
 
-- Header parsing that discovers top-level declarations for AST consumption through header-built visibility.
-- Semantic type identity through `TypeId` equality in the active `TypeEnvironment`.
-- Separate diagnostic lanes for user failures and internal invariant failures.
-- HIR as the first backend-facing semantic IR.
-- Generic, trait and cast resolution before HIR.
-- AST template semantics before runtime-template HIR lowering.
-- Borrow validation as a side-table analysis over HIR.
-- GC as the semantic baseline.
-- Backend lowering from compiler-owned semantic outputs rather than source reinterpretation.
-- Deterministic identities and diagnostics under parallel compilation.
+## Concepts to expand in the rewrite
+
+- lexical analysis and parsing
+- declaration graphs and topological ordering
+- semantic type identity
+- AST and IR ownership
+- static generic and trait resolution
+- template IR and compile-time evaluation
+- borrow analysis as data-flow analysis
+- reachability and target capability validation
+- deterministic parallel compilation
+- project assembly and backend lowering
+
+The future rewrite should teach the general concept first, then show the Beanstalk boundary and finally link to the canonical authority.

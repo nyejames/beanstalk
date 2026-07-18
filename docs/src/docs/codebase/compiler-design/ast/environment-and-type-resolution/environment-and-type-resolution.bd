@@ -1,119 +1,24 @@
+This page is a supplementary teaching scaffold for semantic environments and type identity.
 
-AST environment construction turns sorted declaration shells into semantic frontend state.
+## Core concept
 
-This is where type identity becomes real.
-Headers provide shape and order.
-AST resolves meaning.
+A semantic environment maps source names and parsed type shapes to identities the compiler can compare reliably.
 
-## Main paths
+## Beanstalk boundary
 
-- `src/compiler_frontend/ast/module_ast/environment/`
-- `src/compiler_frontend/ast/type_resolution/`
-- `src/compiler_frontend/ast/module_ast/environment/public_surface.rs`
-- `src/compiler_frontend/datatypes/`
+Each compiled module owns one local `TypeEnvironment`.
 
-## Environment construction
+- Local `TypeId` equality is valid only inside that environment.
+- Cross-module interfaces use stable canonical type identities.
+- A consumer may intern local handles for imported canonical types.
+- `DataType` is syntax or diagnostic shape after semantic resolution.
+- Access modes remain separate from type identity.
+- Public interfaces cannot expose private or unavailable identities.
 
-`build_ast_environment` consumes header-built file visibility, then resolves:
+AST consumes bound visibility rather than rebuilding imports.
 
-- declaration metadata
-- compile-time constants
-- nominal structs
-- choices
-- function signatures
-- receiver catalog data
-- trait metadata
-- shared environment side channels
+## Rewrite focus
 
-AST resolves declaration shells in sorted order.
-It may register nominal identity and generic parameter metadata before constants so constructors are name-resolvable.
-Field and variant constructor shells stay unresolved until their semantic `TypeId`s can be checked and written to `TypeEnvironment`.
+Explain nominal identity, structural shapes, local handles, canonical cross-module identity, symbol visibility and public API validation.
 
-## Type resolution
-
-`type_resolution/` owns parsed type-reference resolution to canonical `TypeId`.
-
-It handles:
-
-- source-visible lookup
-- type aliases
-- builtin types
-- options
-- growable collections
-- fixed-capacity collections
-- hashmaps
-- generic parameters
-- concrete generic nominal instantiation
-- external package types that have frontend mappings
-
-Fixed capacity is type identity.
-`{Int}` and `{4 Int}` are different semantic types.
-Maps are their own constructed shape.
-They are not collection variants.
-
-## Visibility through ScopeContext
-
-AST consumes the header-built file visibility environment through `ScopeContext`.
-It can validate semantic use of visible symbols, but it must not rebuild import bindings or rediscover top-level visibility.
-
-Expression and type resolution should use the active `ScopeContext`, not global bare-name lookup.
-
-All user-visible names go through one collision policy.
-Same-file declarations, source imports, external imports, type aliases, prelude symbols and builtins can't silently shadow each other.
-
-## Public module API validation
-
-`module_ast/environment/public_surface.rs` owns semantic public module API validation after type and trait identities are resolved.
-
-Public module APIs must not expose private root-only types in:
-
-- signatures
-- fields
-- aliases
-- generic bounds
-- exported constant types
-- exported trait metadata
-
-Receiver methods are visible across a module boundary when the root `export:` block exposes the receiver type's source surface.
-Type aliases in the root don't automatically re-export private implementation methods.
-
-## TypeEnvironment boundary
-
-`TypeEnvironment` is the canonical module-local source of semantic type identity.
-`TypeId` equality in the active environment is the only semantic comparison rule.
-
-Function signatures store canonical `TypeId`s on `ReturnSlot` and `Declaration` after resolution.
-Parallel `DataType` values remain available for diagnostics only.
-
-AST body emission receives `AstTypeInterner`, a narrow facade over `TypeEnvironment`.
-It allows derived type interning and module-local compatibility caching without permitting nominal declaration mutation.
-
-## Member lookup
-
-`TypeEnvironment` member queries expose borrowed field/variant views and direct member lookup helpers.
-AST, HIR and backend-facing lowering should use those semantic views instead of cloning member lists for lookup.
-
-Source fields, receiver calls and compiler-owned collection/map builtin member access live under `field_access/`.
-
-## Public API drift hazards
-
-Be strict here.
-Subtle type-resolution drift spreads everywhere.
-
-Common mistakes:
-
-- using `DataType` for semantic comparisons
-- resolving names through global maps instead of `ScopeContext`
-- rebuilding import visibility in AST
-- cloning member lists for lookup instead of using semantic views
-- leaking private root-only types through public API surfaces
-- treating receiver methods as independently importable symbols
-- resolving fixed collection capacity as a backend allocation hint
-- modelling maps as collection capacity variants
-
-## Related reading
-
-- @../ (AST internals): AST phase owners and input/output boundary
-- @../../stages/ast-construction (Stage 4: AST construction): where environment construction lives
-- @../../type-identity-and-coercion (Type identity and coercion): `TypeId`, `DataType` and coercion boundaries
-- @../../imports-packages-and-bindings (Imports, packages and bindings): `ScopeContext` visibility and module-boundary rules
+Canonical details live in `docs/compiler-design-overview.md`.

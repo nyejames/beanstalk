@@ -104,12 +104,15 @@ Active `html` entry-section fields (String shape):
 `head` is one folded string or template value. Authors compose multiple fragments in an ordinary compile-time template. No `+=`, per-key merge or typed head nodes.
 
 Runtime title:
-- `io.set_title(StringContent) -> Void` for HTML-JS sets the live document title
-- the helper is emitted only when reachable
-- calling it after initial page load overrides the initial title from entry config
-- HTML-Wasm deliberately defers `io.set_title`, reachable calls are rejected before lowering
-- standalone non-browser JS rejects through target capability validation or fails clearly at runtime
-- no silent no-op on unsupported hosts
+
+- `io.set_title(StringContent) -> Void` sets the live document title on targets that advertise browser document-title capability.
+- The call records a stable external function identity and a browser document-title capability requirement in per-function link facts.
+- HTML-JS advertises the capability and emits the helper only when the function is reachable.
+- Calling it after initial page load overrides the initial title from entry config.
+- HTML-Wasm does not advertise the capability and rejects reachable calls before lowering.
+- Standalone or embedded JavaScript targets without browser document-title capability reject reachable calls before lowering.
+- Unsupported hosts never reach a generated helper and never use a runtime fallback or silent no-op.
+- If a host advertises the capability but violates that target contract at runtime, the failure is an infrastructure or host-contract failure rather than normal unsupported-target behaviour.
 
 ## Non-goals
 
@@ -218,21 +221,27 @@ Context: the initial document shell must be identical for HTML-JS and HTML-Wasm.
 - Add config-only page test.
 - Add no-config fallback tests.
 
-### Phase 7: Add io.set_title metadata, reachability, validation and JavaScript lowering
+### Phase 7: Add `io.set_title` metadata, capability validation and JavaScript lowering
 
-Context: runtime title mutation is a separate host effect using the existing external package and demand-driven helper architecture.
+Context: runtime title mutation is a browser document capability. Unsupported targets reject it through the normal target-contract lane before lowering.
 
 - Add stable external function identity for `io.set_title`.
-- Register `io.set_title` in Core IO with one shared `StringContent` parameter, `Void` success, no source-visible return value, HTML-JS lowering support and no HTML-Wasm lowering.
-- Emit the JS helper only when reachable.
+- Register `io.set_title` in Core IO with one shared `StringContent` parameter, `Void` success and no source-visible return value.
+- Add an explicit browser document-title capability to target metadata.
+- Record the capability requirement in per-function link facts when `io.set_title` is referenced.
+- Make HTML-JS advertise the capability.
+- Keep HTML-Wasm and non-browser JavaScript targets unsupported unless they explicitly advertise an equivalent host contract.
+- Run external package and target-capability validation against the completed reachable root set before lowering.
+- Reject every reachable unsupported call with one stable target-contract diagnostic.
+- Do not generate the helper for a rejected target.
+- Emit the JavaScript helper only when the call is reachable on a capable target.
 - Convert input through canonical Beanstalk string-content conversion.
 - Set the live document title.
-- Do not silently no-op if browser document support is unavailable.
-- Ensure external package validation rejects HTML-Wasm calls before lowering.
-- Add JS helper reachability tests.
-- Add generated artefact assertion containing title mutation.
-- Add HTML-Wasm rejection fixture with stable diagnostic code.
-- Verify runtime title can override initial `config:` block title.
+- Treat a capable host that lacks its advertised document-title facility as an infrastructure or host-contract failure.
+- Add helper reachability tests.
+- Add a generated artefact assertion containing title mutation.
+- Add HTML-Wasm and standalone non-browser JavaScript rejection fixtures with the same stable diagnostic family.
+- Verify runtime title can override the initial `config:` block title.
 
 ### Phase 8: Delete isolated config parsing, compatibility scanning and old constants
 
@@ -291,9 +300,13 @@ Cover:
 - shared initial document metadata for JavaScript and mixed output
 - config-only HTML entries produce a document
 - `page_title` and `page_head` migration diagnostics
-- `io.set_title` on HTML-JS
-- `io.set_title` rejected before lowering on HTML-Wasm
-- no silent no-op on unsupported hosts
+- reachable `io.set_title` on capable HTML-JS emits the helper
+- unreachable `io.set_title` emits no helper
+- reachable `io.set_title` is rejected before lowering on HTML-Wasm
+- reachable `io.set_title` is rejected before lowering on standalone non-browser JavaScript
+- unsupported targets produce no generated helper and no runtime fallback
+- a target that advertises browser document-title capability reaches lowering through the same external function identity and capability metadata
+- no silent no-op exists
 
 ## Documentation and progress-matrix impact
 
@@ -324,5 +337,4 @@ Before marking this plan complete, verify:
 - no reserved HIR page metadata scanner remains
 - entry metadata is stored in module compiler metadata, not HIR
 - imported modules do not apply entry metadata to importers
-- `io.set_title` works on HTML-JS and fails clearly on unsupported targets
-- no silent no-op exists
+- `io.set_title` lowers only for targets that advertise browser document-title capability and every unsupported reachable call is rejected before lowering

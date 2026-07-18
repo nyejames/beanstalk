@@ -1,99 +1,21 @@
+This page is a supplementary teaching scaffold for target validation and output ownership.
 
-Backend validation runs before target lowering.
-Output writing runs after project builders return artifacts.
+## Target validation
 
-Keep those boundaries separate.
-A lowerer should not discover unsupported features late.
-A backend should not write final files directly.
+The build system supplies reachable roots and target assignments. The compiler checks that every reachable operation and external call is supported by its assigned target.
 
-## Main paths
+Target-contract failures are user diagnostics. Inconsistent compiler or builder metadata is an internal error.
 
-- `src/backends/backend_feature_validation.rs`
-- `src/backends/external_package_validation.rs`
-- `src/build_system/`
-- `write_project_outputs`
+Validation happens before lowering.
 
-## External package validation
+## Output ownership
 
-External package validation checks reachable external calls against selected target lowering metadata.
+Builders and lowerers return output records. The build system validates output roots, writes files, tracks manifests and removes stale files owned by the same builder and profile.
 
-HIR carries stable external IDs.
-The validator resolves those IDs through package metadata and checks that the target can lower each reachable call.
+A builder cannot overwrite or clean another owner's output. Deliberate transformation requires a future explicit pipeline.
 
-That lets an external package be available in frontend metadata while still rejecting a backend that can't lower a reachable function.
+## Rewrite focus
 
-## Backend feature validation
+Explain capability checking, reachability roots, pure code generation, centralised side effects and manifest ownership.
 
-Backend feature validation checks target-gated HIR features through explicit reachability roots.
-
-It validates things such as:
-
-- reachable map operations
-- reactive metadata
-- runtime casts
-- checked numeric operations
-- Float formatting and validation statements
-- generic runtime value restrictions where semantic type analysis is needed
-- target-specific unsupported HIR surfaces
-
-Reachability is syntactic.
-It doesn't fold constants, eliminate dead branches, inspect borrow facts or perform lowering.
-
-## Root policies
-
-Backend feature validation doesn't hard-code one execution root.
-The project builder selects the root policy for the artifact being produced.
-
-Examples:
-
-- entry-start reachability for page bundles
-- explicit exported-function sets for builder-defined callable surfaces
-- complete module reachability for standalone bundles when configured that way
-
-This keeps validation reusable across project builders and artifact types.
-
-## User diagnostics
-
-Backend feature validation reports user-visible target-contract diagnostics.
-Use `CompilerDiagnostic` for those.
-
-A target not supporting reachable maps is a user-facing target contract failure.
-A malformed HIR node reaching the validator is an internal compiler failure and should already have been caught by HIR validation.
-
-## Output files
-
-Backends and project builders produce `OutputFile` records.
-They don't write final project outputs directly.
-
-The build system owns:
-
-- output-root validation
-- skip-unchanged writes
-- manifest tracking
-- stale artifact cleanup
-
-This keeps side effects centralised and makes dev-server/release build behaviour easier to reason about.
-
-## Cleanup policy
-
-A project builder returns a `Project` containing explicit artifacts and cleanup policy.
-The build system uses that to decide which stale files can be removed safely.
-
-Backends should not delete files or write around the output writer.
-If a backend needs a new emitted artifact, it should return it as an `OutputFile`.
-
-## Common mistakes
-
-- Letting target lowerers discover unsupported reachable features late.
-- Reporting target-contract failures as `CompilerError` instead of `CompilerDiagnostic`.
-- Writing output files directly from a backend path.
-- Reinterpreting external package syntax instead of using stable IDs.
-- Treating reachability as optimisation or dead-code elimination.
-- Making validation assume entry-start reachability for every artifact type.
-
-## Related reading
-
-- @../ (Backend overview): the three backend boundaries
-- @../../stages/backend-lowering (Stage 7: Backend lowering): how validation fits into backend lowering
-- @../html-project-assembly (HTML project assembly): route-level root policy examples
-- @../external-js-and-runtime-assets (External JavaScript and runtime assets): external package validation and runtime asset planning
+Canonical details live in both architecture authorities.

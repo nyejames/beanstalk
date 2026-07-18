@@ -4,7 +4,7 @@ Builder-owned routes, fragments and project artifacts.
 
 ## Contract
 
-- Input: compiled modules, `ModuleRootActivity`, backend settings and builder metadata
+- Input: compiled module artefacts, entry assemblies, backend settings and builder metadata
 - Output: HTML route artifacts, tracked assets and cleanup policy
 - Decides: artifact eligibility, route layout, fragment merge, backend selection and asset emission
 - Must not decide: frontend semantics, HIR shape, target code generation

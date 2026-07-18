@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light dark">
-    <title>AST internals | Beanstalk</title>
-    <meta name="description" content="How AST construction resolves semantics and prepares clean HIR input.">
+    <title>AST semantics | Beanstalk</title>
+    <meta name="description" content="Supplementary explanations of semantic environments, bodies, constants, templates and static evidence.">
     <style>
 /*!
   BS CSS CORE (absolute basics CSS reset)
@@ -388,9 +388,9 @@ body {
             </a>
         </div>
     </nav>
-    <section class="container"><p><a href="../">Compiler design</a> / AST internals</p><h1>AST internals</h1><p>AST construction is the semantic centre of the frontend. Headers have already discovered and ordered top-level declarations. AST gives those declarations meaning, checks executable bodies and finishes source-level work before HIR.</p></section>
-    <section class="container"><h2>Three jobs</h2><ul><li><code>build_ast_environment</code> resolves declarations and builds the shared semantic environment</li><li><code>emit_ast_nodes</code> parses and checks executable bodies against that completed environment</li><li><code>finalize_ast</code> prepares constants, templates and metadata for the HIR boundary</li></ul><p>By the end of AST construction, types are canonical, generics and trait evidence are resolved, template semantics are complete and compile-time page fragments have been separated from runtime code.</p></section>
-    <section class="container"><h2>Explore AST internals</h2><ul><li><a href="./environment-and-type-resolution">AST environment and type resolution</a>: scopes, declarations, type identity and contextual coercion</li><li><a href="./expressions-statements-and-terminality">Expressions, statements and terminality</a>: executable bodies, value flow and valid exits</li><li><a href="./constants-and-folding">Constants and folding</a>: compile-time values, const facts and runtime-aligned folding</li><li><a href="./templates-tir-and-reactivity">Templates, TIR and reactivity</a>: template composition, runtime handoff and reactive metadata</li><li><a href="./generics-traits-and-casts">Generics, traits and casts</a>: static evidence, concrete instances and explicit conversion</li></ul></section>
+    <section class="container"><p><a href="../">Compiler design</a> / AST semantics</p><h1>AST semantics</h1><p>AST is the compiler stage where parsed source acquires checked semantic meaning.</p></section>
+    <section class="container"><h2>Conceptual flow</h2><ul><li>Environment construction resolves declarations and canonical identities.</li><li>Body checking validates executable expressions and control flow against that environment.</li><li>Finalisation folds constants and templates, validates public boundaries and produces clean module artefact lanes.</li></ul><p>Internal implementation steps may change. The ownership boundary is the important part.</p></section>
+    <section class="container"><h2>Explore</h2><ul><li><a href="./environment-and-type-resolution">Semantic environments and type identity</a></li><li><a href="./expressions-statements-and-terminality">Expressions, statements and terminality</a></li><li><a href="./constants-and-folding">Constants and folding</a></li><li><a href="./templates-tir-and-reactivity">Templates, TIR and reactivity</a></li><li><a href="./generics-traits-and-casts">Generics, traits and casts</a></li></ul></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;

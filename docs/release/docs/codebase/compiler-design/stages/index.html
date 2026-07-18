@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light dark">
-    <title>Pipeline stages | Beanstalk</title>
-    <meta name="description" content="A map of the eight compiler stages, their ownership and their detailed references.">
+    <title>Compiler pipeline | Beanstalk</title>
+    <meta name="description" content="A high-level learning path through build orchestration and compiler stages.">
     <style>
 /*!
   BS CSS CORE (absolute basics CSS reset)
@@ -388,70 +388,8 @@ body {
             </a>
         </div>
     </nav>
-    <section class="container"><p><a href="../">Compiler design</a> / Pipeline stages</p><h1>Pipeline stages</h1><p>The frontend prepares and orders declarations, resolves semantics, validates memory safety and hands compiled modules to the backend. Each stage owns one clean transformation.</p></section>
-    <section class="container"><p>Each page below explains the shape a stage receives, the shape it produces and the decisions it owns. Follow the pipeline forward when a change crosses a boundary.</p><table style="">
-            
-            <tr style="">
-                
-                <th scope="col" style=""><p> <strong>Stage</strong></p></th>
-    <th scope="col" style=""><p> <strong>Ownership</strong></p></th>
-    <th scope="col" style=""><p> <strong>Page</strong></p></th>
-            
-    </tr>
-
-
-
-                
-
-    <tr style="">
-                 <td style=""><p> Stage 0: Project structure</p></td>
-     <td style=""><p> Finds config, module roots, reachable files and builder-supported source assets.</p></td>
-     <td style=""><p> <a href="./project-structure">Project structure</a></p></td>
-            </tr>
-
-    <tr style="">
-                 <td style=""><p> Stage 1: Tokenization</p></td>
-     <td style=""><p> Converts source text into located tokens and owns lexical recognition.</p></td>
-     <td style=""><p> <a href="./tokenization">Tokenization</a></p></td>
-            </tr>
-
-    <tr style="">
-                 <td style=""><p> Stage 2: Header parsing</p></td>
-     <td style=""><p> Discovers top-level declarations, dependency edges and import surfaces.</p></td>
-     <td style=""><p> <a href="./header-parsing">Header parsing</a></p></td>
-            </tr>
-
-    <tr style="">
-                 <td style=""><p> Stage 3: Dependency sorting</p></td>
-     <td style=""><p> Orders declarations topologically and reports dependency cycles.</p></td>
-     <td style=""><p> <a href="./dependency-sorting">Dependency sorting</a></p></td>
-            </tr>
-
-    <tr style="">
-                 <td style=""><p> Stage 4: AST construction</p></td>
-     <td style=""><p> Resolves declarations, checks bodies, folds constants and prepares HIR input.</p></td>
-     <td style=""><p> <a href="./ast-construction">AST construction</a></p></td>
-            </tr>
-
-    <tr style="">
-                 <td style=""><p> Stage 5: HIR generation</p></td>
-     <td style=""><p> Lowers typed AST into backend-facing semantic IR with explicit control flow.</p></td>
-     <td style=""><p> <a href="./hir-generation">HIR generation</a></p></td>
-            </tr>
-
-    <tr style="">
-                 <td style=""><p> Stage 6: Borrow validation</p></td>
-     <td style=""><p> Validates exclusivity and access, producing ownership side-table facts.</p></td>
-     <td style=""><p> <a href="./borrow-validation">Borrow validation</a></p></td>
-            </tr>
-
-    <tr style="">
-                 <td style=""><p> Stage 7: Backend lowering</p></td>
-     <td style=""><p> Assembles and emits backend artifacts through project builders and lowerers.</p></td>
-     <td style=""><p> <a href="./backend-lowering">Backend lowering</a></p></td>
-            </tr>
-            
-    </table></section>
+    <section class="container"><p><a href="../">Compiler design</a> / Compiler pipeline</p><h1>Compiler pipeline</h1><p>Follow the pipeline to see which owner creates each fact and which later stage is allowed to consume it.</p></section>
+    <section class="container"><h2>Build preparation</h2><ul><li><a href="./project-structure">Build-system Stage 0</a>: config, source ownership, graphs and deterministic scheduling</li></ul><h2>Compiler stages</h2><ul><li><a href="./tokenization">Stage 1: Tokenization</a></li><li><a href="./header-parsing">Stage 2: Header syntax and interface binding</a></li><li><a href="./dependency-sorting">Stage 3: Local declaration ordering</a></li><li><a href="./ast-construction">Stage 4: AST semantics</a></li><li><a href="./hir-generation">Stage 5: HIR and validation</a></li><li><a href="./borrow-validation">Stage 6: Borrow validation</a></li></ul><h2>Target work</h2><ul><li><a href="./backend-lowering">Target planning and backend lowering</a></li></ul></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;

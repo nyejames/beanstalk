@@ -1,18 +1,18 @@
 import @./ast-construction {content as reference_content}
 import @styles/docs {navbar, section, codebase_theme_head}
 
-page_title #= "Stage 4: AST construction"
-page_description #= "Where source declarations become typed AST and HIR-ready structures."
+page_title #= "Stage 4: AST semantics"
+page_description #= "Where retained source structure becomes checked semantic meaning."
 page_head #= codebase_theme_head
 
 #[navbar]
 
 #[section, $md:
-    @../../ (Compiler design) / @../ (Pipeline stages) / Stage 4: AST construction
+    @../../ (Compiler design) / @../ (Compiler pipeline) / Stage 4: AST semantics
 
-    # Stage 4: AST construction
+    # Stage 4: AST semantics
 
-    AST is where most frontend semantics become real. It consumes sorted headers, resolves declarations and prepares clean input for HIR.
+    AST resolves declarations, checks bodies, folds compile-time values and prepares explicit semantic input for HIR.
 ]
 
 #[section, reference_content]

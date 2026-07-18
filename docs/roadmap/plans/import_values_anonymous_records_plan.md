@@ -234,6 +234,10 @@ See `docs/build-system-design.md` "Source #Import contracts" for the full contra
 - Source defaults are limited to a self-contained primitive literal or `none`.
 - Same-name contracts must agree on primitive type, optionality, required or default state and normalised default value.
 - The barrier validates all contracts in the command's selected source graph before module AST compilation.
+- Run the barrier independently for each project or package compilation boundary.
+- Do not use a consuming project's unqualified CLI or programmatic inputs to satisfy dependency contracts.
+- Resolve dependency contracts only from that dependency's fixed or imported project fields, defaults and compatible builder-provided globals.
+- Leave qualified dependency overrides and package-input forwarding to future package-system design.
 - No second general constant evaluator runs in Stage 0.
 - The resolved value enters module AST as an ordinary folded constant. It creates no runtime wrapper or HIR category.
 
@@ -267,6 +271,8 @@ See `docs/build-system-design.md` "Output ownership" for the full contract.
 Context: resolved config and inputs must flow through all command paths consistently.
 
 - Thread resolved config values, `ProjectGlobalsInterface` and build inputs through `build`, `check` and `dev`.
+- Keep the root project's explicit inputs scoped to the root project compilation boundary.
+- When source dependencies compile, construct a separate dependency input context rather than forwarding the root project's unqualified input map.
 - Ensure dev server preserves input values through runtime path resolution, initial build and every rebuild.
 - Ensure `bean check --input` and `bean build --input` resolve frontend constants identically.
 - Ensure HTML-Wasm either accepts compile-time-only cases or rejects unsupported runtime anonymous record use before backend lowering.
@@ -326,6 +332,14 @@ Cover:
 - runtime anonymous record non-escape
 - exported anonymous const records
 - no anonymous-specific HIR path
+- source `#Import` accepted only at module-wide declaration positions owned by header syntax
+- body-local source `#Import` rejected
+- consuming-project input does not satisfy a dependency contract with the same name
+- dependency fixed project field satisfies its own source contract
+- dependency direct project `#Import` and default satisfy only that dependency boundary
+- compatible builder-provided global may satisfy a dependency contract
+- missing dependency input diagnoses inside the dependency boundary
+- no qualified dependency override syntax exists in this implementation
 
 ## Documentation and progress-matrix impact
 
@@ -358,3 +372,6 @@ Before marking this plan complete, verify:
 - anonymous records use hidden nominal identity with no structural typing
 - no flat config, builder selector or global output folder path remains
 - no runtime `Import` wrapper or anonymous-specific HIR path remains
+- source `#Import` remains module-wide, primitive and literal-default-only
+- every project or package boundary resolves its own input namespace
+- consuming-project inputs do not leak into dependency contracts

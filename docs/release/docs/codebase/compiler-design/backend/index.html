@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light dark">
-    <title>Backend handoff | Beanstalk</title>
-    <meta name="description" content="How validated HIR becomes project artifacts and target-specific code.">
+    <title>Target planning and backend lowering | Beanstalk</title>
+    <meta name="description" content="Supplementary explanations of target validation, project assembly and code generation.">
     <style>
 /*!
   BS CSS CORE (absolute basics CSS reset)
@@ -388,9 +388,8 @@ body {
             </a>
         </div>
     </nav>
-    <section class="container"><p><a href="../">Compiler design</a> / Backend handoff</p><h1>Backend handoff</h1><p>Backend work starts after frontend compilation. Validated HIR and companion metadata cross a strict boundary: the build system orchestrates, project builders decide artifact structure and lowerers emit target-specific code.</p></section>
-    <section class="container"><h2>The handoff</h2><ul><li>The build system owns compilation orchestration and final output writing</li><li>Project builders own routes, artifact sets and target selection</li><li>Backend validation checks whether the selected target can lower the reachable program</li><li>Backend lowerers turn validated HIR into JavaScript, Wasm or another target representation</li></ul><p>Backend code must not rediscover source syntax, import visibility, trait evidence or template structure.</p></section>
-    <section class="container"><h2>Explore backend internals</h2><ul><li><a href="./validation-and-output-writing">Backend validation and output writing</a>: target contracts, output records and shared writing rules</li><li><a href="./html-project-assembly">HTML project assembly</a>: routes, page fragments and project artifact planning</li><li><a href="./js-lowering">JavaScript lowering</a>: runtime helpers and HIR-to-JavaScript emission</li><li><a href="./wasm-lowering">Wasm lowering</a>: LIR, runtime contracts and binary emission</li><li><a href="./external-js-and-runtime-assets">External JavaScript and runtime assets</a>: provider imports, glue and runtime modules</li><li><a href="./tracked-assets">Tracked assets</a>: rendered paths, copied assets and output conflicts</li></ul></section>
+    <section class="container"><p><a href="../">Compiler design</a> / Target planning and backend lowering</p><h1>Target planning and backend lowering</h1><p>Build orchestration selects roots and targets. The compiler validates the completed plan. Lowerers generate target code from explicit validated semantic inputs.</p></section>
+    <section class="container"><h2>Explore</h2><ul><li><a href="./validation-and-output-writing">Target validation and output ownership</a></li><li><a href="./html-project-assembly">HTML project assembly</a></li><li><a href="./js-lowering">JavaScript lowering</a></li><li><a href="./wasm-lowering">Wasm lowering</a></li><li><a href="./external-js-and-runtime-assets">External JavaScript and runtime assets</a></li><li><a href="./tracked-assets">Tracked assets</a></li></ul></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;

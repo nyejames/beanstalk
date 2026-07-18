@@ -14,6 +14,22 @@ Use the [Progress Matrix](docs/src/docs/progress/#page.bst) as a reference for w
 - [Final TIR completion](docs/roadmap/plans/final-tir-completion-plan.md)
 - [Compiler diagnostics improvements](docs/roadmap/plans/compiler-diagnostics-improvement-plan.md)
 
+## Mandatory post-TIR plan review checkpoint
+
+After final TIR completion is accepted and before the canonical module plan becomes active, perform one repository-wide roadmap refresh.
+
+The checkpoint must:
+
+- refresh every queued plan against the completed TIR owners and deleted APIs
+- remove every legacy template fallback, multi-store or foreign-store assumption
+- refresh source paths and current-state capsules
+- verify the queued dependency order
+- confirm that no plan introduces a second template representation, preparation owner or folding path
+- confirm that Number, entry config, canonical modules and mixed JavaScript/Wasm work consume the final exact-view TIR handoff
+- record the reviewed commit in each queued plan before implementation begins
+
+This is a documentation checkpoint rather than a separate implementation plan. Canonical module implementation must not begin until it is recorded as complete.
+
 ## Queued implementation chain
 
 - [Canonical module compilation and scoped packages](docs/roadmap/plans/canonical-module-compilation-and-scoped-packages-plan.md)
@@ -59,7 +75,6 @@ See the [final TIR completion plan](docs/roadmap/plans/final-tir-completion-plan
 - additional target builders and capability surfaces
 - profiling-backed frontend or TIR optimisations
 - future Component Model integration
-- incremental builds at the module boundary after persistent artefact serialisation exists
 - ownership optimisation deferred until after GC-first correctness
 - external non-scalar constant design: string slices, collections and opaque-type external constants in const contexts
 - private const and config follow-ups: consume HIR const metadata in borrow checking, temporary-local reduction and constant propagation

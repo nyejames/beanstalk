@@ -1,150 +1,35 @@
+This page is a supplementary teaching scaffold for HIR.
 
-HIR generation lowers the fully typed AST into the first backend-facing semantic IR.
+## Core concept
 
-HIR is explicit enough for borrow validation and backend lowering.
-It isn't a source-level AST with a new name.
+An intermediate representation makes program meaning explicit enough for analysis and target lowering without carrying source syntax.
 
-## Main path
+## Beanstalk boundary
 
-`src/compiler_frontend/hir/`
+HIR owns executable semantic state:
 
-Related paths:
+- control flow
+- locals, places and regions
+- local and cross-module calls
+- checked numeric and cast operations
+- runtime template construction
+- target-neutral external call identities
+- per-function link facts
 
-- `src/compiler_frontend/hir/validation.rs`
-- `src/compiler_frontend/hir/validation/`
-- `src/compiler_frontend/hir/reachability.rs`
+HIR does not own:
 
-## What HIR is
+- public semantic interfaces
+- warnings or documentation
+- compile-time page fragments
+- entry metadata
+- TIR
+- unresolved generics or trait evidence
+- project assembly
 
-HIR stores compact frontend `TypeId`s but doesn't own a separate semantic type table.
-`lower_module` returns the completed `HirModule` beside the AST-built `TypeEnvironment`.
-Borrow validation and backends must use that paired environment for semantic type queries.
+Those facts live in separate module artefact lanes.
 
-HIR makes control flow, locals, calls, regions and terminators explicit.
-Ordinary value construction and pure operators may stay as nested expression trees.
-Effectful work is linearised into statement preludes and temporary locals before the final value expression is used.
+## Rewrite focus
 
-## HIR owns
+Explain control-flow graphs, temporaries, explicit effects, validation invariants and why one IR should not become a dumping ground for every compiler output.
 
-HIR owns:
-
-- explicit control-flow structure
-- block, jump, terminator, loop, branch, return and match representation
-- explicit locals, regions and call targets
-- expression side-effect linearisation
-- lowered runtime template expressions
-- inline runtime template control flow as ordinary CFG
-- runtime slot source/site plans lowered as ordinary string accumulators and appends
-- hashmap literals and map member operations as first-class HIR operations for borrow validation and backend feature validation
-- module constants as compile-time metadata
-- advisory private const-fact metadata projected from AST for future optimisation consumers
-- function-origin metadata such as active-root start versus normal functions
-- doc fragments, rendered path usages, warnings and other module metadata that survives from AST into builder-facing compiled modules
-- stable external function IDs selected during AST resolution
-- builtin runtime cast expressions and fallible cast operations that survive AST folding
-- direct user-function calls emitted during HIR lowering for user-defined cast evidence selected by AST
-- checked numeric effects represented as `HirStatementKind::NumericOp` with the selected `NumericFailureMode`
-- Float formatting and external Float boundary validation represented as `FormatFloat` and `ValidateFloat` statements
-- backend-neutral syntactic reachability facts from explicit roots
-- enough structure for borrow validation and later backend lowering
-
-## HIR doesn't own
-
-HIR doesn't:
-
-- fold templates
-- reconstruct missing template plans
-- carry backend-specific template control-flow nodes
-- carry compile-time top-level page fragments
-- use private const facts to change semantics in this plan
-- solve generic functions or carry unresolved generic parameter executable types
-- decide trait conformance or generic-bound evidence
-- carry user-defined cast trait evidence or generic-bound cast evidence into backend lowering
-- decide final runtime ownership
-- model exact lifetimes
-
-If HIR needs one of those, AST probably failed to finish its job or the feature needs a new explicit handoff.
-
-## Numeric operations
-
-Plain `HirBinOp` remains valid for booleans, comparisons and string concatenation.
-Runtime scalar arithmetic and unary negation must lower through `HirStatementKind::NumericOp`.
-
-HIR validation rejects regressions where numeric arithmetic survives as ordinary expression ops.
-That keeps checked numeric semantics target-neutral before backend lowering.
-
-## User errors versus invariants
-
-HIR lowering treats user-facing source errors as already diagnosed by AST or earlier stages.
-HIR lowering and HIR validation use `CompilerError` for internal transformation invariants.
-
-If a non-unit function can fall through after AST terminality validation, that is a compiler invariant breach.
-It isn't a new user diagnostic from HIR.
-
-## HIR validation
-
-HIR validation runs before the module leaves Stage 5.
-Borrow validation and backend feature validation should receive coherent HIR, not defensively repair it.
-
-Validation checks:
-
-- definition IDs
-- frontend `TypeId` links
-- region graph shape
-- start-function and function-origin metadata
-- CFG ownership
-- doc fragments
-- module constants
-- reactive metadata
-- side-table mappings
-- local/place references
-- terminators
-- patterns
-- expression invariants
-    - `HirExpressionKind::Float` must contain a finite `f64`. `NaN` and infinity reaching HIR are compiler-internal invariant failures, reported through the HIR transformation/internal error lane rather than as a new user diagnostic.
-
-Validation failures are `CompilerError` with `ErrorType::HirTransformation` because they represent compiler-internal lowering invariants.
-
-## Reachability
-
-`hir/reachability.rs` records syntactic reachability for:
-
-- functions
-- blocks
-- external calls
-- map literals and operations
-- reactive template-backed values
-- reactive sinks
-- runtime casts
-- checked numeric operations
-- Float formatting and validation statements
-
-It doesn't fold constants, eliminate dead branches, inspect borrow facts or perform backend lowering.
-
-Some target-gated checks need semantic type analysis on top of reachability.
-For example, generic runtime value validation scans reachable blocks with the module `TypeEnvironment` because generic-instance detection isn't a raw HIR reachability fact.
-
-## External calls
-
-Calls to builder-provided package functions lower to stable external call targets such as `CallTarget::ExternalFunction(ExternalFunctionId)`.
-
-HIR doesn't store package import syntax or backend runtime names.
-Borrow validation can resolve external IDs through the external package registry to recover access rules and return-alias metadata.
-Backends map the same IDs to target-specific helpers, imports, generated glue, runtime names or target-native operations.
-
-## Mutable rvalues
-
-Fresh rvalues passed to mutable (`~T`) call slots are materialised into compiler-introduced hidden locals before borrow validation.
-Borrow validation then sees ordinary local access, not a special temporary node kind.
-
-That keeps the memory model simple: the user sees a value, HIR creates a local when the borrow checker needs a place.
-
-## Related reading
-
-- @../ast-construction (Stage 4: AST construction): produces the typed AST that HIR lowers
-- @../borrow-validation (Stage 6: Borrow validation): reads HIR and writes side-table facts
-- @../backend-lowering (Stage 7: Backend lowering): consumes validated HIR and companion metadata
-- @../../../memory-management/borrow-validation
-  (Memory borrow validation): hidden locals, roots and the HIR side-table handoff
-- @../../type-identity-and-coercion (Type identity and coercion): `TypeId` links carried by HIR
-- @../../entry-start-and-page-fragments (Active-root start and page fragments): why compile-time fragments stay outside HIR
+Canonical details live in `docs/compiler-design-overview.md`.

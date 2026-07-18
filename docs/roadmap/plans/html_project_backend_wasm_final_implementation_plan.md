@@ -259,6 +259,11 @@ See `docs/build-system-design.md` "Physical variants" and "Output ownership".
 - Each selected module variant has a generated JavaScript companion facade. Wasm is emitted per selected module variant.
 - Central output writing with manifests, stale cleanup and conflict diagnostics.
 - Output ownership is keyed by stable builder identity and build profile.
+- Reject an output root containing a manifest owned by another builder.
+- Reject an output root containing a manifest owned by another build profile, including development versus release for the same builder.
+- Keep stale cleanup scoped to the selected builder and profile owner.
+- Do not add a force-overwrite escape hatch.
+- Keep shared-root transformation unavailable until an explicit ordered output-pipeline design exists.
 
 ### Phase 10: Delete whole-module modes, dispatcher paths, bridge APIs and old bootstrap
 
@@ -323,6 +328,11 @@ Cover:
 - no dispatcher-loop, `bst_start`, per-module memory, `i64` bridge or `StringFromI64` remains
 - no old bootstrap path remains
 - `check` performs the same planning and validation as `build`
+- foreign builder manifest conflict is rejected before writing
+- same builder with a different build profile cannot silently claim the same output root
+- stale cleanup never deletes files owned by another builder or profile
+- no force-overwrite path bypasses output ownership
+- two independent builders cannot simulate an output pipeline by sharing one root
 
 ## Documentation and progress-matrix impact
 

@@ -1,73 +1,28 @@
+This page is a supplementary teaching scaffold for binding-backed external code.
 
-Provider-backed external JavaScript lets builders turn non-Beanstalk files into typed package surfaces before AST.
-The backend later emits runtime assets and glue only when reachable compiled code needs them.
+## Core concept
 
-## Main path
+A compiler can expose typed symbols for code implemented outside the source language, then defer runtime integration to target planning.
 
-`src/projects/html_project/external_js/`
+## Beanstalk boundary
 
-Related registries live under `BuilderSurface`:
+External import providers create stable binding-backed interfaces before AST consumes visibility.
 
-- `ExternalImportProviderRegistry`
-- `ExternalImportProviderCache`
-- `ExternalImportResolutionTable`
-- `BuilderRuntimePackageMetadata`
-- `ExternalPackageRegistry`
+Per-function link facts identify reachable external calls.
 
-## Two emission levels
+The build system owns provider caches and resolution state for one build. The builder later plans:
 
-Provider-backed external JS has two emission levels:
+- shared runtime assets
+- required module specifiers
+- entry-specific wrappers
+- import preambles and import-map entries
 
-- build-level runtime emission
-- module-level glue generation
+Unused external functions do not generate glue.
 
-Build-level runtime emission deduplicates JS runtime assets and required runtime module specifiers across all compiled modules.
-Module-level glue generation inspects external functions referenced by the emitted JS bundle and emits only the wrapper module, import preamble and import-map entries needed for that page bundle.
+External packages expose opaque types, constants and free functions. Method-style APIs use source-owned wrappers.
 
-Don't emit glue for unused functions.
-Don't emit duplicate runtime assets per page.
+## Rewrite focus
 
-## Frontend surface
+Explain foreign-function interfaces, symbol identity, capability metadata, demand-driven linking and why provider parsing is not backend source rediscovery.
 
-External import providers resolve non-Beanstalk import sources into typed package/type/function IDs before AST consumes visibility.
-
-JavaScript export names are runtime implementation details.
-Beanstalk names come from annotations.
-Supported JS export forms and annotation rules belong to the package docs, but the compiler-design contract is simple: the frontend sees typed binding package metadata, not arbitrary JavaScript source.
-
-External packages expose opaque types, constants and free functions only.
-They don't expose receiver methods.
-Use source-owned wrapper types for method-style ergonomics.
-
-## Reachability
-
-HIR carries stable external IDs.
-The JS backend records which external functions the emitted bundle references.
-That metadata drives wrapper generation.
-
-Reachability is syntactic from the selected root policy.
-For HTML page bundles, use the route's entry-start reachable set.
-For standalone JS, the selected policy may include every function.
-
-## Builder-runtime packages
-
-Builder-runtime packages such as builder-owned virtual `@web/*` packages use the same runtime asset/glue path as provider-created imports.
-They are registered directly in `binding_packages` and attached to module external-import metadata when reachable HIR references them.
-
-This keeps runtime asset planning consistent across provider-created external packages, builder-runtime packages and compiler-registered external package metadata, where applicable.
-
-## Common mistakes
-
-- Treating external JS files as Beanstalk source modules.
-- Re-reading JS annotations during backend lowering instead of using registered metadata.
-- Emitting glue for every registered external function.
-- Duplicating runtime assets per module or route.
-- Registering external receiver methods instead of free functions plus source wrappers.
-- Letting provider-backed discovery run in parallel without deterministic provider deltas and ID remapping.
-
-## Related reading
-
-- @../ (Backend overview): backend boundaries
-- @../js-lowering (JavaScript lowering): the emitted JS bundle and referenced external functions
-- @../../stages/header-parsing (Stage 2: Header parsing): external import providers and source-kind preparation
-- @../../imports-packages-and-bindings (Imports, packages and bindings): external package identity and module-boundary rules
+Canonical details live in both architecture authorities.

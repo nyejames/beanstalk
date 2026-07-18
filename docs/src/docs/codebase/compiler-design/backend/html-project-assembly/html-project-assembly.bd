@@ -1,93 +1,28 @@
+This page is a supplementary teaching scaffold for HTML project assembly.
 
-The HTML project builder owns route-level artifact assembly.
-It's the `BackendBuilder` implementation for HTML projects.
+## Core concept
 
-It consumes compiled modules, selected backend settings and builder metadata.
-It returns a project with explicit output files and cleanup policy.
+A project builder turns compiled module artefacts and entry link plans into route-level artefacts.
 
-## Main paths
-
-- `src/projects/html_project/html_project_builder.rs`
-- `src/projects/html_project/js_path.rs`
-- `src/projects/html_project/wasm/`
-- `src/projects/html_project/external_js/`
-- `src/projects/html_project/tracked_assets.rs`
-
-## What the HTML builder owns
+## Beanstalk boundary
 
 The HTML builder owns:
 
-- resolving page routes
-- deriving canonical HTML output paths
-- validating duplicate outputs
-- selecting the configured backend path
-- merging const and runtime page fragments
-- planning tracked assets
-- emitting build-level external runtime assets
-- selecting the entry page
-- returning complete project artifacts and cleanup policy
+- entry selection
+- route and document policy
+- activation of one compiled module's dormant root work
+- compile-time and runtime fragment interleaving
+- mixed JavaScript and Wasm planning
+- external runtime glue
+- tracked assets
+- output records
 
-The HTML builder doesn't compile frontend semantics.
-It consumes modules that have already passed HIR generation and borrow validation.
+A module may feed several entry assemblies without recompilation.
 
-## Root activity and artifact eligibility
+The builder does not parse source or trigger deferred AST, HIR, generic or borrow work.
 
-Each compiled module carries `ModuleRootActivity` from header and AST preparation. The metadata records non-trivial root body activity plus const and runtime fragment counts. The builder uses `has_html_artifact_activity()` to select route-producing modules without scanning HIR or rediscovering source syntax.
+## Rewrite focus
 
-API-only modules remain available for imports, public API validation and external package metadata, but they don't emit HTML, runtime glue or tracked assets. Homepage selection only considers artifact-producing modules. A directory project with no artifact-producing entry-root module reports the existing missing-homepage configuration diagnostic.
+Explain the difference between semantic compilation and artefact assembly, then show why entry activation is a link decision rather than a compiler mode.
 
-## Page fragments
-
-The compiled module gives the builder resolved const top-level fragments and `ModuleRootActivity`, including the runtime fragment count. The HTML builder owns the target-independent page-fragment plan shared by HTML-JS and HTML-Wasm:
-
-1. Merge compile-time fragments into the runtime fragment list at their recorded insertion indices.
-2. Create placeholders or slots for runtime fragments.
-3. Execute active-root `start` once through the selected runtime path.
-4. Hydrate returned runtime fragments into the slots in source order.
-5. Assemble the final route HTML artifact.
-
-HIR doesn't carry compile-time page fragments or document structure. That is why the HTML builder needs companion metadata in addition to HIR. JS and Wasm lowerers provide execution artifacts: the builder owns source-order fragment semantics.
-
-## Backend selection
-
-The HTML builder chooses the backend path for the route artifact.
-
-Current paths include:
-
-- HTML-JS through the JS backend
-- HTML-Wasm through Wasm lowering plus bootstrap JS
-
-The project builder owns the route-level policy.
-The lowerers own target code generation.
-
-## External runtime assets
-
-The HTML builder emits build-level external runtime assets for provider-backed JavaScript and builder-runtime packages.
-Those assets are deduplicated across compiled modules.
-
-Module-level glue generation later inspects the functions referenced by the emitted JS bundle and emits only the wrapper module, import preamble and import-map entries needed for that page bundle.
-
-## Tracked assets
-
-Tracked assets are a builder policy over frontend-rendered path usages.
-
-The frontend records semantic path facts.
-The HTML builder decides which file paths become emitted assets, chooses output paths relative to the final page route, reports asset warnings/conflicts and returns asset bytes as ordinary `OutputFile` artifacts.
-
-## Common mistakes
-
-- Moving page-fragment assembly into HIR.
-- Letting the JS or Wasm lowerer discover page routes.
-- Writing output files directly from HTML builder helpers.
-- Treating tracked assets as frontend file-copy behaviour.
-- Emitting all external JS glue instead of only reachable referenced functions.
-
-## Related reading
-
-- @../ (Backend overview): the three backend boundaries and shared fragment invariant
-- @../../stages/backend-lowering (Stage 7: Backend lowering): where HTML assembly fits in the stage
-- @../js-lowering (JavaScript lowering): the HTML-JS execution path
-- @../wasm-lowering (Wasm lowering): the HTML-Wasm execution path
-- @../external-js-and-runtime-assets (External JavaScript and runtime assets): build-level runtime assets and glue
-- @../tracked-assets (Tracked assets): frontend-rendered path usages and asset emission
-- @../../entry-start-and-page-fragments (Active-root start and page fragments): the shared page-fragment contract
+Canonical details live in `docs/build-system-design.md`.

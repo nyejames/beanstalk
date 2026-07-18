@@ -1,127 +1,29 @@
+This page is a supplementary teaching scaffold for compile-time evaluation.
 
-Constants are compile-time declarations.
-AST type-checks their initializers, folds what must fold and records facts for later stages.
+## Core concept
 
-Module constants are metadata.
-They are not runtime top-level declaration statements.
+Constant folding evaluates expressions during compilation when the language requires a stable result.
 
-## Main paths
+## Beanstalk boundary
 
-- `src/compiler_frontend/ast/const_eval/`
-- `src/compiler_frontend/ast/module_ast/finalization/const_fact_collection.rs`
-- `src/compiler_frontend/ast/module_ast/finalization/`
+AST owns semantic checking and folding for:
 
-## Constant rules
+- ordinary constants
+- resolved source build inputs
+- const records
+- const templates
+- compile-time page fragments
 
-Top-level `#` constants must:
+Header syntax and Stage 3 establish local declaration order before folding.
 
-- be initialised
-- be immutable
-- reference only compile-time values
-- fully fold at compile time
-- obey same-file source-order constant semantics
-- obey cross-file dependency order from Stage 3
+Exported folded values cross module boundaries as owned backend-neutral facts. Consumers do not reparse or refold provider templates.
 
-Runtime expressions in constants are rejected.
+Compile-time and runtime numeric, cast and formatting behaviour must agree.
 
-Header parsing records constant initializer reference hints so dependency sorting can order constants before AST folds them.
-AST then performs semantic type checking and actual folding.
+`config.bst` bootstrap and `@project` creation are build-system concerns. They are not defined on this page.
 
-## Const facts
+## Rewrite focus
 
-Const-fact collection runs after AST finalization.
-It owns explicit module, private top-level and body-local const-fact collection.
+Explain constant propagation, deterministic evaluation, const records, why runtime values cannot leak into constants and why duplicate evaluators drift.
 
-Private inferred const facts are advisory metadata.
-They can be projected into HIR for future optimisation consumers, but they don't change semantics in the current plan.
-They don't participate in header dependency sorting and they don't become importable declarations.
-
-## Const records
-
-Struct instances assigned to constants can become data-only const records when all constructor arguments fold.
-
-Const records are field-access-only compile-time member groups.
-They can't be assigned to runtime values, passed, returned, placed in collections or used through runtime methods.
-
-[codeblock, $code("bst"):
-    Defaults = |
-        title String,
-        year Int,
-    |
-
-    defaults #= Defaults("Beanstalk", 2026)
-
-    page_title #= defaults.title
-]
-
-Const-record field projection is allowed when the expression fully folds.
-That is why config-key constants can use values such as `Defaults().entry_root` after AST folding.
-
-## Top-level const templates
-
-Entry-file top-level const templates fold in AST into builder-facing compile-time fragments.
-Each compile-time fragment records a runtime insertion index.
-Builders merge those fragments into the runtime fragment list.
-
-HIR doesn't carry compile-time page fragments.
-
-Direct top-level const-template `if` and `loop` forms like those below must
-fully fold at compile time.
-
-[codeblock, $code("bst"):
-    #[if show:
-        Visible
-    ]
-
-    #[loop items |item|:
-        [item]
-    ]
-]
-
-Const-required `if` validates every branch body.
-Const conditional loops fold to no-output only when the condition is compile-time `false`.
-Compile-time `true` and runtime/unknown conditions are rejected for conditional loops.
-
-Const range/collection loops use `template_const_loop_iteration_limit`.
-The default is `10_000` and the cap is `1_000_000`.
-
-## Folding and numeric semantics
-
-Compile-time folding should agree with runtime lowering.
-
-Examples:
-
-- statically known numeric failures are compile-time diagnostics
-- `String -> Int` and `Float -> Int` casts enforce the signed 32-bit range
-- `String -> Float` rejects grammar-valid text that materialises to non-finite `Float`
-- `Float -> String` uses Beanstalk's formatter, not backend-native display
-- runtime Float interpolation and compile-time template folding use the same formatting rules
-
-If compile-time and runtime formatting differ, templates become target-dependent.
-Avoid that.
-
-## Config extraction
-
-`config.bst` is compiled through the frontend up to AST.
-Stage 0 extracts only authored known top-level config-key constants declared with `name #= value`
-or `name #Type = value` from shared AST const facts.
-Imported constants and support declarations may help config expressions, but they never become config entries.
-
-This lets config use the same folding and diagnostics as source constants without making config a runtime module.
-
-## Common mistakes
-
-- Treating constants as runtime top-level statements.
-- Letting HIR decide whether a constant folds.
-- Letting private inferred const facts change semantics.
-- Carrying compile-time page fragments through HIR.
-- Allowing runtime expressions in const initializers.
-- Forgetting same-file constant source-order semantics.
-- Letting compile-time and runtime Float formatting drift.
-
-## Related reading
-
-- @../ (AST internals): AST phase owners and invariants
-- @../templates-tir-and-reactivity (Templates, TIR and reactivity): top-level const templates and compile-time fragments
-- @../../stages/project-structure (Stage 0: Project structure): config extraction boundary
-- @../../build-system-and-frontend-boundary (Build-system and frontend boundary): `config.bst` compilation rules
+Canonical details live in both architecture authorities.

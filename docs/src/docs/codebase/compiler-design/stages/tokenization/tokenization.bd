@@ -1,122 +1,26 @@
-Tokenization converts source text into structured located tokens.
-It owns lexical recognition and source-location precision.
+This page is a supplementary teaching scaffold for tokenization.
 
-The tokenizer should report syntax that is truly lexical or delimiter-shaped.
-It should not type-check, resolve imports or decide semantic expression behaviour.
+## Core concept
 
-## Main path
+A tokenizer converts characters into located token kinds. It recognises spelling and delimiters without deciding program meaning.
 
-`src/compiler_frontend/tokenizer/lexer.rs`
-
-Related path:
-
-- `src/compiler_frontend/numeric_text/` owns shared numeric grammar, normalization, separator/exponent validation and materialisation helpers used by later semantic consumers.
-
-## What tokenization owns
+## Beanstalk boundary
 
 Tokenization owns:
 
-- basic lexical recognition
-- source location tracking
+- lexical recognition
+- source locations
 - string and template delimiter context
-- numeric literal scanning and source-location diagnostics
-- attached negative literal classification
-- symbolic binary-operator spacing diagnostics
-- unary-negation spacing diagnostics
-- style directive token recognition through the merged directive registry
-- syntax-level rejection of unsupported or unknown directive forms where applicable
+- numeric text scanning
+- spacing diagnostics that are lexical
+- directive token recognition through the supplied registry
 
-The tokenizer consumes literal text and classifies tokens.
-Later stages decide semantic numeric type, checked operation behaviour and cast compatibility.
+It does not resolve imports, types, declarations or target support.
 
-## Entry modes
+Beanstalk source kinds may choose different starting lexical contexts. Normal `.bst` starts in code. Beandown starts inside an implicit template body. Plain Markdown uses its own preparation path.
 
-`TokenizerEntryMode` chooses the initial lexical state for a source file kind.
+## Rewrite focus
 
-[table:
-    [th:
-        [: **Source kind**]
-        [: **Tokenizer entry**]
-    ]
+Explain why token boundaries are separated from parsing, how precise locations improve diagnostics and why shared numeric grammar does not move numeric semantics into the tokenizer.
 
-    [td:
-        [: Normal `.bst`]
-        [: Starts in ordinary code mode.]
-    ]
-
-    [td:
-        [: Beandown `.bd`]
-        [: Starts inside an implicit template body so original source locations can be preserved.]
-    ]
-
-    [td:
-        [: Plain Markdown `.md`]
-        [: Bypasses tokenization because it is a raw content asset.]
-    ]
-]
-
-`TokenizeMode` is the internal lexical stack state used while scanning nested templates.
-It is not the same thing as source-file kind selection.
-
-## Templates and strings
-
-Tokenization handles string/template delimiter context.
-It tracks when source is inside code, string or template body text.
-That allows later stages to preserve template body text while still detecting invalid boundaries.
-
-Beandown starts inside an implicit template body.
-That lets `.bd` files keep real source locations while rejecting an unescaped outer closing bracket.
-The compiler does not pretend it prepended wrapper source text.
-
-## Related reading
-
-- @../header-parsing (Stage 2: Header parsing): source-kind headers and fused Stage 1/2 scheduling
-- @../../diagnostics-paths-and-symbols (Diagnostics, paths and symbols): style directive registry
-- @../../entry-start-and-page-fragments (Active-root start and page fragments): where Beandown and Markdown content surfaces
-
-## Numeric text
-
-Numeric scanning has two layers:
-
-- the tokenizer consumes and classifies literal source text with source-location diagnostics
-- `numeric_text` owns reusable grammar, validation and materialisation helpers for semantic consumers
-
-Keep source text and semantic numeric behaviour separated.
-Tokenization can say a literal spelling is invalid.
-AST and HIR decide whether a checked numeric operation folds, traps or recovers through builtin `Error!`.
-
-## Style directives
-
-The tokenizer recognises directive tokens through the merged directive registry.
-Frontend directives are always available.
-Builder directives are added through the active `BackendBuilder`.
-Unknown directives are rejected strictly.
-
-Tokenizer and template parsing must use the same merged registry.
-Otherwise a directive could tokenize as valid and later parse as unknown, or the other way around.
-
-## Stage 1 and Stage 2 scheduling
-
-In project builds, tokenization is fused with header parsing or source-kind preparation as per-file preparation.
-
-Tiny modules stay serial.
-Medium modules cross to per-file Rayon only when source bytes justify the overhead.
-Larger modules use chunked Rayon scheduling.
-
-Every strategy produces ordered chunk-local results, then merges string-table deltas and remaps tokens, headers, warnings and diagnostics in original source-file order.
-`RAYON_NUM_THREADS` remains the external concurrency control.
-The compiler doesn't create a custom frontend Rayon pool.
-
-## What tokenization should not do
-
-Tokenization should not:
-
-- resolve imports
-- infer types
-- fold constants
-- parse declaration shells
-- decide template slot semantics
-- decide numeric failure mode
-- inspect backend feature support beyond directive availability
-
-If a tokenizer change needs semantic facts, the boundary is probably wrong.
+Canonical details live in `docs/compiler-design-overview.md`.

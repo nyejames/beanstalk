@@ -29,28 +29,29 @@ TIR remains AST-local. No TIR store, ID, view, overlay or preparation type may c
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/final-tir-completion-plan.md
 STATUS: active
-CURRENT_SLICE: R1B-R1D accepted; checkpoint ready to commit before R2A
-LAST_ACCEPTED_COMMIT: 7fd17f4b0 (R1A shared ScopeContext store)
-WORKTREE: main with accepted uncommitted R1B-R1D source and plan changes; concurrent user documentation changes must be ignored, preserved, and excluded from staging
+CURRENT_SLICE: R2A replace overlay-set identity with value-carried TemplateViewContext
+LAST_ACCEPTED_COMMIT: 0d42188ca (R1 ownership and reference collapse)
+WORKTREE: main at 0d42188ca with concurrent user documentation changes that must be ignored, preserved, and excluded from staging
 REQUIRED_RELOADS: startup files, this plan, and current TIR source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: compiler-design-overview.md one-store TIR contract and this plan's R2 exact-view contract
-- code: TemplateIrStore is the only production owner; durable references are module-local; registry, owner/store IDs, foreign conversion, and render-unit late template conversion are deleted; exact nested-wrapper and parser-boundary structural identity are pinned
+- code: overlays.rs, refs.rs, store.rs, view.rs and AST template callers still carry TemplateOverlaySetId; overlay-set storage and composition remain; direct overlay payload arenas already belong to TemplateIrStore
 ACCEPTANCE_CRITERIA:
-- commit the accepted R1B-R1D source and plan only
-- preserve and exclude all concurrent user documentation changes
-- begin R2A with value-carried TemplateViewContext; do not begin preparation
+- add copyable TemplateViewContext with three optional compact overlay IDs
+- replace durable, child, wrapper, view and caller overlay-set identity without a context table or compatibility shim
+- delete TemplateOverlaySet, TemplateOverlaySetId, overlay-set allocation, lookup, canonicalization and composition
+- add focused size invariants and preserve current behavior; do not begin R2B, R2C or preparation
 VALIDATION_STATE:
 - cargo fmt and git diff --check: passed
 - hard deleted-symbol, stale ownership-comment, render-unit conversion, and HIR/backend TIR-boundary greps: passed
 - TIR line inventory: 20,368 production and 17,224 test lines (069a29acb: 24,274 and 27,231)
 - just validate: passed from a clean target; cross-target Clippy, 3441 unit tests, 1784 integration cases, docs check, and 28 benchmark sanity cases; 22 faster and 0 slower
-DOCS_IMPACT: none beyond this plan checkpoint
+DOCS_IMPACT: none beyond this parent-managed plan checkpoint; R2A is an internal refactor
 BLOCKERS_OR_OPEN_DECISIONS: none
 DELEGATION_DECISION: codex-cli for R2A - user requires Codex CLI for subsequent worker slices
 NEXT_WORKER_ORDER: codex-cli (user-required provider)
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit R1B-R1D with explicit staging, reload the plan, then launch the smallest R2A Codex CLI slice
+NEXT_RESUME_ACTION: launch the bounded R2A Codex CLI implementation slice
 ```
 
 Use `069a29acb` as the implementation and regression base. Do not continue extending `FoldAuthorityWalk`, foreign-store traversal, external expression-overlay stacks or prepared foreign-wrapper proofs.

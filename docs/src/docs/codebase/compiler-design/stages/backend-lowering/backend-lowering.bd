@@ -1,120 +1,27 @@
-Backend lowering belongs to project builders after frontend compilation.
+This page is a supplementary teaching scaffold for target planning and backend lowering.
 
-The frontend hands over compiled modules.
-Project builders assemble artifacts.
-Backend lowerers generate target-specific code from validated HIR and companion metadata.
+## Core concept
 
-## Main paths
+A backend should receive explicit validated semantic inputs. It should not reconstruct source meaning while generating target code.
 
-- `src/backends/js/`
-- `src/backends/wasm/`
-- `src/backends/backend_feature_validation.rs`
-- `src/backends/external_package_validation.rs`
-- `src/projects/html_project/html_project_builder.rs`
-- `src/projects/html_project/js_path.rs`
-- `src/projects/html_project/wasm/`
-- `src/projects/html_project/external_js/`
-- `src/projects/html_project/tracked_assets.rs`
+## Beanstalk boundary
 
-## Backend handoff
+The build system owns:
 
-Backend builders consume `Module` values containing:
+- entry and package roots
+- reachability unions
+- target assignment
+- project assembly
+- output records and manifests
 
-- canonical entry-point path
-- validated HIR
-- the paired `TypeEnvironment`
-- borrow-analysis facts
-- warnings
-- resolved const top-level fragments
-- `ModuleRootActivity` with non-trivial root-body, const-fragment and runtime-fragment facts
-- the effective external package registry for the module
-- deduplicated provider/runtime external-import metadata
+The compiler owns target-contract validation over explicit roots and assignments.
 
-Backend lowerers should not rediscover frontend imports, traits, generic evidence, source config or template syntax.
+Lowerers own target-specific code generation from validated HIR, type environments, borrow facts and link plans.
 
-## Three backend boundaries
+Unsupported reachable features are diagnosed before lowering. Lowerers do not parse source, rebuild imports, infer generics or write final project outputs directly.
 
-[table:
-    [th:
-        [: **Boundary**]
-        [: **Owner**]
-    ]
+## Rewrite focus
 
-    [td:
-        [: Build system]
-        [: Orchestration, selected `BackendBuilder`, `Project` receipt, output-root validation, writing, manifest tracking and stale artifact cleanup.]
-    ]
+Explain the distinction between target validation, link planning, code generation and output writing.
 
-    [td:
-        [: Project builder]
-        [: Project-specific artifact assembly, page routes, fragment merge, tracked assets and cleanup policy.]
-    ]
-
-    [td:
-        [: Backend lowerer]
-        [: Target-specific code generation from validated HIR and companion metadata.]
-    ]
-]
-
-Backends and project builders produce `OutputFile` records.
-They shouldn't write final project outputs directly.
-
-## Semantic operations
-
-Language-owned HIR operations such as maps, checked numeric operations, Float formatting, Float validation, builtin casts and reactive metadata lower through backend-owned runtime helpers or target-native code selected by the backend.
-
-They must not become unchecked target-native behaviour when Beanstalk semantics require checks or helper calls.
-
-Ownership-aware backends may use borrow facts and memory-model metadata for optimisation.
-GC-only backends can lower through the semantic baseline without deterministic drop behaviour.
-
-## Backend validation
-
-Backend validation runs before target lowering.
-
-External package validation checks reachable external calls against the selected target's lowering metadata.
-Backend feature validation checks target-gated HIR features through explicit reachability roots and returns structured diagnostics for user-visible target-contract violations.
-
-Backend feature validation doesn't hard-code one execution root.
-The project builder selects a root policy for the artifact being produced, such as entry-start reachability for page bundles or an explicit exported-function set for builder-defined callable surfaces.
-
-Backend lowerers should receive only HIR features and external calls their selected target contract can lower.
-
-## HTML builder
-
-The HTML project builder owns route-level artifact assembly.
-It derives canonical HTML output paths, validates duplicate outputs, selects the configured backend path, emits build-level external runtime assets, emits tracked assets from rendered path usages, selects the entry page and returns the complete project artifact set plus cleanup policy.
-
-The HTML builder also owns the target-independent page-fragment plan shared by HTML-JS and HTML-Wasm:
-
-1. Merge compile-time fragments into the runtime fragment list at their recorded insertion indices.
-2. Create placeholders or slots for runtime fragments.
-3. Execute active-root `start` once through the selected runtime path.
-4. Hydrate returned runtime fragments into the slots in source order.
-5. Assemble the final route HTML artifact.
-
-The HTML-JS path lowers HIR through the JS backend and uses the shared contract to hydrate fragments. The HTML-Wasm path is builder orchestration around the core Wasm backend: it chooses exported functions, requests helper exports, invokes Wasm lowering, generates bootstrap JS, and assembles route HTML, JS and Wasm files using the same fragment contract.
-
-Reactive runtime fragments are a JS-only concern. Ordinary runtime page-fragment assembly is shared. Reactive mounting is not.
-
-## Output writing
-
-Output writing belongs to the build system through `write_project_outputs`.
-
-It owns:
-
-- output-root validation
-- skip-unchanged writes
-- manifest tracking
-- stale artifact cleanup
-
-This keeps lowerers pure with respect to project output state.
-A backend can say what should exist.
-The build system decides how to write it safely.
-
-## Related reading
-
-- @../../backend (Backend handoff): validation, HTML assembly, JS, Wasm, external JS and tracked assets
-- @../hir-generation (Stage 5: HIR generation): the IR that backend lowerers consume
-- @../borrow-validation (Stage 6: Borrow validation): side-table facts for ownership-aware lowering
-- @../../entry-start-and-page-fragments (Active-root start and page fragments): shared page-fragment contract
+Canonical details live in both architecture authorities.

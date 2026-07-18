@@ -1,150 +1,27 @@
+This page is a supplementary teaching scaffold for imports, packages and bindings.
 
-Imports are resolved before AST body semantics.
-AST consumes a file-local visibility environment through `ScopeContext`.
-It may validate semantic use of visible symbols, but it must not rebuild import bindings or rediscover top-level visibility.
+## Import model
 
-## Main owners
+Project source imports are module-root-relative.
 
-- Stage 0 discovers source-backed packages, builder-supported source assets and provider-backed external files.
-- Header import preparation resolves import paths, aliases, module-root exports, namespace records, source-backed package surfaces, binding-backed package symbols, prelude/builtin names, receiver-method visibility and collision rules.
-- Dependency sorting uses header-provided dependency edges.
-- AST uses `ScopeContext` to resolve expressions and type references through the active visibility maps.
-- HIR carries stable external IDs only.
-- Backends map those IDs to helpers, imports, glue, runtime names or target-native operations.
+- `@./` has no meaning.
+- Parent traversal is invalid.
+- Reaching a module or support package exposes only its `export:` facade.
+- No import uses fallback precedence or nearest-match shadowing.
 
-No stage after header import preparation should rebuild import visibility from raw source syntax.
+Header syntax records import shells. Stage 0 uses structural provider references. Interface binding later creates stable imported symbol bindings.
 
-## Source-backed packages and module public surfaces
+## Package model
 
-Source-backed packages are normal modules with one unique non-config `#*.bst` root.
-They participate in module-level dependency sorting.
+- Normal modules are directory-scoped compilation units.
+- Scoped `+*.bst` roots expose project-local support packages.
+- The project-root facade exposes the external package surface.
+- Dependency, Core and Builder source packages compile in separate graph boundaries.
+- Binding-backed packages expose typed external symbols rather than source modules.
+- `@project` is a reserved synthetic interface, not a normal package.
 
-The root filename is cosmetic. Its strict `export:` block is the API boundary.
-Public authored declarations, grouped re-exports, exported constants and exported type surfaces still need to be ordered before outside declarations that import them through the module boundary.
+## Rewrite focus
 
-Ordinary root imports and declarations outside `export:` remain private to the root file.
-Grouped public re-exports define the public API name.
+Explain namespace design, visibility, re-export bindings, source versus binding-backed packages and why package origin is separate from backing.
 
-Module public API maps are built from:
-
-- public authored headers inside the root's `export:` block
-- grouped imports inside `export:`
-- grouped aliases inside those imports
-
-Legacy inline `export`, bare namespace exports and wildcard exports are outside the current surface.
-
-## Namespace records
-
-Source namespace imports create shallow field-access-only import records.
-Import records are not first-class values.
-Import source child paths directly rather than walking source path segments through namespace fields.
-
-External package namespace imports can expose recursive child namespace records for package-local symbol paths such as `io.input.*`.
-That recursion belongs to virtual package metadata, not source module surfaces.
-
-## Binding-backed packages
-
-Binding-backed packages are virtual typed symbols implemented outside Beanstalk source. They resolve through `ExternalPackageRegistry` and expose opaque types, constants and free functions only.
-
-External package membership uses:
-
-- stable `ExternalPackageId` values
-- readable package paths
-- structured package-local symbol paths
-- origin metadata
-- stable frontend IDs such as `ExternalFunctionId`
-
-All binding-backed packages, whether registered directly by a builder or produced by
-an import provider, share one external-package identity model.
-The prelude `io` namespace alias is a separate bare-name visibility policy for `@core/io`, not a package kind.
-
-Binding-backed packages don't register source-style receiver methods.
-Use a source-owned wrapper type when method-style ergonomics are wanted over an external handle.
-The HTML `@html` package's `Canvas` wrapper is the shape to copy: the raw `@web/canvas` symbols stay binding-backed, while method-style calls come from an ordinary source-owned wrapper.
-
-Project-local and Builder source-backed packages resolve through `SourcePackageRegistry`. Binding-backed Core, Builder and ProjectLocal packages resolve through `ExternalPackageRegistry`. Both registries carry `PackageMetadata`, but origin and backing don't alter import syntax or the strict module `export:` boundary.
-
-## External import providers
-
-External import providers live under `BuilderSurface` and resolve non-Beanstalk import sources into typed package/type/function IDs before AST consumes visibility.
-
-Grouped imports for virtual external packages resolve through external package metadata before source module-boundary enforcement.
-Source imports still go through module public-surface checks before source target resolution, so virtual package lookup doesn't weaken source-backed package or module privacy.
-
-Provider-backed external JavaScript is the main current example.
-The frontend registers typed package metadata.
-The backend later emits only the runtime assets and glue reachable from the compiled bundle.
-
-## Source file kinds
-
-Builder-supported source file kinds resolve through the same extensionless source import path as `.bst` files when the active builder declares support.
-
-HTML supports:
-
-- Beandown `.bd`
-- plain Markdown `.md`
-
-Both become private synthetic `content #String` constants during header preparation.
-Recognised but unsupported source kinds are rejected with typed import diagnostics.
-
-There is no source-kind-specific AST, HIR or borrow-checker path.
-This keeps content assets integrated without making every asset format a compiler sublanguage.
-
-## Receiver methods and visibility
-
-Header import preparation doesn't import source-authored receiver methods as independent symbols.
-
-A source-authored receiver method belongs to the same file as its nominal receiver type.
-It becomes callable wherever the receiver type is visible.
-Namespace imports may make the receiver type visible, but methods are not namespace fields and can't be grouped-imported or aliased independently.
-
-External packages don't expose receiver methods.
-Compiler-owned collection and map operations are builtin member access, not user extension methods.
-
-## Collision policy
-
-All user-visible names go through one collision policy.
-Same-file declarations, source imports, external imports, type aliases, prelude symbols and builtins can't silently shadow each other.
-
-Aliases have two different rules depending on where they appear:
-
-- Ordinary import aliases are file-local. They can't be independently re-exported.
-- An alias authored inside a grouped import in `export:` defines the public API name for that exported symbol.
-
-Both kinds must not collide with visible names. Leading-case mismatches warn.
-
-Ordinary examples:
-
-[codeblock, $code("bst"):
-    import @some/path { Symbol as LocalName }
-    import @core/io { io as CoreIo }
-]
-
-Module export alias example:
-
-[codeblock, $code("bst"):
-    export:
-        import @some/path { Symbol as PublicName }
-    ;
-]
-
-The grouped alias inside `export:` is the public API name. It isn't a file-local-only alias that happens to be exported.
-
-## Related reading
-
-- @../stages/header-parsing (Stage 2: Header parsing): where imports, aliases and module exports are parsed
-- @../stages/dependency-sorting (Stage 3: Dependency sorting): how source-backed package root surfaces participate in ordering
-- @../stages/ast-construction (Stage 4: AST construction): `ScopeContext` visibility consumption
-- @../backend/external-js-and-runtime-assets (External JavaScript and runtime assets): provider-backed JS and runtime asset planning
-
-If a lookup path needs to behave differently for source imports, module-boundary imports and external packages, put that distinction in the visibility/import layer.
-Don't hide it in expression resolution.
-
-## HIR handoff
-
-HIR stores stable external IDs, not package syntax or backend runtime names.
-
-Borrow validation can resolve external IDs through the external package registry to recover access rules and return-alias metadata.
-Backends map the same IDs to target-specific helpers, imports, generated glue, runtime names or target-native operations.
-
-That lets frontend semantics stay target-neutral while backends still own runtime integration.
+Canonical details live in both architecture authorities.

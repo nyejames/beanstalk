@@ -1,108 +1,35 @@
-Build systems provide a `BackendBuilder` and wrap it in a `ProjectBuilder`.
+This page is a supplementary teaching scaffold for the build-system and compiler boundary.
 
-The frontend compiles modules up to HIR and borrow validation.
-The backend builder consumes a compiled project graph and emits project artifacts.
-That split is strict.
+## Core concept
 
-Backend builders don't load source files, discover modules, load or parse `config.bst`, perform semantic frontend compilation or write final output files directly.
-They declare the build surface the frontend is allowed to see.
+Build orchestration answers which semantic units to compile. The compiler answers what those units mean.
 
-## BackendBuilder
+## Build-system ownership
 
-The accepted architecture has the backend consume a success-only `ProjectCompilation` rather than a flat `Vec<Module>`. The current implementation still passes `Vec<Module>`; the canonical module plan owns that migration.
+- command and capability selection
+- config bootstrap
+- source ownership and graphs
+- provider scheduling
+- generated-function worklists
+- entry and package assembly
+- target planning
+- outputs and incremental reuse
 
-See `docs/build-system-design.md` "Success-only ProjectCompilation" for the accepted payload shape and `docs/compiler-design-overview.md` "Backend-facing compiler handoff" for what backends receive.
+## Compiler ownership
 
-A backend builder declares these frontend-visible surfaces:
+- source syntax preparation
+- provider-interface binding
+- local declaration ordering
+- AST semantics
+- TIR
+- HIR and validation
+- borrow validation
+- target-contract validation
 
-- source-backed packages
-- binding-backed packages
-- config keys
-- style directives
-- external import providers
-- builder runtime packages
-- supported source file kinds
+Backends consume explicit compiled artefacts and link plans. They do not load source or reconstruct project topology.
 
-It receives a validated `Config`, may validate backend-owned config keys and lowers compiled module artefacts into project output records. The frontend doesn't know the final project layout. The backend doesn't know how raw source files were discovered.
+## Rewrite focus
 
-## BuilderSurface
+Explain why ownership boundaries reduce duplicated work, conflicting truth and late target failures.
 
-`BuilderSurface` is the build surface exposed to the frontend.
-It carries typed registries, not loose callbacks or strings.
-
-The accepted architecture separates reusable immutable builder capability definition from one build-owned provider cache and one build-owned external import resolution table. The current implementation mixes both in `BuilderSurface`; the canonical module plan owns that migration.
-
-See `docs/build-system-design.md` "Selected command and capability surface" for the accepted capability surface contract.
-
-`ProjectConfigKeyRegistry` is declarative Stage 0 metadata.
-The accepted architecture replaces flat config keys with one section-aware recursive schema. The current implementation uses flat keys; the project config plan owns that migration.
-
-Source and binding registries stay separate because their resolution paths differ. Both carry shared `PackageMetadata`, whose independent `PackageOrigin` and `PackageBacking` axes let the frontend classify packages without conflating ownership with implementation. Config keys, providers and supported source kinds are builder surface too. Binding-specific lowering metadata remains with the binding and provider owners.
-
-## Config compilation
-
-`config.bst` is build-system-owned compile-time Beanstalk source.
-It is one self-contained source file with no source imports or package resolution.
-It uses the frontend up to AST so config values can use normal compile-time constants, folded templates and typed diagnostics.
-
-It isn't compiled as a module.
-It doesn't produce HIR.
-It doesn't create runtime `start` semantics.
-It doesn't export language-visible declarations.
-
-The accepted config model uses one required open `project` record, private helper constants and top-level builder and tooling section records. Only active sections are schema-validated. The current implementation uses flat known config keys; the project config plan owns that migration.
-
-See `docs/build-system-design.md` "Self-contained config.bst" for the full config contract.
-
-Config rejects by design:
-
-- every source import, including relative, project, Core, Builder, dependency and binding-backed imports
-- runtime declarations, mutable bindings, functions, named support types, traits and conformances
-- standalone templates and top-level const page fragments
-- `export:`
-
-## External import providers
-
-External import providers are builder-declared hooks.
-Stage 0 and import preparation use them to turn non-Beanstalk files into typed external package surfaces before AST consumes visibility.
-
-Provider results may also carry registered runtime imports discovered while parsing the external source.
-That is important for JavaScript imports: the frontend sees a typed package surface, while the backend later emits only the runtime glue and assets that reachable HIR uses.
-
-Provider-capable discovery stays serial for now.
-It mutates the external package registry, provider cache, resolution table and shared diagnostic string table.
-Parallel provider-backed discovery needs deterministic provider deltas and ID remapping before it can be safe.
-
-## Builder-runtime packages
-
-Builder-runtime package metadata covers builder-owned virtual packages such as `@web/canvas`.
-These packages are registered directly in `binding_packages`, then attached to module external-import metadata when reachable HIR references one of their functions.
-
-This lets builder-owned packages share the same runtime asset and glue path as provider-created imports without pretending they were project-local source files.
-
-## Source file kinds
-
-Source file kind metadata lets builders opt into source assets that participate in normal source import discovery without becoming Beanstalk modules.
-HTML registers Beandown `.bd` and plain Markdown `.md` content assets this way.
-
-A supported source asset follows the same extensionless source import candidate path as `.bst` files.
-Recognised but unsupported source kinds are rejected with typed import diagnostics.
-
-Beandown and plain Markdown become ordinary synthetic `content #String` constants during header preparation.
-Beandown nested templates with no explicit directive default to `$md` during ordinary AST template parsing.
-They don't get a custom AST node, HIR, borrow-checker or backend path.
-
-## Validation lanes
-
-Project-specific config validation stays in `BackendBuilder::validate_project_config`.
-It returns `ProjectConfigError` so normal user config mistakes remain typed `CompilerDiagnostic` values while infrastructure failures remain explicit `CompilerError` values.
-
-Complex release optimisations should stay outside the fast frontend path unless correctness requires them.
-This compiler is built for hot-reload development, so slow project-wide cleverness belongs behind a clear target or release boundary.
-
-## Related reading
-
-- @../stages/project-structure (Stage 0: Project structure): where Stage 0 applies this contract
-- @../stages/ast-construction (Stage 4: AST construction): where config compilation stops
-- @../imports-packages-and-bindings (Imports, packages and bindings): source-backed packages, binding-backed packages and provider imports
-- @../diagnostics-paths-and-symbols (Diagnostics, paths and symbols): `CompilerDiagnostic`/`CompilerError` lanes
+Canonical details live in both architecture authorities.

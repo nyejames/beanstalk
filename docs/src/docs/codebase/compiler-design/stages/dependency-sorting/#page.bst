@@ -1,18 +1,18 @@
 import @./dependency-sorting {content as reference_content}
 import @styles/docs {navbar, section, codebase_theme_head}
 
-page_title #= "Stage 3: Dependency sorting"
-page_description #= "How Beanstalk orders top-level declarations and reports dependency cycles."
+page_title #= "Stage 3: Local declaration ordering"
+page_description #= "How Beanstalk topologically orders declarations inside one canonical module."
 page_head #= codebase_theme_head
 
 #[navbar]
 
 #[section, $md:
-    @../../ (Compiler design) / @../ (Pipeline stages) / Stage 3: Dependency sorting
+    @../../ (Compiler design) / @../ (Compiler pipeline) / Stage 3: Local declaration ordering
 
-    # Stage 3: Dependency sorting
+    # Stage 3: Local declaration ordering
 
-    Dependency sorting makes declarations linearly consumable by AST. It never looks inside executable bodies.
+    Stage 3 orders declarations owned by one module. Provider modules were already ordered by the build-system graph.
 ]
 
 #[section, reference_content]

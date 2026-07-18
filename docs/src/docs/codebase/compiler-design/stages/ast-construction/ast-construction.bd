@@ -1,105 +1,28 @@
+This page is a supplementary teaching scaffold for AST semantics.
 
-AST consumes sorted declaration headers and the header-built module environment.
-It resolves declarations, folds constants/templates, parses executable bodies, type-checks expressions, validates terminality and emits typed AST nodes.
+## Core concept
 
-AST is where most frontend semantics become real.
+The AST stage turns parsed declaration shapes and expressions into checked semantic meaning.
 
-## Main path
-
-`src/compiler_frontend/ast/mod.rs`
-
-Main phase owners:
-
-- `src/compiler_frontend/ast/module_ast/environment/`
-- `src/compiler_frontend/ast/module_ast/emission/`
-- `src/compiler_frontend/ast/module_ast/finalization/`
-
-## Phase owners
-
-`build_ast_environment` consumes header-built file visibility, then resolves declaration metadata, constants, nominal types, function signatures, receiver catalog data, trait metadata and shared environment side channels.
-
-`emit_ast_nodes` parses function/start/template bodies against the completed environment, validates function terminality, emits AST nodes and emits const-template output.
-
-`finalize_ast` performs HIR-boundary cleanup.
-It extracts doc fragments, assembles const top-level fragments, propagates reactive template metadata, normalizes templates, normalizes module constants, validates type boundaries, collects const facts, gathers concrete choice definitions, merges builtin AST and constructs the final `Ast`.
-
-## What AST owns
+## Beanstalk boundary
 
 AST owns:
 
-- semantic declaration resolution from header shells into canonical `TypeId`, function signature, constant, nominal type, trait and receiver-method metadata
-- public module-root API surface validation, including private type leakage in exported signatures, fields, aliases, constants and trait metadata
-- executable body parsing
-- body-local declarations
-- expression parsing and type checking
-- function terminality validation for non-unit success returns before HIR lowering
-- contextual coercion at explicit frontend-owned boundaries
-- generic validation, generic free-function template storage, call inference and concrete instance emission before HIR
-- trait declaration/evidence validation, static generic-bound evidence checks and bound-provided receiver-call resolution before HIR
-- explicit cast target/evidence resolution and builtin cast folding
-- constant folding, const-fact collection and const-only validation
-- template composition, compile-time folding, runtime render-plan preparation, reactivity metadata preservation and HIR-boundary template normalization
-- TIR-based template representation and TIR-to-HIR handoff conversion
+- module-local declaration resolution
+- local type-environment construction
+- executable body parsing and type checking
+- contextual coercion at explicit receiving sites
+- constant and template folding
+- generic call inference and request emission
+- trait, conformance and cast evidence
+- public-surface validation
+- entry metadata folding
+- TIR from parser emission through finalisation
 
-AST should be described by ownership and data flow, not by a fixed internal pass count.
-Internal substeps can move as long as the stage still consumes sorted headers, resolves semantics once and emits clean HIR input.
+AST consumes bound visibility and local declaration order. It does not rediscover imports or provider declarations.
 
-## Important subowners
+## Rewrite focus
 
-- `type_resolution/` owns parsed type-reference resolution to canonical `TypeId`, including source-visible lookup, aliases, fixed collection capacity, maps and generic nominal instantiation.
-- `module_ast/environment/public_surface.rs` owns semantic public module API validation after type and trait identities are resolved.
-- `generic_functions/` owns generic free-function templates, call inference and concrete instance emission before HIR.
-- `generic_bounds.rs` owns static trait-bound validation for concrete nominal generic instances.
-- `templates/` owns template parsing, composition, folding, slot routing, render plans, control-flow validation and template structural metadata traversal.
-- `templates/tir/` owns the AST-local Template IR.
-- `module_ast/finalization/const_fact_collection.rs` owns explicit module, private top-level and body-local const-fact collection after AST finalization.
-- `builtins/casts/` owns builtin cast target classification, evidence, policies and core cast-trait metadata.
-- `field_access/` owns source fields, receiver calls and compiler-owned collection/map builtin member access.
+Explain the difference between syntax trees and typed semantic trees, why environment construction precedes body checking and why compile-time evaluation must agree with runtime semantics.
 
-## Frontend arenas
-
-Frontend arenas are stage/module-owned implementation details.
-They provide stable IDs and reduce clone/allocation pressure inside the owning stage.
-
-They don't change source semantics, diagnostics, declaration ordering, HIR shape or backend artifacts.
-
-Token/header statistics and `FrontendArenaCapacityEstimate` produce conservative `Vec` capacity seeds.
-These estimates are policy-only: undersized estimates grow normally, oversized estimates only reserve bounded extra capacity and capacity formulas should stay centralised in frontend arena policy modules.
-
-The scope-frame arena is AST-owned.
-It replaces cloned body-local scope maps with parent-linked frames while continuing to consume header-built visibility through `ScopeContext`.
-`StringTable` remains the path and string identity system.
-
-## AST parallelism readiness
-
-AST body emission remains serial in production.
-`AstEmitter` consumes a mutable `AstModuleEnvironment`, parses bodies through `ScopeContext` values backed by `Rc`/`RefCell` state, emits warnings and rendered-path usages through shared sinks and accumulates generic instantiation requests before concrete instances are emitted.
-
-Wrapping those structures in locks would add contention and ownership churn without solving deterministic merge.
-
-Future AST parallelism needs:
-
-- an immutable environment snapshot for worker reads
-- worker-local string-table forks or pre-interned body symbols
-- read-only lookup surfaces that are `Send`/`Sync` by design
-- deterministic merge of warnings, rendered path usages, generic instantiation requests and emitted nodes
-- a clear owner for the generic instance worklist
-
-HIR generation, borrow validation, backend lowering and Wasm lowering remain out of scope for this frontend parallelism pass.
-They shouldn't be parallelised as follow-on cleanup to Stage 0 or file-preparation scheduling changes.
-
-## Direct Beandown API
-
-The direct HTML-project Beandown API uses the same tokenizer, synthetic-header preparation, dependency sorting and AST folding path as compiler-integrated `.bd` imports, then extracts the folded `content` constant.
-It also uses the same Beandown template parse policy, where nested templates with no explicit directive default to `$md`.
-
-It deliberately stops before HIR generation, borrow validation, backend lowering, artifact writing and output cleanup.
-
-That keeps Beandown a compiler-integrated content source rather than a special compiler mode.
-
-## Related reading
-
-- @../../ast (AST internals): environment, expressions, constants, templates and generics
-- @../hir-generation (Stage 5: HIR generation): the consumer of AST output
-- @../../type-identity-and-coercion (Type identity and coercion): `TypeEnvironment` and `TypeId` semantics
-- @../../parallelism-and-determinism (Parallelism and determinism): why AST body emission stays serial
+Canonical details live in `docs/compiler-design-overview.md`.

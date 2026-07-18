@@ -6,7 +6,7 @@ Implicit `start`, const/runtime split and builder-owned assembly.
 
 - Input: active module-root top-level runtime statements and top-level const templates
 - Output: an implicit `start()` header, runtime fragment strings and compile-time fragment metadata
-- Decides: which active-root forms are runtime code, which fold into builder metadata and which imported-root bodies are suppressed
+- Decides: which dormant root forms remain runtime code, which fold into builder metadata and which entry assembly may activate them
 - Must not decide: HTML page assembly, route selection, backend lowering
 - Invariant: HIR carries runtime code only and doesn't own document structure
 
