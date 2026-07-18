@@ -14,7 +14,7 @@ use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::const_values::resolver::classify_template_from_effective_tir;
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::ast::templates::error::TemplateError;
-use crate::compiler_frontend::ast::templates::tir::TemplateIrRegistry;
+use crate::compiler_frontend::ast::templates::tir::TemplateIrStore;
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, DiagnosticBag};
 use crate::compiler_frontend::declaration_syntax::record_body::parse_record_body;
 use crate::compiler_frontend::declaration_syntax::signature_members::{
@@ -58,13 +58,12 @@ pub fn parse_struct_shell(
 /// WHY: called at AST stage only, after constant resolution has run. At header stage,
 /// references are unresolved and cannot be validated yet.
 ///
-/// Template constness is classified through the caller's registry-backed effective TIR view.
+/// Template constness is classified through the caller's effective view over the module TIR store.
 /// A TIR classification failure is itself a reportable diagnostic and is pushed into the bag
 /// instead of the generic non-constant message.
 pub(crate) fn validate_struct_default_values(
     fields: &[Declaration],
-    template_ir_registry: &Rc<RefCell<TemplateIrRegistry>>,
-    string_table: &StringTable,
+    template_ir_store: &Rc<RefCell<TemplateIrStore>>,
 ) -> Result<(), DiagnosticBag> {
     let mut bag = DiagnosticBag::new();
 
@@ -77,11 +76,7 @@ pub(crate) fn validate_struct_default_values(
             field
                 .value
                 .const_value_kind_with_template_classifier(&mut |template| {
-                    classify_template_from_effective_tir(
-                        template,
-                        template_ir_registry,
-                        string_table,
-                    )
+                    classify_template_from_effective_tir(template, template_ir_store)
                 });
 
         let is_compile_time_constant = match classification {

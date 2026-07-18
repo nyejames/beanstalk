@@ -166,11 +166,7 @@ pub(crate) fn convert_tir_tree_to_active_slot_plan(
         }
 
         TemplateIrNodeKind::ChildTemplate { reference, .. } => {
-            let child_template_id = reference.template_id_in_store(store.store_id()).ok_or_else(
-                || CompilerError::compiler_error(
-                    "TIR active-slot conversion: child template reference is not in the current store.",
-                ),
-            )?;
+            let child_template_id = reference.root;
 
             let child_root = store
                 .get_template(child_template_id)

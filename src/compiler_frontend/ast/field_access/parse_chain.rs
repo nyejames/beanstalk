@@ -212,12 +212,9 @@ fn parse_postfix_chain_typed(
             scope_context: context,
         };
 
-        if let Some(field_access) = parse_field_member_access_typed(
-            token_stream,
-            member_context.to_owned(),
-            type_interner,
-            string_table,
-        )? {
+        if let Some(field_access) =
+            parse_field_member_access_typed(token_stream, member_context.to_owned(), type_interner)?
+        {
             receiver_node = field_access;
             continue;
         }

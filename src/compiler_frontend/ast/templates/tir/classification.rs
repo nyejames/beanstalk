@@ -3,7 +3,7 @@
 //! WHAT: answers unresolved-slot, escaped-insert, and const-evaluable questions
 //! from TIR trees in the module-scoped `TemplateIrStore`.
 //!
-//! Callers classify a stable registry-backed `TirView` whose root, phase and
+//! Callers classify a stable store-backed `TirView` whose root, phase and
 //! overlay set carry the authoritative reference identity.
 //!
 //! WHY: normalization and folding should classify from the TIR root they
@@ -16,7 +16,6 @@
 //! the HIR boundary.
 
 use std::collections::HashSet;
-use std::sync::Arc;
 
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
@@ -41,8 +40,7 @@ use crate::compiler_frontend::ast::templates::tir::node::{
 use crate::compiler_frontend::ast::templates::tir::overlays::{
     TemplateOverlaySetId, TirSlotResolutionKind,
 };
-use crate::compiler_frontend::ast::templates::tir::refs::{TemplateRef, TemplateTirChildReference};
-use crate::compiler_frontend::ast::templates::tir::registry::TemplateIrRegistry;
+use crate::compiler_frontend::ast::templates::tir::refs::TemplateTirChildReference;
 use crate::compiler_frontend::ast::templates::tir::store::TemplateIrStore;
 use crate::compiler_frontend::ast::templates::tir::view::{TemplateTirPhase, TirView};
 use crate::compiler_frontend::compiler_errors::CompilerError;
@@ -52,7 +50,7 @@ use crate::compiler_frontend::symbols::string_interning::StringTable;
 /// Classification result from one TIR template root.
 ///
 /// WHAT: bundles const-value kind, shape const-evaluability, and escaped-insert
-///       detection for one registry-backed template tree.
+///       detection for one store-backed template tree.
 /// WHY: lets callers classify from TIR once and reuse the combined answer
 ///      without rebuilding the tree or running separate tree walks.
 pub(crate) struct TirTemplateClassification {
@@ -71,16 +69,15 @@ enum StringFunctionChildConstPolicy {
 struct TirViewConstEvaluationContext<'view, 'store> {
     view: TirView<'view>,
     store: &'store TemplateIrStore,
-    string_table: &'view StringTable,
     expression_overlay_stack: Vec<TemplateOverlaySetId>,
-    visiting_templates: HashSet<TemplateRef>,
+    visiting_templates: HashSet<TemplateIrId>,
     string_function_child_policy: StringFunctionChildConstPolicy,
 }
 
 impl<'view, 'store> TirViewConstEvaluationContext<'view, 'store> {
     /// Resolves one expression site through the active root-first overlay stack.
     ///
-    /// WHAT: delegates expression lookup to the registry owner while the
+    /// WHAT: delegates expression lookup to the module store while the
     ///       current view remains responsible for slot and wrapper dimensions.
     /// WHY: nested same-store views can change those dimensions without
     ///       discarding an outer finalized root expression override.
@@ -88,8 +85,8 @@ impl<'view, 'store> TirViewConstEvaluationContext<'view, 'store> {
         &self,
         site_id: ExpressionSiteId,
     ) -> Result<Option<&'view Expression>, TemplateError> {
-        let registry: &TemplateIrRegistry = self.view.registry_ref();
-        Ok(registry.expression_for_overlay_stack(&self.expression_overlay_stack, site_id)?)
+        let store: &TemplateIrStore = self.view.store();
+        Ok(store.expression_for_overlay_stack(&self.expression_overlay_stack, site_id)?)
     }
 
     fn expression_stack_with_overlay(
@@ -102,29 +99,6 @@ impl<'view, 'store> TirViewConstEvaluationContext<'view, 'store> {
     }
 }
 
-// -------------------------
-//  Same-store ownership proof
-// -------------------------
-
-/// Test-only proof that a preserved TIR reference belongs to a given store.
-///
-/// WHAT: compares the `TemplateTirReference.store_owner` token against the
-/// store's owner token using `Arc::ptr_eq`.
-/// WHY: tests need to prove same-store behavior without an unrelated template
-/// in another store masking the result.
-#[cfg(test)]
-pub(crate) fn same_store_tir_id(
-    template: &Template,
-    store: &TemplateIrStore,
-) -> Option<TemplateIrId> {
-    let reference = &template.tir_reference;
-    if Arc::ptr_eq(&reference.store_owner, &store.owner()) {
-        Some(reference.root.template_id)
-    } else {
-        None
-    }
-}
-
 /// Read-only unresolved-slot query over an existing same-store TIR subtree.
 ///
 /// WHAT: walks the subtree rooted at `root` (recursing through child templates
@@ -132,8 +106,8 @@ pub(crate) fn same_store_tir_id(
 ///       caller already holds a finalized same-store root.
 /// WHY: runtime control-flow slot-artifact validation prefers the finalized
 ///      body root after render-unit preparation.
-/// Missing nodes and required same-store templates are compiler errors. Foreign
-/// child references and cycle re-entry remain semantic non-matches.
+/// Missing nodes and required same-store templates are compiler errors. Cycle
+/// re-entry remains a semantic non-match.
 pub(crate) fn tir_subtree_has_unresolved_slots(
     store: &TemplateIrStore,
     root: TemplateIrNodeId,
@@ -148,7 +122,7 @@ pub(crate) fn tir_subtree_has_unresolved_slots(
 ///       so finalization classifies the exact effective view produced by
 ///       expression-overlay normalization.
 /// WHY: finalization stores normalized dynamic-expression, branch-selector,
-///      and loop-header payloads in registry-owned overlays. Classifying the
+///      and loop-header payloads in store-owned overlays. Classifying the
 ///      structural root alone would ignore those effective expressions.
 ///      Slot-resolution overlays are supported:
 ///      resolved slots are folded through their source templates at fold time,
@@ -159,21 +133,12 @@ pub(crate) fn tir_subtree_has_unresolved_slots(
 pub(crate) fn classify_effective_tir_view_template(
     view: &TirView<'_>,
     store: &TemplateIrStore,
-    string_table: &StringTable,
 ) -> Result<TirTemplateClassification, TemplateError> {
     if !view.phase().is_at_least(TemplateTirPhase::Composed) {
         return Err(TemplateError::from(CompilerError::compiler_error(format!(
             "classify_effective_tir_view_template: root {} is at phase {}, but classification requires Composed or later",
             view.root_ref(),
             view.phase()
-        ))));
-    }
-
-    if view.root_ref().store_id != store.store_id() {
-        return Err(TemplateError::from(CompilerError::compiler_error(format!(
-            "classify_effective_tir_view_template: view root {} does not belong to supplied store {}",
-            view.root_ref(),
-            store.store_id()
         ))));
     }
 
@@ -189,11 +154,11 @@ pub(crate) fn classify_effective_tir_view_template(
     }
 
     // Read the root and authoritative kind from the caller-provided store
-    // instead of borrowing it again through the registry. Effective
+    // instead of borrowing it again through the store. Effective
     // classification stays read-only so callers can retain the active fold
-    // borrow while classifying a nested template from that same registry store.
+    // borrow while classifying a nested template from that same module store.
     let (store_root, template_kind) = store
-        .get_template(view.root_ref().template_id)
+        .get_template(view.root_ref())
         .map(|template| (template.root, template.kind.clone()))
         .ok_or_else(|| {
             TemplateError::from(CompilerError::compiler_error(format!(
@@ -202,8 +167,7 @@ pub(crate) fn classify_effective_tir_view_template(
             )))
         })?;
 
-    let shape_const_evaluable =
-        tir_view_template_is_const_evaluable_value(view, store, string_table)?;
+    let shape_const_evaluable = tir_view_template_is_const_evaluable_value(view, store)?;
     let has_unresolved_slots = tir_tree_has_slots(store, store_root, &mut HashSet::new())?;
     let has_slot_insertions =
         tir_tree_has_slot_insert_children(store, store_root, &mut HashSet::new())?;
@@ -319,7 +283,7 @@ fn classify_tir_const_value(
 /// WHY: runtime slot contribution sources are not always full `Template`
 /// values, but TIR owns their structural constness checks.
 pub(crate) fn tir_node_is_const_evaluable_value(
-    store: &mut TemplateIrStore,
+    store: &TemplateIrStore,
     node_id: TemplateIrNodeId,
     string_table: &StringTable,
 ) -> bool {
@@ -336,7 +300,7 @@ pub(crate) fn tir_node_is_const_evaluable_value(
 /// read the finalized TIR body root for the body-level constness predicate.
 #[cfg(test)]
 pub(crate) fn tir_node_is_const_evaluable_value_with_bindings(
-    store: &mut TemplateIrStore,
+    store: &TemplateIrStore,
     node_id: TemplateIrNodeId,
     loop_binding_paths: &[InternedPath],
     string_table: &StringTable,
@@ -361,8 +325,8 @@ pub(crate) fn tir_node_is_const_evaluable_value_with_bindings(
 /// prevent infinite recursion on cyclic references.
 ///
 /// Missing nodes and required same-store templates are malformed TIR authority,
-/// not semantic absence. Foreign child references remain non-participants for
-/// this same-store structural query, and cycle re-entry remains a non-match.
+/// not semantic absence. Cycle re-entry remains a non-match for this structural
+/// query.
 fn tir_tree_has_slots(
     store: &TemplateIrStore,
     node_id: TemplateIrNodeId,
@@ -370,9 +334,8 @@ fn tir_tree_has_slots(
 ) -> Result<bool, TemplateError> {
     let node = store.get_node(node_id).ok_or_else(|| {
         TemplateError::from(CompilerError::compiler_error(format!(
-            "TIR slot classification lost node {} in store {}.",
-            node_id,
-            store.store_id()
+            "TIR slot classification lost node {} in the store.",
+            node_id
         )))
     })?;
 
@@ -390,11 +353,7 @@ fn tir_tree_has_slots(
         TemplateIrNodeKind::Slot { .. } => Ok(true),
 
         TemplateIrNodeKind::ChildTemplate { reference, .. } => {
-            if let Some(template_id) = reference.template_id_in_store(store.store_id()) {
-                visit_child_template(store, template_id, visited, tir_tree_has_slots)
-            } else {
-                Ok(false)
-            }
+            visit_child_template(store, reference.root, visited, tir_tree_has_slots)
         }
 
         TemplateIrNodeKind::InsertContribution { template } => {
@@ -457,8 +416,8 @@ fn tir_tree_has_slots(
 ///      turn the template into a `WrapperTemplate`.
 ///
 /// Missing nodes and required same-store child or insert templates are malformed
-/// TIR authority and propagate through `TemplateError`. Foreign child references
-/// remain semantic non-participants, and cycle re-entry remains a non-match.
+/// TIR authority and propagate through `TemplateError`. Cycle re-entry remains a
+/// non-match.
 fn tir_view_has_resolved_slots(
     view: &TirView<'_>,
     store: &TemplateIrStore,
@@ -467,9 +426,8 @@ fn tir_view_has_resolved_slots(
 ) -> Result<bool, TemplateError> {
     let node = store.get_node(node_id).ok_or_else(|| {
         TemplateError::from(CompilerError::compiler_error(format!(
-            "TIR resolved-slot classification lost node {} in store {}.",
-            node_id,
-            store.store_id()
+            "TIR resolved-slot classification lost node {} in the store.",
+            node_id
         )))
     })?;
 
@@ -491,11 +449,7 @@ fn tir_view_has_resolved_slots(
         }
 
         TemplateIrNodeKind::ChildTemplate { reference, .. } => {
-            if let Some(template_id) = reference.template_id_in_store(store.store_id()) {
-                tir_view_visit_child_template(view, store, template_id, visited)
-            } else {
-                Ok(false)
-            }
+            tir_view_visit_child_template(view, store, reference.root, visited)
         }
 
         TemplateIrNodeKind::InsertContribution { template } => {
@@ -558,9 +512,8 @@ fn tir_view_visit_child_template(
         tir_view_has_resolved_slots(view, store, child_template.root, visited)?
     } else {
         return Err(TemplateError::from(CompilerError::compiler_error(format!(
-            "TIR resolved-slot classification lost same-store child template {} in store {}.",
-            template_id,
-            store.store_id()
+            "TIR resolved-slot classification lost child template {} in the store.",
+            template_id
         ))));
     };
 
@@ -578,8 +531,7 @@ fn tir_view_visit_child_template(
 /// WHY: TIR trees may represent an escaped insert through either a
 ///      `ChildTemplate` or `InsertContribution`, so both forms must be checked.
 /// Missing nodes and required same-store templates are malformed TIR authority,
-/// not semantic absence. Foreign child references remain non-participants and
-/// cycle re-entry remains a non-match.
+/// not semantic absence. Cycle re-entry remains a non-match.
 fn tir_tree_has_slot_insert_children(
     store: &TemplateIrStore,
     node_id: TemplateIrNodeId,
@@ -587,9 +539,8 @@ fn tir_tree_has_slot_insert_children(
 ) -> Result<bool, TemplateError> {
     let node = store.get_node(node_id).ok_or_else(|| {
         TemplateError::from(CompilerError::compiler_error(format!(
-            "TIR escaped-insert classification lost node {} in store {}.",
-            node_id,
-            store.store_id()
+            "TIR escaped-insert classification lost node {} in the store.",
+            node_id
         )))
     })?;
 
@@ -610,14 +561,11 @@ fn tir_tree_has_slot_insert_children(
         // visited-set guard so a shared child is still detected on first
         // encounter; subsequent re-encounters short-circuit via the visited set.
         TemplateIrNodeKind::ChildTemplate { reference, .. } => {
-            let Some(template_id) = reference.template_id_in_store(store.store_id()) else {
-                return Ok(false);
-            };
+            let template_id = reference.root;
             let child = store.get_template(template_id).ok_or_else(|| {
                 TemplateError::from(CompilerError::compiler_error(format!(
-                    "TIR escaped-insert classification lost same-store child template {} in store {}.",
-                    template_id,
-                    store.store_id()
+                    "TIR escaped-insert classification lost child template {} in the store.",
+                    template_id
                 )))
             })?;
             let is_slot_insert = matches!(child.kind, TemplateType::SlotInsert(_));
@@ -637,9 +585,8 @@ fn tir_tree_has_slot_insert_children(
         TemplateIrNodeKind::InsertContribution { template } => {
             let child = store.get_template(*template).ok_or_else(|| {
                 TemplateError::from(CompilerError::compiler_error(format!(
-                    "TIR escaped-insert classification lost insert-contribution template {} in store {}.",
-                    template,
-                    store.store_id()
+                    "TIR escaped-insert classification lost insert-contribution template {} in the store.",
+                    template
                 )))
             })?;
             let is_slot_insert = matches!(child.kind, TemplateType::SlotInsert(_));
@@ -697,13 +644,12 @@ fn tir_tree_has_slot_insert_children(
 fn tir_view_template_is_const_evaluable_value(
     view: &TirView<'_>,
     store: &TemplateIrStore,
-    string_table: &StringTable,
 ) -> Result<bool, TemplateError> {
     // Read the root from the caller-provided store instead of reborrowing it
-    // through the registry's RefCell. This keeps classification compatible with
+    // through the store's RefCell. This keeps classification compatible with
     // the live immutable store borrow held by the view-native fold path.
     let root = store
-        .get_template(view.root_ref().template_id)
+        .get_template(view.root_ref())
         .map(|template| template.root)
         .ok_or_else(|| {
             CompilerError::compiler_error(format!(
@@ -714,7 +660,6 @@ fn tir_view_template_is_const_evaluable_value(
     let mut context = TirViewConstEvaluationContext {
         view: view.clone(),
         store,
-        string_table,
         expression_overlay_stack: vec![view.overlay_set_id()],
         visiting_templates: HashSet::new(),
         string_function_child_policy: StringFunctionChildConstPolicy::Strict,
@@ -735,7 +680,6 @@ fn tir_view_template_is_const_evaluable_value(
 pub(crate) fn tir_view_subtree_is_const_evaluable_value(
     view: &TirView<'_>,
     store: &TemplateIrStore,
-    string_table: &StringTable,
     node_id: TemplateIrNodeId,
     loop_binding_paths: &[InternedPath],
 ) -> Result<bool, TemplateError> {
@@ -743,7 +687,6 @@ pub(crate) fn tir_view_subtree_is_const_evaluable_value(
     tir_view_subtree_is_const_evaluable_value_with_expression_stack(
         view,
         store,
-        string_table,
         node_id,
         loop_binding_paths,
         &expression_overlay_stack,
@@ -761,7 +704,6 @@ pub(crate) fn tir_view_subtree_is_const_evaluable_value(
 pub(crate) fn tir_view_subtree_is_const_evaluable_value_with_expression_stack(
     view: &TirView<'_>,
     store: &TemplateIrStore,
-    string_table: &StringTable,
     node_id: TemplateIrNodeId,
     loop_binding_paths: &[InternedPath],
     expression_overlay_stack: &[TemplateOverlaySetId],
@@ -769,7 +711,6 @@ pub(crate) fn tir_view_subtree_is_const_evaluable_value_with_expression_stack(
     let mut context = TirViewConstEvaluationContext {
         view: view.clone(),
         store,
-        string_table,
         expression_overlay_stack: expression_overlay_stack.to_vec(),
         visiting_templates: HashSet::new(),
         string_function_child_policy: StringFunctionChildConstPolicy::Strict,
@@ -784,12 +725,10 @@ pub(crate) fn tir_view_expression_is_const_evaluable_value_with_bindings(
     store: &TemplateIrStore,
     expression: &Expression,
     loop_binding_paths: &[InternedPath],
-    string_table: &StringTable,
 ) -> Result<bool, TemplateError> {
     let mut context = TirViewConstEvaluationContext {
         view: view.clone(),
         store,
-        string_table,
         expression_overlay_stack: vec![view.overlay_set_id()],
         visiting_templates: HashSet::new(),
         string_function_child_policy: StringFunctionChildConstPolicy::StructuralHeadFunction,
@@ -804,12 +743,10 @@ pub(crate) fn tir_view_option_capture_presence_is_const_decidable(
     store: &TemplateIrStore,
     scrutinee: &Expression,
     loop_binding_paths: &[InternedPath],
-    string_table: &StringTable,
 ) -> Result<bool, TemplateError> {
     let mut context = TirViewConstEvaluationContext {
         view: view.clone(),
         store,
-        string_table,
         expression_overlay_stack: vec![view.overlay_set_id()],
         visiting_templates: HashSet::new(),
         string_function_child_policy: StringFunctionChildConstPolicy::StructuralHeadFunction,
@@ -823,7 +760,7 @@ pub(crate) fn tir_view_option_capture_presence_is_const_decidable(
 }
 
 fn tir_child_template_is_const_evaluable_value(
-    store: &mut TemplateIrStore,
+    store: &TemplateIrStore,
     template_id: TemplateIrId,
     root: TemplateIrNodeId,
     loop_binding_paths: &[InternedPath],
@@ -850,7 +787,7 @@ fn tir_child_template_is_const_evaluable_value(
 
 fn tir_view_child_template_is_const_evaluable_value(
     context: &mut TirViewConstEvaluationContext<'_, '_>,
-    template_ref: TemplateRef,
+    template_ref: TemplateIrId,
     root: TemplateIrNodeId,
     loop_binding_paths: &[InternedPath],
 ) -> Result<bool, TemplateError> {
@@ -865,110 +802,20 @@ fn tir_view_child_template_is_const_evaluable_value(
     Ok(is_const_evaluable)
 }
 
-/// Follows one store-qualified child through its exact registry view.
+/// Follows one store-local child through its exact module-store view.
 ///
-/// Same-store children reuse the active store borrow. Foreign children borrow
-/// their registered store for the read-only classification walk. Composed-or-
-/// later references preserve their exact view identity; below-Composed
-/// references intentionally remain structural and do not consume their
-/// recorded overlay.
+/// Children reuse the active store borrow for the read-only classification
+/// walk. Composed-or-later references preserve their exact view identity;
+/// below-Composed references intentionally remain structural and do not
+/// consume their recorded overlay.
 fn tir_view_qualified_child_is_const_evaluable_value(
     context: &mut TirViewConstEvaluationContext<'_, '_>,
     reference: TemplateTirChildReference,
-    expected_store_owner: Option<&Arc<super::store::TemplateIrStoreOwner>>,
     loop_binding_paths: &[InternedPath],
 ) -> Result<bool, TemplateError> {
-    if reference.root.store_id == context.store.store_id() {
-        if let Some(expected_store_owner) = expected_store_owner
-            && !Arc::ptr_eq(expected_store_owner, &context.store.owner())
-        {
-            return Ok(false);
-        }
-
-        let Some((child_kind, child_root)) = context
-            .store
-            .get_template(reference.root.template_id)
-            .map(|template_ir| (template_ir.kind.clone(), template_ir.root))
-        else {
-            return Ok(false);
-        };
-        if matches!(
-            context.string_function_child_policy,
-            StringFunctionChildConstPolicy::StructuralHeadFunction
-        ) && matches!(child_kind, TemplateType::StringFunction)
-            && string_function_child_is_structural_const_value(context.store, child_root)
-        {
-            return Ok(true);
-        }
-
-        // Parsed children are structural shortcuts. Their recorded overlay is
-        // not authoritative yet, so keep the active parent view and expression
-        // stack while descending instead of consuming child dimensions.
-        if !reference.phase.is_at_least(TemplateTirPhase::Composed) {
-            return tir_view_child_template_is_const_evaluable_value(
-                context,
-                reference.root,
-                child_root,
-                loop_binding_paths,
-            );
-        }
-
-        let child_view =
-            context
-                .view
-                .child_view(reference.root, reference.phase, reference.overlay_set_id)?;
-        let child_expression_overlay_stack =
-            context.expression_stack_with_overlay(reference.overlay_set_id);
-        let parent_view = std::mem::replace(&mut context.view, child_view);
-        let parent_expression_overlay_stack = std::mem::replace(
-            &mut context.expression_overlay_stack,
-            child_expression_overlay_stack,
-        );
-        let result = tir_view_child_template_is_const_evaluable_value(
-            context,
-            reference.root,
-            child_root,
-            loop_binding_paths,
-        );
-        context.view = parent_view;
-        context.expression_overlay_stack = parent_expression_overlay_stack;
-        return result;
-    }
-
-    let registry = context.view.registry_ref();
-    let child_store_handle = registry
-        .store_handle(reference.root.store_id)
-        .ok_or_else(|| {
-            CompilerError::compiler_error(format!(
-                "TIR const classification child store {} is not registered.",
-                reference.root.store_id
-            ))
-        })?;
-
-    // A foreign below-Composed child starts a new structural boundary. Use the
-    // canonical empty overlay only for that fresh view; never resolve the
-    // child's recorded overlay until its phase makes that dimension authoritative.
-    let child_view = if reference.phase.is_at_least(TemplateTirPhase::Composed) {
-        context
-            .view
-            .child_view(reference.root, reference.phase, reference.overlay_set_id)?
-    } else {
-        TirView::new(
-            registry,
-            reference.root,
-            reference.phase,
-            TemplateOverlaySetId::empty(),
-        )?
-    };
-
-    let child_store = child_store_handle.borrow();
-    if let Some(expected_store_owner) = expected_store_owner
-        && !Arc::ptr_eq(expected_store_owner, &child_store.owner())
-    {
-        return Ok(false);
-    }
-    let Some((child_kind, child_root)) = child_store
-        .get_template(reference.root.template_id)
+    let Some((child_kind, child_root)) = context
+        .store
+        .get_template(reference.root)
         .map(|template_ir| (template_ir.kind.clone(), template_ir.root))
     else {
         return Ok(false);
@@ -977,37 +824,44 @@ fn tir_view_qualified_child_is_const_evaluable_value(
         context.string_function_child_policy,
         StringFunctionChildConstPolicy::StructuralHeadFunction
     ) && matches!(child_kind, TemplateType::StringFunction)
-        && string_function_child_is_structural_const_value(&child_store, child_root)
+        && string_function_child_is_structural_const_value(context.store, child_root)
     {
         return Ok(true);
     }
 
-    let visiting_templates = std::mem::take(&mut context.visiting_templates);
-    let mut child_context = TirViewConstEvaluationContext {
-        view: child_view,
-        store: &child_store,
-        string_table: context.string_table,
-        expression_overlay_stack: if reference.phase.is_at_least(TemplateTirPhase::Composed) {
-            vec![reference.overlay_set_id]
-        } else {
-            Vec::new()
-        },
-        visiting_templates,
-        string_function_child_policy: context.string_function_child_policy,
-    };
+    if !reference.phase.is_at_least(TemplateTirPhase::Composed) {
+        return tir_view_child_template_is_const_evaluable_value(
+            context,
+            reference.root,
+            child_root,
+            loop_binding_paths,
+        );
+    }
+
+    let child_view =
+        context
+            .view
+            .child_view(reference.root, reference.phase, reference.overlay_set_id)?;
+    let child_expression_overlay_stack =
+        context.expression_stack_with_overlay(reference.overlay_set_id);
+    let parent_view = std::mem::replace(&mut context.view, child_view);
+    let parent_expression_overlay_stack = std::mem::replace(
+        &mut context.expression_overlay_stack,
+        child_expression_overlay_stack,
+    );
     let result = tir_view_child_template_is_const_evaluable_value(
-        &mut child_context,
+        context,
         reference.root,
         child_root,
         loop_binding_paths,
     );
-    context.visiting_templates = child_context.visiting_templates;
-
+    context.view = parent_view;
+    context.expression_overlay_stack = parent_expression_overlay_stack;
     result
 }
 
 fn tir_tree_is_const_evaluable_value(
-    store: &mut TemplateIrStore,
+    store: &TemplateIrStore,
     node_id: TemplateIrNodeId,
     loop_binding_paths: &[InternedPath],
     string_table: &StringTable,
@@ -1053,9 +907,7 @@ fn tir_tree_is_const_evaluable_value(
         }
 
         TemplateIrNodeKind::ChildTemplate { reference, .. } => {
-            let Some(template_id) = reference.template_id_in_store(store.store_id()) else {
-                return false;
-            };
+            let template_id = reference.root;
             let Some(child_template) = store.get_template(template_id) else {
                 return false;
             };
@@ -1188,9 +1040,9 @@ fn tir_view_tree_is_const_evaluable_value(
     node_id: TemplateIrNodeId,
     loop_binding_paths: &[InternedPath],
 ) -> Result<bool, TemplateError> {
-    // Read the structural node from the store directly. The view is only used
-    // for overlay-effective expression lookups, not for node traversal, so
-    // this avoids borrowing the store through the registry's RefCell.
+    // Read the structural node from the store directly. The view is only
+    // used for overlay-effective expression lookups, not for node traversal,
+    // so this avoids re-borrowing the store through the view's RefCell.
     let node_kind = context
         .store
         .get_node(node_id)
@@ -1242,7 +1094,6 @@ fn tir_view_tree_is_const_evaluable_value(
             tir_view_qualified_child_is_const_evaluable_value(
                 context,
                 reference,
-                None,
                 loop_binding_paths,
             )
         }
@@ -1265,7 +1116,7 @@ fn tir_view_tree_is_const_evaluable_value(
 
             tir_view_child_template_is_const_evaluable_value(
                 context,
-                TemplateRef::new(context.store.store_id(), template),
+                template,
                 child_root,
                 loop_binding_paths,
             )
@@ -1530,7 +1381,7 @@ fn string_function_child_is_structural_const_value(
 }
 
 fn tir_tree_is_const_evaluable_standalone_value(
-    store: &mut TemplateIrStore,
+    store: &TemplateIrStore,
     node_id: TemplateIrNodeId,
     string_table: &StringTable,
     visiting_templates: &mut HashSet<TemplateIrId>,
@@ -1574,9 +1425,7 @@ fn tir_tree_is_const_evaluable_standalone_value(
             .is_ok_and(|kind| kind.is_compile_time_value()),
 
         TemplateIrNodeKind::ChildTemplate { reference, .. } => {
-            let Some(template_id) = reference.template_id_in_store(store.store_id()) else {
-                return false;
-            };
+            let template_id = reference.root;
             let Some(root) = store
                 .get_template(template_id)
                 .map(|template| template.root)
@@ -1633,7 +1482,7 @@ fn tir_tree_is_const_evaluable_standalone_value(
 }
 
 fn tir_dynamic_expression_is_const_evaluable(
-    store: &mut TemplateIrStore,
+    store: &TemplateIrStore,
     expression: &Expression,
     loop_binding_paths: &[InternedPath],
     string_table: &StringTable,
@@ -1653,7 +1502,7 @@ fn tir_dynamic_expression_is_const_evaluable(
 /// View-aware expression constness for TIR payloads.
 ///
 /// This mirrors the compile-time value shapes owned by `Expression`, but routes
-/// every embedded template through its exact registry-qualified TIR reference.
+/// every embedded template through its exact store-local TIR reference.
 /// Keeping the recursion here ensures composite values retain the exact TIR
 /// identity and overlay context of embedded templates.
 fn tir_view_expression_is_const_evaluable(
@@ -1709,7 +1558,6 @@ fn tir_view_expression_is_const_evaluable(
             tir_view_qualified_child_is_const_evaluable_value(
                 context,
                 child_reference,
-                Some(&reference.store_owner),
                 loop_binding_paths,
             )
         }
@@ -1856,7 +1704,7 @@ fn tir_view_loop_header_is_const_evaluable(
 fn expression_is_const_evaluable_with_bindings_and_tir_templates(
     expression: &Expression,
     loop_binding_paths: &[InternedPath],
-    store: &mut TemplateIrStore,
+    store: &TemplateIrStore,
     string_table: &StringTable,
     visiting_templates: &mut HashSet<TemplateIrId>,
     string_function_child_policy: StringFunctionChildConstPolicy,
@@ -1986,7 +1834,7 @@ fn expression_is_const_evaluable_with_bindings_and_tir_templates(
 
 fn tir_loop_header_is_const_evaluable_value(
     header: &TemplateLoopHeader,
-    store: &mut TemplateIrStore,
+    store: &TemplateIrStore,
     string_table: &StringTable,
     visiting_templates: &mut HashSet<TemplateIrId>,
     string_function_child_policy: StringFunctionChildConstPolicy,
@@ -2026,7 +1874,7 @@ fn tir_loop_header_is_const_evaluable_value(
 fn branch_selector_const_evaluation_bindings_with_tir_templates(
     selector: &TemplateBranchSelector,
     inherited_binding_paths: &[InternedPath],
-    store: &mut TemplateIrStore,
+    store: &TemplateIrStore,
     string_table: &StringTable,
     visiting_templates: &mut HashSet<TemplateIrId>,
     string_function_child_policy: StringFunctionChildConstPolicy,
@@ -2073,7 +1921,7 @@ fn branch_selector_const_evaluation_bindings_with_tir_templates(
 fn option_capture_presence_is_const_decidable_with_tir_templates(
     scrutinee: &Expression,
     loop_binding_paths: &[InternedPath],
-    store: &mut TemplateIrStore,
+    store: &TemplateIrStore,
     string_table: &StringTable,
     visiting_templates: &mut HashSet<TemplateIrId>,
     string_function_child_policy: StringFunctionChildConstPolicy,
@@ -2103,7 +1951,7 @@ fn option_capture_presence_is_const_decidable_with_tir_templates(
 }
 
 fn tir_embedded_template_is_const_evaluable(
-    store: &mut TemplateIrStore,
+    store: &TemplateIrStore,
     template: &Template,
     loop_binding_paths: &[InternedPath],
     string_table: &StringTable,
@@ -2111,13 +1959,10 @@ fn tir_embedded_template_is_const_evaluable(
     string_function_child_policy: StringFunctionChildConstPolicy,
 ) -> bool {
     let reference = &template.tir_reference;
-    if reference.root.store_id != store.store_id()
-        || !Arc::ptr_eq(&reference.store_owner, &store.owner())
-        || reference.overlay_set_id != TemplateOverlaySetId::empty()
-    {
+    if reference.overlay_set_id != TemplateOverlaySetId::empty() {
         return false;
     }
-    let template_id = reference.root.template_id;
+    let template_id = reference.root;
     let Some(root) = store
         .get_template(template_id)
         .map(|template_ir| template_ir.root)
@@ -2167,9 +2012,8 @@ fn visit_child_template(
 
     let child_template = store.get_template(template_id).ok_or_else(|| {
         TemplateError::from(CompilerError::compiler_error(format!(
-            "TIR structural classification lost same-store child template {} in store {}.",
-            template_id,
-            store.store_id()
+            "TIR structural classification lost child template {} in the store.",
+            template_id
         )))
     })?;
 

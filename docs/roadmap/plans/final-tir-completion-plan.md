@@ -29,28 +29,28 @@ TIR remains AST-local. No TIR store, ID, view, overlay or preparation type may c
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/final-tir-completion-plan.md
 STATUS: active
-CURRENT_SLICE: R1B - merge registry storage into the module TIR store
-LAST_ACCEPTED_COMMIT: 2ea171ead (R0 ownership inventory)
-WORKTREE: main at 2ea171ead; reviewed R1A implementation and plan update pending commit
+CURRENT_SLICE: R1B-R1D accepted; checkpoint ready to commit before R2A
+LAST_ACCEPTED_COMMIT: 7fd17f4b0 (R1A shared ScopeContext store)
+WORKTREE: main with accepted uncommitted R1B-R1D source and plan changes; concurrent user documentation changes must be ignored, preserved, and excluded from staging
 REQUIRED_RELOADS: startup files, this plan, and current TIR source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: compiler-design-overview.md one-store TIR contract and this plan's R1B owner collapse
-- code: templates/tir/registry.rs and store.rs; contexts now require one RegisteredTemplateIrStore
+- docs: compiler-design-overview.md one-store TIR contract and this plan's R2 exact-view contract
+- code: TemplateIrStore is the only production owner; durable references are module-local; registry, owner/store IDs, foreign conversion, and render-unit late template conversion are deleted; exact nested-wrapper and parser-boundary structural identity are pinned
 ACCEPTANCE_CRITERIA:
-- move overlay arenas and APIs into TemplateIrStore
-- replace registry/store pairs with the one shared store handle
-- delete TemplateIrRegistry and RegisteredTemplateIrStore without a forwarding owner
+- commit the accepted R1B-R1D source and plan only
+- preserve and exclude all concurrent user documentation changes
+- begin R2A with value-carried TemplateViewContext; do not begin preparation
 VALIDATION_STATE:
-- R0 read-only inventory: passed; exact paths and historical counts reviewed by parent
-- R1A cargo fmt: passed
-- R1A cargo test --quiet -- --format terse: passed; 3605 tests
-- R1A just validate: passed; 1784 integration cases and 28 benchmark sanity cases
+- cargo fmt and git diff --check: passed
+- hard deleted-symbol, stale ownership-comment, render-unit conversion, and HIR/backend TIR-boundary greps: passed
+- TIR line inventory: 20,368 production and 17,224 test lines (069a29acb: 24,274 and 27,231)
+- just validate: passed from a clean target; cross-target Clippy, 3441 unit tests, 1784 integration cases, docs check, and 28 benchmark sanity cases; 22 faster and 0 slower
 DOCS_IMPACT: none beyond this plan checkpoint
 BLOCKERS_OR_OPEN_DECISIONS: none
-DELEGATION_DECISION: undecided - resolve the R1B implementation worker after committing R1A
-NEXT_WORKER_ORDER: ollama, codex-cli, parent-direct
+DELEGATION_DECISION: codex-cli for R2A - user requires Codex CLI for subsequent worker slices
+NEXT_WORKER_ORDER: codex-cli (user-required provider)
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit accepted R1A, then scope R1B by final owner
+NEXT_RESUME_ACTION: commit R1B-R1D with explicit staging, reload the plan, then launch the smallest R2A Codex CLI slice
 ```
 
 Use `069a29acb` as the implementation and regression base. Do not continue extending `FoldAuthorityWalk`, foreign-store traversal, external expression-overlay stacks or prepared foreign-wrapper proofs.
@@ -62,6 +62,19 @@ Final TIR completion unblocks:
 - the Number plan, which consumes the shared value-to-string path and one-store folding
 - the entry config plan, which folds `config:` blocks through the ordinary module AST path
 - the canonical module plan, which requires stable template folding before immutable module artefacts can carry folded constants
+
+### Mandatory post-TIR roadmap review
+
+After final TIR completion is accepted and before the canonical module plan becomes active:
+
+- refresh every queued plan against the final TIR owners and deleted APIs
+- remove every remaining legacy fallback, multi-store, foreign-store and duplicate-preparation assumption
+- refresh current-state capsules and implementation paths
+- verify the queued dependency chain
+- confirm that downstream plans consume one module-scoped store, exact `TirView`, one preparation owner and the final folded-string or owned-runtime handoff
+- record the reviewed repository commit in each queued plan
+
+This checkpoint changes documentation and plan assumptions only. It does not reopen accepted TIR architecture.
 
 ## Deletion obligations
 
@@ -521,10 +534,8 @@ TIR directory; `069a29acb` contains 24,274 production and 27,231 test lines.
 - Update constant, type, trait, function-signature and body-emission contexts to pass the same handle.
 - Keep test-only isolated store construction in local test helpers, not production constructors.
 
-R1A complete. `ScopeContext::new` now requires the module's registered store, every production
-constructor passes that handle directly and the scratch allocation and production replacement
-setter are gone. Migration-era multi-store helpers remain compiled only for their existing tests
-until R1B deletes the registry owner.
+R1A completed in `7fd17f4b0`. `ScopeContext::new` requires the module store, every production
+constructor passes that handle directly and only test helpers allocate isolated stores.
 
 #### R1B - Merge registry storage into the store
 
@@ -559,6 +570,13 @@ Do not leave a thin registry that forwards to the store.
 - Parser output, integration output and diagnostics are unchanged.
 - Production and test lines are below the `069a29acb` base.
 - Common code gate passes.
+
+R1B-R1D accepted on the pre-commit worktree. `TemplateIrStore` now owns all overlay arenas and is
+the only production TIR owner. Durable references contain module-local typed IDs, the registry,
+store/owner identity and foreign conversion paths are deleted and parser template values are
+structural before render-unit preparation. The final tracked-file inventory is 20,368 production
+and 17,224 test lines versus 24,274 and 27,231 at `069a29acb`. `just validate` passed from a clean
+target with 3,441 unit tests, 1,784 integration cases, docs checking and 28 benchmark sanity cases.
 
 ### Phase R2 - Make `TirView` complete
 
@@ -825,6 +843,7 @@ TIR is complete only when:
 - no TIR identity reaches HIR or a backend
 - production and test code are materially smaller than `069a29acb`
 - output, diagnostics, formatting, wrappers, slots, control flow and reactivity remain unchanged
+- the mandatory post-TIR roadmap review checkpoint is complete before canonical module implementation begins
 - validation and recorded benchmark gates pass
 
 ## Non-goals

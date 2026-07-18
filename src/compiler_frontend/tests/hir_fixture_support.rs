@@ -9,8 +9,8 @@ use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::templates::template::Template;
 use crate::compiler_frontend::ast::templates::template::{Style, TemplateType};
 use crate::compiler_frontend::ast::templates::tir::{
-    TemplateIrBuilder, TemplateIrRegistry, TemplateIrSummary, TemplateOverlaySet, TemplateRef,
-    TemplateTirPhase, TemplateTirReference,
+    TemplateIrBuilder, TemplateIrStore, TemplateIrSummary, TemplateOverlaySet, TemplateTirPhase,
+    TemplateTirReference,
 };
 use crate::compiler_frontend::hir::hir_builder::lower_module;
 use crate::compiler_frontend::hir::module::HirModule;
@@ -20,6 +20,8 @@ use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::compiler_frontend::value_mode::ValueMode;
 use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 pub(crate) fn build_ast(nodes: Vec<AstNode>, entry_path: InternedPath) -> Ast {
     crate::compiler_frontend::hir::hir_builder::build_ast(nodes, entry_path)
@@ -40,16 +42,16 @@ pub(crate) fn lower_hir(ast: Ast, string_table: &mut StringTable) -> HirModule {
 /// Builds a malformed raw-template expression for HIR boundary invariant tests.
 ///
 /// AST finalization should replace this shape with an owned runtime handoff. The
-/// returned registry keeps the deliberately unnormalized template's TIR identity valid.
+/// returned shared store keeps the deliberately unnormalized template's TIR identity valid.
 pub(crate) fn raw_template_expression_for_hir_invariant(
     kind: TemplateType,
     location: SourceLocation,
     value_mode: ValueMode,
-) -> (Expression, TemplateIrRegistry) {
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.allocate_store();
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
-    let store_handle = registry.store_handle(store_id).expect("allocated store");
+) -> (Expression, Rc<RefCell<TemplateIrStore>>) {
+    let store_handle = Rc::new(RefCell::new(TemplateIrStore::new()));
+    let overlay_set_id = store_handle
+        .borrow_mut()
+        .allocate_overlay_set(TemplateOverlaySet::empty());
     let template_id = {
         let mut store = store_handle.borrow_mut();
         let mut builder = TemplateIrBuilder::new(&mut store);
@@ -62,17 +64,15 @@ pub(crate) fn raw_template_expression_for_hir_invariant(
             location.clone(),
         )
     };
-    let store_owner = store_handle.borrow().owner();
     let template = Template {
         kind,
         tir_reference: TemplateTirReference {
-            root: TemplateRef::new(store_id, template_id),
-            store_owner,
+            root: template_id,
             phase: TemplateTirPhase::Parsed,
             overlay_set_id,
         },
         location,
     };
 
-    (Expression::template(template, value_mode), registry)
+    (Expression::template(template, value_mode), store_handle)
 }

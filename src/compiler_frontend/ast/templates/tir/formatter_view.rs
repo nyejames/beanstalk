@@ -27,11 +27,12 @@ use crate::compiler_frontend::ast::templates::template::{
     BodyWhitespacePolicy, ReactiveSubscription, Style, TemplateSegmentOrigin,
 };
 use crate::compiler_frontend::ast::templates::tir::ids::{TemplateIrId, TemplateIrNodeId};
-use crate::compiler_frontend::ast::templates::tir::node::{TemplateIrNode, TemplateIrNodeKind};
-use crate::compiler_frontend::ast::templates::tir::overlays::TemplateOverlaySetId;
-use crate::compiler_frontend::ast::templates::tir::refs::{
-    TemplateNodeRef, TemplateRef, TemplateStoreId, TemplateTirChildReference,
+use crate::compiler_frontend::ast::templates::tir::node::{
+    TemplateIr, TemplateIrNode, TemplateIrNodeKind,
 };
+use crate::compiler_frontend::ast::templates::tir::overlays::TemplateOverlaySetId;
+use crate::compiler_frontend::ast::templates::tir::refs::TemplateTirChildReference;
+use crate::compiler_frontend::ast::templates::tir::store::TemplateIrStore;
 use crate::compiler_frontend::ast::templates::tir::view::{TemplateTirPhase, TirView};
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
@@ -54,6 +55,54 @@ pub(crate) struct TirFormatterResult {
     pub warnings: Vec<CompilerDiagnostic>,
 }
 
+/// Mutable formatter state for one module-local TIR store.
+///
+/// WHAT: keeps append-only formatter writeback on the shared store while
+///       constructing short-lived immutable `TirView`s for overlay-aware reads.
+/// WHY: `TirView` deliberately exposes an immutable store reference. Formatter
+///      output still needs to append nodes and update nested roots, so the
+///      mutation owner must be explicit at this adapter boundary.
+struct FormatterStore<'store> {
+    store: &'store mut TemplateIrStore,
+    root: TemplateIrId,
+    phase: TemplateTirPhase,
+    overlay_set_id: TemplateOverlaySetId,
+}
+
+impl FormatterStore<'_> {
+    fn view(&self) -> Result<TirView<'_>, CompilerError> {
+        TirView::new(&*self.store, self.root, self.phase, self.overlay_set_id)
+    }
+
+    fn root_template(&self) -> Result<TemplateIr, CompilerError> {
+        self.view()?.root_template().cloned()
+    }
+
+    fn effective_node(&self, node_id: TemplateIrNodeId) -> Result<TemplateIrNode, CompilerError> {
+        self.view()?.effective_node(node_id).cloned()
+    }
+
+    fn node_reactive_subscription(
+        &self,
+        node_id: TemplateIrNodeId,
+    ) -> Option<ReactiveSubscription> {
+        self.store.node_reactive_subscription(node_id).cloned()
+    }
+
+    fn push_node(
+        &mut self,
+        node: TemplateIrNode,
+        reactive_subscription: Option<ReactiveSubscription>,
+    ) -> TemplateIrNodeId {
+        let node_id = self.store.push_node(node);
+        if let Some(subscription) = reactive_subscription {
+            self.store
+                .set_node_reactive_subscription(node_id, subscription);
+        }
+        node_id
+    }
+}
+
 // -------------------------
 //  Public entry point
 // -------------------------
@@ -67,13 +116,21 @@ pub(crate) struct TirFormatterResult {
 ///       structural nodes break runs and pass through unchanged.
 /// WHY: this keeps formatter behavior on the authoritative TIR representation.
 pub(crate) fn format_tir_template(
-    view: &TirView<'_>,
+    store: &mut TemplateIrStore,
+    root: TemplateIrId,
+    phase: TemplateTirPhase,
+    overlay_set_id: TemplateOverlaySetId,
     style: &Style,
     string_table: &mut StringTable,
 ) -> Result<TirFormatterResult, CompilerMessages> {
-    let root_ref = view.root_ref();
+    let mut formatter_store = FormatterStore {
+        store,
+        root,
+        phase,
+        overlay_set_id,
+    };
     let root_node_id = {
-        let template = view
+        let template = formatter_store
             .root_template()
             .map_err(|error| compiler_error_messages(error, string_table))?;
         template.root
@@ -107,9 +164,9 @@ pub(crate) fn format_tir_template(
         .map(|f| f.post_format_whitespace_passes.as_slice())
         .unwrap_or(&[]);
 
-    let root_node_ref = TemplateNodeRef::new(root_ref.store_id, root_node_id);
+    let root_node_ref = root_node_id;
     let result = format_tir_node(
-        view,
+        &mut formatter_store,
         root_node_ref,
         pre_format_passes,
         post_format_passes,
@@ -121,8 +178,13 @@ pub(crate) fn format_tir_template(
     // their own formatter applied before folding. Recursively format every
     // reachable child template so the fold path sees formatted bodies.
     let mut visited = HashSet::new();
-    let formatted_root_ref = TemplateNodeRef::new(root_ref.store_id, result.root);
-    format_child_templates_in_subtree(view, formatted_root_ref, &mut visited, string_table)?;
+    let formatted_root_ref = result.root;
+    format_child_templates_in_subtree(
+        &mut formatter_store,
+        formatted_root_ref,
+        &mut visited,
+        string_table,
+    )?;
 
     Ok(result)
 }
@@ -192,13 +254,13 @@ fn extract_formatter_child_fact(kind: &TemplateIrNodeKind) -> FormatterChildFact
 ///      formatting pass does not format nested children. This pass ensures each
 ///      child template is formatted independently before folding.
 fn format_child_templates_in_subtree(
-    view: &TirView<'_>,
-    node_ref: TemplateNodeRef,
-    visited: &mut HashSet<TemplateRef>,
+    formatter_store: &mut FormatterStore<'_>,
+    node_ref: TemplateIrNodeId,
+    visited: &mut HashSet<TemplateIrId>,
     string_table: &mut StringTable,
 ) -> Result<(), CompilerMessages> {
     let fact = {
-        let node = view
+        let node = formatter_store
             .effective_node(node_ref)
             .map_err(|error| compiler_error_messages(error, string_table))?;
         extract_formatter_child_fact(&node.kind)
@@ -207,7 +269,7 @@ fn format_child_templates_in_subtree(
     match fact {
         FormatterChildFact::ChildTemplate { reference } if visited.insert(reference.root) => {
             format_referenced_child_template(
-                view,
+                formatter_store,
                 reference.root,
                 reference.phase,
                 reference.overlay_set_id,
@@ -217,8 +279,13 @@ fn format_child_templates_in_subtree(
 
         FormatterChildFact::Sequence(children) => {
             for child_id in children {
-                let child_ref = TemplateNodeRef::new(node_ref.store_id, child_id);
-                format_child_templates_in_subtree(view, child_ref, visited, string_table)?;
+                let child_ref = child_id;
+                format_child_templates_in_subtree(
+                    formatter_store,
+                    child_ref,
+                    visited,
+                    string_table,
+                )?;
             }
         }
 
@@ -227,13 +294,23 @@ fn format_child_templates_in_subtree(
             fallback,
         } => {
             for body_id in branch_bodies {
-                let branch_ref = TemplateNodeRef::new(node_ref.store_id, body_id);
-                format_child_templates_in_subtree(view, branch_ref, visited, string_table)?;
+                let branch_ref = body_id;
+                format_child_templates_in_subtree(
+                    formatter_store,
+                    branch_ref,
+                    visited,
+                    string_table,
+                )?;
             }
 
             if let Some(fallback_id) = fallback {
-                let fallback_ref = TemplateNodeRef::new(node_ref.store_id, fallback_id);
-                format_child_templates_in_subtree(view, fallback_ref, visited, string_table)?;
+                let fallback_ref = fallback_id;
+                format_child_templates_in_subtree(
+                    formatter_store,
+                    fallback_ref,
+                    visited,
+                    string_table,
+                )?;
             }
         }
 
@@ -241,29 +318,32 @@ fn format_child_templates_in_subtree(
             body,
             aggregate_wrapper,
         } => {
-            let body_ref = TemplateNodeRef::new(node_ref.store_id, body);
-            format_child_templates_in_subtree(view, body_ref, visited, string_table)?;
+            let body_ref = body;
+            format_child_templates_in_subtree(formatter_store, body_ref, visited, string_table)?;
 
             if let Some(aggregate_id) = aggregate_wrapper {
-                let aggregate_ref = TemplateNodeRef::new(node_ref.store_id, aggregate_id);
-                format_child_templates_in_subtree(view, aggregate_ref, visited, string_table)?;
+                let aggregate_ref = aggregate_id;
+                format_child_templates_in_subtree(
+                    formatter_store,
+                    aggregate_ref,
+                    visited,
+                    string_table,
+                )?;
             }
         }
 
-        FormatterChildFact::InsertContribution { template }
-            if visited.insert(TemplateRef::new(node_ref.store_id, template)) =>
-        {
-            let child_ref = TemplateRef::new(node_ref.store_id, template);
+        FormatterChildFact::InsertContribution { template } if visited.insert(template) => {
+            let child_ref = template;
             // InsertContribution nodes reference SlotInsert templates that are
             // always at Formatted phase: create_template_node formats every
             // same-store linear template before the parser records the insert
             // contribution. Using Formatted prevents re-formatting an already
             // formatted root.
             format_referenced_child_template(
-                view,
+                formatter_store,
                 child_ref,
                 TemplateTirPhase::Formatted,
-                view.overlay_set_id(),
+                formatter_store.overlay_set_id,
                 string_table,
             )?;
         }
@@ -282,20 +362,25 @@ fn format_child_templates_in_subtree(
 /// WHY: both `ChildTemplate` and `InsertContribution` nodes reference nested
 ///      templates that need independent formatting before folding.
 fn format_referenced_child_template(
-    view: &TirView<'_>,
-    template_ref: TemplateRef,
+    formatter_store: &mut FormatterStore<'_>,
+    template_ref: TemplateIrId,
     phase: TemplateTirPhase,
     overlay_set_id: TemplateOverlaySetId,
     string_table: &mut StringTable,
 ) -> Result<(), CompilerMessages> {
-    let child_view = view
-        .child_view(template_ref, phase, overlay_set_id)
-        .map_err(|error| compiler_error_messages(error, string_table))?;
-
     let style = {
-        let template = child_view
-            .root_template()
-            .map_err(|error| compiler_error_messages(error, string_table))?;
+        let template = formatter_store
+            .store
+            .get_template(template_ref)
+            .ok_or_else(|| {
+                compiler_error_messages(
+                    CompilerError::compiler_error(format!(
+                        "TIR formatter view lost referenced child template {}.",
+                        template_ref
+                    )),
+                    string_table,
+                )
+            })?;
         template.style.clone()
     };
 
@@ -309,13 +394,20 @@ fn format_referenced_child_template(
         return Ok(());
     }
 
-    let result = format_tir_template(&child_view, &style, string_table)?;
+    let result = format_tir_template(
+        formatter_store.store,
+        template_ref,
+        phase,
+        overlay_set_id,
+        &style,
+        string_table,
+    )?;
 
-    let mut store = view
-        .registry_ref()
-        .store_mut(template_ref.store_id)
-        .map_err(|error| compiler_error_messages(error, string_table))?;
-    let Some(template) = store.templates.get_mut(template_ref.template_id.index()) else {
+    let Some(template) = formatter_store
+        .store
+        .templates
+        .get_mut(template_ref.index())
+    else {
         return Err(compiler_error_messages(
             CompilerError::compiler_error(format!(
                 "TIR formatter view lost referenced child template {} during writeback.",
@@ -374,15 +466,15 @@ fn extract_formatter_node_fact(node: &TemplateIrNode) -> FormatterNodeFact {
 /// into child templates would violate opacity, and control-flow nodes are not
 /// expected in a simple formatter body.
 fn format_tir_node(
-    view: &TirView<'_>,
-    node_ref: TemplateNodeRef,
+    formatter_store: &mut FormatterStore<'_>,
+    node_ref: TemplateIrNodeId,
     pre_format_passes: &[TemplateWhitespacePassProfile],
     post_format_passes: &[TemplateWhitespacePassProfile],
     formatter: Option<&crate::compiler_frontend::ast::templates::template::Formatter>,
     string_table: &mut StringTable,
 ) -> Result<TirFormatterResult, CompilerMessages> {
     let fact = {
-        let node = view
+        let node = formatter_store
             .effective_node(node_ref)
             .map_err(|error| compiler_error_messages(error, string_table))?;
         extract_formatter_node_fact(&node)
@@ -396,10 +488,10 @@ fn format_tir_node(
             // head count is zero. The root-template lookup is required internal
             // authority: a missing root is a compiler bug, not a silent skip.
             let head_node_count = {
-                let root_template = view
+                let root_template = formatter_store
                     .root_template()
                     .map_err(|error| compiler_error_messages(error, string_table))?;
-                if root_template.root == node_ref.node_id {
+                if root_template.root == node_ref {
                     root_template.summary.head_node_count as usize
                 } else {
                     0
@@ -407,7 +499,7 @@ fn format_tir_node(
             };
 
             format_tir_sequence(
-                view,
+                formatter_store,
                 node_ref,
                 &children,
                 location,
@@ -423,11 +515,10 @@ fn format_tir_node(
             // A single body-eligible node is treated as a run of one. It is not
             // wrapped in a sequence unless the formatter expands it.
             let representative_location =
-                representative_location_for_single_node(view, node_ref, string_table)?;
+                representative_location_for_single_node(formatter_store, node_ref, string_table)?;
             let (replacement_nodes, warnings, content_changed) = process_formatter_run(
-                view,
-                node_ref.store_id,
-                std::slice::from_ref(&node_ref.node_id),
+                formatter_store,
+                std::slice::from_ref(&node_ref),
                 TemplateBodyRunPosition::Only,
                 &representative_location,
                 pre_format_passes,
@@ -440,8 +531,7 @@ fn format_tir_node(
                 replacement_nodes[0]
             } else {
                 push_formatter_node(
-                    view,
-                    node_ref.store_id,
+                    formatter_store,
                     TemplateIrNode::new(
                         TemplateIrNodeKind::Sequence {
                             children: replacement_nodes,
@@ -449,7 +539,6 @@ fn format_tir_node(
                         location,
                     ),
                     None,
-                    string_table,
                 )?
             };
 
@@ -458,7 +547,7 @@ fn format_tir_node(
 
         // Structural nodes that are not body-eligible pass through unchanged.
         FormatterNodeFact::Passthrough => Ok(TirFormatterResult {
-            root: node_ref.node_id,
+            root: node_ref,
             warnings: Vec::new(),
         }),
     }
@@ -483,8 +572,8 @@ struct ChildRunEligibility {
 /// outside the formatter-visible surface.
 #[allow(clippy::too_many_arguments)]
 fn format_tir_sequence(
-    view: &TirView<'_>,
-    original_node_ref: TemplateNodeRef,
+    formatter_store: &mut FormatterStore<'_>,
+    original_node_ref: TemplateIrNodeId,
     children: &[TemplateIrNodeId],
     location: SourceLocation,
     head_node_count: usize,
@@ -500,9 +589,9 @@ fn format_tir_sequence(
     let mut is_first_run = true;
 
     for (child_index, &child_id) in children.iter().enumerate() {
-        let child_ref = TemplateNodeRef::new(original_node_ref.store_id, child_id);
+        let child_ref = child_id;
         let child_eligibility = {
-            let child = view
+            let child = formatter_store
                 .effective_node(child_ref)
                 .map_err(|error| compiler_error_messages(error, string_table))?;
             ChildRunEligibility {
@@ -522,16 +611,11 @@ fn format_tir_sequence(
 
         if !current_run.is_empty() {
             let run_position = run_position_for_run(is_first_run, false);
-            let representative_location = representative_location_for_run(
-                view,
-                original_node_ref.store_id,
-                &current_run,
-                string_table,
-            )?;
+            let representative_location =
+                representative_location_for_run(formatter_store, &current_run, string_table)?;
 
             let (replacement, warnings, run_changed) = process_formatter_run(
-                view,
-                original_node_ref.store_id,
+                formatter_store,
                 &current_run,
                 run_position,
                 &representative_location,
@@ -553,16 +637,11 @@ fn format_tir_sequence(
 
     if !current_run.is_empty() {
         let run_position = run_position_for_run(is_first_run, true);
-        let representative_location = representative_location_for_run(
-            view,
-            original_node_ref.store_id,
-            &current_run,
-            string_table,
-        )?;
+        let representative_location =
+            representative_location_for_run(formatter_store, &current_run, string_table)?;
 
         let (replacement, warnings, run_changed) = process_formatter_run(
-            view,
-            original_node_ref.store_id,
+            formatter_store,
             &current_run,
             run_position,
             &representative_location,
@@ -579,11 +658,10 @@ fn format_tir_sequence(
 
     let root = if !content_changed && new_children.len() == children.len() {
         // Fast path: nothing changed, so the original node is still valid.
-        original_node_ref.node_id
+        original_node_ref
     } else {
         push_formatter_node(
-            view,
-            original_node_ref.store_id,
+            formatter_store,
             TemplateIrNode::new(
                 TemplateIrNodeKind::Sequence {
                     children: new_children,
@@ -591,7 +669,6 @@ fn format_tir_sequence(
                 location,
             ),
             None,
-            string_table,
         )?
     };
 
@@ -635,23 +712,22 @@ fn is_body_eligible_kind(kind: &TemplateIrNodeKind) -> bool {
 /// WHY: markdown inline-code pairing must work across inserted scalar strings
 /// without opening body-bearing child templates to the parent formatter.
 fn child_template_is_head_expression_insert_in_tir(
-    view: &TirView<'_>,
+    formatter_store: &FormatterStore<'_>,
     reference: &TemplateTirChildReference,
 ) -> Result<bool, CompilerError> {
-    // Cross-store child templates cannot be inspected from this view; stay
-    // conservative and treat them as opaque child-template boundaries.
-    if reference.root.store_id != view.root_ref().store_id {
-        return Ok(false);
-    }
-
-    let child_view = view.child_view(reference.root, reference.phase, reference.overlay_set_id)?;
+    let child_view = TirView::new(
+        &*formatter_store.store,
+        reference.root,
+        reference.phase,
+        reference.overlay_set_id,
+    )?;
     let child_template = child_view.root_template()?;
-    let root_node_ref = TemplateNodeRef::new(child_view.root_ref().store_id, child_template.root);
+    let root_node_ref = child_template.root;
     let root_node = child_view.effective_node(root_node_ref)?;
 
     let candidate_ids = match &root_node.kind {
         TemplateIrNodeKind::Sequence { children } => children.as_slice(),
-        _ => std::slice::from_ref(&root_node_ref.node_id),
+        _ => std::slice::from_ref(&root_node_ref),
     };
 
     if candidate_ids.is_empty() {
@@ -659,8 +735,7 @@ fn child_template_is_head_expression_insert_in_tir(
     }
 
     for node_id in candidate_ids {
-        let node_ref = TemplateNodeRef::new(root_node_ref.store_id, *node_id);
-        let node = child_view.effective_node(node_ref)?;
+        let node = child_view.effective_node(*node_id)?;
 
         match &node.kind {
             TemplateIrNodeKind::Text { origin, .. } if *origin == TemplateSegmentOrigin::Head => {}
@@ -682,12 +757,12 @@ fn child_template_is_head_expression_insert_in_tir(
 /// dynamic-expression anchors. Accepting the kind directly avoids a repeated
 /// `effective_node` read when the caller already holds the node borrow.
 fn opaque_kind_for_kind(
-    view: &TirView<'_>,
+    formatter_store: &FormatterStore<'_>,
     kind: &TemplateIrNodeKind,
 ) -> Result<FormatterOpaqueKind, CompilerError> {
     match kind {
         TemplateIrNodeKind::ChildTemplate { reference, .. } => {
-            if child_template_is_head_expression_insert_in_tir(view, reference)? {
+            if child_template_is_head_expression_insert_in_tir(formatter_store, reference)? {
                 Ok(FormatterOpaqueKind::DynamicExpression)
             } else {
                 Ok(FormatterOpaqueKind::ChildTemplate)
@@ -716,8 +791,7 @@ fn opaque_kind_for_kind(
 /// data and produce TIR data.
 #[allow(clippy::too_many_arguments)]
 fn process_formatter_run(
-    view: &TirView<'_>,
-    store_id: TemplateStoreId,
+    formatter_store: &mut FormatterStore<'_>,
     run: &[TemplateIrNodeId],
     run_position: TemplateBodyRunPosition,
     representative_location: &SourceLocation,
@@ -735,17 +809,15 @@ fn process_formatter_run(
     let mut run_reactive_subscription: Option<ReactiveSubscription> = None;
 
     for &node_id in run {
-        let node_ref = TemplateNodeRef::new(store_id, node_id);
-        let node = view
+        let node_ref = node_id;
+        let node = formatter_store
             .effective_node(node_ref)
             .map_err(|error| compiler_error_messages(error, string_table))?;
 
         match &node.kind {
             TemplateIrNodeKind::Text { text, .. } => {
-                if run_reactive_subscription.is_none()
-                    && let Some(store) = view.registry_ref().store(store_id)
-                {
-                    run_reactive_subscription = store.node_reactive_subscription(node_id).cloned();
+                if run_reactive_subscription.is_none() {
+                    run_reactive_subscription = formatter_store.node_reactive_subscription(node_id);
                 }
 
                 input_pieces.push(FormatterInputPiece::Text(FormatterTextPiece {
@@ -760,7 +832,7 @@ fn process_formatter_run(
 
                 input_pieces.push(FormatterInputPiece::Opaque(FormatterOpaquePiece {
                     id: anchor_id,
-                    kind: opaque_kind_for_kind(view, &node.kind)
+                    kind: opaque_kind_for_kind(formatter_store, &node.kind)
                         .map_err(|error| CompilerMessages::from_error_ref(error, string_table))?,
                 }));
             }
@@ -800,8 +872,7 @@ fn process_formatter_run(
 
     // 4. Map formatter output back to TIR nodes.
     let (replacement_nodes, content_changed) = output_to_tir_nodes(
-        view,
-        store_id,
+        formatter_store,
         output,
         representative_location,
         &anchor_side_table,
@@ -827,8 +898,7 @@ fn process_formatter_run(
 /// WHY: preserving original nodes for anchors keeps child-template opacity and
 /// dynamic-expression metadata intact.
 fn output_to_tir_nodes(
-    view: &TirView<'_>,
-    store_id: TemplateStoreId,
+    formatter_store: &mut FormatterStore<'_>,
     output: crate::compiler_frontend::ast::templates::formatter_contract::FormatterOutput,
     representative_location: &SourceLocation,
     anchor_side_table: &[TemplateIrNodeId],
@@ -845,8 +915,7 @@ fn output_to_tir_nodes(
                 let byte_len = text.len();
 
                 nodes.push(push_formatter_node(
-                    view,
-                    store_id,
+                    formatter_store,
                     TemplateIrNode::new(
                         TemplateIrNodeKind::Text {
                             text: text_id,
@@ -856,7 +925,6 @@ fn output_to_tir_nodes(
                         representative_location.clone(),
                     ),
                     run_reactive_subscription.clone(),
-                    string_table,
                 )?);
 
                 content_changed = true;
@@ -886,24 +954,14 @@ fn output_to_tir_nodes(
 ///
 /// WHAT: obtains the mutable store borrow only after formatter input has been
 ///       extracted into owned local data. WHY: `TirView` reads through the
-///       registry/store `RefCell` model, so writeback must be a separate short
-///       phase rather than holding a mutable store borrow during view reads.
+///       module store `RefCell`, so writeback must be a separate short phase
+///       rather than holding a mutable store borrow during view reads.
 fn push_formatter_node(
-    view: &TirView<'_>,
-    store_id: TemplateStoreId,
+    formatter_store: &mut FormatterStore<'_>,
     node: TemplateIrNode,
     reactive_subscription: Option<ReactiveSubscription>,
-    string_table: &StringTable,
 ) -> Result<TemplateIrNodeId, CompilerMessages> {
-    let mut store = view
-        .registry_ref()
-        .store_mut(store_id)
-        .map_err(|error| compiler_error_messages(error, string_table))?;
-
-    let node_id = store.push_node(node);
-    if let Some(subscription) = reactive_subscription {
-        store.set_node_reactive_subscription(node_id, subscription);
-    }
+    let node_id = formatter_store.push_node(node, reactive_subscription);
 
     Ok(node_id)
 }
@@ -932,8 +990,7 @@ fn run_position_for_run(is_first_run: bool, is_last_run: bool) -> TemplateBodyRu
 /// provenance is not feasible. A representative span preserves useful
 /// diagnostics locations without pretending to be precise.
 fn representative_location_for_run(
-    view: &TirView<'_>,
-    store_id: TemplateStoreId,
+    formatter_store: &FormatterStore<'_>,
     run: &[TemplateIrNodeId],
     string_table: &StringTable,
 ) -> Result<SourceLocation, CompilerMessages> {
@@ -942,8 +999,8 @@ fn representative_location_for_run(
     let mut fallback_location: Option<SourceLocation> = None;
 
     for &node_id in run {
-        let node_ref = TemplateNodeRef::new(store_id, node_id);
-        let node = view
+        let node_ref = node_id;
+        let node = formatter_store
             .effective_node(node_ref)
             .map_err(|error| compiler_error_messages(error, string_table))?;
 
@@ -991,14 +1048,13 @@ fn representative_location_for_run(
 
 /// Derives a representative location for a single body-eligible node.
 fn representative_location_for_single_node(
-    view: &TirView<'_>,
-    node_ref: TemplateNodeRef,
+    formatter_store: &FormatterStore<'_>,
+    node_ref: TemplateIrNodeId,
     string_table: &StringTable,
 ) -> Result<SourceLocation, CompilerMessages> {
     representative_location_for_run(
-        view,
-        node_ref.store_id,
-        std::slice::from_ref(&node_ref.node_id),
+        formatter_store,
+        std::slice::from_ref(&node_ref),
         string_table,
     )
 }

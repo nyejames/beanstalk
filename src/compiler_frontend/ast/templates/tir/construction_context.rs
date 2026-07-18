@@ -12,9 +12,10 @@
 //! `TemplateTirReference`. Keeping the registered store, source location, and
 //! builder state on the construction context means parser callers record
 //! through the context instead of repeatedly borrowing
-//! `context.registered_template_ir_store`.
+//! `context.template_ir_store`.
 
-use std::sync::Arc;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::templates::error::TemplateError;
@@ -25,12 +26,11 @@ use crate::compiler_frontend::ast::templates::template_control_flow::{
     TemplateLoopControlKind, TemplateLoopHeader,
 };
 use crate::compiler_frontend::ast::templates::tir::overlays::TemplateOverlaySet;
-use crate::compiler_frontend::ast::templates::tir::parser_builder_state::{
-    TemplateParserIrBuilderState, TemplateTirReference,
-};
-use crate::compiler_frontend::ast::templates::tir::store::{TemplateIrStore, TemplateIrStoreOwner};
+use crate::compiler_frontend::ast::templates::tir::parser_builder_state::TemplateParserIrBuilderState;
+use crate::compiler_frontend::ast::templates::tir::refs::TemplateTirReference;
+use crate::compiler_frontend::ast::templates::tir::store::TemplateIrStore;
 use crate::compiler_frontend::ast::templates::tir::{
-    RegisteredTemplateIrStore, TemplateTirPhase,
+    TemplateTirPhase,
     ids::{TemplateIrId, TemplateIrNodeId},
     node::TemplateIrBranch,
 };
@@ -39,7 +39,7 @@ use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
 /// Parser-local owner for in-progress TIR builder state.
 ///
-/// WHAT: wraps the active `TemplateParserIrBuilderState` and the registry/store
+/// WHAT: wraps the active `TemplateParserIrBuilderState` and the store
 ///       identity it writes into, and provides the recording API that head/body
 ///       parsing and render-unit preparation use to emit TIR nodes.
 /// WHY: keeps parse-time accumulator state and store-borrowing details off
@@ -48,12 +48,8 @@ use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 pub(crate) struct TemplateConstructionContext {
     builder: TemplateParserIrBuilderState,
 
-    /// Registered store that receives the parser-emitted nodes.
-    ///
-    /// WHAT: couples the registry, store ID and direct store handle so the
-    ///       context cannot write to a store that does not match its registry
-    ///       entry.
-    registered_store: RegisteredTemplateIrStore,
+    /// Shared module store that receives parser-emitted nodes and overlays.
+    store: Rc<RefCell<TemplateIrStore>>,
 
     /// Source location where this template started parsing.
     ///
@@ -63,33 +59,13 @@ pub(crate) struct TemplateConstructionContext {
 }
 
 impl TemplateConstructionContext {
-    /// Creates a fresh construction context bound to the given registry-owned store.
-    ///
-    /// WHAT: allocates a new builder state that will record parser output into
-    ///       the registered store, and remembers the registered-store value so
-    ///       later code can recover store-qualified identity without reaching
-    ///       back into `ScopeContext`.
-    pub(crate) fn new(
-        registered_store: RegisteredTemplateIrStore,
-        location: SourceLocation,
-    ) -> Self {
-        let store_owner = registered_store.store().borrow().owner();
-
+    /// Creates a fresh construction context bound to the module store.
+    pub(crate) fn new(store: Rc<RefCell<TemplateIrStore>>, location: SourceLocation) -> Self {
         Self {
-            builder: TemplateParserIrBuilderState::new(store_owner),
-            registered_store,
+            builder: TemplateParserIrBuilderState::new(),
+            store,
             location,
         }
-    }
-
-    /// Returns the logical store-owner token for the store this context writes into.
-    ///
-    /// WHAT: the `head_expressions` cross-store gate compares this token with
-    ///       `value.tir_reference.store_owner` on an incoming child `Template` to decide
-    ///       whether to record a raw `TemplateIrId` child reference (same store)
-    ///       or an opaque dynamic expression (foreign store).
-    pub(crate) fn store_owner(&self) -> Arc<TemplateIrStoreOwner> {
-        self.registered_store.store().borrow().owner()
     }
 
     /// Returns the source location captured when this context was created.
@@ -100,8 +76,8 @@ impl TemplateConstructionContext {
     /// Returns a shared reference to the in-progress builder state.
     ///
     /// WHAT: lets validation and render-unit sync read root children,
-    ///       control-flow node IDs, and the store-owner token while parsing is
-    ///       still in progress.
+    ///       control-flow node IDs while parser construction is still in
+    ///       progress.
     pub(crate) fn builder(&self) -> &TemplateParserIrBuilderState {
         &self.builder
     }
@@ -113,7 +89,7 @@ impl TemplateConstructionContext {
     /// WHY: body-boundary validation and node lookup need store access without
     ///      taking ownership of the store handle from the context.
     pub(crate) fn store(&self) -> std::cell::Ref<'_, TemplateIrStore> {
-        self.registered_store.store().borrow()
+        self.store.borrow()
     }
 
     // -------------------------
@@ -127,7 +103,7 @@ impl TemplateConstructionContext {
         byte_len: usize,
         location: SourceLocation,
     ) {
-        let mut store = self.registered_store.store().borrow_mut();
+        let mut store = self.store.borrow_mut();
         self.builder.record_text(
             &mut store,
             text,
@@ -148,7 +124,7 @@ impl TemplateConstructionContext {
         byte_len: usize,
         location: SourceLocation,
     ) {
-        let mut store = self.registered_store.store().borrow_mut();
+        let mut store = self.store.borrow_mut();
         self.builder.record_text(
             &mut store,
             text,
@@ -167,7 +143,7 @@ impl TemplateConstructionContext {
         reactive_subscription: Option<ReactiveSubscription>,
         location: SourceLocation,
     ) {
-        let mut store = self.registered_store.store().borrow_mut();
+        let mut store = self.store.borrow_mut();
         self.builder.record_text(
             &mut store,
             text,
@@ -192,7 +168,7 @@ impl TemplateConstructionContext {
         reactive_subscription: Option<ReactiveSubscription>,
         location: SourceLocation,
     ) {
-        let mut store = self.registered_store.store().borrow_mut();
+        let mut store = self.store.borrow_mut();
         self.builder.record_dynamic_expression(
             &mut store,
             expression,
@@ -213,7 +189,7 @@ impl TemplateConstructionContext {
         origin: TemplateSegmentOrigin,
         location: SourceLocation,
     ) {
-        let mut store = self.registered_store.store().borrow_mut();
+        let mut store = self.store.borrow_mut();
         self.builder
             .record_child_template(&mut store, child_reference, origin, location);
     }
@@ -224,7 +200,7 @@ impl TemplateConstructionContext {
         slot: SlotPlaceholder,
         location: SourceLocation,
     ) -> Result<(), TemplateError> {
-        let mut store = self.registered_store.store().borrow_mut();
+        let mut store = self.store.borrow_mut();
         self.builder.record_slot(&mut store, slot, location)
     }
 
@@ -234,7 +210,7 @@ impl TemplateConstructionContext {
         contribution_template_id: TemplateIrId,
         location: SourceLocation,
     ) {
-        let mut store = self.registered_store.store().borrow_mut();
+        let mut store = self.store.borrow_mut();
         self.builder
             .record_insert_contribution(&mut store, contribution_template_id, location);
     }
@@ -250,7 +226,7 @@ impl TemplateConstructionContext {
         fallback: Option<TemplateIrNodeId>,
         location: SourceLocation,
     ) {
-        let mut store = self.registered_store.store().borrow_mut();
+        let mut store = self.store.borrow_mut();
         self.builder
             .record_branch_chain(&mut store, branches, fallback, location);
     }
@@ -262,7 +238,7 @@ impl TemplateConstructionContext {
         body: TemplateIrNodeId,
         location: SourceLocation,
     ) {
-        let mut store = self.registered_store.store().borrow_mut();
+        let mut store = self.store.borrow_mut();
         self.builder.record_loop(&mut store, header, body, location);
     }
 
@@ -272,7 +248,7 @@ impl TemplateConstructionContext {
         kind: TemplateLoopControlKind,
         location: SourceLocation,
     ) {
-        let mut store = self.registered_store.store().borrow_mut();
+        let mut store = self.store.borrow_mut();
         self.builder.record_loop_control(&mut store, kind, location);
     }
 
@@ -283,7 +259,7 @@ impl TemplateConstructionContext {
     /// Trims leading whitespace-only text nodes for control-flow body
     /// boundary cleanup.
     pub(crate) fn trim_leading_whitespace(&mut self, string_table: &StringTable) {
-        let store = self.registered_store.store().borrow();
+        let store = self.store.borrow();
         self.builder
             .trim_leading_whitespace_text(&store, string_table);
     }
@@ -291,7 +267,7 @@ impl TemplateConstructionContext {
     /// Trims trailing whitespace-only text nodes for loop-control sentinel
     /// cleanup.
     pub(crate) fn trim_trailing_whitespace(&mut self, string_table: &StringTable) {
-        let store = self.registered_store.store().borrow();
+        let store = self.store.borrow();
         self.builder
             .trim_trailing_whitespace_text(&store, string_table);
     }
@@ -304,7 +280,7 @@ impl TemplateConstructionContext {
     ///
     /// WHAT: seals accumulated children under a root sequence node, stores the
     ///       finished `TemplateIr` entry, and returns the required
-    ///       `TemplateTirReference` (store-qualified root + store-owner token).
+    ///       `TemplateTirReference`.
     ///       The `phase` parameter records how far the root has progressed:
     ///       `Parsed` for ordinary body/wrapper construction, `Formatted` for
     ///       prepared control-flow owner roots.
@@ -318,25 +294,20 @@ impl TemplateConstructionContext {
         location: SourceLocation,
     ) -> TemplateTirReference {
         let template_id = {
-            let mut store = self.registered_store.store().borrow_mut();
+            let mut store = self.store.borrow_mut();
             self.builder.finish(&mut store, style, kind, location)
         };
 
-        // Allocate the canonical empty overlay set through the registry so the
-        // reference carries a real registry-backed ID. In this carrier-only
-        // phase every parser-emitted reference defaults to "no overlays"; later
+        // Allocate the canonical empty overlay set through the store so the
+        // reference carries a real store-backed ID. In this carrier-only phase
+        // every parser-emitted reference defaults to "no overlays"; later
         // phases will thread non-empty overlay sets through the same path.
         let overlay_set_id = self
-            .registered_store
-            .registry()
+            .store
             .borrow_mut()
             .allocate_overlay_set(TemplateOverlaySet::empty());
 
-        self.builder.finalized_reference(
-            template_id,
-            self.registered_store.store_id(),
-            overlay_set_id,
-            phase,
-        )
+        self.builder
+            .finalized_reference(template_id, overlay_set_id, phase)
     }
 }

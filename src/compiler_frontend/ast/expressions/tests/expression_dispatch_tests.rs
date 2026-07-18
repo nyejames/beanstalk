@@ -16,8 +16,7 @@ use crate::compiler_frontend::ast::expressions::parse_expression_dispatch::{
 use crate::compiler_frontend::ast::templates::template::Template;
 use crate::compiler_frontend::ast::templates::template::{SlotKey, Style, TemplateType};
 use crate::compiler_frontend::ast::templates::tir::{
-    RegisteredTemplateIrStore, TemplateIrBuilder, TemplateIrRegistry, TemplateIrStore,
-    TemplateIrSummary, TemplateOverlaySet, TemplateOverlaySetId, TemplateRef, TemplateTirPhase,
+    TemplateIrBuilder, TemplateIrStore, TemplateIrSummary, TemplateOverlaySetId, TemplateTirPhase,
     TemplateTirReference,
 };
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
@@ -293,23 +292,17 @@ fn full_frontend_stray_hash_error() {
 }
 
 #[test]
-fn constant_identifier_uses_foreign_effective_tir() {
+fn constant_identifier_uses_module_store_tir() {
     let mut string_table = StringTable::new();
     let scope = InternedPath::from_single_str("test.bst", &mut string_table);
     let constant_name = string_table.intern("wrapper");
 
-    let primary_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-    let foreign_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-    let mut registry = TemplateIrRegistry::new();
-    registry.allocate_overlay_set(TemplateOverlaySet::empty());
-    let primary_store_id = registry.adopt_store(Rc::clone(&primary_store));
-    let foreign_store_id = registry.adopt_store(Rc::clone(&foreign_store));
-    let registry = Rc::new(RefCell::new(registry));
+    let store = Rc::new(RefCell::new(TemplateIrStore::new()));
 
     let location = SourceLocation::new(scope.clone(), Default::default(), Default::default());
     let template_id = {
-        let mut foreign_store = foreign_store.borrow_mut();
-        let mut builder = TemplateIrBuilder::new(&mut foreign_store);
+        let mut store = store.borrow_mut();
+        let mut builder = TemplateIrBuilder::new(&mut store);
         let slot = builder.push_slot_node(SlotKey::Default, location.clone());
         builder.finish_template(
             slot,
@@ -323,8 +316,7 @@ fn constant_identifier_uses_foreign_effective_tir() {
     let template = Template {
         kind: TemplateType::String,
         tir_reference: TemplateTirReference {
-            root: TemplateRef::new(foreign_store.borrow().store_id(), template_id),
-            store_owner: foreign_store.borrow().owner(),
+            root: template_id,
             phase: TemplateTirPhase::Composed,
             overlay_set_id: TemplateOverlaySetId::empty_for_test(),
         },
@@ -339,10 +331,7 @@ fn constant_identifier_uses_foreign_effective_tir() {
         vec![],
         0,
     )
-    .with_registered_template_ir_store(
-        RegisteredTemplateIrStore::from_registry_and_store_id(registry, primary_store_id)
-            .expect("primary test store should be registered"),
-    );
+    .with_template_ir_store(Rc::clone(&store));
     context.set_local_declarations(vec![Declaration {
         id: InternedPath::from_components(vec![constant_name]),
         value: Expression::template(template, ValueMode::ImmutableOwned),
@@ -367,15 +356,12 @@ fn constant_identifier_uses_foreign_effective_tir() {
         false,
         &mut string_table,
     )
-    .expect("registry-backed constant reference should inline through effective TIR");
+    .expect("module-store constant reference should inline through effective TIR");
 
     let ExpressionKind::Template(parsed_template) = parsed.kind else {
         panic!("constant reference should preserve the existing inlined template behavior");
     };
-    assert_eq!(
-        parsed_template.tir_reference.root.store_id,
-        foreign_store_id
-    );
+    assert_eq!(parsed_template.tir_reference.root, template_id);
 }
 
 // ----------------------------------

@@ -84,20 +84,15 @@ fn capacity_only_shorthand(type_ref: &ParsedTypeRef) -> Option<&ParsedCollection
 
 /// Classify a body-local constant initializer through the module's effective TIR views.
 ///
-/// Both declaration paths use the same registry because templates may retain exact foreign-store
-/// references after composition. A scratch view of the current store cannot recover that identity.
+/// Both declaration paths use the shared module store so templates retain their exact view
+/// identity after composition. Classification does not rebuild a scratch template view.
 fn initializer_is_compile_time_constant(
     initializer: &Expression,
     context: &ScopeContext,
-    string_table: &StringTable,
 ) -> Result<bool, CompilerDiagnostic> {
     initializer
         .const_value_kind_with_template_classifier(&mut |template| {
-            classify_template_from_effective_tir(
-                template,
-                context.registered_template_ir_store.registry(),
-                string_table,
-            )
+            classify_template_from_effective_tir(template, &context.template_ir_store)
         })
         .map(|kind| kind.is_compile_time_value())
         .map_err(TemplateError::into_diagnostic)
@@ -390,7 +385,7 @@ pub fn resolve_declaration_syntax(
         // Post-parse validation for token consumption and constant folding.
         let initializer_is_compile_time_constant =
             if declaration_syntax.binding_mode.is_compile_time() {
-                initializer_is_compile_time_constant(&parsed_initializer, context, string_table)?
+                initializer_is_compile_time_constant(&parsed_initializer, context)?
             } else {
                 true
             };
@@ -507,11 +502,7 @@ pub fn resolve_declaration_syntax(
                 )?);
             }
 
-            if let Err(bag) = validate_struct_default_values(
-                &params,
-                context.registered_template_ir_store.registry(),
-                string_table,
-            ) {
+            if let Err(bag) = validate_struct_default_values(&params, &context.template_ir_store) {
                 let diagnostics = bag.into_diagnostics();
                 if let Some(first) = diagnostics.into_iter().next() {
                     return Err(Box::new(first));
@@ -617,7 +608,7 @@ pub fn resolve_declaration_syntax(
     // this check covers the body-local path through `resolve_declaration_syntax`.
     let initializer_is_compile_time_constant = if declaration_syntax.binding_mode.is_compile_time()
     {
-        initializer_is_compile_time_constant(&parsed_initializer, context, string_table)?
+        initializer_is_compile_time_constant(&parsed_initializer, context)?
     } else {
         true
     };

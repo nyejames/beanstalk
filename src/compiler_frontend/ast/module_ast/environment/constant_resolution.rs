@@ -11,7 +11,7 @@ use crate::compiler_frontend::ast::module_ast::environment::TopLevelDeclarationT
 use crate::compiler_frontend::ast::module_ast::scope_context::{ContextKind, ScopeContext};
 use crate::compiler_frontend::ast::statements::declarations::resolve_declaration_syntax;
 use crate::compiler_frontend::ast::templates::error::TemplateError;
-use crate::compiler_frontend::ast::templates::tir::RegisteredTemplateIrStore;
+use crate::compiler_frontend::ast::templates::tir::TemplateIrStore;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::ast::type_resolution::ResolvedTypeAnnotation;
 use crate::compiler_frontend::compiler_errors::{CompilerError, compiler_error_to_diagnostic};
@@ -57,7 +57,7 @@ pub(crate) struct ConstantHeaderParseContext<'a> {
     pub project_path_resolver: Option<ProjectPathResolver>,
     pub path_format_config: PathStringFormatConfig,
     pub template_const_loop_iteration_limit: usize,
-    pub registered_template_ir_store: RegisteredTemplateIrStore,
+    pub template_ir_store: Rc<RefCell<TemplateIrStore>>,
     pub build_profile: FrontendBuildProfile,
     pub warnings: &'a mut Vec<CompilerDiagnostic>,
     pub rendered_path_usages: Rc<RefCell<Vec<RenderedPathUsage>>>,
@@ -86,7 +86,7 @@ pub(crate) fn parse_constant_header_declaration(
         project_path_resolver,
         path_format_config,
         template_const_loop_iteration_limit,
-        registered_template_ir_store,
+        template_ir_store,
         build_profile,
         warnings,
         rendered_path_usages,
@@ -116,7 +116,7 @@ pub(crate) fn parse_constant_header_declaration(
         Arc::clone(external_package_registry),
         vec![],
         0,
-        registered_template_ir_store,
+        template_ir_store,
     )
     .with_style_directives(style_directives)
     .with_build_profile(build_profile)
@@ -156,15 +156,11 @@ pub(crate) fn parse_constant_header_declaration(
 
     // After resolution, the initializer must be fully foldable at compile time.
     // Runtime expressions in constants are rejected here. Template payloads keep
-    // their registry-qualified store, phase and overlay identity during classification.
+    // their module-local reference, phase and overlay identity during classification.
     let initializer_is_compile_time_constant = declaration
         .value
         .const_value_kind_with_template_classifier(&mut |template| {
-            classify_template_from_effective_tir(
-                template,
-                scope_context.registered_template_ir_store.registry(),
-                string_table,
-            )
+            classify_template_from_effective_tir(template, &scope_context.template_ir_store)
         })
         .map(|kind| kind.is_compile_time_value())
         .map_err(|error| Box::new(TemplateError::into_diagnostic(error)))?;

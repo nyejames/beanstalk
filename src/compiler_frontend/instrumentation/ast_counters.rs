@@ -92,7 +92,7 @@ pub(crate) enum AstCounter {
     // Phase 1 TIR attribution counters.
     //
     // WHAT: fine-grained attribution for current-state materialization,
-    // registry-backed view folds, fold-cache behavior, and full
+    // module-store view folds, fold-cache behavior, and full
     // `TemplateIrStore` clone sites, so Phase 2 can rank remaining clone and
     // current-state materialization costs.
     // WHY: the existing `ast_tir_templates_created` / `ast_tir_nodes_created`
@@ -136,15 +136,15 @@ pub(crate) enum AstCounter {
     /// Recursive child formatted-root shortcut missed because `ContentMirror`
     /// authority only admits narrow text/direct-dynamic shapes.
 
-    /// Registry-backed finalization fold attempt that passed reference, store,
-    /// and registry validation and reached view construction.
-    TirRegistryBackedFoldAttempts,
+    /// Finalization view fold attempt that passed reference and store
+    /// validation and reached view construction.
+    TirFinalizationFoldAttempts,
 
-    /// Registry-backed finalization fold completed (folded or classified
-    /// non-renderable through the registry path, without falling back).
-    TirRegistryBackedFoldSuccesses,
+    /// Finalization view fold completed (folded or classified
+    /// non-renderable through the view path, without falling back).
+    TirFinalizationFoldSuccesses,
 
-    /// Total `fold_tir_view` entries (registry-backed view folds from any
+    /// Total `fold_tir_view` entries (module-store view folds from any
     /// caller: finalization, doc fragments, HIR handoff).
     TirViewFoldsAttempted,
 
@@ -171,7 +171,7 @@ pub(crate) enum AstCounter {
     TirFoldCacheMisses,
 
     /// Full `TemplateIrStore` clones in AST finalization
-    /// (`template_helpers`): the registry-view fold store clone and the
+    /// (`template_helpers`): the module-store view fold clone and the
     /// fold-context snapshot clone.
     TirStoreCloneFinalization,
 
@@ -182,8 +182,7 @@ pub(crate) enum AstCounter {
     /// folding.
     TirStoreCloneHirHandoff,
 
-    /// Registry-backed TirView roots tested for the read-only, no-clone fold
-    /// path.
+    /// TirView roots tested for the read-only, no-clone fold path.
     TirReadOnlyFoldAttempts,
 
     /// Read-only no-clone path attempts that completed without falling back to
@@ -191,7 +190,7 @@ pub(crate) enum AstCounter {
     TirReadOnlyFoldSuccesses,
 
     /// Read-only no-clone path attempts rejected before finalization continued
-    /// through the general registry-backed view fold.
+    /// through the general module-store view fold.
     TirReadOnlyFoldFallbacks,
 }
 #[cfg(feature = "benchmark_counters")]
@@ -329,8 +328,8 @@ mod detailed {
             AstCounter::TirFoldStringInternCalls,
             AstCounter::TirCurrentStateTemplatesCreated,
             AstCounter::TirCurrentStateNodesCreated,
-            AstCounter::TirRegistryBackedFoldAttempts,
-            AstCounter::TirRegistryBackedFoldSuccesses,
+            AstCounter::TirFinalizationFoldAttempts,
+            AstCounter::TirFinalizationFoldSuccesses,
             AstCounter::TirViewFoldsAttempted,
             AstCounter::TirViewFoldOverlayEmpty,
             AstCounter::TirViewFoldOverlayExpressionOnly,
@@ -432,8 +431,8 @@ mod detailed {
 
             AstCounter::TirCurrentStateTemplatesCreated => "TIR current-state templates created",
             AstCounter::TirCurrentStateNodesCreated => "TIR current-state nodes created",
-            AstCounter::TirRegistryBackedFoldAttempts => "registry-backed fold attempts",
-            AstCounter::TirRegistryBackedFoldSuccesses => "registry-backed fold successes",
+            AstCounter::TirFinalizationFoldAttempts => "finalization fold attempts",
+            AstCounter::TirFinalizationFoldSuccesses => "finalization fold successes",
             AstCounter::TirViewFoldsAttempted => "TIR view folds attempted",
             AstCounter::TirViewFoldOverlayEmpty => "TIR view fold overlay: empty",
             AstCounter::TirViewFoldOverlayExpressionOnly => {
@@ -557,8 +556,8 @@ mod detailed {
                 "ast_tir_current_state_templates_created"
             }
             AstCounter::TirCurrentStateNodesCreated => "ast_tir_current_state_nodes_created",
-            AstCounter::TirRegistryBackedFoldAttempts => "ast_tir_registry_backed_fold_attempts",
-            AstCounter::TirRegistryBackedFoldSuccesses => "ast_tir_registry_backed_fold_successes",
+            AstCounter::TirFinalizationFoldAttempts => "ast_tir_finalization_fold_attempts",
+            AstCounter::TirFinalizationFoldSuccesses => "ast_tir_finalization_fold_successes",
             AstCounter::TirViewFoldsAttempted => "ast_tir_view_folds_attempted",
             AstCounter::TirViewFoldOverlayEmpty => "ast_tir_view_fold_overlay_empty",
             AstCounter::TirViewFoldOverlayExpressionOnly => {

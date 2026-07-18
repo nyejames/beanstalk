@@ -49,8 +49,8 @@ fn ast_counters_record_stable_metrics_when_stdout_is_suppressed() {
     // Phase 1 TIR attribution counters must flow through the stable metric path.
     add_ast_counter(AstCounter::TirCurrentStateTemplatesCreated, 303);
     add_ast_counter(AstCounter::TirCurrentStateNodesCreated, 305);
-    add_ast_counter(AstCounter::TirRegistryBackedFoldAttempts, 313);
-    add_ast_counter(AstCounter::TirRegistryBackedFoldSuccesses, 317);
+    add_ast_counter(AstCounter::TirFinalizationFoldAttempts, 313);
+    add_ast_counter(AstCounter::TirFinalizationFoldSuccesses, 317);
     add_ast_counter(AstCounter::TirViewFoldsAttempted, 331);
     add_ast_counter(AstCounter::TirViewFoldOverlayEmpty, 337);
     add_ast_counter(AstCounter::TirViewFoldOverlayExpressionOnly, 341);
@@ -152,12 +152,12 @@ fn ast_counters_record_stable_metrics_when_stdout_is_suppressed() {
     );
     assert_counter_value(
         &observations.counters,
-        "ast_tir_registry_backed_fold_attempts",
+        "ast_tir_finalization_fold_attempts",
         313.0,
     );
     assert_counter_value(
         &observations.counters,
-        "ast_tir_registry_backed_fold_successes",
+        "ast_tir_finalization_fold_successes",
         317.0,
     );
     assert_counter_value(

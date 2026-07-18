@@ -110,7 +110,7 @@ fn substitute_source_consts_in_expression(
     string_table: &StringTable,
 ) -> Expression {
     match &expression.kind {
-        ExpressionKind::Reference(path) => source_const_value_for_path(path, context, string_table)
+        ExpressionKind::Reference(path) => source_const_value_for_path(path, context)
             .cloned()
             .unwrap_or(expression),
 
@@ -173,12 +173,8 @@ fn fold_substituted_runtime_condition(
         Ok(stack) => {
             if stack.len() == 1
                 && let ExpressionRpnItem::Operand(folded) = &stack[0]
-                && expression_is_compile_time_constant_from_effective_tir(
-                    folded,
-                    context,
-                    string_table,
-                )
-                .unwrap_or(false)
+                && expression_is_compile_time_constant_from_effective_tir(folded, context)
+                    .unwrap_or(false)
             {
                 return folded.clone();
             }
@@ -193,14 +189,12 @@ fn fold_substituted_runtime_condition(
 fn source_const_value_for_path<'a>(
     path: &InternedPath,
     context: &'a ScopeContext,
-    string_table: &StringTable,
 ) -> Option<&'a Expression> {
     let declaration = context
         .top_level_declarations
         .get_visible_resolved_by_path(path, context.visible_declaration_ids.as_ref())?;
 
-    let decidable =
-        source_const_value_is_condition_decidable(&declaration.value, context, string_table);
+    let decidable = source_const_value_is_condition_decidable(&declaration.value, context);
 
     if decidable {
         Some(&declaration.value)
@@ -212,35 +206,24 @@ fn source_const_value_for_path<'a>(
 fn source_const_value_is_condition_decidable(
     expression: &Expression,
     context: &ScopeContext,
-    string_table: &StringTable,
 ) -> bool {
     match &expression.kind {
         ExpressionKind::OptionNone => true,
         ExpressionKind::Coerced { value, .. } => {
-            expression_is_compile_time_constant_from_effective_tir(value, context, string_table)
-                .unwrap_or(false)
+            expression_is_compile_time_constant_from_effective_tir(value, context).unwrap_or(false)
         }
-        _ => expression_is_compile_time_constant_from_effective_tir(
-            expression,
-            context,
-            string_table,
-        )
-        .unwrap_or(false),
+        _ => expression_is_compile_time_constant_from_effective_tir(expression, context)
+            .unwrap_or(false),
     }
 }
 
 fn expression_is_compile_time_constant_from_effective_tir(
     expression: &Expression,
     context: &ScopeContext,
-    string_table: &StringTable,
 ) -> Result<bool, TemplateError> {
     Ok(expression
         .const_value_kind_with_template_classifier(&mut |template| {
-            classify_template_from_effective_tir(
-                template,
-                context.registered_template_ir_store.registry(),
-                string_table,
-            )
+            classify_template_from_effective_tir(template, &context.template_ir_store)
         })?
         .is_compile_time_value())
 }

@@ -27,8 +27,8 @@ use crate::compiler_frontend::ast::templates::template_folding::{
     selected_option_capture_payload,
 };
 use crate::compiler_frontend::ast::templates::tir::{
-    TemplateIrBuilder, TemplateIrRegistry, TemplateIrStore, TemplateIrSummary, TemplateOverlaySet,
-    TemplateOverlaySetId, TemplateRef, TemplateTirPhase, TemplateTirReference, TirFoldCache,
+    TemplateIrBuilder, TemplateIrStore, TemplateIrSummary, TemplateOverlaySet,
+    TemplateOverlaySetId, TemplateTirPhase, TemplateTirReference, TirFoldCache,
 };
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
@@ -81,7 +81,7 @@ fn bool_condition_with_no_bindings_returns_borrowed() {
         path_format_config: &path_format,
         source_file_scope: &source_scope,
         template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
-        template_ir_registry: None,
+        template_ir_store: None,
         bindings: vec![],
         fold_cache: TirFoldCache::new(),
     };
@@ -109,7 +109,7 @@ fn string_slice_with_no_bindings_returns_borrowed() {
         path_format_config: &path_format,
         source_file_scope: &source_scope,
         template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
-        template_ir_registry: None,
+        template_ir_store: None,
         bindings: vec![],
         fold_cache: TirFoldCache::new(),
     };
@@ -156,7 +156,7 @@ fn bool_condition_binding_substitution_returns_owned() {
         path_format_config: &path_format,
         source_file_scope: &source_scope,
         template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
-        template_ir_registry: None,
+        template_ir_store: None,
         bindings,
         fold_cache: TirFoldCache::new(),
     };
@@ -214,7 +214,7 @@ fn option_present_capture_substitution_returns_owned() {
         path_format_config: &path_format,
         source_file_scope: &source_scope,
         template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
-        template_ir_registry: None,
+        template_ir_store: None,
         bindings,
         fold_cache: TirFoldCache::new(),
     };
@@ -231,16 +231,14 @@ fn option_present_capture_substitution_returns_owned() {
 #[test]
 fn option_capture_classifies_same_store_payload_under_active_fold_borrow() {
     let mut string_table = StringTable::new();
-    let registry = Rc::new(RefCell::new(TemplateIrRegistry::new()));
-    let active_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-    let active_store_id = registry.borrow_mut().adopt_store(Rc::clone(&active_store));
-    let overlay_set_id = registry
+    let store = Rc::new(RefCell::new(TemplateIrStore::new()));
+    let overlay_set_id = store
         .borrow_mut()
         .allocate_overlay_set(TemplateOverlaySet::empty());
 
     let template_id = {
-        let mut active_store = active_store.borrow_mut();
-        let mut builder = TemplateIrBuilder::new(&mut active_store);
+        let mut store_borrow = store.borrow_mut();
+        let mut builder = TemplateIrBuilder::new(&mut store_borrow);
         let slot = builder.push_slot_node(SlotKey::Default, test_location(1));
         let root = builder.push_sequence_node(vec![slot], test_location(1));
 
@@ -254,18 +252,12 @@ fn option_capture_classifies_same_store_payload_under_active_fold_borrow() {
     };
 
     let payload_template = store_qualified_template_with_tir_reference(TemplateTirReference {
-        root: TemplateRef::new(active_store_id, template_id),
-        store_owner: active_store.borrow().owner(),
+        root: template_id,
         phase: TemplateTirPhase::Composed,
         overlay_set_id,
     });
 
-    assert_registry_backed_option_capture(
-        &mut string_table,
-        registry,
-        active_store,
-        payload_template,
-    );
+    assert_store_backed_option_capture(&mut string_table, Rc::clone(&store), payload_template);
 }
 
 #[test]
@@ -304,7 +296,7 @@ fn option_capture_scalar_payload_does_not_require_tir_registry() {
         path_format_config: &path_format,
         source_file_scope: &source_scope,
         template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
-        template_ir_registry: None,
+        template_ir_store: None,
         bindings: vec![TemplateFoldBinding {
             path: option_path,
             value: option_value,
@@ -320,48 +312,6 @@ fn option_capture_scalar_payload_does_not_require_tir_registry() {
     assert!(matches!(capture.value.kind, ExpressionKind::StringSlice(_)));
 }
 
-#[test]
-fn option_capture_classifies_foreign_store_payload_through_effective_tir() {
-    let mut string_table = StringTable::new();
-    let registry = Rc::new(RefCell::new(TemplateIrRegistry::new()));
-    let active_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-    registry.borrow_mut().adopt_store(Rc::clone(&active_store));
-
-    let payload_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-    let payload_store_id = registry.borrow_mut().adopt_store(Rc::clone(&payload_store));
-    let overlay_set_id = registry
-        .borrow_mut()
-        .allocate_overlay_set(TemplateOverlaySet::empty());
-    let template_id = {
-        let mut payload_store = payload_store.borrow_mut();
-        let mut builder = TemplateIrBuilder::new(&mut payload_store);
-        let slot = builder.push_slot_node(SlotKey::Default, test_location(1));
-        let root = builder.push_sequence_node(vec![slot], test_location(1));
-
-        builder.finish_template(
-            root,
-            Style::default(),
-            TemplateType::String,
-            TemplateIrSummary::default(),
-            test_location(1),
-        )
-    };
-
-    let payload_template = store_qualified_template_with_tir_reference(TemplateTirReference {
-        root: TemplateRef::new(payload_store_id, template_id),
-        store_owner: payload_store.borrow().owner(),
-        phase: TemplateTirPhase::Composed,
-        overlay_set_id,
-    });
-
-    assert_registry_backed_option_capture(
-        &mut string_table,
-        registry,
-        active_store,
-        payload_template,
-    );
-}
-
 fn store_qualified_template_with_tir_reference(tir_reference: TemplateTirReference) -> Template {
     Template {
         kind: TemplateType::String,
@@ -370,10 +320,9 @@ fn store_qualified_template_with_tir_reference(tir_reference: TemplateTirReferen
     }
 }
 
-fn assert_registry_backed_option_capture(
+fn assert_store_backed_option_capture(
     string_table: &mut StringTable,
-    registry: Rc<RefCell<TemplateIrRegistry>>,
-    active_store: Rc<RefCell<TemplateIrStore>>,
+    store: Rc<RefCell<TemplateIrStore>>,
     payload_template: Template,
 ) {
     let option_path = InternedPath::from_single_str("maybe_payload", string_table);
@@ -406,7 +355,7 @@ fn assert_registry_backed_option_capture(
         path_format_config: &path_format,
         source_file_scope: &source_scope,
         template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
-        template_ir_registry: Some(registry),
+        template_ir_store: Some(Rc::clone(&store)),
         bindings: vec![TemplateFoldBinding {
             path: option_path,
             value: option_value,
@@ -415,8 +364,8 @@ fn assert_registry_backed_option_capture(
     };
 
     // The TIR folder retains this borrow while option-capture resolution classifies
-    // nested template payloads. Registry classification must therefore remain read-only.
-    let _active_fold_borrow = active_store.borrow();
+    // nested template payloads. Store classification must therefore remain read-only.
+    let _active_fold_borrow = store.borrow();
     let capture = selected_option_capture_payload(&scrutinee, &pattern, &mut fold_context)
         .expect("the composed slot wrapper is a compile-time option payload")
         .expect("the present option should produce a capture binding");
@@ -448,7 +397,7 @@ fn coerced_expression_with_no_bindings_returns_borrowed() {
         path_format_config: &path_format,
         source_file_scope: &source_scope,
         template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
-        template_ir_registry: None,
+        template_ir_store: None,
         bindings: vec![],
         fold_cache: TirFoldCache::new(),
     };
@@ -467,7 +416,7 @@ fn coerced_template_with_no_bindings_returns_inner_template_borrow() {
     let mut string_table = StringTable::new();
     let text_id = string_table.intern("nested");
 
-    // Build a minimal store-qualified text template so the borrow path receives
+    // Build a minimal module-local text template so the borrow path receives
     // the same authoritative identity as any other parsed template.
     let mut tir_store = TemplateIrStore::new();
     let template_id = {
@@ -486,8 +435,7 @@ fn coerced_template_with_no_bindings_returns_inner_template_borrow() {
     let nested_template = Template {
         kind: TemplateType::String,
         tir_reference: TemplateTirReference {
-            root: TemplateRef::new(tir_store.store_id(), template_id),
-            store_owner: tir_store.owner(),
+            root: template_id,
             phase: TemplateTirPhase::Parsed,
             overlay_set_id: TemplateOverlaySetId::empty_for_test(),
         },
@@ -500,7 +448,7 @@ fn coerced_template_with_no_bindings_returns_inner_template_borrow() {
     );
 
     // The no-substitution path does not semantically read the template, so it
-    // must not depend on registry classification.
+    // must not depend on store classification.
     let resolver = test_project_path_resolver();
     let path_format = PathStringFormatConfig::default();
     let source_scope = InternedPath::new();
@@ -510,7 +458,7 @@ fn coerced_template_with_no_bindings_returns_inner_template_borrow() {
         path_format_config: &path_format,
         source_file_scope: &source_scope,
         template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
-        template_ir_registry: None,
+        template_ir_store: None,
         bindings: vec![],
         fold_cache: TirFoldCache::new(),
     };
@@ -546,7 +494,7 @@ fn rpn_with_no_substitutable_operands_returns_borrowed() {
         path_format_config: &path_format,
         source_file_scope: &source_scope,
         template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
-        template_ir_registry: None,
+        template_ir_store: None,
         bindings: vec![],
         fold_cache: TirFoldCache::new(),
     };
@@ -632,7 +580,7 @@ fn rpn_with_bound_reference_operand_returns_owned() {
         path_format_config: &path_format,
         source_file_scope: &source_scope,
         template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
-        template_ir_registry: None,
+        template_ir_store: None,
         bindings,
         fold_cache: TirFoldCache::new(),
     };

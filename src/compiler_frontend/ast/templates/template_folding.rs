@@ -20,7 +20,7 @@ use crate::compiler_frontend::ast::templates::template_control_flow::{
     TemplateFoldBinding, TemplateLoopControlKind,
 };
 use crate::compiler_frontend::ast::templates::tir::{
-    TemplateIrRegistry, TemplateTirPhase, TirFoldCache, TirView, fold_tir_view,
+    TemplateIrStore, TemplateTirPhase, TirFoldCache, TirView, fold_tir_view,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_messages::{
@@ -34,7 +34,6 @@ use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable}
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::sync::Arc;
 
 // -------------------------
 //  Folding Context
@@ -52,16 +51,16 @@ pub struct TemplateFoldContext<'a> {
     pub source_file_scope: &'a InternedPath,
     pub template_const_loop_iteration_limit: usize,
 
-    /// Module-local TIR registry used to resolve root and child view identity.
+    /// Module-local TIR store used to resolve root and child view identity.
     ///
-    /// WHAT: provides the registry authority needed to construct precise
+    /// WHAT: provides the store authority needed to construct precise
     ///       [`TirView`](crate::compiler_frontend::ast::templates::tir::TirView)
     ///       instances for child-template references during recursive folding.
-    /// WHY: top-level and child templates carry registry-qualified
+    /// WHY: top-level and child templates carry module-local
     ///      root/phase/overlay identity. `Template::fold_to_emission` requires
     ///      this authority, while low-level store-local walkers may omit it only
     ///      when their caller already owns the exact store and root.
-    pub(crate) template_ir_registry: Option<Rc<RefCell<TemplateIrRegistry>>>,
+    pub(crate) template_ir_store: Option<Rc<RefCell<TemplateIrStore>>>,
 
     pub(crate) bindings: Vec<TemplateFoldBinding>,
 
@@ -147,7 +146,7 @@ impl TemplateFoldContext<'_> {
 impl Template {
     /// Folds a fully-resolved template into an interned string ID.
     ///
-    /// WHAT: folds the template's authoritative registry-backed TIR view through
+    /// WHAT: folds the template's authoritative store-backed TIR view through
     /// the TIR-native folder.
     /// WHY: compile-time folding should consume the same TIR shape that runtime
     /// handoff materialization uses.
@@ -181,8 +180,8 @@ impl Template {
 
     /// Folds a fully-resolved template into a `TemplateEmission`.
     ///
-    /// WHAT: resolves the template's authoritative registry-backed TIR view and
-    ///       folds it against the store that owns the root.
+    /// WHAT: resolves the template's authoritative store-backed TIR view and
+    ///       folds it against the module store.
     /// WHY: compile-time folding should consume the same final TIR authority as
     ///      finalization and HIR-handoff paths.
     pub(crate) fn fold_to_emission(
@@ -193,53 +192,32 @@ impl Template {
     }
 }
 
-/// Folds a template through its stable registry-backed `TirView`.
+/// Folds a template through its stable store-backed `TirView`.
 ///
-/// WHAT: when the template owns a `Composed`-or-later TIR reference (same-store
-///       or foreign), resolve its owning store through the module registry and
-///       fold the view directly through `fold_tir_view`.
-/// WHY: compile-time folding should consume the same final TIR authority as
-///      finalization and HIR-handoff paths whenever registry identity is
-///      available. A missing reference, registry entry, owner match, overlay or
-///      minimum phase is an AST invariant failure rather than permission to
-///      reconstruct the template from compatibility content.
+/// WHAT: resolves the `Composed`-or-later TIR reference through the module store
+///       and folds the view directly through `fold_tir_view`.
+/// WHY: compile-time folding consumes the same final TIR authority as
+///      finalization and HIR-handoff paths. A missing root, overlay or minimum
+///      phase is an AST invariant failure rather than permission to reconstruct
+///      the template from compatibility content.
 fn fold_to_emission_from_view(
     template: &Template,
     fold_context: &mut TemplateFoldContext<'_>,
 ) -> Result<TemplateEmission, TemplateError> {
     let reference = &template.tir_reference;
 
-    let registry_rc = fold_context
-        .template_ir_registry
+    let store_handle = fold_context
+        .template_ir_store
         .as_ref()
         .map(Rc::clone)
         .ok_or_else(|| {
-            CompilerError::compiler_error(
-                "Template folding requires the module-local TIR registry.",
-            )
+            CompilerError::compiler_error("Template folding requires the module-local TIR store.")
         })?;
 
-    let registry_borrow = registry_rc.borrow();
-    let store_handle = registry_borrow
-        .store_handle(reference.root.store_id)
-        .ok_or_else(|| {
-            CompilerError::compiler_error(format!(
-                "Template folding store {} is not registered.",
-                reference.root.store_id
-            ))
-        })?;
     let store = store_handle.borrow();
 
-    if !Arc::ptr_eq(&store.owner(), &reference.store_owner) {
-        return Err(CompilerError::compiler_error(format!(
-            "Template folding root {} does not belong to its registered store.",
-            reference.root
-        ))
-        .into());
-    }
-
     let view = TirView::with_minimum_phase(
-        &registry_borrow,
+        &store,
         reference.root,
         reference.phase,
         TemplateTirPhase::Composed,
@@ -287,21 +265,20 @@ fn const_option_presence(
 
         ExpressionKind::Coerced { value, .. } => {
             let payload = (**value).clone();
-            let template_ir_registry = fold_context.template_ir_registry.as_ref();
-            let string_table = &*fold_context.string_table;
+            let template_ir_store = fold_context.template_ir_store.as_ref();
 
             // Scalar and other non-template payloads keep their ordinary const rules.
-            // Registry authority is required only when expression recursion reaches a
-            // nested template, whether that template belongs to the active or a foreign store.
+            // Store authority is required only when expression recursion reaches
+            // a nested template.
             let payload_is_compile_time_constant = payload
                 .const_value_kind_with_template_classifier(&mut |template| {
-                    let registry = template_ir_registry.ok_or_else(|| {
+                    let store = template_ir_store.ok_or_else(|| {
                         CompilerError::compiler_error(
-                            "Template option-capture folding requires the module-local TIR registry.",
+                            "Template option-capture folding requires the module-local TIR store.",
                         )
                     })?;
 
-                    classify_template_from_effective_tir(template, registry, string_table)
+                    classify_template_from_effective_tir(template, store)
                 })?
                 .is_compile_time_value();
 

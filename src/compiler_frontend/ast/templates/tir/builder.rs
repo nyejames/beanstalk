@@ -131,9 +131,8 @@ impl<'store> TemplateIrBuilder<'store> {
         template: TemplateIrId,
         location: SourceLocation,
     ) -> TemplateIrNodeId {
-        let reference = TemplateTirChildReference::same_store(
+        let reference = TemplateTirChildReference::new(
             template,
-            self.store.store_id(),
             TemplateTirPhase::Parsed,
             TemplateOverlaySetId::empty(),
         );

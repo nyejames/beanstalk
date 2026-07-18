@@ -82,9 +82,7 @@ impl<'context, 'services> AstFinalizer<'context, 'services> {
             &self.context.path_format_config,
             string_table,
             self.context.template_const_loop_iteration_limit,
-            Some(Rc::clone(
-                self.context.registered_template_ir_store.registry(),
-            )),
+            Rc::clone(&self.context.template_ir_store),
         )
         .map_err(TemplateNormalizationError::from)
         .map_err(|error| {
@@ -173,16 +171,17 @@ impl<'context, 'services> AstFinalizer<'context, 'services> {
             .entry_dir
             .join_str(IMPLICIT_START_FUNC_NAME, string_table);
         // Const-fact collection reads template values through their exact
-        // registry-qualified effective views, including foreign stores and
-        // finalization overlays.
-        let const_facts = ConstFactCollector::new(
-            string_table,
-            Rc::clone(self.context.registered_template_ir_store.registry()),
-        )
-        .collect(&module_constants, &emitted.ast, &start_function_path)
-        .map_err(|error| {
-            self.template_normalization_error_messages(error, &emitted.warnings, string_table)
-        })?;
+        // module-local effective views, including finalization overlays.
+        let const_facts =
+            ConstFactCollector::new(string_table, Rc::clone(&self.context.template_ir_store))
+                .collect(&module_constants, &emitted.ast, &start_function_path)
+                .map_err(|error| {
+                    self.template_normalization_error_messages(
+                        error,
+                        &emitted.warnings,
+                        string_table,
+                    )
+                })?;
         timer_log!(
             const_fact_collection_start,
             "AST/finalize/const facts collected in: "
@@ -210,23 +209,14 @@ impl<'context, 'services> AstFinalizer<'context, 'services> {
 
         #[cfg(debug_assertions)]
         {
-            // Borrow the module TIR store for the debug TypeId walk. The borrow
-            // guard must be dropped before the owned clone below.
-            let template_ir_store = self.context.registered_template_ir_store.store().borrow();
-            // Borrow the registry as well so debug validation can construct
-            // finalized `TirView`s from template references.
-            let template_ir_registry = self
-                .context
-                .registered_template_ir_store
-                .registry()
-                .borrow();
+            // The shared module store is the authority for finalized views.
+            let template_ir_store = self.context.template_ir_store.borrow();
             debug_validate_type_ids_for_hir(
                 &emitted.ast,
                 &module_constants,
                 &choice_definitions,
                 &type_environment,
                 &template_ir_store,
-                &template_ir_registry,
             );
         }
 

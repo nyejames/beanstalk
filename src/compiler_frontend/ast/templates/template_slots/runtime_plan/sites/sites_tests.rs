@@ -12,10 +12,11 @@ use crate::compiler_frontend::ast::templates::error::TemplateError;
 use crate::compiler_frontend::ast::templates::template::SlotKey;
 use crate::compiler_frontend::ast::templates::template::TemplateSegmentOrigin;
 use crate::compiler_frontend::ast::templates::template_slots::TemplateSlotError;
+use crate::compiler_frontend::ast::templates::tir::refs::TemplateTirChildReference;
 use crate::compiler_frontend::ast::templates::tir::{
     TemplateIrBuilder, TemplateIrId, TemplateIrNodeId, TemplateIrStore, TemplateOverlaySetId,
-    TemplateRef, TemplateSlotPlanId, TemplateSlotSiteRenderPiece, TemplateSlotSiteRenderPlan,
-    TemplateStoreId, TemplateTirChildReference, TemplateTirPhase, TirCopyState,
+    TemplateSlotPlanId, TemplateSlotSiteRenderPiece, TemplateSlotSiteRenderPlan, TemplateTirPhase,
+    TirCopyState,
 };
 use crate::compiler_frontend::compiler_errors::ErrorType;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -95,9 +96,8 @@ fn present_slot_node_carries_its_key() {
 #[test]
 fn missing_same_store_child_template_is_an_authority_error() {
     let mut store = TemplateIrStore::new();
-    let same_store_missing_template = TemplateTirChildReference::same_store(
+    let same_store_missing_template = TemplateTirChildReference::new(
         TemplateIrId::new(99),
-        store.store_id(),
         TemplateTirPhase::Parsed,
         TemplateOverlaySetId::empty(),
     );
@@ -152,31 +152,4 @@ fn missing_structural_authority_propagates_through_runtime_slot_site_planner() {
             panic!("missing structural authority must not become a user diagnostic");
         }
     }
-}
-
-#[test]
-fn foreign_child_reference_stays_on_subtree_copy_authority() {
-    let mut store = TemplateIrStore::new();
-    let foreign_store_id = TemplateStoreId::new(store.store_id().index() + 1);
-    let foreign_reference = TemplateTirChildReference::new(
-        TemplateRef::new(foreign_store_id, TemplateIrId::new(0)),
-        TemplateTirPhase::Parsed,
-        TemplateOverlaySetId::empty(),
-    );
-    let mut builder = TemplateIrBuilder::new(&mut store);
-    let child_node =
-        builder.push_child_template_node_with_reference(foreign_reference, empty_location());
-
-    let mut copy_state = TirCopyState::new();
-    let inner_plan = TemplateSlotSiteRenderPlan::default();
-
-    let result = build_tir_wrapper_render_pieces(
-        child_node,
-        &inner_plan,
-        SlotKey::Default,
-        &mut store,
-        &mut copy_state,
-    );
-
-    assert_authority_error(result, "foreign child reference", "active-slot copy");
 }

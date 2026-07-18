@@ -1123,7 +1123,7 @@ impl Expression {
     ///
     /// WHAT: stores routed slot application data as neutral owned AST payload.
     /// WHY: later HIR cutover can lower slot applications from this variant without reaching
-    /// through `Template::runtime_slot_handoff` or any TIR registry/store reference.
+    /// through `Template::runtime_slot_handoff` or any TIR-internal reference.
     #[allow(
         dead_code,
         reason = "Phase 11 introduces the final expression shape before finalization cutover wires production callers"
@@ -1241,7 +1241,7 @@ impl Expression {
     /// WHAT: keeps ordinary expression-shape recursion in one owner while the
     ///       caller supplies the stage-appropriate classification for template
     ///       payloads.
-    /// WHY: finalization already owns registry-qualified effective TIR views,
+    /// WHY: finalization already owns exact effective TIR views,
     ///      while earlier parser callers still materialize current TIR. Both
     ///      paths must preserve identical non-template const semantics without
     ///      duplicating the expression walk.

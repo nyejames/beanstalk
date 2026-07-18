@@ -2,12 +2,12 @@
 //!
 //! WHAT: `TemplateOverlaySet` groups the three overlay dimensions — expression
 //! overrides, slot resolution, and wrapper context — behind a single
-//! registry-owned set ID. Each dimension carries a typed overlay ID that
-//! indexes into a registry-owned overlay entry table.
+//! store-owned set ID. Each dimension carries a typed overlay ID that
+//! indexes into a store-owned overlay entry table.
 //!
 //! WHY: the final TIR system applies contextual changes as overlays rather than
 //! mutating shared structural roots. Overlay sets are immutable once allocated
-//! and canonicalized by the registry so equivalent sets share one ID. This lets
+//! and canonicalized by the module store so equivalent sets share one ID. This lets
 //! `TemplateTirReference` carry a single overlay-set ID instead of ad hoc maps.
 //!
 //! ## Canonical resolution order
@@ -25,13 +25,13 @@
 //! Within each dimension the last non-`None` value in composition order wins,
 //! so later contextual overlays can replace earlier entries for the same
 //! dimension.
-//! See `TemplateIrRegistry::compose_overlay_sets`.
+//! See `TemplateIrStore::compose_overlay_sets`.
 //!
 //! ## Ownership contract
 //!
 //! Overlays are AST-local. They are not exposed to HIR, backends, or the public
-//! API. The registry owns overlay set and overlay entry storage; IDs remain
-//! valid only within the `TemplateIrRegistry` that created them.
+//! API. The module store owns overlay set and overlay entry storage; IDs remain
+//! valid only within the `TemplateIrStore` that created them.
 //!
 //! ## Payload coverage
 //!
@@ -47,18 +47,18 @@ use std::fmt;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::templates::template::SlotKey;
 use crate::compiler_frontend::ast::templates::tir::ids::{
-    ChildTemplateOccurrenceId, ExpressionSiteId, SlotOccurrenceId,
+    ChildTemplateOccurrenceId, ExpressionSiteId, SlotOccurrenceId, TemplateIrId,
+    TemplateWrapperSetId,
 };
-use crate::compiler_frontend::ast::templates::tir::refs::{TemplateRef, TemplateWrapperSetRef};
 
 // -------------------------
 //  Overlay set ID
 // -------------------------
 
-/// Stable index for an overlay set in `TemplateIrRegistry`.
+/// Stable index for an overlay set in `TemplateIrStore`.
 ///
 /// WHAT: identifies one immutable `TemplateOverlaySet` allocated by the
-/// registry. Equivalent overlay sets share one ID after canonicalization.
+/// module store. Equivalent overlay sets share one ID after canonicalization.
 /// WHY: `TemplateTirReference` carries a single overlay-set ID so later phases
 /// resolve contextual changes through one stable handle instead of ad hoc maps.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -76,26 +76,26 @@ impl TemplateOverlaySetId {
         )
     }
 
-    /// Returns the raw index for registry lookups.
+    /// Returns the raw index for store lookups.
     pub(crate) fn index(self) -> usize {
         self.0 as usize
     }
 
     /// Returns the canonical empty overlay-set ID.
     ///
-    /// WHAT: the registry always allocates the empty set at index 0, so this is
-    ///       a stable identity for "no overlays" even before a registry is
+    /// WHAT: the module store always allocates the empty set at index 0, so this is
+    ///       a stable identity for "no overlays" even before the store is
     ///       available.
     /// WHY: construction sites that emit `ChildTemplate` nodes before the
-    ///      registry finalizes the parent reference (e.g. parser emission,
+    ///      store finalizes the parent reference (e.g. parser emission,
     ///      current-state materialization) still need a valid overlay-set ID.
-    ///      Callers that already have a registry should prefer
-    ///      `TemplateIrRegistry::allocate_overlay_set(TemplateOverlaySet::empty())`.
+    ///      Callers that already have a store should prefer
+    ///      `TemplateIrStore::allocate_overlay_set(TemplateOverlaySet::empty())`.
     pub(crate) fn empty() -> Self {
         Self(0)
     }
 
-    /// Returns a zero-valued overlay-set ID for test fixtures without a registry.
+    /// Returns a zero-valued overlay-set ID for test fixtures without a store.
     ///
     /// WHAT: alias for [`Self::empty`] kept for test fixtures that predate the
     ///       production-safe constructor.
@@ -117,14 +117,14 @@ impl fmt::Display for TemplateOverlaySetId {
 //  Overlay dimension IDs
 // -------------------------
 
-/// Stable index for an expression overlay entry in `TemplateIrRegistry`.
+/// Stable index for an expression overlay entry in `TemplateIrStore`.
 ///
-/// WHAT: identifies a registry-owned expression override applied at
+/// WHAT: identifies a store-owned expression override applied at
 /// dynamic-expression nodes. The concrete payload carries expression overrides
 /// keyed by `ExpressionSiteId`.
 /// WHY: expression overrides are one of the three overlay dimensions; a typed
 /// ID keeps the reference distinct from slot and wrapper overlays and lets the
-/// registry own expression-overlay storage centrally.
+/// store own expression-overlay storage centrally.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct TirExpressionOverlayId(u32);
 
@@ -139,7 +139,7 @@ impl TirExpressionOverlayId {
         )
     }
 
-    /// Returns the raw index for registry lookups.
+    /// Returns the raw index for store lookups.
     pub(crate) fn index(self) -> usize {
         self.0 as usize
     }
@@ -151,9 +151,9 @@ impl fmt::Display for TirExpressionOverlayId {
     }
 }
 
-/// Stable index for a slot resolution overlay entry in `TemplateIrRegistry`.
+/// Stable index for a slot resolution overlay entry in `TemplateIrStore`.
 ///
-/// WHAT: identifies a registry-owned slot resolution applied at slot occurrence
+/// WHAT: identifies a store-owned slot resolution applied at slot occurrence
 /// boundaries. The concrete payload carries slot resolutions keyed by
 /// `SlotOccurrenceId`.
 /// WHY: slot resolution is one of the three overlay dimensions; a typed ID keeps
@@ -172,7 +172,7 @@ impl TirSlotResolutionOverlayId {
         )
     }
 
-    /// Returns the raw index for registry lookups.
+    /// Returns the raw index for store lookups.
     pub(crate) fn index(self) -> usize {
         self.0 as usize
     }
@@ -184,9 +184,9 @@ impl fmt::Display for TirSlotResolutionOverlayId {
     }
 }
 
-/// Stable index for a wrapper context overlay entry in `TemplateIrRegistry`.
+/// Stable index for a wrapper context overlay entry in `TemplateIrStore`.
 ///
-/// WHAT: identifies a registry-owned wrapper context applied at child-template
+/// WHAT: identifies a store-owned wrapper context applied at child-template
 /// occurrence boundaries. The concrete payload carries inherited wrapper,
 /// `$fresh`, and output-guard context keyed by child occurrence.
 /// WHY: wrapper context is one of the three overlay dimensions; a typed ID
@@ -205,7 +205,7 @@ impl TirWrapperContextOverlayId {
         )
     }
 
-    /// Returns the raw index for registry lookups.
+    /// Returns the raw index for store lookups.
     pub(crate) fn index(self) -> usize {
         self.0 as usize
     }
@@ -234,7 +234,7 @@ pub(crate) enum TirSlotResolutionKind {
     ///
     /// Repeated slot occurrences can carry equivalent source lists so replay is
     /// represented by data, not by consuming the routed contribution.
-    Resolved { sources: Vec<TemplateRef> },
+    Resolved { sources: Vec<TemplateIrId> },
 
     /// The slot was routed and intentionally receives no content.
     Missing,
@@ -262,7 +262,7 @@ pub(crate) struct TirSlotResolution {
 
 impl TirSlotResolution {
     /// Creates a resolved slot entry with one or more contribution sources.
-    pub(crate) fn resolved(key: SlotKey, sources: Vec<TemplateRef>) -> Self {
+    pub(crate) fn resolved(key: SlotKey, sources: Vec<TemplateIrId>) -> Self {
         Self {
             key,
             kind: TirSlotResolutionKind::Resolved { sources },
@@ -288,7 +288,7 @@ impl TirSlotResolution {
 
     /// Returns the contribution source refs for a resolved slot.
     #[cfg(test)]
-    pub(crate) fn sources(&self) -> &[TemplateRef] {
+    pub(crate) fn sources(&self) -> &[TemplateIrId] {
         match &self.kind {
             TirSlotResolutionKind::Resolved { sources } => sources,
             TirSlotResolutionKind::Missing | TirSlotResolutionKind::Unresolved => &[],
@@ -321,12 +321,12 @@ impl TirSlotResolution {
 //  Overlay payloads
 // -------------------------
 
-// These payload structs give the overlay dimension IDs real registry storage
+// These payload structs give the overlay dimension IDs real store storage
 // with final-system-oriented names. Each payload carries occurrence-keyed
 // entries so `TirView` can resolve contextual template state centrally instead
 // of making consumers combine ad hoc maps.
 
-/// Registry-owned expression override payload.
+/// Store-owned expression override payload.
 ///
 /// WHAT: carries expression overrides keyed by `ExpressionSiteId`. Each entry
 ///       replaces the structural expression at one dynamic-expression splice
@@ -360,7 +360,7 @@ impl TirExpressionOverlay {
     }
 }
 
-/// Registry-owned slot resolution payload.
+/// Store-owned slot resolution payload.
 ///
 /// WHAT: carries slot resolutions keyed by `SlotOccurrenceId`. Each entry
 ///       describes what contribution fills one slot occurrence when the
@@ -437,7 +437,7 @@ pub(crate) enum TirWrapperApplicationMode {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct TirWrapperContext {
     /// Wrapper set inherited by this child occurrence, when one applies.
-    pub(crate) inherited_wrapper_set: Option<TemplateWrapperSetRef>,
+    pub(crate) inherited_wrapper_set: Option<TemplateWrapperSetId>,
     /// True when `$fresh` suppresses the immediate parent wrapper context.
     pub(crate) skip_parent_child_wrappers: bool,
     /// When wrappers apply to this child occurrence.
@@ -452,7 +452,7 @@ impl TirWrapperContext {
     }
 
     /// Creates wrapper context for a child occurrence with inherited wrappers.
-    pub(crate) fn inherited(wrapper_set: TemplateWrapperSetRef) -> Self {
+    pub(crate) fn inherited(wrapper_set: TemplateWrapperSetId) -> Self {
         Self {
             inherited_wrapper_set: Some(wrapper_set),
             skip_parent_child_wrappers: false,
@@ -468,7 +468,7 @@ impl TirWrapperContext {
     }
 }
 
-/// Registry-owned wrapper context overlay payload.
+/// Store-owned wrapper context overlay payload.
 ///
 /// WHAT: carries wrapper context keyed by `ChildTemplateOccurrenceId`.
 /// WHY: wrapper context is one of the three overlay dimensions; storing
@@ -497,12 +497,12 @@ impl TirWrapperContextOverlay {
 //  Overlay set
 // -------------------------
 
-/// A registry-owned, immutable set of overlay dimension references.
+/// A store-owned, immutable set of overlay dimension references.
 ///
 /// WHAT: groups the three overlay dimensions — expression overrides, slot
-/// resolution, and wrapper context — behind one canonical registry ID. Each
+/// resolution, and wrapper context — behind one canonical store ID. Each
 /// field is `None` when that dimension has no overlay for this set.
-/// WHY: `TemplateTirReference` carries one overlay-set ID; the registry
+/// WHY: `TemplateTirReference` carries one overlay-set ID; the module store
 /// canonicalizes equivalent sets so consumers never combine overlay maps ad hoc.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct TemplateOverlaySet {
@@ -517,7 +517,7 @@ pub(crate) struct TemplateOverlaySet {
 impl TemplateOverlaySet {
     /// Creates an overlay set with no overlays in any dimension.
     ///
-    /// WHAT: the canonical "no contextual changes" set. The registry
+    /// WHAT: the canonical "no contextual changes" set. The module store
     /// canonicalizes all empty sets to this single entry.
     /// WHY: most templates carry no overlays; a named constructor makes the
     /// intent explicit at call sites instead of relying on `Default` derivation.
@@ -527,7 +527,7 @@ impl TemplateOverlaySet {
 
     /// Returns `true` when no overlay dimension is set.
     ///
-    /// WHAT: a quick emptiness check used by the registry to keep the canonical
+    /// WHAT: a quick emptiness check used by the store to keep the canonical
     /// empty set unique and by callers that want to short-circuit overlay work.
     pub(crate) fn is_empty(&self) -> bool {
         self.expression_overrides.is_none()

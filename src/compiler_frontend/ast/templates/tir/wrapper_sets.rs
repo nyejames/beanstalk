@@ -10,8 +10,8 @@
 //! `$children(..)` wrappers apply to child-template boundaries. Keeping the
 //! equivalence predicate, wrapper-reference normalization, and overlay
 //! construction in one module makes the wrapper application boundary explicit
-//! and easy to audit without leaking store or registry internals into the
-//! template construction orchestrator.
+//! and easy to audit without leaking store internals into the template
+//! construction orchestrator.
 
 use crate::compiler_frontend::ast::templates::template::Template;
 use crate::compiler_frontend::ast::templates::tir::ids::{
@@ -21,17 +21,15 @@ use crate::compiler_frontend::ast::templates::tir::node::TemplateIrNodeKind;
 use crate::compiler_frontend::ast::templates::tir::overlays::{
     TemplateOverlaySet, TirWrapperApplicationMode, TirWrapperContext, TirWrapperContextOverlay,
 };
-use crate::compiler_frontend::ast::templates::tir::parser_builder_state::TemplateTirReference;
+use crate::compiler_frontend::ast::templates::tir::refs::TemplateTirReference;
 use crate::compiler_frontend::ast::templates::tir::refs::{
-    TemplateTirChildReference, TemplateWrapperReference, TemplateWrapperSetRef,
-};
-use crate::compiler_frontend::ast::templates::tir::registry::{
-    RegisteredTemplateIrStore, TemplateIrRegistry,
+    TemplateTirChildReference, TemplateWrapperReference,
 };
 use crate::compiler_frontend::ast::templates::tir::store::TemplateIrStore;
 use crate::compiler_frontend::ast::templates::tir::view::TemplateTirPhase;
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use std::sync::Arc;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 /// Returns true when two wrapper template ref vectors are equivalent.
 ///
@@ -54,29 +52,21 @@ pub(crate) fn wrapper_sets_are_equivalent(
     left.len() == right.len() && left.iter().zip(right.iter()).all(|(l, r)| l == r)
 }
 
-/// Converts a wrapper `Template` into an effective wrapper reference without
-/// requiring same-store ownership.
+/// Converts a wrapper `Template` into an effective module-local wrapper reference.
 ///
 /// WHAT: extracts the template's TIR reference (root, phase, overlay-set ID)
-///       and validates its overlay, store owner, and template identity. The
-///       current store is checked directly so callers holding its mutable
-///       `RefCell` borrow never re-enter it through the registry.
-/// WHY: the final cross-store wrapper strategy uses store-qualified wrapper
-///      references resolved through the registry. This helper is the
-///      normalization step that converts AST `Template` values into the
-///      wrapper-ref shape before they enter a wrapper set.
+///       and validates its overlay and template identity in the active store.
+/// WHY: wrapper references carry only module-local root, phase, and overlay
+///      identity because every TIR value in this AST build uses one store.
 ///
-/// Returns `Err` when the wrapper has no valid registry-backed TIR identity,
-/// including a wrong store, missing template, owner mismatch or missing
-/// overlay. These are internal invariant failures; callers must not recover
-/// through an intermediate content representation.
+/// Returns `Err` when the wrapper has no valid TIR identity or its overlay or
+/// template entry is missing. These are internal invariant failures.
 pub(crate) fn wrapper_reference_for_template(
     template: &Template,
     current_store: &TemplateIrStore,
-    registry: &TemplateIrRegistry,
 ) -> Result<TemplateWrapperReference, CompilerError> {
     let reference = &template.tir_reference;
-    registry
+    current_store
         .overlay_set(reference.overlay_set_id)
         .ok_or_else(|| {
             CompilerError::compiler_error(format!(
@@ -85,43 +75,12 @@ pub(crate) fn wrapper_reference_for_template(
             ))
         })?;
 
-    if reference.root.store_id == current_store.store_id() {
-        if !Arc::ptr_eq(&reference.store_owner, &current_store.owner()) {
-            return Err(CompilerError::compiler_error(
-                "wrapper-reference normalization: same-store reference owner did not match the current store.",
-            ));
-        }
-        current_store.get_template(reference.root.template_id).ok_or_else(|| {
-            CompilerError::compiler_error(format!(
-                "wrapper-reference normalization: same-store template {} was missing from the current store.",
-                reference.root.template_id
-            ))
-        })?;
-    } else {
-        let foreign_store_handle = registry
-            .store_handle(reference.root.store_id)
-            .ok_or_else(|| {
-                CompilerError::compiler_error(format!(
-                    "wrapper-reference normalization: foreign store {} was not found in the module-local TIR registry.",
-                    reference.root.store_id
-                ))
-            })?;
-        let foreign_store = foreign_store_handle.borrow();
-        if !Arc::ptr_eq(&reference.store_owner, &foreign_store.owner()) {
-            return Err(CompilerError::compiler_error(format!(
-                "wrapper-reference normalization: foreign store {} owner did not match the reference owner.",
-                reference.root.store_id
-            )));
-        }
-        foreign_store
-            .get_template(reference.root.template_id)
-            .ok_or_else(|| {
-                CompilerError::compiler_error(format!(
-                    "wrapper-reference normalization: foreign template {} was missing from store {}.",
-                    reference.root.template_id, reference.root.store_id
-                ))
-            })?;
-    }
+    current_store.get_template(reference.root).ok_or_else(|| {
+        CompilerError::compiler_error(format!(
+            "wrapper-reference normalization: template {} was missing from the current store.",
+            reference.root
+        ))
+    })?;
 
     Ok(TemplateWrapperReference::new(
         reference.root,
@@ -161,17 +120,13 @@ pub(crate) fn wrapper_reference_for_template(
 pub(crate) fn attach_wrapper_context_overlay(
     tir_reference: &mut TemplateTirReference,
     inherited_wrapper_refs: &[TemplateWrapperReference],
-    registered_store: &RegisteredTemplateIrStore,
+    store_handle: &Rc<RefCell<TemplateIrStore>>,
 ) -> Result<(), CompilerError> {
-    if tir_reference.root.store_id != registered_store.store_id() {
-        return Err(CompilerError::compiler_error(
-            "wrapper-context overlay: template reference points at a different registered store.",
-        ));
-    }
-
-    {
-        let registry = registered_store.registry().borrow();
-        registry
+    // Validate ownership and read the root before mutating anything. Required
+    // authority is proven before durable wrapper or overlay state is allocated.
+    let root = {
+        let store = store_handle.borrow();
+        store
             .overlay_set(tir_reference.overlay_set_id)
             .ok_or_else(|| {
                 CompilerError::compiler_error(format!(
@@ -179,23 +134,12 @@ pub(crate) fn attach_wrapper_context_overlay(
                     tir_reference.overlay_set_id
                 ))
             })?;
-    }
-
-    // Validate ownership and read the root before mutating anything. Required
-    // authority is proven before durable wrapper or overlay state is allocated.
-    let root = {
-        let store = registered_store.store().borrow();
-        if !Arc::ptr_eq(&tir_reference.store_owner, &store.owner()) {
-            return Err(CompilerError::compiler_error(
-                "wrapper-context overlay: template reference does not belong to the current store.",
-            ));
-        }
         store
-            .get_template(tir_reference.root.template_id)
+            .get_template(tir_reference.root)
             .ok_or_else(|| {
                 CompilerError::compiler_error(format!(
                     "wrapper-context overlay: owning template {} not found in store.",
-                    tir_reference.root.template_id
+                    tir_reference.root
                 ))
             })?
             .root
@@ -203,15 +147,8 @@ pub(crate) fn attach_wrapper_context_overlay(
 
     let mut pending_contexts = Vec::new();
     {
-        let store = registered_store.store().borrow();
-        let registry = registered_store.registry().borrow();
-        collect_wrapper_contexts(
-            &store,
-            &registry,
-            root,
-            inherited_wrapper_refs,
-            &mut pending_contexts,
-        )?;
+        let store = store_handle.borrow();
+        collect_wrapper_contexts(&store, root, inherited_wrapper_refs, &mut pending_contexts)?;
     }
 
     if pending_contexts.is_empty() {
@@ -225,9 +162,9 @@ pub(crate) fn attach_wrapper_context_overlay(
         .iter()
         .any(|context| !context.skip_parent_child_wrappers)
     {
-        let mut store = registered_store.store().borrow_mut();
+        let mut store = store_handle.borrow_mut();
         let wrapper_set_id = store.push_or_reuse_wrapper_set(inherited_wrapper_refs.to_vec());
-        Some(TemplateWrapperSetRef::new(store.store_id(), wrapper_set_id))
+        Some(wrapper_set_id)
     } else {
         None
     };
@@ -252,16 +189,16 @@ pub(crate) fn attach_wrapper_context_overlay(
         })
         .collect();
 
-    let mut registry = registered_store.registry().borrow_mut();
+    let mut store = store_handle.borrow_mut();
     let wrapper_overlay_id =
-        registry.allocate_wrapper_context_overlay(TirWrapperContextOverlay { contexts });
-    let wrapper_only_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet {
+        store.allocate_wrapper_context_overlay(TirWrapperContextOverlay { contexts });
+    let wrapper_only_overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet {
         expression_overrides: None,
         slot_resolution: None,
         wrapper_context: Some(wrapper_overlay_id),
     });
-    let merged_overlay_set_id = registry
-        .compose_overlay_sets(&[tir_reference.overlay_set_id, wrapper_only_overlay_set_id])?;
+    let merged_overlay_set_id =
+        store.compose_overlay_sets(&[tir_reference.overlay_set_id, wrapper_only_overlay_set_id])?;
 
     tir_reference.overlay_set_id = merged_overlay_set_id;
     if !tir_reference.phase.is_at_least(TemplateTirPhase::Composed) {
@@ -282,9 +219,8 @@ struct PendingWrapperContext {
 ///
 /// WHAT: traverses `Sequence`, `BranchChain`, and `Loop` structural nodes to
 ///       find `ChildTemplate` occurrences. For each occurrence, resolves the
-///       child template's metadata (same-store directly, foreign through the
-///       registry) and records `$fresh` suppression or inherited wrapper-set
-///       context.
+///       child template's metadata directly from the module store and records
+///       `$fresh` suppression or inherited wrapper-set context.
 ///
 /// WHY: wrapper context belongs to the occurrence in the owning structural
 ///      tree. This traversal does not recurse into a child's own root — it only
@@ -295,7 +231,6 @@ struct PendingWrapperContext {
 ///      transient fact enum.
 fn collect_wrapper_contexts(
     store: &TemplateIrStore,
-    registry: &TemplateIrRegistry,
     node_id: TemplateIrNodeId,
     inherited_wrapper_refs: &[TemplateWrapperReference],
     contexts: &mut Vec<PendingWrapperContext>,
@@ -312,7 +247,7 @@ fn collect_wrapper_contexts(
             reference,
             occurrence_id,
         } => {
-            let metadata = resolve_child_wrapper_metadata(store, registry, reference)?;
+            let metadata = resolve_child_wrapper_metadata(store, reference)?;
             if metadata.skip_parent_child_wrappers {
                 contexts.push(PendingWrapperContext {
                     occurrence_id: *occurrence_id,
@@ -334,33 +269,15 @@ fn collect_wrapper_contexts(
         }
         TemplateIrNodeKind::Sequence { children } => {
             for child_id in children {
-                collect_wrapper_contexts(
-                    store,
-                    registry,
-                    *child_id,
-                    inherited_wrapper_refs,
-                    contexts,
-                )?;
+                collect_wrapper_contexts(store, *child_id, inherited_wrapper_refs, contexts)?;
             }
         }
         TemplateIrNodeKind::BranchChain { branches, fallback } => {
             for branch in branches {
-                collect_wrapper_contexts(
-                    store,
-                    registry,
-                    branch.body,
-                    inherited_wrapper_refs,
-                    contexts,
-                )?;
+                collect_wrapper_contexts(store, branch.body, inherited_wrapper_refs, contexts)?;
             }
             if let Some(fallback_id) = fallback {
-                collect_wrapper_contexts(
-                    store,
-                    registry,
-                    *fallback_id,
-                    inherited_wrapper_refs,
-                    contexts,
-                )?;
+                collect_wrapper_contexts(store, *fallback_id, inherited_wrapper_refs, contexts)?;
             }
         }
         TemplateIrNodeKind::Loop {
@@ -368,15 +285,9 @@ fn collect_wrapper_contexts(
             aggregate_wrapper,
             ..
         } => {
-            collect_wrapper_contexts(store, registry, *body, inherited_wrapper_refs, contexts)?;
+            collect_wrapper_contexts(store, *body, inherited_wrapper_refs, contexts)?;
             if let Some(wrapper_id) = aggregate_wrapper {
-                collect_wrapper_contexts(
-                    store,
-                    registry,
-                    *wrapper_id,
-                    inherited_wrapper_refs,
-                    contexts,
-                )?;
+                collect_wrapper_contexts(store, *wrapper_id, inherited_wrapper_refs, contexts)?;
             }
         }
         _ => {}
@@ -394,19 +305,17 @@ struct ChildWrapperMetadata {
 /// Resolves child-template metadata for wrapper-context decisions.
 ///
 /// WHAT: reads `has_control_flow` and `skip_parent_child_wrappers` from the
-///       child's TIR entry. Same-store references use the already-held store
-///       directly to avoid `RefCell` re-entry. Foreign references resolve
-///       through the registry.
+///       child's TIR entry. References use the already-held store directly
+///       to avoid `RefCell` re-entry.
 ///
 /// WHY: wrapper context belongs to the occurrence in the owning structural
 ///      tree, not to the child's own root. Only the child's metadata is needed
 ///      to decide `$fresh` suppression and application mode.
 fn resolve_child_wrapper_metadata(
     current_store: &TemplateIrStore,
-    registry: &TemplateIrRegistry,
     reference: &TemplateTirChildReference,
 ) -> Result<ChildWrapperMetadata, CompilerError> {
-    registry
+    current_store
         .overlay_set(reference.overlay_set_id)
         .ok_or_else(|| {
             CompilerError::compiler_error(format!(
@@ -415,39 +324,16 @@ fn resolve_child_wrapper_metadata(
             ))
         })?;
 
-    if reference.root.store_id == current_store.store_id() {
-        let child = current_store
-            .get_template(reference.root.template_id)
-            .ok_or_else(|| {
-                CompilerError::compiler_error(format!(
-                    "wrapper-context overlay: child template {} not found in current store.",
-                    reference.root.template_id
-                ))
-            })?;
-        Ok(ChildWrapperMetadata {
-            has_control_flow: child.summary.has_control_flow,
-            skip_parent_child_wrappers: child.style.skip_parent_child_wrappers,
-        })
-    } else {
-        let foreign_store = registry.store(reference.root.store_id).ok_or_else(|| {
-            CompilerError::compiler_error(format!(
-                "wrapper-context overlay: foreign store {} not found in registry.",
-                reference.root.store_id
-            ))
-        })?;
-        let child = foreign_store
-            .get_template(reference.root.template_id)
-            .ok_or_else(|| {
-                CompilerError::compiler_error(format!(
-                    "wrapper-context overlay: child template {} not found in foreign store {}.",
-                    reference.root.template_id, reference.root.store_id
-                ))
-            })?;
-        Ok(ChildWrapperMetadata {
-            has_control_flow: child.summary.has_control_flow,
-            skip_parent_child_wrappers: child.style.skip_parent_child_wrappers,
-        })
-    }
+    let child = current_store.get_template(reference.root).ok_or_else(|| {
+        CompilerError::compiler_error(format!(
+            "wrapper-context overlay: child template {} not found in current store.",
+            reference.root
+        ))
+    })?;
+    Ok(ChildWrapperMetadata {
+        has_control_flow: child.summary.has_control_flow,
+        skip_parent_child_wrappers: child.style.skip_parent_child_wrappers,
+    })
 }
 
 #[cfg(test)]

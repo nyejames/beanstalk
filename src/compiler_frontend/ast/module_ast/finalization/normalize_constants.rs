@@ -39,7 +39,7 @@ use crate::compiler_frontend::ast::expressions::expression::{Expression, Express
 use crate::compiler_frontend::ast::templates::template::Template;
 use crate::compiler_frontend::ast::templates::template::{TemplateConstValueKind, TemplateType};
 use crate::compiler_frontend::ast::templates::template_control_flow::validate_const_required_template_control_flow;
-use crate::compiler_frontend::ast::templates::tir::TemplateIrRegistry;
+use crate::compiler_frontend::ast::templates::tir::TemplateIrStore;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, InvalidTemplateStructureReason,
@@ -49,7 +49,6 @@ use crate::compiler_frontend::instrumentation::{AstCounter, increment_ast_counte
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use std::rc::Rc;
 
 impl AstFinalizer<'_, '_> {
     /// Normalizes module constants for HIR.
@@ -74,7 +73,7 @@ impl AstFinalizer<'_, '_> {
             // Wrapper constants remain valid here even when their authored source used
             // slot-oriented composition structure, as long as the final constant value
             // classifies as `RenderableString` or `WrapperTemplate`.
-            if self.contains_helper_only_template_value(&declaration.value, string_table)? {
+            if self.contains_helper_only_template_value(&declaration.value)? {
                 continue;
             }
 
@@ -141,10 +140,7 @@ impl AstFinalizer<'_, '_> {
                     template_const_loop_iteration_limit: self
                         .context
                         .template_const_loop_iteration_limit,
-                    template_ir_store: self.context.registered_template_ir_store.store(),
-                    template_ir_registry: Rc::clone(
-                        self.context.registered_template_ir_store.registry(),
-                    ),
+                    template_ir_store: &self.context.template_ir_store,
                 },
             );
         }
@@ -211,13 +207,9 @@ pub(super) fn normalize_module_constant_template_expression(
     fold_inputs: TemplateFinalizationFoldInputs<'_, '_>,
 ) -> Result<Expression, TemplateNormalizationError> {
     {
-        let registry = fold_inputs.template_ir_registry.borrow();
-        validate_const_required_template_control_flow(
-            template,
-            &registry,
-            fold_inputs.string_table,
-        )
-        .map_err(|diagnostic| TemplateNormalizationError::Diagnostic(Box::new(diagnostic)))?;
+        let store = fold_inputs.template_ir_store.borrow();
+        validate_const_required_template_control_flow(template, &store, fold_inputs.string_table)
+            .map_err(|diagnostic| TemplateNormalizationError::Diagnostic(Box::new(diagnostic)))?;
     }
 
     let fold_result = try_fold_template_to_string(template, fold_inputs)?;
@@ -275,17 +267,12 @@ impl AstFinalizer<'_, '_> {
     fn contains_helper_only_template_value(
         &self,
         expression: &Expression,
-        string_table: &StringTable,
     ) -> Result<bool, TemplateNormalizationError> {
         let contains_helper = match &expression.kind {
             ExpressionKind::Template(template) => {
-                let template_kind = effective_template_kind_from_registry(
+                let template_kind = effective_template_kind_from_store(
                     template,
-                    &self
-                        .context
-                        .registered_template_ir_store
-                        .registry()
-                        .borrow(),
+                    &self.context.template_ir_store.borrow(),
                 )?;
                 if !matches!(template_kind, TemplateType::SlotInsert(_)) {
                     return Ok(false);
@@ -293,8 +280,7 @@ impl AstFinalizer<'_, '_> {
 
                 let template_const_kind = classify_template_from_effective_tir(
                     template,
-                    self.context.registered_template_ir_store.registry(),
-                    string_table,
+                    &self.context.template_ir_store,
                 )?;
                 matches!(
                     template_const_kind,
@@ -304,7 +290,7 @@ impl AstFinalizer<'_, '_> {
 
             ExpressionKind::Collection(items) => {
                 for item in items {
-                    if self.contains_helper_only_template_value(item, string_table)? {
+                    if self.contains_helper_only_template_value(item)? {
                         return Ok(true);
                     }
                 }
@@ -314,7 +300,7 @@ impl AstFinalizer<'_, '_> {
             ExpressionKind::StructInstance(fields)
             | ExpressionKind::ChoiceConstruct { fields, .. } => {
                 for field in fields {
-                    if self.contains_helper_only_template_value(&field.value, string_table)? {
+                    if self.contains_helper_only_template_value(&field.value)? {
                         return Ok(true);
                     }
                 }
@@ -322,21 +308,21 @@ impl AstFinalizer<'_, '_> {
             }
 
             ExpressionKind::Range(start, end) => {
-                self.contains_helper_only_template_value(start, string_table)?
-                    || self.contains_helper_only_template_value(end, string_table)?
+                self.contains_helper_only_template_value(start)?
+                    || self.contains_helper_only_template_value(end)?
             }
 
             #[cfg(test)]
             ExpressionKind::FallibleCarrierConstruct { value, .. } => {
-                self.contains_helper_only_template_value(value, string_table)?
+                self.contains_helper_only_template_value(value)?
             }
 
             ExpressionKind::OptionPropagation { value } => {
-                self.contains_helper_only_template_value(value, string_table)?
+                self.contains_helper_only_template_value(value)?
             }
 
             ExpressionKind::Coerced { value, .. } => {
-                self.contains_helper_only_template_value(value, string_table)?
+                self.contains_helper_only_template_value(value)?
             }
 
             _ => false,
@@ -346,18 +332,18 @@ impl AstFinalizer<'_, '_> {
     }
 }
 
-/// Reads the authoritative template kind from the owning TIR store entry.
+/// Reads the authoritative template kind from the module TIR store entry.
 ///
-/// WHAT: resolves the template's TIR reference through the module registry and
+/// WHAT: resolves the template's TIR reference through the module store and
 ///       returns `TemplateIr.kind`.
 /// WHY: `TemplateIr.kind` is the sole post-construction kind owner.
-fn effective_template_kind_from_registry(
+fn effective_template_kind_from_store(
     template: &Template,
-    registry: &TemplateIrRegistry,
+    store: &TemplateIrStore,
 ) -> Result<TemplateType, TemplateNormalizationError> {
-    template.tir_kind_via_registry(registry).ok_or_else(|| {
+    template.tir_kind_from_store(store).ok_or_else(|| {
         CompilerError::compiler_error(
-            "Constant normalization template kind was not found in its registry-backed TIR store.",
+            "Constant normalization template kind was not found in the module TIR store.",
         )
         .into()
     })

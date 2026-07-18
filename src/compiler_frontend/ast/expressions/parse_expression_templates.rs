@@ -50,13 +50,10 @@ pub(super) fn parse_template_expression(
     .map_err(ExpressionParseError::from)?;
 
     let template_kind = {
-        let registry = template_context
-            .registered_template_ir_store
-            .registry()
-            .borrow();
-        template.tir_kind_via_registry(&registry).ok_or_else(|| {
+        let store = template_context.template_ir_store.borrow();
+        template.tir_kind_from_store(&store).ok_or_else(|| {
             CompilerError::compiler_error(
-                "Parsed template kind was missing from its registry-backed TIR store.",
+                "Parsed template kind was missing from its module-local TIR store.",
             )
         })?
     };
@@ -74,14 +71,11 @@ pub(super) fn parse_template_expression(
         TemplateType::String => {
             maybe_consume_closing_parenthesis(token_stream, consume_closing_parenthesis);
 
-            // Construction leaves foldable templates on the module registry's
+            // Construction leaves foldable templates on the shared module store's
             // Composed-or-later effective root. Classify that exact view so
             // slot, wrapper and expression overlays match the following fold.
-            let classification = classify_template_effective_tir(
-                &template,
-                template_context.registered_template_ir_store.registry(),
-                string_table,
-            )?;
+            let classification =
+                classify_template_effective_tir(&template, &template_context.template_ir_store)?;
             let const_value_kind = if classification.has_unresolved_slots {
                 TemplateConstValueKind::WrapperTemplate
             } else {

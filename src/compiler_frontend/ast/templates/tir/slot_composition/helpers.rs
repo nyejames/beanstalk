@@ -15,7 +15,7 @@ use crate::compiler_frontend::ast::templates::template::{SlotKey, Style, Templat
 use crate::compiler_frontend::ast::templates::tir::copy_state::TirCopyState;
 use crate::compiler_frontend::ast::templates::tir::node::TemplateIrNodeKind;
 use crate::compiler_frontend::ast::templates::tir::overlays::TemplateOverlaySetId;
-use crate::compiler_frontend::ast::templates::tir::refs::{TemplateRef, TemplateTirChildReference};
+use crate::compiler_frontend::ast::templates::tir::refs::TemplateTirChildReference;
 use crate::compiler_frontend::ast::templates::tir::summary::summarize_existing_nodes;
 use crate::compiler_frontend::ast::templates::tir::{
     TemplateIr, TemplateIrBuilder, TemplateIrId, TemplateIrNode, TemplateIrNodeId, TemplateIrStore,
@@ -29,24 +29,23 @@ use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 /// Boxed diagnostic result for the shared slot-composition helper family.
 type SlotCompositionResult<T> = Result<T, Box<CompilerDiagnostic>>;
 
-/// Store-qualified wrapper/fill identity for one structural slot composition.
+/// Module-local wrapper/fill identity for one structural slot composition.
 ///
 /// WHAT: records the effective wrapper view identity and the temporary fill
 ///       template created while resolving its slots. The wrapper keeps its
-///       phase and overlay set while both roots remain qualified by store.
+///       phase and overlay set while both roots remain module-local.
 /// WHY: overlay allocation runs after the structural store borrow is released.
-///      Carrying qualified refs across that boundary prevents a store-local ID
-///      from being reinterpreted in the wrong store and preserves the wrapper
-///      context needed by later registry-backed composition work.
+///      Carrying the wrapper/fill pair across that boundary preserves the
+///      wrapper context needed by later store-local composition work.
 pub(super) struct SlotResolutionComposition {
     pub(super) wrapper_reference: TemplateTirChildReference,
-    pub(super) fill_reference: TemplateRef,
+    pub(super) fill_reference: TemplateIrId,
 }
 
 impl SlotResolutionComposition {
     pub(super) fn new(
         wrapper_reference: TemplateTirChildReference,
-        fill_reference: TemplateRef,
+        fill_reference: TemplateIrId,
     ) -> Self {
         Self {
             wrapper_reference,
@@ -221,11 +220,7 @@ pub(super) fn tir_tree_has_slots(
         TemplateIrNodeKind::Slot { .. } => Ok(true),
 
         TemplateIrNodeKind::ChildTemplate { reference, .. } => {
-            let Some(template_id) = reference.template_id_in_store(store.store_id()) else {
-                return Err(Box::new(internal_compiler_error(
-                    "TIR slot expansion: child template reference is not in the current store while checking for slots.",
-                )));
-            };
+            let template_id = reference.root;
             let Some(child_template) = store.get_template(template_id) else {
                 return Err(Box::new(internal_compiler_error(
                     "TIR slot expansion: child template ID was not present in the store while checking for slots.",

@@ -230,7 +230,7 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
             Arc::clone(&self.context.external_package_registry),
             Vec::<TypeId>::new(),
             input.scope_frame_capacity,
-            self.context.registered_template_ir_store.clone(),
+            self.context.template_ir_store.clone(),
         )
         .with_style_directives(self.context.style_directives)
         .with_build_profile(self.context.build_profile)
@@ -1103,15 +1103,12 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
         let template =
             template_result.map_err(|error| self.diagnostic_messages(*error, string_table))?;
 
-        // Construction leaves const-required templates on the module registry's
+        // Construction leaves const-required templates on the shared module store's
         // Composed-or-later effective root. Classify that exact root so slot,
         // wrapper and expression overlays stay aligned with the following fold.
-        let template_const_kind = classify_template_from_effective_tir(
-            &template,
-            context.registered_template_ir_store.registry(),
-            string_table,
-        )
-        .map_err(|error| self.template_error_messages(error, string_table))?;
+        let template_const_kind =
+            classify_template_from_effective_tir(&template, &context.template_ir_store)
+                .map_err(|error| self.template_error_messages(error, string_table))?;
 
         match template_const_kind {
             // WHAT: top-level const templates can be direct strings or wrapper

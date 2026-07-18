@@ -80,9 +80,9 @@ pub(super) fn parse_identifier_or_call(
     if let Some(binding) = context.get_reference(&identifier) {
         // Template slot inserts are only legal inside template bodies, constant
         // initializers, or constant headers.
-        // The binding value may reference a template from a foreign TIR store
-        // whose registry is not available here, so the durable cache is the
-        // only kind source at this parser boundary.
+        // The binding value may carry a template whose module store is not
+        // borrowed at this parser boundary, so the durable kind cache is the
+        // only kind source available here.
         if let ExpressionKind::Template(template_value) = &binding.value.kind
             && matches!(template_value.kind, TemplateType::SlotInsert(_))
             && !matches!(
@@ -115,11 +115,8 @@ pub(super) fn parse_identifier_or_call(
         // record coercion can validate field values instead of rejecting the
         // struct symbol itself as a non-constant reference.
         if token_stream.peek_next_token() == Some(&TokenKind::OpenParenthesis)
-            && let Some(struct_constructor) = context.source_struct_constructor(
-                binding.as_declaration(),
-                type_interner.environment(),
-                string_table,
-            )?
+            && let Some(struct_constructor) = context
+                .source_struct_constructor(binding.as_declaration(), type_interner.environment())?
         {
             let struct_instance = parse_struct_constructor_expression(
                 token_stream,
@@ -153,7 +150,6 @@ pub(super) fn parse_identifier_or_call(
             if context.is_source_choice_declaration(
                 binding.as_declaration(),
                 type_interner.environment(),
-                string_table,
             )? {
                 let choice_value = parse_choice_construct(
                     token_stream,
@@ -201,17 +197,13 @@ pub(super) fn parse_identifier_or_call(
         // Constant contexts reject non-constant local references. The unresolved
         // constant placeholder exemption is checked before TIR classification so
         // placeholders that have not been folded yet are not rejected prematurely.
-        // Template constness comes from the registry-qualified effective view so
-        // imported and composed templates retain their exact store and overlays.
+        // Template constness comes from the exact effective view so composed
+        // templates retain their module-local reference and overlays.
         if context.kind.is_constant_context() && !binding.is_unresolved_constant_placeholder() {
             let is_compile_time_constant = binding
                 .value
                 .const_value_kind_with_template_classifier(&mut |template| {
-                    classify_template_from_effective_tir(
-                        template,
-                        context.registered_template_ir_store.registry(),
-                        string_table,
-                    )
+                    classify_template_from_effective_tir(template, &context.template_ir_store)
                 })?
                 .is_compile_time_value();
 

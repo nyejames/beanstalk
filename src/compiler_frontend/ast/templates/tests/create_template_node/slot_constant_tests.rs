@@ -54,24 +54,16 @@ fn slot_wrappers_remain_compile_time_templates_until_filled() {
 
     assert!(matches!(template.kind, TemplateType::String));
     assert!(
-        classify_template_effective_tir(
-            &template,
-            context.registered_template_ir_store.registry(),
-            &string_table,
-        )
-        .expect("wrapper classification should succeed")
-        .has_unresolved_slots,
+        classify_template_effective_tir(&template, &context.template_ir_store)
+            .expect("wrapper classification should succeed")
+            .has_unresolved_slots,
         "wrapper template should have unresolved slots"
     );
     let expression = Expression::template(template, ValueMode::ImmutableOwned);
     assert!(
         expression
             .const_value_kind_with_template_classifier(&mut |template| {
-                classify_template_from_effective_tir(
-                    template,
-                    context.registered_template_ir_store.registry(),
-                    &string_table,
-                )
+                classify_template_from_effective_tir(template, &context.template_ir_store)
             })
             .expect("const classification should succeed")
             .is_compile_time_value(),
@@ -104,7 +96,7 @@ fn folding_nested_wrapper_constant_with_unfilled_named_slots_renders_empty_strin
 
     let mut token_stream = template_tokens_from_source("[header]", &mut string_table);
     let context = constant_template_context(&token_stream.src_path, &declarations)
-        .with_registered_template_ir_store(wrapper_context.registered_template_ir_store.clone());
+        .with_template_ir_store(wrapper_context.template_ir_store.clone());
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("template using wrapper constant should parse");
 
@@ -129,24 +121,16 @@ fn wrapper_templates_with_runtime_references_are_not_compile_time_constants() {
 
     assert!(matches!(template.kind, TemplateType::StringFunction));
     assert!(
-        classify_template_effective_tir(
-            &template,
-            context.registered_template_ir_store.registry(),
-            &string_table,
-        )
-        .expect("runtime wrapper classification should succeed")
-        .has_unresolved_slots,
+        classify_template_effective_tir(&template, &context.template_ir_store)
+            .expect("runtime wrapper classification should succeed")
+            .has_unresolved_slots,
         "runtime wrapper template should have unresolved slots"
     );
     let expression = Expression::template(template, ValueMode::ImmutableOwned);
     assert!(
         !expression
             .const_value_kind_with_template_classifier(&mut |template| {
-                classify_template_from_effective_tir(
-                    template,
-                    context.registered_template_ir_store.registry(),
-                    &string_table,
-                )
+                classify_template_from_effective_tir(template, &context.template_ir_store)
             })
             .expect("const classification should succeed")
             .is_compile_time_value(),
@@ -266,13 +250,9 @@ fn assert_slot_is_tir_only_and_const(source: &str, slot_name: &str) {
         .expect("template with slot should parse");
 
     assert!(
-        classify_template_effective_tir(
-            &template,
-            context.registered_template_ir_store.registry(),
-            &string_table,
-        )
-        .expect("slot classification should succeed")
-        .has_unresolved_slots,
+        classify_template_effective_tir(&template, &context.template_ir_store)
+            .expect("slot classification should succeed")
+            .has_unresolved_slots,
         "{slot_name} slot should be detected from TIR"
     );
 
@@ -280,11 +260,7 @@ fn assert_slot_is_tir_only_and_const(source: &str, slot_name: &str) {
     assert!(
         expression
             .const_value_kind_with_template_classifier(&mut |template| {
-                classify_template_from_effective_tir(
-                    template,
-                    context.registered_template_ir_store.registry(),
-                    &string_table,
-                )
+                classify_template_from_effective_tir(template, &context.template_ir_store)
             })
             .expect("const classification should succeed")
             .is_compile_time_value(),

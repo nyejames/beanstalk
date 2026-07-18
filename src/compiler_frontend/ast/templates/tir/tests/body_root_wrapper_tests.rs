@@ -10,16 +10,12 @@
 use super::super::builder::TemplateIrBuilder;
 use super::super::ids::{TemplateIrId, TemplateIrNodeId};
 use super::super::node::{TemplateIrBranch, TemplateIrNodeKind};
-use super::super::overlays::{TemplateOverlaySet, TemplateOverlaySetId, TirExpressionOverlay};
-use super::super::refs::{
-    TemplateRef, TemplateStoreId, TemplateTirChildReference, TemplateWrapperReference,
-};
-use super::super::registry::TemplateIrRegistry;
+use super::super::overlays::TemplateOverlaySetId;
+use super::super::refs::TemplateWrapperReference;
 use super::super::store::TemplateIrStore;
 use super::super::summary::TemplateIrSummary;
 use super::super::view::TemplateTirPhase;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
-use crate::compiler_frontend::ast::templates::error::TemplateError;
 use crate::compiler_frontend::ast::templates::template::{
     SlotKey, Style, TemplateSegmentOrigin, TemplateType,
 };
@@ -129,7 +125,7 @@ fn build_control_flow_child_template(
 fn expect_child_template_id(node_id: TemplateIrNodeId, store: &TemplateIrStore) -> TemplateIrId {
     let node = store.get_node(node_id).expect("node should exist");
     match &node.kind {
-        TemplateIrNodeKind::ChildTemplate { reference, .. } => reference.root.template_id,
+        TemplateIrNodeKind::ChildTemplate { reference, .. } => reference.root,
         other => panic!("expected ChildTemplate node, found {other:?}"),
     }
 }
@@ -154,16 +150,13 @@ fn body_root_wraps_non_control_flow_direct_child() {
     let child = build_single_text_tir_template(&mut store, &mut string_table, "child");
     let child_node = build_child_template_node(&mut store, child);
     let body_root = build_body_root_from_children(&mut store, vec![child_node]);
-
-    let registry = TemplateIrRegistry::new();
     let wrapped_root = apply_inherited_child_wrappers_to_body_root(
         body_root,
         &[TemplateWrapperReference::new(
-            TemplateRef::new(store.store_id(), wrapper),
+            wrapper,
             TemplateTirPhase::Finalized,
             TemplateOverlaySetId::empty(),
         )],
-        &registry,
         &mut store,
         &string_table,
     )
@@ -210,16 +203,13 @@ fn body_root_skips_fresh_direct_child() {
     );
     let child_node = build_child_template_node(&mut store, child_tir_id);
     let body_root = build_body_root_from_children(&mut store, vec![child_node]);
-
-    let registry = TemplateIrRegistry::new();
     let wrapped_root = apply_inherited_child_wrappers_to_body_root(
         body_root,
         &[TemplateWrapperReference::new(
-            TemplateRef::new(store.store_id(), wrapper),
+            wrapper,
             TemplateTirPhase::Finalized,
             TemplateOverlaySetId::empty(),
         )],
-        &registry,
         &mut store,
         &string_table,
     )
@@ -241,16 +231,13 @@ fn body_root_wraps_control_flow_direct_child_with_conditional_wrappers() {
         build_control_flow_child_template(&mut store, &mut string_table, "output");
     let child_node = build_child_template_node(&mut store, control_flow_child);
     let body_root = build_body_root_from_children(&mut store, vec![child_node]);
-
-    let registry = TemplateIrRegistry::new();
     let wrapped_root = apply_inherited_child_wrappers_to_body_root(
         body_root,
         &[TemplateWrapperReference::new(
-            TemplateRef::new(store.store_id(), wrapper),
+            wrapper,
             TemplateTirPhase::Finalized,
             TemplateOverlaySetId::empty(),
         )],
-        &registry,
         &mut store,
         &string_table,
     )
@@ -297,16 +284,13 @@ fn body_root_leaves_slot_bearing_child_unwrapped() {
     );
     let slot_child_node = build_child_template_node(&mut store, slot_template);
     let body_root = build_body_root_from_children(&mut store, vec![slot_child_node]);
-
-    let registry = TemplateIrRegistry::new();
     let wrapped_root = apply_inherited_child_wrappers_to_body_root(
         body_root,
         &[TemplateWrapperReference::new(
-            TemplateRef::new(store.store_id(), wrapper),
+            wrapper,
             TemplateTirPhase::Finalized,
             TemplateOverlaySetId::empty(),
         )],
-        &registry,
         &mut store,
         &string_table,
     )
@@ -318,275 +302,6 @@ fn body_root_leaves_slot_bearing_child_unwrapped() {
     );
 }
 
-// -----------------------------
-//  Cross-store direct children
-// -----------------------------
-
-fn build_cross_store_registry() -> (TemplateIrRegistry, TemplateStoreId, TemplateStoreId) {
-    let mut registry = TemplateIrRegistry::new();
-    let empty_overlay = registry.allocate_overlay_set(TemplateOverlaySet::empty());
-    assert_eq!(empty_overlay, TemplateOverlaySetId::empty());
-
-    let foreign_store_id = registry.allocate_store();
-    let local_store_id = registry.allocate_store();
-    (registry, foreign_store_id, local_store_id)
-}
-
-fn foreign_child_reference(
-    foreign_store_id: TemplateStoreId,
-    foreign_child_id: TemplateIrId,
-    phase: TemplateTirPhase,
-    overlay_set_id: TemplateOverlaySetId,
-) -> TemplateTirChildReference {
-    TemplateTirChildReference::new(
-        TemplateRef::new(foreign_store_id, foreign_child_id),
-        phase,
-        overlay_set_id,
-    )
-}
-
-fn build_slot_tir_template(store: &mut TemplateIrStore) -> TemplateIrId {
-    let mut builder = TemplateIrBuilder::new(store);
-    let slot_node = builder.push_slot_node(SlotKey::Default, empty_location());
-    builder.finish_template(
-        slot_node,
-        Style::default(),
-        TemplateType::String,
-        TemplateIrSummary {
-            slot_count: 1,
-            has_slots: true,
-            ..TemplateIrSummary::default()
-        },
-        empty_location(),
-    )
-}
-
-fn apply_wrappers_to_foreign_child(
-    registry: &TemplateIrRegistry,
-    local_store_id: TemplateStoreId,
-    child_reference: TemplateTirChildReference,
-    string_table: &mut StringTable,
-) -> Result<(TemplateIrNodeId, TemplateIrNodeId), TemplateError> {
-    let local_store_rc = registry
-        .store_handle(local_store_id)
-        .expect("local store should be registered");
-    let mut local_store = local_store_rc.borrow_mut();
-
-    let wrapper = build_single_text_tir_template(&mut local_store, string_table, "wrapper-prefix");
-    let child_node = TemplateIrBuilder::new(&mut local_store)
-        .push_child_template_node_with_reference(child_reference, empty_location());
-    let body_root = build_body_root_from_children(&mut local_store, vec![child_node]);
-    let wrapper_reference = TemplateWrapperReference::new(
-        TemplateRef::new(local_store_id, wrapper),
-        TemplateTirPhase::Finalized,
-        TemplateOverlaySetId::empty(),
-    );
-
-    let wrapped_root = apply_inherited_child_wrappers_to_body_root(
-        body_root,
-        &[wrapper_reference],
-        registry,
-        &mut local_store,
-        string_table,
-    )?;
-
-    Ok((body_root, wrapped_root))
-}
-
-fn assert_infrastructure_error(
-    result: Result<(TemplateIrNodeId, TemplateIrNodeId), TemplateError>,
-    expected_message: &str,
-) {
-    let compiler_error = match result {
-        Err(TemplateError::Infrastructure(compiler_error)) => compiler_error,
-        Err(other) => panic!("expected an infrastructure error, got: {other:?}"),
-        Ok(_) => panic!("expected inherited-wrapper application to fail"),
-    };
-
-    assert!(
-        compiler_error.msg.contains(expected_message),
-        "expected error to contain {expected_message:?}, got: {}",
-        compiler_error.msg
-    );
-}
-
-#[test]
-fn body_root_skips_foreign_fresh_direct_child() {
-    let mut string_table = StringTable::new();
-    let (registry, foreign_store_id, local_store_id) = build_cross_store_registry();
-
-    let foreign_child_id = {
-        let foreign_store_rc = registry
-            .store_handle(foreign_store_id)
-            .expect("foreign store should be registered");
-        let mut foreign_store = foreign_store_rc.borrow_mut();
-        build_text_tir_template(
-            &mut foreign_store,
-            &mut string_table,
-            "fresh-foreign",
-            Style {
-                skip_parent_child_wrappers: true,
-                ..Style::default()
-            },
-            TemplateIrSummary::default(),
-        )
-    };
-    let child_reference = foreign_child_reference(
-        foreign_store_id,
-        foreign_child_id,
-        TemplateTirPhase::Finalized,
-        TemplateOverlaySetId::empty(),
-    );
-
-    let (body_root, wrapped_root) = apply_wrappers_to_foreign_child(
-        &registry,
-        local_store_id,
-        child_reference,
-        &mut string_table,
-    )
-    .expect("wrapper application should succeed");
-
-    assert_eq!(
-        wrapped_root, body_root,
-        "foreign $fresh child should remain unwrapped"
-    );
-}
-
-#[test]
-fn body_root_leaves_foreign_slot_bearing_child_unwrapped() {
-    let mut string_table = StringTable::new();
-    let (registry, foreign_store_id, local_store_id) = build_cross_store_registry();
-
-    let foreign_child_id = {
-        let foreign_store_rc = registry
-            .store_handle(foreign_store_id)
-            .expect("foreign store should be registered");
-        let mut foreign_store = foreign_store_rc.borrow_mut();
-        build_slot_tir_template(&mut foreign_store)
-    };
-    let child_reference = foreign_child_reference(
-        foreign_store_id,
-        foreign_child_id,
-        TemplateTirPhase::Finalized,
-        TemplateOverlaySetId::empty(),
-    );
-
-    let (body_root, wrapped_root) = apply_wrappers_to_foreign_child(
-        &registry,
-        local_store_id,
-        child_reference,
-        &mut string_table,
-    )
-    .expect("wrapper application should succeed");
-
-    assert_eq!(
-        wrapped_root, body_root,
-        "foreign slot-bearing child should remain a head-chain receiver"
-    );
-}
-
-#[test]
-fn body_root_wraps_foreign_control_flow_child_preserving_reference_identity() {
-    let mut string_table = StringTable::new();
-    let (mut registry, foreign_store_id, local_store_id) = build_cross_store_registry();
-
-    let foreign_child_id = {
-        let foreign_store_rc = registry
-            .store_handle(foreign_store_id)
-            .expect("foreign store should be registered");
-        let mut foreign_store = foreign_store_rc.borrow_mut();
-        build_control_flow_child_template(&mut foreign_store, &mut string_table, "output")
-    };
-    let expression_overlay = registry.allocate_expression_overlay(TirExpressionOverlay {
-        overrides: Vec::new(),
-    });
-    let foreign_overlay = registry.allocate_overlay_set(TemplateOverlaySet {
-        expression_overrides: Some(expression_overlay),
-        ..TemplateOverlaySet::empty()
-    });
-    assert_ne!(foreign_overlay, TemplateOverlaySetId::empty());
-
-    let child_reference = foreign_child_reference(
-        foreign_store_id,
-        foreign_child_id,
-        TemplateTirPhase::Formatted,
-        foreign_overlay,
-    );
-    let (_, wrapped_root) = apply_wrappers_to_foreign_child(
-        &registry,
-        local_store_id,
-        child_reference,
-        &mut string_table,
-    )
-    .expect("wrapper application should succeed");
-
-    let local_store_rc = registry
-        .store_handle(local_store_id)
-        .expect("local store should be registered");
-    let local_store = local_store_rc.borrow();
-    let children = root_sequence_children(wrapped_root, &local_store);
-    assert_eq!(children.len(), 1);
-
-    let wrapper_template_id = expect_child_template_id(children[0], &local_store);
-    let wrapper_template = local_store
-        .get_template(wrapper_template_id)
-        .expect("derived wrapper template should exist");
-    assert!(wrapper_template.conditional_child_wrapper_set.is_some());
-
-    let inner_child_node = local_store
-        .get_node(wrapper_template.root)
-        .expect("derived wrapper root should exist");
-    let TemplateIrNodeKind::ChildTemplate { reference, .. } = &inner_child_node.kind else {
-        panic!("expected a ChildTemplate inside the derived wrapper");
-    };
-    assert_eq!(
-        *reference, child_reference,
-        "derived wrapper should preserve the foreign root, phase and overlay set"
-    );
-}
-
-#[test]
-fn body_root_foreign_child_missing_store_returns_precise_error() {
-    let mut string_table = StringTable::new();
-    let (registry, _, local_store_id) = build_cross_store_registry();
-    let child_reference = foreign_child_reference(
-        TemplateStoreId::new(99),
-        TemplateIrId::new(0),
-        TemplateTirPhase::Finalized,
-        TemplateOverlaySetId::empty(),
-    );
-
-    let result = apply_wrappers_to_foreign_child(
-        &registry,
-        local_store_id,
-        child_reference,
-        &mut string_table,
-    );
-
-    assert_infrastructure_error(result, "not in the module-local TIR registry");
-}
-
-#[test]
-fn body_root_foreign_child_missing_template_returns_precise_error() {
-    let mut string_table = StringTable::new();
-    let (registry, foreign_store_id, local_store_id) = build_cross_store_registry();
-    let child_reference = foreign_child_reference(
-        foreign_store_id,
-        TemplateIrId::new(99),
-        TemplateTirPhase::Finalized,
-        TemplateOverlaySetId::empty(),
-    );
-
-    let result = apply_wrappers_to_foreign_child(
-        &registry,
-        local_store_id,
-        child_reference,
-        &mut string_table,
-    );
-
-    assert_infrastructure_error(result, "missing in store");
-}
-
 // ---------------------
 //  Body-root authority
 // ---------------------
@@ -596,15 +311,8 @@ fn apply_inherited_wrappers_rejects_missing_body_root_with_empty_wrappers() {
     let string_table = StringTable::new();
     let mut store = TemplateIrStore::new();
     let missing_root = TemplateIrNodeId::new(99);
-    let registry = TemplateIrRegistry::new();
-
-    let result = apply_inherited_child_wrappers_to_body_root(
-        missing_root,
-        &[],
-        &registry,
-        &mut store,
-        &string_table,
-    );
+    let result =
+        apply_inherited_child_wrappers_to_body_root(missing_root, &[], &mut store, &string_table);
 
     assert!(
         result.is_err(),
@@ -617,13 +325,10 @@ fn apply_inherited_wrappers_rejects_non_sequence_body_root_with_empty_wrappers()
     let mut string_table = StringTable::new();
     let mut store = TemplateIrStore::new();
     let text = build_single_text_tir_template(&mut store, &mut string_table, "leaf");
-    let registry = TemplateIrRegistry::new();
-
     // A bare template root node is a Text node, not a Sequence.
     let result = apply_inherited_child_wrappers_to_body_root(
         store.get_template(text).expect("template exists").root,
         &[],
-        &registry,
         &mut store,
         &string_table,
     );

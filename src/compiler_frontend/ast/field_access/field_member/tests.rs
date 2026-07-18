@@ -1,9 +1,9 @@
-//! Registry-authority tests for compile-time field inlining.
+//! Module-store authority tests for compile-time field inlining.
 //!
-//! WHAT: exercises receiver-authored and resolved-default field values whose templates belong to
-//!       a foreign registry store.
-//! WHY: field access must classify the effective TIR view instead of using whichever store
-//!      happens to be active at the access site.
+//! WHAT: exercises receiver-authored and resolved-default field values whose templates are
+//!       resolved from the shared module-local TIR store.
+//! WHY: field access must classify the exact effective TIR view and preserve its overlay
+//!      identity at the access site.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -16,8 +16,8 @@ use crate::compiler_frontend::ast::expressions::expression::{Expression, Express
 use crate::compiler_frontend::ast::templates::template::Template;
 use crate::compiler_frontend::ast::templates::template::{SlotKey, Style, TemplateType};
 use crate::compiler_frontend::ast::templates::tir::{
-    TemplateIrBuilder, TemplateIrRegistry, TemplateIrStore, TemplateIrSummary, TemplateOverlaySet,
-    TemplateOverlaySetId, TemplateRef, TemplateTirPhase, TemplateTirReference,
+    TemplateIrBuilder, TemplateIrStore, TemplateIrSummary, TemplateOverlaySetId, TemplateTirPhase,
+    TemplateTirReference,
 };
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, DiagnosticPayload, InvalidFieldAccessReason,
@@ -48,8 +48,7 @@ fn slot_template(store: &mut TemplateIrStore) -> Template {
     Template {
         kind: TemplateType::String,
         tir_reference: TemplateTirReference {
-            root: TemplateRef::new(store.store_id(), template_id),
-            store_owner: store.owner(),
+            root: template_id,
             phase: TemplateTirPhase::Composed,
             overlay_set_id: TemplateOverlaySetId::empty_for_test(),
         },
@@ -57,22 +56,16 @@ fn slot_template(store: &mut TemplateIrStore) -> Template {
     }
 }
 
-fn registry_with_foreign_template() -> (Rc<RefCell<TemplateIrRegistry>>, Template) {
-    let primary_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-    let foreign_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-    let mut registry = TemplateIrRegistry::new();
-    registry.allocate_overlay_set(TemplateOverlaySet::empty());
-    registry.adopt_store(primary_store);
-    registry.adopt_store(Rc::clone(&foreign_store));
-
-    let template = slot_template(&mut foreign_store.borrow_mut());
-    (Rc::new(RefCell::new(registry)), template)
+fn store_with_template() -> (Rc<RefCell<TemplateIrStore>>, Template) {
+    let store = Rc::new(RefCell::new(TemplateIrStore::new()));
+    let template = slot_template(&mut store.borrow_mut());
+    (store, template)
 }
 
 #[test]
 fn receiver_authored_field_uses_foreign_effective_tir() {
     let mut string_table = StringTable::new();
-    let (registry, template) = registry_with_foreign_template();
+    let (registry, template) = store_with_template();
     let field_name = string_table.intern("content");
     let field_path = InternedPath::from_components(vec![field_name]);
     let receiver_value = Expression::struct_instance(
@@ -93,10 +86,9 @@ fn receiver_authored_field_uses_foreign_effective_tir() {
         scope: InternedPath::from_single_str("scope", &mut string_table),
     };
 
-    let inlined =
-        const_inline_field_value_from_receiver(&receiver, field_name, &registry, &string_table)
-            .expect("effective TIR classification should succeed")
-            .expect("receiver-authored const field should inline");
+    let inlined = const_inline_field_value_from_receiver(&receiver, field_name, &registry)
+        .expect("effective TIR classification should succeed")
+        .expect("receiver-authored const field should inline");
 
     assert!(matches!(inlined.kind, ExpressionKind::Template(_)));
     assert_eq!(inlined.value_mode, ValueMode::ImmutableOwned);
@@ -148,7 +140,7 @@ fn missing_member_name_after_dot_points_at_offending_token_boundary() {
 #[test]
 fn resolved_default_field_uses_foreign_effective_tir() {
     let mut string_table = StringTable::new();
-    let (registry, template) = registry_with_foreign_template();
+    let (registry, template) = store_with_template();
     let mut type_environment = TypeEnvironment::new();
     let field_name = string_table.intern("content");
     let struct_path = InternedPath::from_single_str("Card", &mut string_table);
@@ -190,7 +182,6 @@ fn resolved_default_field_uses_foreign_effective_tir() {
         &type_environment,
         Some(&resolved_fields),
         &registry,
-        &string_table,
     )
     .expect("effective TIR classification should succeed")
     .expect("resolved const default should inline");

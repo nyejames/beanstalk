@@ -153,11 +153,7 @@ fn copy_tir_node_with_active_slot_plan(
 
         TemplateIrNodeKind::ChildTemplate { reference, .. } => {
             let new_child_id = copy_tir_template_with_active_slot_plan(
-                reference.template_id_in_store(store.store_id()).ok_or_else(|| {
-                    CompilerError::compiler_error(
-                        "TIR active-slot copy: child template reference is not in the current store.",
-                    )
-                })?,
+                reference.root,
                 active_slot_plan,
                 store,
                 copy_state,
@@ -165,9 +161,8 @@ fn copy_tir_node_with_active_slot_plan(
             copy_state.record_child_template();
 
             let occurrence_id = store.next_child_template_occurrence_id();
-            let reference = TemplateTirChildReference::same_store(
+            let reference = TemplateTirChildReference::new(
                 new_child_id,
-                store.store_id(),
                 TemplateTirPhase::Parsed,
                 TemplateOverlaySetId::empty(),
             );

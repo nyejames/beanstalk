@@ -11,12 +11,11 @@ use crate::compiler_frontend::ast::templates::template::{
 use crate::compiler_frontend::ast::templates::template_control_flow::{
     TemplateBranchSelector, TemplateLoopHeader,
 };
+use crate::compiler_frontend::ast::templates::tir::refs::TemplateTirChildReference;
 use crate::compiler_frontend::ast::templates::tir::{
     TemplateIr, TemplateIrBranch, TemplateIrBuilder, TemplateIrNode, TemplateIrNodeKind,
-    TemplateIrRegistry, TemplateIrStore, TemplateIrSummary, TemplateLoopHeaderExpressionSites,
-    TemplateNodeRef, TemplateRef, TemplateSlotPlan, TemplateStoreId, TemplateTirChildReference,
-    TemplateTirPhase, TemplateTirReference, TemplateWrapperReference, TemplateWrapperSet,
-    TemplateWrapperSetRef, TirView,
+    TemplateIrStore, TemplateIrSummary, TemplateLoopHeaderExpressionSites, TemplateSlotPlan,
+    TemplateTirPhase, TemplateTirReference, TemplateWrapperReference, TemplateWrapperSet, TirView,
 };
 use crate::compiler_frontend::ast::templates::tir::{
     TemplateOverlaySet, TemplateOverlaySetId, TirExpressionOverlay, TirSlotResolution,
@@ -54,7 +53,7 @@ fn test_project_path_resolver() -> ProjectPathResolver {
     .expect("test path resolver should be valid")
 }
 
-/// Constructs a `Template` directly from a real registry-qualified TIR reference.
+/// Constructs a `Template` directly from a real module-local TIR reference.
 fn template_with_reference(
     reference: TemplateTirReference,
     kind: TemplateType,
@@ -72,7 +71,6 @@ fn template_with_reference(
 /// before finalization normalizes their enclosing payload.
 fn registered_text_template(
     text: crate::compiler_frontend::symbols::string_interning::StringId,
-    store_id: TemplateStoreId,
     overlay_set_id: TemplateOverlaySetId,
     template_ir_store: &Rc<RefCell<TemplateIrStore>>,
     string_table: &StringTable,
@@ -98,8 +96,7 @@ fn registered_text_template(
     };
     template_with_reference(
         TemplateTirReference {
-            root: TemplateRef::new(store_id, template_id),
-            store_owner: template_ir_store.borrow().owner(),
+            root: template_id,
             phase: TemplateTirPhase::Composed,
             overlay_set_id,
         },
@@ -114,15 +111,11 @@ fn registered_text_template(
 fn nested_wrapper_finalization_fixture(
     string_table: &mut StringTable,
     unsafe_nested_wrapper: bool,
-) -> (
-    Template,
-    Rc<RefCell<TemplateIrStore>>,
-    Rc<RefCell<TemplateIrRegistry>>,
-) {
+) -> (Template, Rc<RefCell<TemplateIrStore>>) {
     let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.adopt_store(Rc::clone(&template_ir_store));
-    let empty_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let empty_overlay_set_id = template_ir_store
+        .borrow_mut()
+        .allocate_overlay_set(TemplateOverlaySet::empty());
 
     let (
         parent_template_id,
@@ -213,7 +206,7 @@ fn nested_wrapper_finalization_fixture(
         }
 
         let inner_wrapper_reference = TemplateWrapperReference::new(
-            store.qualify_template_ref(inner_wrapper_template_id),
+            inner_wrapper_template_id,
             TemplateTirPhase::Finalized,
             empty_overlay_set_id,
         );
@@ -235,9 +228,8 @@ fn nested_wrapper_finalization_fixture(
                 SourceLocation::default(),
             );
             let nested_child_node = builder.push_child_template_node_with_reference(
-                TemplateTirChildReference::same_store(
+                TemplateTirChildReference::new(
                     nested_child_template_id,
-                    store_id,
                     TemplateTirPhase::Composed,
                     empty_overlay_set_id,
                 ),
@@ -281,7 +273,7 @@ fn nested_wrapper_finalization_fixture(
             _ => panic!("expected outer dynamic-expression node"),
         };
         let outer_wrapper_reference = TemplateWrapperReference::new(
-            store.qualify_template_ref(outer_wrapper_template_id),
+            outer_wrapper_template_id,
             TemplateTirPhase::Finalized,
             empty_overlay_set_id,
         );
@@ -292,9 +284,8 @@ fn nested_wrapper_finalization_fixture(
         let parent_child_node = {
             let mut builder = TemplateIrBuilder::new(&mut store);
             builder.push_child_template_node_with_reference(
-                TemplateTirChildReference::same_store(
+                TemplateTirChildReference::new(
                     child_template_id,
-                    store_id,
                     TemplateTirPhase::Composed,
                     empty_overlay_set_id,
                 ),
@@ -332,59 +323,63 @@ fn nested_wrapper_finalization_fixture(
         )
     };
 
-    let nested_context_overlay_id =
-        registry.allocate_wrapper_context_overlay(TirWrapperContextOverlay {
+    let nested_context_overlay_id = template_ir_store
+        .borrow_mut()
+        .allocate_wrapper_context_overlay(TirWrapperContextOverlay {
             contexts: vec![(
                 nested_occurrence_id,
                 TirWrapperContext {
-                    inherited_wrapper_set: Some(TemplateWrapperSetRef::new(
-                        store_id,
-                        inner_wrapper_set_id,
-                    )),
+                    inherited_wrapper_set: Some(inner_wrapper_set_id),
                     ..TirWrapperContext::default()
                 },
             )],
         });
-    let outer_expression_overlay_id = registry.allocate_expression_overlay(TirExpressionOverlay {
-        overrides: vec![(
-            outer_expression_site_id,
-            Box::new(Expression::string_slice(
-                string_table.intern("outer-overlay"),
-                SourceLocation::default(),
-                ValueMode::ImmutableOwned,
-            )),
-        )],
-    });
-    let outer_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet {
-        expression_overrides: Some(outer_expression_overlay_id),
-        slot_resolution: None,
-        wrapper_context: Some(nested_context_overlay_id),
-    });
+    let outer_expression_overlay_id =
+        template_ir_store
+            .borrow_mut()
+            .allocate_expression_overlay(TirExpressionOverlay {
+                overrides: vec![(
+                    outer_expression_site_id,
+                    Box::new(Expression::string_slice(
+                        string_table.intern("outer-overlay"),
+                        SourceLocation::default(),
+                        ValueMode::ImmutableOwned,
+                    )),
+                )],
+            });
+    let outer_overlay_set_id =
+        template_ir_store
+            .borrow_mut()
+            .allocate_overlay_set(TemplateOverlaySet {
+                expression_overrides: Some(outer_expression_overlay_id),
+                slot_resolution: None,
+                wrapper_context: Some(nested_context_overlay_id),
+            });
     template_ir_store.borrow_mut().wrapper_sets[outer_wrapper_set_id.index()].wrappers[0]
         .overlay_set_id = outer_overlay_set_id;
 
-    let parent_context_overlay_id =
-        registry.allocate_wrapper_context_overlay(TirWrapperContextOverlay {
+    let parent_context_overlay_id = template_ir_store
+        .borrow_mut()
+        .allocate_wrapper_context_overlay(TirWrapperContextOverlay {
             contexts: vec![(
                 parent_occurrence_id,
                 TirWrapperContext {
-                    inherited_wrapper_set: Some(TemplateWrapperSetRef::new(
-                        store_id,
-                        outer_wrapper_set_id,
-                    )),
+                    inherited_wrapper_set: Some(outer_wrapper_set_id),
                     ..TirWrapperContext::default()
                 },
             )],
         });
-    let parent_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet {
-        expression_overrides: None,
-        slot_resolution: None,
-        wrapper_context: Some(parent_context_overlay_id),
-    });
+    let parent_overlay_set_id =
+        template_ir_store
+            .borrow_mut()
+            .allocate_overlay_set(TemplateOverlaySet {
+                expression_overrides: None,
+                slot_resolution: None,
+                wrapper_context: Some(parent_context_overlay_id),
+            });
     let template = template_with_reference(
         TemplateTirReference {
-            root: TemplateRef::new(store_id, parent_template_id),
-            store_owner: template_ir_store.borrow().owner(),
+            root: parent_template_id,
             phase: TemplateTirPhase::Finalized,
             overlay_set_id: parent_overlay_set_id,
         },
@@ -392,7 +387,7 @@ fn nested_wrapper_finalization_fixture(
         SourceLocation::default(),
     );
 
-    (template, template_ir_store, Rc::new(RefCell::new(registry)))
+    (template, template_ir_store)
 }
 
 fn location_at(line: i32, column: i32) -> SourceLocation {
@@ -429,24 +424,18 @@ fn assert_expression_site_location(
 #[test]
 fn finalization_fold_composed_tir_root_folds_view_text() {
     let mut string_table = StringTable::new();
-    let view_text = string_table.intern("registry-backed view");
+    let view_text = string_table.intern("store-backed view");
 
     let project_path_resolver = test_project_path_resolver();
     let path_format_config = PathStringFormatConfig::default();
     let source_file_scope = InternedPath::new();
     let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
+    let overlay_set_id = template_ir_store
+        .borrow_mut()
+        .allocate_overlay_set(TemplateOverlaySet::empty());
 
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.adopt_store(Rc::clone(&template_ir_store));
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
-
-    let template = registered_text_template(
-        view_text,
-        store_id,
-        overlay_set_id,
-        &template_ir_store,
-        &string_table,
-    );
+    let template =
+        registered_text_template(view_text, overlay_set_id, &template_ir_store, &string_table);
 
     let folded = try_fold_template_to_string(
         &template,
@@ -457,7 +446,6 @@ fn finalization_fold_composed_tir_root_folds_view_text() {
             string_table: &mut string_table,
             template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
             template_ir_store: &template_ir_store,
-            template_ir_registry: Rc::new(RefCell::new(registry)),
         },
     )
     .expect("composed TIR root fold should succeed")
@@ -479,16 +467,13 @@ fn finalization_normalizes_dynamic_expression_payloads_into_expression_overlay()
     let path_format_config = PathStringFormatConfig::default();
     let source_file_scope = InternedPath::new();
     let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.adopt_store(Rc::clone(&template_ir_store));
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
-    let registry = Rc::new(RefCell::new(registry));
+    let overlay_set_id = template_ir_store
+        .borrow_mut()
+        .allocate_overlay_set(TemplateOverlaySet::empty());
 
     let dynamic_expression = Expression::template(
         registered_text_template(
             normalized_text,
-            store_id,
             overlay_set_id,
             &template_ir_store,
             &string_table,
@@ -530,8 +515,7 @@ fn finalization_normalizes_dynamic_expression_payloads_into_expression_overlay()
 
     let mut template = template_with_reference(
         TemplateTirReference {
-            root: TemplateRef::new(store_id, template_id),
-            store_owner: template_ir_store.borrow().owner(),
+            root: template_id,
             phase: TemplateTirPhase::Composed,
             overlay_set_id,
         },
@@ -546,7 +530,6 @@ fn finalization_normalizes_dynamic_expression_payloads_into_expression_overlay()
         template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
         string_table: &mut string_table,
         template_ir_store: Rc::clone(&template_ir_store),
-        template_ir_registry: Rc::clone(&registry),
     };
 
     normalize_template_for_hir(&mut template, &mut context)
@@ -563,9 +546,9 @@ fn finalization_normalizes_dynamic_expression_payloads_into_expression_overlay()
         "normalization should advance the effective reference to the finalized phase"
     );
 
-    let registry = registry.borrow();
+    let store = template_ir_store.borrow();
     let view = TirView::with_minimum_phase(
-        &registry,
+        &store,
         reference.root,
         reference.phase,
         TemplateTirPhase::Finalized,
@@ -583,7 +566,7 @@ fn finalization_normalizes_dynamic_expression_payloads_into_expression_overlay()
     assert_expression_site_location(&view, site_id, 31, 7);
 
     let expression_by_node = view
-        .effective_expression_for_node(TemplateNodeRef::new(store_id, dynamic_node_id))
+        .effective_expression_for_node(dynamic_node_id)
         .expect("node lookup should be valid")
         .expect("normalized dynamic expression should be visible by node");
     assert!(
@@ -616,16 +599,13 @@ fn finalization_does_not_mark_parsed_expression_overlay_reference_finalized() {
     let path_format_config = PathStringFormatConfig::default();
     let source_file_scope = InternedPath::new();
     let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.adopt_store(Rc::clone(&template_ir_store));
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
-    let registry = Rc::new(RefCell::new(registry));
+    let overlay_set_id = template_ir_store
+        .borrow_mut()
+        .allocate_overlay_set(TemplateOverlaySet::empty());
 
     let dynamic_expression = Expression::template(
         registered_text_template(
             normalized_text,
-            store_id,
             overlay_set_id,
             &template_ir_store,
             &string_table,
@@ -652,8 +632,7 @@ fn finalization_does_not_mark_parsed_expression_overlay_reference_finalized() {
 
     let mut template = template_with_reference(
         TemplateTirReference {
-            root: TemplateRef::new(store_id, template_id),
-            store_owner: template_ir_store.borrow().owner(),
+            root: template_id,
             phase: TemplateTirPhase::Parsed,
             overlay_set_id,
         },
@@ -668,7 +647,6 @@ fn finalization_does_not_mark_parsed_expression_overlay_reference_finalized() {
         template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
         string_table: &mut string_table,
         template_ir_store: Rc::clone(&template_ir_store),
-        template_ir_registry: Rc::clone(&registry),
     };
 
     normalize_template_for_hir(&mut template, &mut context)
@@ -695,16 +673,13 @@ fn finalization_normalizes_branch_selector_payloads_into_expression_overlay() {
     let path_format_config = PathStringFormatConfig::default();
     let source_file_scope = InternedPath::new();
     let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.adopt_store(Rc::clone(&template_ir_store));
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
-    let registry = Rc::new(RefCell::new(registry));
+    let overlay_set_id = template_ir_store
+        .borrow_mut()
+        .allocate_overlay_set(TemplateOverlaySet::empty());
 
     let selector_expression = Expression::template(
         registered_text_template(
             normalized_text,
-            store_id,
             overlay_set_id,
             &template_ir_store,
             &string_table,
@@ -745,8 +720,7 @@ fn finalization_normalizes_branch_selector_payloads_into_expression_overlay() {
 
     let mut template = template_with_reference(
         TemplateTirReference {
-            root: TemplateRef::new(store_id, template_id),
-            store_owner: template_ir_store.borrow().owner(),
+            root: template_id,
             phase: TemplateTirPhase::Composed,
             overlay_set_id,
         },
@@ -761,7 +735,6 @@ fn finalization_normalizes_branch_selector_payloads_into_expression_overlay() {
         template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
         string_table: &mut string_table,
         template_ir_store: Rc::clone(&template_ir_store),
-        template_ir_registry: Rc::clone(&registry),
     };
 
     normalize_template_for_hir(&mut template, &mut context)
@@ -778,9 +751,9 @@ fn finalization_normalizes_branch_selector_payloads_into_expression_overlay() {
         "normalization should advance the effective reference to the finalized phase"
     );
 
-    let registry = registry.borrow();
+    let store = template_ir_store.borrow();
     let view = TirView::with_minimum_phase(
-        &registry,
+        &store,
         reference.root,
         reference.phase,
         TemplateTirPhase::Finalized,
@@ -823,16 +796,13 @@ fn finalization_normalizes_loop_header_payloads_into_expression_overlay() {
     let path_format_config = PathStringFormatConfig::default();
     let source_file_scope = InternedPath::new();
     let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.adopt_store(Rc::clone(&template_ir_store));
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
-    let registry = Rc::new(RefCell::new(registry));
+    let overlay_set_id = template_ir_store
+        .borrow_mut()
+        .allocate_overlay_set(TemplateOverlaySet::empty());
 
     let header_expression = Expression::template(
         registered_text_template(
             normalized_text,
-            store_id,
             overlay_set_id,
             &template_ir_store,
             &string_table,
@@ -876,8 +846,7 @@ fn finalization_normalizes_loop_header_payloads_into_expression_overlay() {
 
     let mut template = template_with_reference(
         TemplateTirReference {
-            root: TemplateRef::new(store_id, template_id),
-            store_owner: template_ir_store.borrow().owner(),
+            root: template_id,
             phase: TemplateTirPhase::Composed,
             overlay_set_id,
         },
@@ -892,7 +861,6 @@ fn finalization_normalizes_loop_header_payloads_into_expression_overlay() {
         template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
         string_table: &mut string_table,
         template_ir_store: Rc::clone(&template_ir_store),
-        template_ir_registry: Rc::clone(&registry),
     };
 
     normalize_template_for_hir(&mut template, &mut context)
@@ -909,9 +877,9 @@ fn finalization_normalizes_loop_header_payloads_into_expression_overlay() {
         "normalization should advance the effective reference to the finalized phase"
     );
 
-    let registry = registry.borrow();
+    let store = template_ir_store.borrow();
     let view = TirView::with_minimum_phase(
-        &registry,
+        &store,
         reference.root,
         reference.phase,
         TemplateTirPhase::Finalized,
@@ -960,10 +928,9 @@ fn finalization_fold_uses_finalized_expression_overlay_view() {
     let path_format_config = PathStringFormatConfig::default();
     let source_file_scope = InternedPath::new();
     let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.adopt_store(Rc::clone(&template_ir_store));
-    let empty_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let empty_overlay_set_id = template_ir_store
+        .borrow_mut()
+        .allocate_overlay_set(TemplateOverlaySet::empty());
 
     let (template_id, dynamic_node) = {
         let mut store = template_ir_store.borrow_mut();
@@ -1002,29 +969,35 @@ fn finalization_fold_uses_finalized_expression_overlay_view() {
         }
     };
 
-    let expression_overlay_id = registry.allocate_expression_overlay(TirExpressionOverlay {
-        overrides: vec![(
-            site_id,
-            Box::new(Expression::string_slice(
-                overlay_text,
-                SourceLocation::default(),
-                ValueMode::ImmutableOwned,
-            )),
-        )],
-    });
-    let expression_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet {
-        expression_overrides: Some(expression_overlay_id),
-        slot_resolution: None,
-        wrapper_context: None,
-    });
-    let overlay_set_id = registry
+    let expression_overlay_id =
+        template_ir_store
+            .borrow_mut()
+            .allocate_expression_overlay(TirExpressionOverlay {
+                overrides: vec![(
+                    site_id,
+                    Box::new(Expression::string_slice(
+                        overlay_text,
+                        SourceLocation::default(),
+                        ValueMode::ImmutableOwned,
+                    )),
+                )],
+            });
+    let expression_overlay_set_id =
+        template_ir_store
+            .borrow_mut()
+            .allocate_overlay_set(TemplateOverlaySet {
+                expression_overrides: Some(expression_overlay_id),
+                slot_resolution: None,
+                wrapper_context: None,
+            });
+    let overlay_set_id = template_ir_store
+        .borrow_mut()
         .compose_overlay_sets(&[empty_overlay_set_id, expression_overlay_set_id])
         .expect("expression overlay set should compose");
 
     let template = template_with_reference(
         TemplateTirReference {
-            root: TemplateRef::new(store_id, template_id),
-            store_owner: template_ir_store.borrow().owner(),
+            root: template_id,
             phase: TemplateTirPhase::Finalized,
             overlay_set_id,
         },
@@ -1044,7 +1017,6 @@ fn finalization_fold_uses_finalized_expression_overlay_view() {
             string_table: &mut string_table,
             template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
             template_ir_store: &template_ir_store,
-            template_ir_registry: Rc::new(RefCell::new(registry)),
         },
     )
     .expect("expression-overlay view fold should succeed")
@@ -1075,10 +1047,9 @@ fn finalization_classifies_root_expression_overlay_through_nested_same_store_chi
     let path_format_config = PathStringFormatConfig::default();
     let source_file_scope = InternedPath::new();
     let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.adopt_store(Rc::clone(&template_ir_store));
-    let empty_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let empty_overlay_set_id = template_ir_store
+        .borrow_mut()
+        .allocate_overlay_set(TemplateOverlaySet::empty());
 
     let (root_template_id, dynamic_site_id, selector_site_id, loop_site_id) = {
         let mut store = template_ir_store.borrow_mut();
@@ -1189,9 +1160,8 @@ fn finalization_classifies_root_expression_overlay_through_nested_same_store_chi
         let mut builder = TemplateIrBuilder::new(&mut store);
         let mut descendant_template_id = leaf_template_id;
         for _ in 0..3 {
-            let child_reference = TemplateTirChildReference::same_store(
+            let child_reference = TemplateTirChildReference::new(
                 descendant_template_id,
-                store_id,
                 TemplateTirPhase::Composed,
                 empty_overlay_set_id,
             );
@@ -1217,44 +1187,49 @@ fn finalization_classifies_root_expression_overlay_through_nested_same_store_chi
         )
     };
 
-    let expression_overlay_id = registry.allocate_expression_overlay(TirExpressionOverlay {
-        overrides: vec![
-            (
-                dynamic_site_id,
-                Box::new(Expression::string_slice(
-                    dynamic_text,
-                    SourceLocation::default(),
-                    ValueMode::ImmutableOwned,
-                )),
-            ),
-            (
-                selector_site_id,
-                Box::new(Expression::bool(
-                    true,
-                    SourceLocation::default(),
-                    ValueMode::ImmutableOwned,
-                )),
-            ),
-            (
-                loop_site_id,
-                Box::new(Expression::bool(
-                    false,
-                    SourceLocation::default(),
-                    ValueMode::ImmutableOwned,
-                )),
-            ),
-        ],
-    });
-    let root_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet {
-        expression_overrides: Some(expression_overlay_id),
-        slot_resolution: None,
-        wrapper_context: None,
-    });
+    let expression_overlay_id =
+        template_ir_store
+            .borrow_mut()
+            .allocate_expression_overlay(TirExpressionOverlay {
+                overrides: vec![
+                    (
+                        dynamic_site_id,
+                        Box::new(Expression::string_slice(
+                            dynamic_text,
+                            SourceLocation::default(),
+                            ValueMode::ImmutableOwned,
+                        )),
+                    ),
+                    (
+                        selector_site_id,
+                        Box::new(Expression::bool(
+                            true,
+                            SourceLocation::default(),
+                            ValueMode::ImmutableOwned,
+                        )),
+                    ),
+                    (
+                        loop_site_id,
+                        Box::new(Expression::bool(
+                            false,
+                            SourceLocation::default(),
+                            ValueMode::ImmutableOwned,
+                        )),
+                    ),
+                ],
+            });
+    let root_overlay_set_id =
+        template_ir_store
+            .borrow_mut()
+            .allocate_overlay_set(TemplateOverlaySet {
+                expression_overrides: Some(expression_overlay_id),
+                slot_resolution: None,
+                wrapper_context: None,
+            });
 
     let template = template_with_reference(
         TemplateTirReference {
-            root: TemplateRef::new(store_id, root_template_id),
-            store_owner: template_ir_store.borrow().owner(),
+            root: root_template_id,
             phase: TemplateTirPhase::Finalized,
             overlay_set_id: root_overlay_set_id,
         },
@@ -1271,7 +1246,6 @@ fn finalization_classifies_root_expression_overlay_through_nested_same_store_chi
             string_table: &mut string_table,
             template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
             template_ir_store: &template_ir_store,
-            template_ir_registry: Rc::new(RefCell::new(registry)),
         },
     )
     .expect("root overlay should classify and fold through nested descendants")
@@ -1295,10 +1269,9 @@ fn finalization_ignores_parsed_child_overlay_before_later_composed_descendant() 
     let path_format_config = PathStringFormatConfig::default();
     let source_file_scope = InternedPath::new();
     let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.adopt_store(Rc::clone(&template_ir_store));
-    let empty_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let empty_overlay_set_id = template_ir_store
+        .borrow_mut()
+        .allocate_overlay_set(TemplateOverlaySet::empty());
     let missing_overlay_set_id = TemplateOverlaySetId::new(999);
 
     let (root_template_id, descendant_site_id) = {
@@ -1337,9 +1310,8 @@ fn finalization_ignores_parsed_child_overlay_before_later_composed_descendant() 
         let parsed_child_template_id = {
             let mut builder = TemplateIrBuilder::new(&mut store);
             let child_node = builder.push_child_template_node_with_reference(
-                TemplateTirChildReference::same_store(
+                TemplateTirChildReference::new(
                     descendant_template_id,
-                    store_id,
                     TemplateTirPhase::Composed,
                     empty_overlay_set_id,
                 ),
@@ -1357,9 +1329,8 @@ fn finalization_ignores_parsed_child_overlay_before_later_composed_descendant() 
 
         let mut builder = TemplateIrBuilder::new(&mut store);
         let child_node = builder.push_child_template_node_with_reference(
-            TemplateTirChildReference::same_store(
+            TemplateTirChildReference::new(
                 parsed_child_template_id,
-                store_id,
                 TemplateTirPhase::Parsed,
                 missing_overlay_set_id,
             ),
@@ -1377,25 +1348,30 @@ fn finalization_ignores_parsed_child_overlay_before_later_composed_descendant() 
         (root_template_id, descendant_site_id)
     };
 
-    let expression_overlay_id = registry.allocate_expression_overlay(TirExpressionOverlay {
-        overrides: vec![(
-            descendant_site_id,
-            Box::new(Expression::string_slice(
-                override_text,
-                SourceLocation::default(),
-                ValueMode::ImmutableOwned,
-            )),
-        )],
-    });
-    let root_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet {
-        expression_overrides: Some(expression_overlay_id),
-        slot_resolution: None,
-        wrapper_context: None,
-    });
+    let expression_overlay_id =
+        template_ir_store
+            .borrow_mut()
+            .allocate_expression_overlay(TirExpressionOverlay {
+                overrides: vec![(
+                    descendant_site_id,
+                    Box::new(Expression::string_slice(
+                        override_text,
+                        SourceLocation::default(),
+                        ValueMode::ImmutableOwned,
+                    )),
+                )],
+            });
+    let root_overlay_set_id =
+        template_ir_store
+            .borrow_mut()
+            .allocate_overlay_set(TemplateOverlaySet {
+                expression_overrides: Some(expression_overlay_id),
+                slot_resolution: None,
+                wrapper_context: None,
+            });
     let template = template_with_reference(
         TemplateTirReference {
-            root: TemplateRef::new(store_id, root_template_id),
-            store_owner: template_ir_store.borrow().owner(),
+            root: root_template_id,
             phase: TemplateTirPhase::Finalized,
             overlay_set_id: root_overlay_set_id,
         },
@@ -1412,7 +1388,6 @@ fn finalization_ignores_parsed_child_overlay_before_later_composed_descendant() 
             string_table: &mut string_table,
             template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
             template_ir_store: &template_ir_store,
-            template_ir_registry: Rc::new(RefCell::new(registry)),
         },
     )
     .expect("a Parsed child must not consume its missing overlay during finalization")
@@ -1428,7 +1403,7 @@ fn finalization_ignores_parsed_child_overlay_before_later_composed_descendant() 
 #[test]
 fn finalization_rejects_nested_runtime_wrapper_in_exact_wrapper_overlay() {
     let mut string_table = StringTable::new();
-    let (template, template_ir_store, template_ir_registry) =
+    let (template, template_ir_store) =
         nested_wrapper_finalization_fixture(&mut string_table, true);
     let project_path_resolver = test_project_path_resolver();
     let path_format_config = PathStringFormatConfig::default();
@@ -1443,7 +1418,6 @@ fn finalization_rejects_nested_runtime_wrapper_in_exact_wrapper_overlay() {
             string_table: &mut string_table,
             template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
             template_ir_store: &template_ir_store,
-            template_ir_registry,
         },
     )
     .expect("runtime nested wrapper should be a valid non-foldable shape");
@@ -1458,18 +1432,13 @@ fn finalization_rejects_nested_runtime_wrapper_in_exact_wrapper_overlay() {
 fn finalization_keeps_valid_runtime_slot_plan_out_of_folded_string() {
     let mut string_table = StringTable::new();
     let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.adopt_store(Rc::clone(&template_ir_store));
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let overlay_set_id = template_ir_store
+        .borrow_mut()
+        .allocate_overlay_set(TemplateOverlaySet::empty());
     let text = string_table.intern("runtime root");
-    let template = registered_text_template(
-        text,
-        store_id,
-        overlay_set_id,
-        &template_ir_store,
-        &string_table,
-    );
-    let template_id = template.tir_reference.root.template_id;
+    let template =
+        registered_text_template(text, overlay_set_id, &template_ir_store, &string_table);
+    let template_id = template.tir_reference.root;
 
     {
         let mut store = template_ir_store.borrow_mut();
@@ -1493,7 +1462,6 @@ fn finalization_keeps_valid_runtime_slot_plan_out_of_folded_string() {
             string_table: &mut string_table,
             template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
             template_ir_store: &template_ir_store,
-            template_ir_registry: Rc::new(RefCell::new(registry)),
         },
     )
     .expect("valid runtime slot plan should use the handoff path");
@@ -1514,18 +1482,13 @@ fn finalization_keeps_valid_runtime_slot_plan_out_of_folded_string() {
 fn finalization_replaces_renderable_runtime_slot_plan_with_owned_handoff() {
     let mut string_table = StringTable::new();
     let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.adopt_store(Rc::clone(&template_ir_store));
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let overlay_set_id = template_ir_store
+        .borrow_mut()
+        .allocate_overlay_set(TemplateOverlaySet::empty());
     let text = string_table.intern("runtime handoff");
-    let template = registered_text_template(
-        text,
-        store_id,
-        overlay_set_id,
-        &template_ir_store,
-        &string_table,
-    );
-    let template_id = template.tir_reference.root.template_id;
+    let template =
+        registered_text_template(text, overlay_set_id, &template_ir_store, &string_table);
+    let template_id = template.tir_reference.root;
 
     {
         let mut store = template_ir_store.borrow_mut();
@@ -1541,7 +1504,6 @@ fn finalization_replaces_renderable_runtime_slot_plan_with_owned_handoff() {
     let project_path_resolver = test_project_path_resolver();
     let path_format_config = PathStringFormatConfig::default();
     let source_file_scope = InternedPath::new();
-    let template_ir_registry = Rc::new(RefCell::new(registry));
     let mut context = TemplateNormalizationContext {
         source_file_scope: &source_file_scope,
         path_format_config: &path_format_config,
@@ -1549,7 +1511,6 @@ fn finalization_replaces_renderable_runtime_slot_plan_with_owned_handoff() {
         template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
         string_table: &mut string_table,
         template_ir_store: Rc::clone(&template_ir_store),
-        template_ir_registry,
     };
 
     normalize_expression_templates(&mut expression, &mut context)
@@ -1574,18 +1535,13 @@ fn finalization_replaces_renderable_runtime_slot_plan_with_owned_handoff() {
 fn module_constant_normalization_rejects_runtime_slot_plan_with_structured_diagnostic() {
     let mut string_table = StringTable::new();
     let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.adopt_store(Rc::clone(&template_ir_store));
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let overlay_set_id = template_ir_store
+        .borrow_mut()
+        .allocate_overlay_set(TemplateOverlaySet::empty());
     let text = string_table.intern("module constant runtime plan");
-    let template = registered_text_template(
-        text,
-        store_id,
-        overlay_set_id,
-        &template_ir_store,
-        &string_table,
-    );
-    let template_id = template.tir_reference.root.template_id;
+    let template =
+        registered_text_template(text, overlay_set_id, &template_ir_store, &string_table);
+    let template_id = template.tir_reference.root;
 
     {
         let mut store = template_ir_store.borrow_mut();
@@ -1614,7 +1570,6 @@ fn module_constant_normalization_rejects_runtime_slot_plan_with_structured_diagn
             string_table: &mut string_table,
             template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
             template_ir_store: &template_ir_store,
-            template_ir_registry: Rc::new(RefCell::new(registry)),
         },
     );
 
@@ -1640,7 +1595,7 @@ fn module_constant_normalization_rejects_runtime_slot_plan_with_structured_diagn
 #[test]
 fn finalization_accepts_supported_nested_wrapper_exact_view() {
     let mut string_table = StringTable::new();
-    let (template, template_ir_store, template_ir_registry) =
+    let (template, template_ir_store) =
         nested_wrapper_finalization_fixture(&mut string_table, false);
     let project_path_resolver = test_project_path_resolver();
     let path_format_config = PathStringFormatConfig::default();
@@ -1655,7 +1610,6 @@ fn finalization_accepts_supported_nested_wrapper_exact_view() {
             string_table: &mut string_table,
             template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
             template_ir_store: &template_ir_store,
-            template_ir_registry,
         },
     )
     .expect("supported nested wrapper should fold through the exact views")
@@ -1680,9 +1634,6 @@ fn finalization_fold_uses_resolved_slot_overlay_set() {
     let path_format_config = PathStringFormatConfig::default();
     let source_file_scope = InternedPath::new();
     let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.adopt_store(Rc::clone(&template_ir_store));
 
     let reference = {
         let mut store = template_ir_store.borrow_mut();
@@ -1737,22 +1688,19 @@ fn finalization_fold_uses_resolved_slot_overlay_set() {
             _ => panic!("expected slot node"),
         };
 
-        let slot_overlay_id = registry.allocate_slot_resolution_overlay(TirSlotResolutionOverlay {
+        let slot_overlay_id = store.allocate_slot_resolution_overlay(TirSlotResolutionOverlay {
             resolutions: vec![(
                 slot_occurrence_id,
-                TirSlotResolution::resolved(
-                    SlotKey::Default,
-                    vec![TemplateRef::new(store_id, fill_template_id)],
-                ),
+                TirSlotResolution::resolved(SlotKey::Default, vec![fill_template_id]),
             )],
         });
-        let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet {
+        let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet {
             expression_overrides: None,
             slot_resolution: Some(slot_overlay_id),
             wrapper_context: None,
         });
         assert!(
-            !registry
+            !store
                 .overlay_set(overlay_set_id)
                 .expect("overlay set should exist")
                 .is_empty(),
@@ -1760,8 +1708,7 @@ fn finalization_fold_uses_resolved_slot_overlay_set() {
         );
 
         TemplateTirReference {
-            root: TemplateRef::new(store_id, wrapper_template_id),
-            store_owner: store.owner(),
+            root: wrapper_template_id,
             phase: TemplateTirPhase::Composed,
             overlay_set_id,
         }
@@ -1779,7 +1726,6 @@ fn finalization_fold_uses_resolved_slot_overlay_set() {
             string_table: &mut string_table,
             template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
             template_ir_store: &template_ir_store,
-            template_ir_registry: Rc::new(RefCell::new(registry)),
         },
     )
     .expect("resolved slot-overlay fold should succeed")
@@ -1802,10 +1748,9 @@ fn finalization_fold_composed_root_with_unfilled_slot_emits_no_slot_output() {
     let path_format_config = PathStringFormatConfig::default();
     let source_file_scope = InternedPath::new();
     let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.adopt_store(Rc::clone(&template_ir_store));
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let overlay_set_id = template_ir_store
+        .borrow_mut()
+        .allocate_overlay_set(TemplateOverlaySet::empty());
 
     // An unfilled slot contributes no output. Finalization folds that rule
     // directly from the composed TIR root.
@@ -1830,8 +1775,7 @@ fn finalization_fold_composed_root_with_unfilled_slot_emits_no_slot_output() {
         );
 
         TemplateTirReference {
-            root: TemplateRef::new(store_id, template_id),
-            store_owner: store.owner(),
+            root: template_id,
             phase: TemplateTirPhase::Composed,
             overlay_set_id,
         }
@@ -1849,7 +1793,6 @@ fn finalization_fold_composed_root_with_unfilled_slot_emits_no_slot_output() {
             string_table: &mut string_table,
             template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
             template_ir_store: &template_ir_store,
-            template_ir_registry: Rc::new(RefCell::new(registry)),
         },
     )
     .expect("composed slot-root fold should succeed")
@@ -1874,10 +1817,9 @@ fn finalization_fold_formatted_root_with_unfilled_slot_emits_no_slot_output() {
     let path_format_config = PathStringFormatConfig::default();
     let source_file_scope = InternedPath::new();
     let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.adopt_store(Rc::clone(&template_ir_store));
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let overlay_set_id = template_ir_store
+        .borrow_mut()
+        .allocate_overlay_set(TemplateOverlaySet::empty());
 
     let reference = {
         let location = SourceLocation::default();
@@ -1904,8 +1846,7 @@ fn finalization_fold_formatted_root_with_unfilled_slot_emits_no_slot_output() {
         );
 
         TemplateTirReference {
-            root: TemplateRef::new(store_id, template_id),
-            store_owner: store.owner(),
+            root: template_id,
             phase: TemplateTirPhase::Formatted,
             overlay_set_id,
         }
@@ -1926,7 +1867,6 @@ fn finalization_fold_formatted_root_with_unfilled_slot_emits_no_slot_output() {
             string_table: &mut string_table,
             template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
             template_ir_store: &template_ir_store,
-            template_ir_registry: Rc::new(RefCell::new(registry)),
         },
     )
     .expect("formatted slot-root fold should succeed")
@@ -1941,9 +1881,9 @@ fn finalization_fold_formatted_root_with_unfilled_slot_emits_no_slot_output() {
     #[cfg(feature = "benchmark_counters")]
     {
         assert_eq!(
-            test_read_ast_counter(AstCounter::TirRegistryBackedFoldAttempts),
+            test_read_ast_counter(AstCounter::TirFinalizationFoldAttempts),
             1,
-            "slot-bearing formatted roots are now real registry fold attempts"
+            "slot-bearing formatted roots are now real store fold attempts"
         );
         assert_eq!(
             test_read_ast_counter(AstCounter::TirReadOnlyFoldAttempts),
@@ -1956,9 +1896,9 @@ fn finalization_fold_formatted_root_with_unfilled_slot_emits_no_slot_output() {
             "slot nodes reject read-only fold safety"
         );
         assert_eq!(
-            test_read_ast_counter(AstCounter::TirRegistryBackedFoldSuccesses),
+            test_read_ast_counter(AstCounter::TirFinalizationFoldSuccesses),
             1,
-            "the registry-backed fold completes directly"
+            "the store-backed fold completes directly"
         );
     }
 }
@@ -1978,10 +1918,9 @@ fn branch_tir_root_normalizes_into_owned_runtime_handoff() {
     let branch_text = string_table.intern("branch body");
     let fallback_text = string_table.intern("fallback body");
     let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.adopt_store(Rc::clone(&template_ir_store));
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let overlay_set_id = template_ir_store
+        .borrow_mut()
+        .allocate_overlay_set(TemplateOverlaySet::empty());
     let template_id = {
         let mut store = template_ir_store.borrow_mut();
         let mut builder = TemplateIrBuilder::new(&mut store);
@@ -2022,8 +1961,7 @@ fn branch_tir_root_normalizes_into_owned_runtime_handoff() {
 
     let template = template_with_reference(
         TemplateTirReference {
-            root: TemplateRef::new(store_id, template_id),
-            store_owner: template_ir_store.borrow().owner(),
+            root: template_id,
             phase: TemplateTirPhase::Composed,
             overlay_set_id,
         },
@@ -2042,7 +1980,6 @@ fn branch_tir_root_normalizes_into_owned_runtime_handoff() {
         template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
         string_table: &mut string_table,
         template_ir_store: Rc::clone(&template_ir_store),
-        template_ir_registry: Rc::new(RefCell::new(registry)),
     };
 
     normalize_expression_templates(&mut expression, &mut context)
@@ -2083,10 +2020,9 @@ fn loop_tir_root_normalizes_into_owned_runtime_handoff() {
     let open_text = string_table.intern("[");
     let close_text = string_table.intern("]");
     let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.adopt_store(Rc::clone(&template_ir_store));
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let overlay_set_id = template_ir_store
+        .borrow_mut()
+        .allocate_overlay_set(TemplateOverlaySet::empty());
     let template_id = {
         let mut store = template_ir_store.borrow_mut();
         let aggregate_output = store.push_node(TemplateIrNode::new(
@@ -2128,8 +2064,7 @@ fn loop_tir_root_normalizes_into_owned_runtime_handoff() {
 
     let template = template_with_reference(
         TemplateTirReference {
-            root: TemplateRef::new(store_id, template_id),
-            store_owner: template_ir_store.borrow().owner(),
+            root: template_id,
             phase: TemplateTirPhase::Composed,
             overlay_set_id,
         },
@@ -2148,7 +2083,6 @@ fn loop_tir_root_normalizes_into_owned_runtime_handoff() {
         template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
         string_table: &mut string_table,
         template_ir_store: Rc::clone(&template_ir_store),
-        template_ir_registry: Rc::new(RefCell::new(registry)),
     };
 
     normalize_expression_templates(&mut expression, &mut context)
@@ -2277,7 +2211,6 @@ fn collect_owned_node_string_slice_expressions(
 fn registered_runtime_template(
     text: crate::compiler_frontend::symbols::string_interning::StringId,
     reference_name: &str,
-    store_id: TemplateStoreId,
     overlay_set_id: TemplateOverlaySetId,
     template_ir_store: &Rc<RefCell<TemplateIrStore>>,
     string_table: &mut StringTable,
@@ -2319,8 +2252,7 @@ fn registered_runtime_template(
     };
     template_with_reference(
         TemplateTirReference {
-            root: TemplateRef::new(store_id, template_id),
-            store_owner: template_ir_store.borrow().owner(),
+            root: template_id,
             phase: TemplateTirPhase::Composed,
             overlay_set_id,
         },
@@ -2338,15 +2270,13 @@ fn ordinary_runtime_template_handoff_uses_module_tir_store() {
     let path_format_config = PathStringFormatConfig::default();
     let source_file_scope = InternedPath::new();
     let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.adopt_store(Rc::clone(&template_ir_store));
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let overlay_set_id = template_ir_store
+        .borrow_mut()
+        .allocate_overlay_set(TemplateOverlaySet::empty());
 
     let template = registered_runtime_template(
         text,
         "name",
-        store_id,
         overlay_set_id,
         &template_ir_store,
         &mut string_table,
@@ -2361,7 +2291,6 @@ fn ordinary_runtime_template_handoff_uses_module_tir_store() {
         template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
         string_table: &mut string_table,
         template_ir_store: Rc::clone(&template_ir_store),
-        template_ir_registry: Rc::new(RefCell::new(registry)),
     };
 
     normalize_expression_templates(&mut expression, &mut context)
@@ -2383,15 +2312,13 @@ fn runtime_template_expression_normalization_replaces_template_with_owned_handof
     let path_format_config = PathStringFormatConfig::default();
     let source_file_scope = InternedPath::new();
     let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.adopt_store(Rc::clone(&template_ir_store));
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let overlay_set_id = template_ir_store
+        .borrow_mut()
+        .allocate_overlay_set(TemplateOverlaySet::empty());
 
     let template = registered_runtime_template(
         text,
         "name",
-        store_id,
         overlay_set_id,
         &template_ir_store,
         &mut string_table,
@@ -2406,7 +2333,6 @@ fn runtime_template_expression_normalization_replaces_template_with_owned_handof
         template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
         string_table: &mut string_table,
         template_ir_store: Rc::clone(&template_ir_store),
-        template_ir_registry: Rc::new(RefCell::new(registry)),
     };
 
     normalize_expression_templates(&mut expression, &mut context)
@@ -2440,14 +2366,12 @@ fn runtime_template_expression_handoff_uses_finalized_expression_overlay_view() 
     let path_format_config = PathStringFormatConfig::default();
     let source_file_scope = InternedPath::new();
     let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.adopt_store(Rc::clone(&template_ir_store));
-    let empty_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let empty_overlay_set_id = template_ir_store
+        .borrow_mut()
+        .allocate_overlay_set(TemplateOverlaySet::empty());
     let nested_template_expression = Expression::template(
         registered_text_template(
             overlay_text,
-            store_id,
             empty_overlay_set_id,
             &template_ir_store,
             &string_table,
@@ -2492,8 +2416,7 @@ fn runtime_template_expression_handoff_uses_finalized_expression_overlay_view() 
 
     let template = template_with_reference(
         TemplateTirReference {
-            root: TemplateRef::new(store_id, template_id),
-            store_owner: template_ir_store.borrow().owner(),
+            root: template_id,
             phase: TemplateTirPhase::Composed,
             overlay_set_id: empty_overlay_set_id,
         },
@@ -2509,7 +2432,6 @@ fn runtime_template_expression_handoff_uses_finalized_expression_overlay_view() 
         template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
         string_table: &mut string_table,
         template_ir_store: Rc::clone(&template_ir_store),
-        template_ir_registry: Rc::new(RefCell::new(registry)),
     };
 
     normalize_expression_templates(&mut expression, &mut context)
@@ -2542,17 +2464,15 @@ fn nested_runtime_template_normalizes_through_final_view() {
     let path_format_config = PathStringFormatConfig::default();
     let source_file_scope = InternedPath::new();
     let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.adopt_store(Rc::clone(&template_ir_store));
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let overlay_set_id = template_ir_store
+        .borrow_mut()
+        .allocate_overlay_set(TemplateOverlaySet::empty());
 
     // Build a TIR whose sole dynamic expression holds a nested runtime
     // template (text plus a runtime reference, so it is not const-foldable).
     let nested_template = registered_runtime_template(
         nested_text,
         "runtime_ref",
-        store_id,
         overlay_set_id,
         &template_ir_store,
         &mut string_table,
@@ -2580,8 +2500,7 @@ fn nested_runtime_template_normalizes_through_final_view() {
 
     let template = template_with_reference(
         TemplateTirReference {
-            root: TemplateRef::new(store_id, template_id),
-            store_owner: template_ir_store.borrow().owner(),
+            root: template_id,
             phase: TemplateTirPhase::Composed,
             overlay_set_id,
         },
@@ -2597,7 +2516,6 @@ fn nested_runtime_template_normalizes_through_final_view() {
         template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
         string_table: &mut string_table,
         template_ir_store: Rc::clone(&template_ir_store),
-        template_ir_registry: Rc::new(RefCell::new(registry)),
     };
 
     normalize_expression_templates(&mut expression, &mut context)
@@ -2677,10 +2595,9 @@ fn nested_const_template_folds_through_final_view() {
     let path_format_config = PathStringFormatConfig::default();
     let source_file_scope = InternedPath::new();
     let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.adopt_store(Rc::clone(&template_ir_store));
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let overlay_set_id = template_ir_store
+        .borrow_mut()
+        .allocate_overlay_set(TemplateOverlaySet::empty());
 
     // Build a child template (const text) and an outer template whose TIR
     // root is a sequence containing a child-template ref to it.
@@ -2716,8 +2633,7 @@ fn nested_const_template_folds_through_final_view() {
 
     let template = template_with_reference(
         TemplateTirReference {
-            root: TemplateRef::new(store_id, outer_template_id),
-            store_owner: template_ir_store.borrow().owner(),
+            root: outer_template_id,
             phase: TemplateTirPhase::Composed,
             overlay_set_id,
         },
@@ -2734,7 +2650,6 @@ fn nested_const_template_folds_through_final_view() {
             string_table: &mut string_table,
             template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
             template_ir_store: &template_ir_store,
-            template_ir_registry: Rc::new(RefCell::new(registry)),
         },
     )
     .expect("fold through final view should succeed")
@@ -2759,10 +2674,9 @@ fn reactive_metadata_derived_from_nested_final_view() {
     let path_format_config = PathStringFormatConfig::default();
     let source_file_scope = InternedPath::new();
     let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.adopt_store(Rc::clone(&template_ir_store));
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let overlay_set_id = template_ir_store
+        .borrow_mut()
+        .allocate_overlay_set(TemplateOverlaySet::empty());
 
     // Build a TIR with a dynamic expression carrying a reactive subscription.
     let template_id = {
@@ -2803,8 +2717,7 @@ fn reactive_metadata_derived_from_nested_final_view() {
 
     let template = template_with_reference(
         TemplateTirReference {
-            root: TemplateRef::new(store_id, template_id),
-            store_owner: template_ir_store.borrow().owner(),
+            root: template_id,
             phase: TemplateTirPhase::Composed,
             overlay_set_id,
         },
@@ -2820,7 +2733,6 @@ fn reactive_metadata_derived_from_nested_final_view() {
         template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
         string_table: &mut string_table,
         template_ir_store: Rc::clone(&template_ir_store),
-        template_ir_registry: Rc::new(RefCell::new(registry)),
     };
 
     normalize_expression_templates(&mut expression, &mut context)
@@ -2855,10 +2767,9 @@ fn helper_artifact_rejected_after_final_view_traversal() {
     let path_format_config = PathStringFormatConfig::default();
     let source_file_scope = InternedPath::new();
     let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.adopt_store(Rc::clone(&template_ir_store));
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let overlay_set_id = template_ir_store
+        .borrow_mut()
+        .allocate_overlay_set(TemplateOverlaySet::empty());
 
     // Build a TIR root with simple text. The template kind is SlotInsert,
     // which finalization must reject as a helper artifact.
@@ -2883,8 +2794,7 @@ fn helper_artifact_rejected_after_final_view_traversal() {
 
     let template = template_with_reference(
         TemplateTirReference {
-            root: TemplateRef::new(store_id, template_id),
-            store_owner: template_ir_store.borrow().owner(),
+            root: template_id,
             phase: TemplateTirPhase::Composed,
             overlay_set_id,
         },
@@ -2901,7 +2811,6 @@ fn helper_artifact_rejected_after_final_view_traversal() {
         template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
         string_table: &mut string_table,
         template_ir_store: Rc::clone(&template_ir_store),
-        template_ir_registry: Rc::new(RefCell::new(registry)),
     };
 
     let result = normalize_expression_templates(&mut expression, &mut context);

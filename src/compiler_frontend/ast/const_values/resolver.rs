@@ -7,7 +7,6 @@
 
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::sync::Arc;
 
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::const_eval::constant_fold;
@@ -23,7 +22,7 @@ use crate::compiler_frontend::ast::templates::error::TemplateError;
 use crate::compiler_frontend::ast::templates::template::Template;
 use crate::compiler_frontend::ast::templates::template::TemplateConstValueKind;
 use crate::compiler_frontend::ast::templates::tir::{
-    TemplateIrRegistry, TemplateTirPhase, TirTemplateClassification, TirView,
+    TemplateIrStore, TemplateTirPhase, TirTemplateClassification, TirView,
     classify_effective_tir_view_template,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
@@ -115,24 +114,24 @@ impl Eq for ConstResolutionError {}
 /// whether they are compile-time constants.
 pub struct ConstValueResolver<'a> {
     string_table: &'a mut StringTable,
-    template_ir_registry: Rc<RefCell<TemplateIrRegistry>>,
+    template_ir_store: Rc<RefCell<TemplateIrStore>>,
 }
 
 impl<'a> ConstValueResolver<'a> {
-    /// Creates a resolver backed by the module TIR registry.
+    /// Creates a resolver backed by the module TIR store.
     ///
-    /// WHAT: the caller supplies the finalization registry so each template is
-    ///       classified through its exact store-qualified effective TIR view.
-    /// WHY: const-fact collection runs after template normalization and must not
-    ///      reconstruct compatibility content in the primary store, especially
-    ///      for overlays or references owned by another registered store.
+    /// WHAT: the caller supplies the module store so each template is
+    ///       classified through its exact effective TIR view.
+    /// WHY: const-fact collection runs after template normalization and must
+    ///      classify each template through its exact module-local view, including
+    ///      its overlay identity.
     pub fn new(
         string_table: &'a mut StringTable,
-        template_ir_registry: Rc<RefCell<TemplateIrRegistry>>,
+        template_ir_store: Rc<RefCell<TemplateIrStore>>,
     ) -> Self {
         Self {
             string_table,
-            template_ir_registry,
+            template_ir_store,
         }
     }
 
@@ -349,41 +348,38 @@ impl<'a> ConstValueResolver<'a> {
         &mut self,
         expression: &Expression,
     ) -> Result<ConstValueKind, ConstResolutionError> {
-        let registry = Rc::clone(&self.template_ir_registry);
-        let string_table = &*self.string_table;
+        let store = Rc::clone(&self.template_ir_store);
 
         expression
             .const_value_kind_with_template_classifier(&mut |template| {
-                classify_template_from_effective_tir(template, &registry, string_table)
+                classify_template_from_effective_tir(template, &store)
             })
             .map_err(ConstResolutionError::from)
     }
 }
 
-/// Classifies one template through its registry-qualified effective TIR view.
+/// Classifies one template through its module-local effective TIR view.
 ///
-/// WHAT: validates the reference, phase and store-owner token before using the
-///       existing effective-view classifier on the owning registry store.
+/// WHAT: validates the module-local reference, phase and overlay identity before
+///       using the existing effective-view classifier on the shared module store.
 /// WHY: AST const consumers run after composition, so missing or pre-Composed
 ///      identity is a broken phase invariant rather than permission to recover
-///      semantics from the compatibility content mirror.
+///      semantics outside the exact module-local view.
 pub(crate) fn classify_template_from_effective_tir(
     template: &Template,
-    registry: &Rc<RefCell<TemplateIrRegistry>>,
-    string_table: &StringTable,
+    store: &Rc<RefCell<TemplateIrStore>>,
 ) -> Result<TemplateConstValueKind, TemplateError> {
-    Ok(classify_template_effective_tir(template, registry, string_table)?.const_value_kind)
+    Ok(classify_template_effective_tir(template, store)?.const_value_kind)
 }
 
-/// Returns the full classification for one registry-qualified template view.
+/// Returns the full classification for one module-local template view.
 ///
 /// WHAT: exposes structural slot and insert facts alongside the const-value kind.
 /// WHY: parser-side folding must retain an unfilled wrapper template even though
 ///      final fold boundaries render its missing slots as empty output.
 pub(crate) fn classify_template_effective_tir(
     template: &Template,
-    registry: &Rc<RefCell<TemplateIrRegistry>>,
-    string_table: &StringTable,
+    store: &Rc<RefCell<TemplateIrStore>>,
 ) -> Result<TirTemplateClassification, TemplateError> {
     let reference = &template.tir_reference;
 
@@ -395,34 +391,13 @@ pub(crate) fn classify_template_effective_tir(
         .into());
     }
 
-    let registry = registry.borrow();
-    let store_handle = registry
-        .store_handle(reference.root.store_id)
-        .ok_or_else(|| {
-            CompilerError::compiler_error(format!(
-                "AST const template root {} refers to a missing registry store.",
-                reference.root
-            ))
-        })?;
-
-    {
-        let store = store_handle.borrow();
-        if !Arc::ptr_eq(&reference.store_owner, &store.owner()) {
-            return Err(CompilerError::compiler_error(format!(
-                "AST const template root {} does not match its registry store owner.",
-                reference.root
-            ))
-            .into());
-        }
-    }
-
+    let store = store.borrow();
     let view = TirView::with_minimum_phase(
-        &registry,
+        &store,
         reference.root,
         reference.phase,
         TemplateTirPhase::Composed,
         reference.overlay_set_id,
     )?;
-    let store = store_handle.borrow();
-    classify_effective_tir_view_template(&view, &store, string_table)
+    classify_effective_tir_view_template(&view, &store)
 }

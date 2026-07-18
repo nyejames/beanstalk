@@ -14,7 +14,7 @@ use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, expression_value_shape_for_type_id,
 };
 use crate::compiler_frontend::ast::expressions::expression_types::ConstRecordState;
-use crate::compiler_frontend::ast::templates::tir::TemplateIrRegistry;
+use crate::compiler_frontend::ast::templates::tir::TemplateIrStore;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, InvalidFieldAccessReason};
@@ -58,8 +58,7 @@ struct FieldMemberResolution<'a> {
     type_environment: &'a TypeEnvironment,
     resolved_struct_fields_by_path: Option<&'a FxHashMap<InternedPath, Vec<Declaration>>>,
     receiver_is_const_record: bool,
-    template_ir_registry: Option<&'a Rc<RefCell<TemplateIrRegistry>>>,
-    string_table: &'a StringTable,
+    template_ir_store: Option<&'a Rc<RefCell<TemplateIrStore>>>,
 }
 
 // --------------------------
@@ -90,12 +89,11 @@ fn const_field_value<'a>(
 
 fn expression_is_compile_time_constant(
     expression: &Expression,
-    template_ir_registry: &Rc<RefCell<TemplateIrRegistry>>,
-    string_table: &StringTable,
+    template_ir_store: &Rc<RefCell<TemplateIrStore>>,
 ) -> Result<bool, ExpressionParseError> {
     Ok(expression
         .const_value_kind_with_template_classifier(&mut |template| {
-            classify_template_from_effective_tir(template, template_ir_registry, string_table)
+            classify_template_from_effective_tir(template, template_ir_store)
         })?
         .is_compile_time_value())
 }
@@ -106,15 +104,11 @@ fn const_inline_field_value(
     field_name: StringId,
     type_environment: &TypeEnvironment,
     resolved_struct_fields_by_path: Option<&FxHashMap<InternedPath, Vec<Declaration>>>,
-    template_ir_registry: &Rc<RefCell<TemplateIrRegistry>>,
-    string_table: &StringTable,
+    template_ir_store: &Rc<RefCell<TemplateIrStore>>,
 ) -> Result<Option<Expression>, ExpressionParseError> {
-    if let Some(field_value) = const_inline_field_value_from_receiver(
-        receiver_node,
-        field_name,
-        template_ir_registry,
-        string_table,
-    )? {
+    if let Some(field_value) =
+        const_inline_field_value_from_receiver(receiver_node, field_name, template_ir_store)?
+    {
         return Ok(Some(field_value));
     }
 
@@ -129,7 +123,7 @@ fn const_inline_field_value(
         return Ok(None);
     };
 
-    if !expression_is_compile_time_constant(field_value, template_ir_registry, string_table)? {
+    if !expression_is_compile_time_constant(field_value, template_ir_store)? {
         return Ok(None);
     }
 
@@ -141,8 +135,7 @@ fn const_inline_field_value(
 fn const_inline_field_value_from_receiver(
     receiver_node: &AstNode,
     field_name: StringId,
-    template_ir_registry: &Rc<RefCell<TemplateIrRegistry>>,
-    string_table: &StringTable,
+    template_ir_store: &Rc<RefCell<TemplateIrStore>>,
 ) -> Result<Option<Expression>, ExpressionParseError> {
     let receiver_value = match &receiver_node.kind {
         NodeKind::ExpressionStatement(expression) => expression,
@@ -162,7 +155,7 @@ fn const_inline_field_value_from_receiver(
     };
     let field_value = field.value.to_owned();
 
-    if !expression_is_compile_time_constant(&field_value, template_ir_registry, string_table)? {
+    if !expression_is_compile_time_constant(&field_value, template_ir_store)? {
         return Ok(None);
     }
 
@@ -181,8 +174,7 @@ fn resolve_field_member(
         type_environment,
         resolved_struct_fields_by_path,
         receiver_is_const_record,
-        template_ir_registry,
-        string_table,
+        template_ir_store,
     } = input;
 
     // Try canonical TypeEnvironment first; fall back to AST-owned struct shells
@@ -209,7 +201,7 @@ fn resolve_field_member(
         resolved_struct_fields_by_path,
     );
 
-    let const_inline_value = if let Some(template_ir_registry) = template_ir_registry {
+    let const_inline_value = if let Some(template_ir_store) = template_ir_store {
         // Const records need full declaration values for field inlining. The
         // TypeEnvironment owns semantic field types, while the resolved struct
         // field side table owns foldable default expressions. Prefer the
@@ -221,8 +213,7 @@ fn resolve_field_member(
             field_name,
             type_environment,
             resolved_struct_fields_by_path,
-            template_ir_registry,
-            string_table,
+            template_ir_store,
         )?
     } else {
         None
@@ -293,7 +284,6 @@ pub(super) fn parse_field_member_access_typed(
     token_stream: &mut FileTokens,
     context: MemberStepContext<'_>,
     type_interner: &mut AstTypeInterner<'_>,
-    string_table: &StringTable,
 ) -> Result<Option<AstNode>, ExpressionParseError> {
     let MemberStepContext {
         receiver_node,
@@ -305,8 +295,8 @@ pub(super) fn parse_field_member_access_typed(
     } = context;
     let receiver_is_const_record = receiver_node.expression_is_const_record_value()?;
     let field = {
-        let template_ir_registry = if scope_context.kind.is_constant_context() {
-            Some(scope_context.registered_template_ir_store.registry())
+        let template_ir_store = if scope_context.kind.is_constant_context() {
+            Some(scope_context.template_ir_store.clone())
         } else {
             None
         };
@@ -318,8 +308,7 @@ pub(super) fn parse_field_member_access_typed(
             type_environment: type_interner.environment(),
             resolved_struct_fields_by_path: scope_context.resolved_struct_fields_by_path.as_deref(),
             receiver_is_const_record,
-            template_ir_registry,
-            string_table,
+            template_ir_store: template_ir_store.as_ref(),
         })?
     };
 

@@ -611,7 +611,7 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
         // Control-flow children are fully TIR-owned: their body roots carry the
         // branch/loop structure and the child template node is already recorded
         // above through `record_parser_tir_child_template`.
-        let child_template_id = child_template.tir_reference.root.template_id;
+        let child_template_id = child_template.tir_reference.root;
         let has_control_flow_root = {
             let store = construction_context.store();
             store
@@ -711,7 +711,7 @@ fn record_parser_tir_insert_contribution(
     construction_context: &mut TemplateConstructionContext,
     child_template: &Template,
 ) {
-    let child_template_id = child_template.tir_reference.root.template_id;
+    let child_template_id = child_template.tir_reference.root;
 
     construction_context
         .record_insert_contribution(child_template_id, child_template.location.clone());
@@ -799,10 +799,7 @@ fn tir_only_body_construction_context(
     location: &SourceLocation,
     context: &ScopeContext,
 ) -> TemplateConstructionContext {
-    TemplateConstructionContext::new(
-        context.registered_template_ir_store.clone(),
-        location.to_owned(),
-    )
+    TemplateConstructionContext::new(context.template_ir_store.clone(), location.to_owned())
 }
 
 fn body_sentinel_target<'a>(
@@ -836,7 +833,7 @@ fn finalize_tir_body_builder(
 
     let store = construction_context.store();
     let template_ir = store
-        .get_template(tir_reference.root.template_id)
+        .get_template(tir_reference.root)
         .expect("finalized control-flow body template should exist in the TIR store");
     template_ir.root
 }

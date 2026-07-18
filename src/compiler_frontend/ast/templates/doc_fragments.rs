@@ -12,7 +12,7 @@ use crate::compiler_frontend::ast::templates::error::TemplateError;
 use crate::compiler_frontend::ast::templates::template::Template;
 use crate::compiler_frontend::ast::templates::template::{CommentDirectiveKind, TemplateType};
 use crate::compiler_frontend::ast::templates::template_folding::TemplateFoldContext;
-use crate::compiler_frontend::ast::templates::tir::{TemplateIrRegistry, TirFoldCache};
+use crate::compiler_frontend::ast::templates::tir::{TemplateIrStore, TirFoldCache};
 use crate::compiler_frontend::ast::templates::top_level_templates::{
     AstDocFragment, AstDocFragmentKind,
 };
@@ -32,7 +32,7 @@ pub(in crate::compiler_frontend::ast::templates) fn collect_and_strip_comment_te
     path_format_config: &PathStringFormatConfig,
     string_table: &mut StringTable,
     template_const_loop_iteration_limit: usize,
-    template_ir_registry: Option<Rc<RefCell<TemplateIrRegistry>>>,
+    template_ir_store: Rc<RefCell<TemplateIrStore>>,
 ) -> Result<Vec<AstDocFragment>, TemplateError> {
     let mut fragments = Vec::new();
     let mut context = DocFragmentCollectionContext {
@@ -40,7 +40,7 @@ pub(in crate::compiler_frontend::ast::templates) fn collect_and_strip_comment_te
         path_format_config,
         string_table,
         template_const_loop_iteration_limit,
-        template_ir_registry,
+        template_ir_store,
     };
 
     for node in ast_nodes.iter_mut() {
@@ -51,10 +51,9 @@ pub(in crate::compiler_frontend::ast::templates) fn collect_and_strip_comment_te
         let mut retained = Vec::with_capacity(body.len());
 
         for statement in std::mem::take(body) {
-            if let Some(comment_template) = as_top_level_template_comment_declaration(
-                &statement,
-                context.template_ir_registry.as_ref(),
-            ) {
+            if let Some(comment_template) =
+                as_top_level_template_comment_declaration(&statement, &context.template_ir_store)
+            {
                 collect_doc_fragments(comment_template, &mut fragments, &mut context)?;
                 continue;
             }
@@ -80,14 +79,14 @@ pub(in crate::compiler_frontend::ast::templates) fn collect_and_strip_comment_te
 /// Shared state for doc-template extraction.
 ///
 /// WHAT: carries fold services through top-level comment extraction.
-/// WHY: every fold should see the same module registry authority without
+/// WHY: every fold should see the same module-store authority without
 /// growing helper signatures.
 struct DocFragmentCollectionContext<'a, 'strings> {
     project_path_resolver: &'a ProjectPathResolver,
     path_format_config: &'a PathStringFormatConfig,
     string_table: &'strings mut StringTable,
     template_const_loop_iteration_limit: usize,
-    template_ir_registry: Option<Rc<RefCell<TemplateIrRegistry>>>,
+    template_ir_store: Rc<RefCell<TemplateIrStore>>,
 }
 
 // -------------------------
@@ -97,13 +96,12 @@ struct DocFragmentCollectionContext<'a, 'strings> {
 /// Matches a top-level `PushStartRuntimeFragment` node containing a comment
 /// template.
 ///
-/// WHAT: reads the authoritative TIR kind when the registry can resolve the
-///       template, then falls back to the durable boundary cache.
-/// WHY: top-level templates may cross from a foreign TIR store while older
-///      extraction callers do not provide a registry.
+/// WHAT: reads the authoritative TIR kind from the shared module store.
+/// WHY: comment extraction runs after AST emission, when every template value
+///      belongs to that store.
 fn as_top_level_template_comment_declaration<'a>(
     node: &'a AstNode,
-    registry: Option<&Rc<RefCell<TemplateIrRegistry>>>,
+    store: &Rc<RefCell<TemplateIrStore>>,
 ) -> Option<&'a Template> {
     let NodeKind::PushStartRuntimeFragment(expression) = &node.kind else {
         return None;
@@ -113,9 +111,9 @@ fn as_top_level_template_comment_declaration<'a>(
         return None;
     };
 
-    let template_kind = template_kind_at_doc_fragment_boundary(template, registry);
+    let template_kind = template_kind_at_doc_fragment_boundary(template, store);
 
-    matches!(template_kind, TemplateType::Comment(_)).then_some(template.as_ref())
+    matches!(template_kind, Some(TemplateType::Comment(_))).then_some(template.as_ref())
 }
 
 /// Extracts one top-level `$doc` fragment.
@@ -125,11 +123,11 @@ fn collect_doc_fragments(
     context: &mut DocFragmentCollectionContext<'_, '_>,
 ) -> Result<(), TemplateError> {
     let template_kind =
-        template_kind_at_doc_fragment_boundary(template, context.template_ir_registry.as_ref());
+        template_kind_at_doc_fragment_boundary(template, &context.template_ir_store);
 
     if matches!(
         template_kind,
-        TemplateType::Comment(CommentDirectiveKind::Doc)
+        Some(TemplateType::Comment(CommentDirectiveKind::Doc))
     ) {
         let mut fold_context = TemplateFoldContext {
             string_table: context.string_table,
@@ -137,7 +135,7 @@ fn collect_doc_fragments(
             path_format_config: context.path_format_config,
             source_file_scope: &template.location.scope,
             template_const_loop_iteration_limit: context.template_const_loop_iteration_limit,
-            template_ir_registry: context.template_ir_registry.as_ref().map(Rc::clone),
+            template_ir_store: Some(Rc::clone(&context.template_ir_store)),
             bindings: Vec::new(),
             fold_cache: TirFoldCache::new(),
         };
@@ -153,13 +151,10 @@ fn collect_doc_fragments(
     Ok(())
 }
 
-/// Reads a doc-fragment template's kind from TIR when that authority is
-/// reachable, otherwise uses the durable cross-store cache.
+/// Reads a doc-fragment template's kind from the shared module TIR store.
 fn template_kind_at_doc_fragment_boundary(
     template: &Template,
-    registry: Option<&Rc<RefCell<TemplateIrRegistry>>>,
-) -> TemplateType {
-    registry
-        .and_then(|registry| template.tir_kind_via_registry(&registry.borrow()))
-        .unwrap_or_else(|| template.kind.clone())
+    store: &Rc<RefCell<TemplateIrStore>>,
+) -> Option<TemplateType> {
+    template.tir_kind_from_store(&store.borrow())
 }

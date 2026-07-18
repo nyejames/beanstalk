@@ -197,11 +197,7 @@ pub(super) fn parse_struct_constructor_expression(
             } else {
                 value
                     .const_value_kind_with_template_classifier(&mut |template| {
-                        classify_template_from_effective_tir(
-                            template,
-                            context.registered_template_ir_store.registry(),
-                            string_table,
-                        )
+                        classify_template_from_effective_tir(template, &context.template_ir_store)
                     })?
                     .is_compile_time_value()
             };

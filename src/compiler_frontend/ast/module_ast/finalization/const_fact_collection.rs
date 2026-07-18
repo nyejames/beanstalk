@@ -22,7 +22,7 @@ use crate::compiler_frontend::ast::expressions::expression_rpn::{
 use crate::compiler_frontend::ast::expressions::expression_types::FallibleHandling;
 use crate::compiler_frontend::ast::statements::match_patterns::MatchPattern;
 use crate::compiler_frontend::ast::statements::value_production::types::ValueBlock;
-use crate::compiler_frontend::ast::templates::tir::TemplateIrRegistry;
+use crate::compiler_frontend::ast::templates::tir::TemplateIrStore;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 
@@ -36,18 +36,18 @@ pub(super) struct ConstFactCollector<'a> {
 }
 
 impl<'a> ConstFactCollector<'a> {
-    /// Creates a collector backed by the module TIR registry.
+    /// Creates a collector backed by the module TIR store.
     ///
-    /// WHAT: threads the finalization registry from `AstPhaseContext` so template
+    /// WHAT: threads the shared module store from `AstPhaseContext` so template
     ///       const classification reads each exact effective TIR view.
-    /// WHY: store-qualified roots may belong to the primary or a foreign module
-    ///      store, and overlays are registry-owned rather than content-derived.
+    /// WHY: module-local roots and store-owned overlays are the authority for
+    ///      classification rather than reconstructed template structure.
     pub(super) fn new(
         string_table: &'a mut StringTable,
-        template_ir_registry: Rc<RefCell<TemplateIrRegistry>>,
+        template_ir_store: Rc<RefCell<TemplateIrStore>>,
     ) -> Self {
         Self {
-            resolver: ConstValueResolver::new(string_table, template_ir_registry),
+            resolver: ConstValueResolver::new(string_table, template_ir_store),
             facts: AstConstFacts::default(),
             module_explicit_env: ConstValueEnvironment::default(),
         }

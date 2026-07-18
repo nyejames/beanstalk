@@ -4,17 +4,17 @@
 //! behavior, overlay entry allocation, overlay set allocation and canonical
 //! reuse, composition order, and missing-overlay-set rejection.
 //!
-//! WHY: overlay storage is a new registry-owned subsystem. These tests guard the
+//! WHY: overlay storage is a new store-owned subsystem. These tests guard the
 //! invariants later phases depend on: canonical reuse, the "last non-`None`
 //! wins" composition rule, and stable ID/display behavior.
 
 use super::super::ids::{ChildTemplateOccurrenceId, ExpressionSiteId, SlotOccurrenceId};
+use super::super::ids::{TemplateIrId, TemplateWrapperSetId};
 use super::super::overlays::{
     TemplateOverlaySet, TemplateOverlaySetId, TirExpressionOverlay, TirExpressionOverlayId,
     TirSlotResolution, TirSlotResolutionOverlay, TirSlotResolutionOverlayId, TirWrapperContext,
     TirWrapperContextOverlay, TirWrapperContextOverlayId,
 };
-use super::super::refs::{TemplateRef, TemplateStoreId, TemplateWrapperSetRef};
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, ExpressionValueShape,
 };
@@ -45,7 +45,7 @@ fn bool_expression() -> Expression {
         value_shape: ExpressionValueShape::Ordinary,
     }
 }
-use super::super::registry::TemplateIrRegistry;
+use super::super::store::TemplateIrStore;
 
 #[test]
 fn overlay_set_id_round_trips_through_index() {
@@ -119,10 +119,10 @@ fn non_empty_set_reports_not_empty() {
 
 #[test]
 fn allocate_expression_overlay_returns_sequential_ids() {
-    let mut registry = TemplateIrRegistry::new();
+    let mut store = TemplateIrStore::new();
 
-    let a = registry.allocate_expression_overlay(TirExpressionOverlay::default());
-    let b = registry.allocate_expression_overlay(TirExpressionOverlay::default());
+    let a = store.allocate_expression_overlay(TirExpressionOverlay::default());
+    let b = store.allocate_expression_overlay(TirExpressionOverlay::default());
 
     assert_eq!(a.index(), 0);
     assert_eq!(b.index(), 1);
@@ -130,10 +130,10 @@ fn allocate_expression_overlay_returns_sequential_ids() {
 
 #[test]
 fn allocate_slot_resolution_overlay_returns_sequential_ids() {
-    let mut registry = TemplateIrRegistry::new();
+    let mut store = TemplateIrStore::new();
 
-    let a = registry.allocate_slot_resolution_overlay(TirSlotResolutionOverlay::default());
-    let b = registry.allocate_slot_resolution_overlay(TirSlotResolutionOverlay::default());
+    let a = store.allocate_slot_resolution_overlay(TirSlotResolutionOverlay::default());
+    let b = store.allocate_slot_resolution_overlay(TirSlotResolutionOverlay::default());
 
     assert_eq!(a.index(), 0);
     assert_eq!(b.index(), 1);
@@ -141,10 +141,10 @@ fn allocate_slot_resolution_overlay_returns_sequential_ids() {
 
 #[test]
 fn allocate_wrapper_context_overlay_returns_sequential_ids() {
-    let mut registry = TemplateIrRegistry::new();
+    let mut store = TemplateIrStore::new();
 
-    let a = registry.allocate_wrapper_context_overlay(TirWrapperContextOverlay::default());
-    let b = registry.allocate_wrapper_context_overlay(TirWrapperContextOverlay::default());
+    let a = store.allocate_wrapper_context_overlay(TirWrapperContextOverlay::default());
+    let b = store.allocate_wrapper_context_overlay(TirWrapperContextOverlay::default());
 
     assert_eq!(a.index(), 0);
     assert_eq!(b.index(), 1);
@@ -152,10 +152,10 @@ fn allocate_wrapper_context_overlay_returns_sequential_ids() {
 
 #[test]
 fn overlay_entry_lookup_returns_allocated_payload() {
-    let mut registry = TemplateIrRegistry::new();
-    let id = registry.allocate_expression_overlay(TirExpressionOverlay::default());
+    let mut store = TemplateIrStore::new();
+    let id = store.allocate_expression_overlay(TirExpressionOverlay::default());
 
-    let overlay = registry
+    let overlay = store
         .expression_overlay(id)
         .expect("expression overlay should exist");
     assert!(overlay.overrides.is_empty());
@@ -163,20 +163,20 @@ fn overlay_entry_lookup_returns_allocated_payload() {
 
 #[test]
 fn overlay_entry_lookup_returns_none_for_missing_id() {
-    let registry = TemplateIrRegistry::new();
+    let store = TemplateIrStore::new();
 
     assert!(
-        registry
+        store
             .expression_overlay(TirExpressionOverlayId::new(99))
             .is_none()
     );
     assert!(
-        registry
+        store
             .slot_resolution_overlay(TirSlotResolutionOverlayId::new(99))
             .is_none()
     );
     assert!(
-        registry
+        store
             .wrapper_context_overlay(TirWrapperContextOverlayId::new(99))
             .is_none()
     );
@@ -184,11 +184,11 @@ fn overlay_entry_lookup_returns_none_for_missing_id() {
 
 #[test]
 fn allocate_overlay_set_returns_sequential_ids_for_distinct_sets() {
-    let mut registry = TemplateIrRegistry::new();
+    let mut store = TemplateIrStore::new();
 
-    let expression_id = registry.allocate_expression_overlay(TirExpressionOverlay::default());
-    let first = registry.allocate_overlay_set(TemplateOverlaySet::empty());
-    let second = registry.allocate_overlay_set(TemplateOverlaySet {
+    let expression_id = store.allocate_expression_overlay(TirExpressionOverlay::default());
+    let first = store.allocate_overlay_set(TemplateOverlaySet::empty());
+    let second = store.allocate_overlay_set(TemplateOverlaySet {
         expression_overrides: Some(expression_id),
         slot_resolution: None,
         wrapper_context: None,
@@ -196,27 +196,27 @@ fn allocate_overlay_set_returns_sequential_ids_for_distinct_sets() {
 
     assert_eq!(first.index(), 0);
     assert_eq!(second.index(), 1);
-    assert_eq!(registry.overlay_set_count(), 2);
+    assert_eq!(store.overlay_sets.len(), 2);
 }
 
 #[test]
 fn allocate_overlay_set_canonicalizes_empty_sets() {
-    let mut registry = TemplateIrRegistry::new();
+    let mut store = TemplateIrStore::new();
 
-    let first = registry.allocate_overlay_set(TemplateOverlaySet::empty());
-    let second = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let first = store.allocate_overlay_set(TemplateOverlaySet::empty());
+    let second = store.allocate_overlay_set(TemplateOverlaySet::empty());
 
     assert_eq!(first, second);
-    assert_eq!(registry.overlay_set_count(), 1);
+    assert_eq!(store.overlay_sets.len(), 1);
 }
 
 #[test]
 fn allocate_overlay_set_canonicalizes_equivalent_sets() {
-    let mut registry = TemplateIrRegistry::new();
+    let mut store = TemplateIrStore::new();
 
-    let expression_id = registry.allocate_expression_overlay(TirExpressionOverlay::default());
-    let slot_id = registry.allocate_slot_resolution_overlay(TirSlotResolutionOverlay::default());
-    let wrapper_id = registry.allocate_wrapper_context_overlay(TirWrapperContextOverlay::default());
+    let expression_id = store.allocate_expression_overlay(TirExpressionOverlay::default());
+    let slot_id = store.allocate_slot_resolution_overlay(TirSlotResolutionOverlay::default());
+    let wrapper_id = store.allocate_wrapper_context_overlay(TirWrapperContextOverlay::default());
 
     let set = TemplateOverlaySet {
         expression_overrides: Some(expression_id),
@@ -224,49 +224,47 @@ fn allocate_overlay_set_canonicalizes_equivalent_sets() {
         wrapper_context: Some(wrapper_id),
     };
 
-    let first = registry.allocate_overlay_set(set.clone());
-    let second = registry.allocate_overlay_set(set);
+    let first = store.allocate_overlay_set(set.clone());
+    let second = store.allocate_overlay_set(set);
 
     assert_eq!(first, second);
-    assert_eq!(registry.overlay_set_count(), 1);
+    assert_eq!(store.overlay_sets.len(), 2);
 }
 
 #[test]
 fn allocate_overlay_set_does_not_canonicalize_distinct_sets() {
-    let mut registry = TemplateIrRegistry::new();
+    let mut store = TemplateIrStore::new();
 
-    let expression_id = registry.allocate_expression_overlay(TirExpressionOverlay::default());
-    let slot_id = registry.allocate_slot_resolution_overlay(TirSlotResolutionOverlay::default());
+    let expression_id = store.allocate_expression_overlay(TirExpressionOverlay::default());
+    let slot_id = store.allocate_slot_resolution_overlay(TirSlotResolutionOverlay::default());
 
-    let first = registry.allocate_overlay_set(TemplateOverlaySet {
+    let first = store.allocate_overlay_set(TemplateOverlaySet {
         expression_overrides: Some(expression_id),
         slot_resolution: None,
         wrapper_context: None,
     });
-    let second = registry.allocate_overlay_set(TemplateOverlaySet {
+    let second = store.allocate_overlay_set(TemplateOverlaySet {
         expression_overrides: None,
         slot_resolution: Some(slot_id),
         wrapper_context: None,
     });
 
     assert_ne!(first, second);
-    assert_eq!(registry.overlay_set_count(), 2);
+    assert_eq!(store.overlay_sets.len(), 3);
 }
 
 #[test]
 fn overlay_set_lookup_returns_allocated_set() {
-    let mut registry = TemplateIrRegistry::new();
+    let mut store = TemplateIrStore::new();
 
-    let expression_id = registry.allocate_expression_overlay(TirExpressionOverlay::default());
-    let set_id = registry.allocate_overlay_set(TemplateOverlaySet {
+    let expression_id = store.allocate_expression_overlay(TirExpressionOverlay::default());
+    let set_id = store.allocate_overlay_set(TemplateOverlaySet {
         expression_overrides: Some(expression_id),
         slot_resolution: None,
         wrapper_context: None,
     });
 
-    let set = registry
-        .overlay_set(set_id)
-        .expect("overlay set should exist");
+    let set = store.overlay_set(set_id).expect("overlay set should exist");
     assert_eq!(set.expression_overrides, Some(expression_id));
     assert!(set.slot_resolution.is_none());
     assert!(set.wrapper_context.is_none());
@@ -274,37 +272,33 @@ fn overlay_set_lookup_returns_allocated_set() {
 
 #[test]
 fn overlay_set_lookup_returns_none_for_missing_id() {
-    let registry = TemplateIrRegistry::new();
-    assert!(
-        registry
-            .overlay_set(TemplateOverlaySetId::new(99))
-            .is_none()
-    );
+    let store = TemplateIrStore::new();
+    assert!(store.overlay_set(TemplateOverlaySetId::new(99)).is_none());
 }
 
 #[test]
 fn compose_overlay_sets_last_non_none_wins_per_dimension() {
-    let mut registry = TemplateIrRegistry::new();
+    let mut store = TemplateIrStore::new();
 
-    let outer_expression = registry.allocate_expression_overlay(TirExpressionOverlay::default());
-    let inner_expression = registry.allocate_expression_overlay(TirExpressionOverlay::default());
-    let inner_slot = registry.allocate_slot_resolution_overlay(TirSlotResolutionOverlay::default());
+    let outer_expression = store.allocate_expression_overlay(TirExpressionOverlay::default());
+    let inner_expression = store.allocate_expression_overlay(TirExpressionOverlay::default());
+    let inner_slot = store.allocate_slot_resolution_overlay(TirSlotResolutionOverlay::default());
 
-    let outer = registry.allocate_overlay_set(TemplateOverlaySet {
+    let outer = store.allocate_overlay_set(TemplateOverlaySet {
         expression_overrides: Some(outer_expression),
         slot_resolution: None,
         wrapper_context: None,
     });
-    let inner = registry.allocate_overlay_set(TemplateOverlaySet {
+    let inner = store.allocate_overlay_set(TemplateOverlaySet {
         expression_overrides: Some(inner_expression),
         slot_resolution: Some(inner_slot),
         wrapper_context: None,
     });
 
-    let composed = registry
+    let composed = store
         .compose_overlay_sets(&[outer, inner])
         .expect("composition should succeed");
-    let set = registry
+    let set = store
         .overlay_set(composed)
         .expect("composed overlay set should exist");
 
@@ -318,32 +312,32 @@ fn compose_overlay_sets_last_non_none_wins_per_dimension() {
 
 #[test]
 fn compose_overlay_sets_fills_in_none_dimensions_from_later_sets() {
-    let mut registry = TemplateIrRegistry::new();
+    let mut store = TemplateIrStore::new();
 
-    let expression_id = registry.allocate_expression_overlay(TirExpressionOverlay::default());
-    let slot_id = registry.allocate_slot_resolution_overlay(TirSlotResolutionOverlay::default());
-    let wrapper_id = registry.allocate_wrapper_context_overlay(TirWrapperContextOverlay::default());
+    let expression_id = store.allocate_expression_overlay(TirExpressionOverlay::default());
+    let slot_id = store.allocate_slot_resolution_overlay(TirSlotResolutionOverlay::default());
+    let wrapper_id = store.allocate_wrapper_context_overlay(TirWrapperContextOverlay::default());
 
-    let first = registry.allocate_overlay_set(TemplateOverlaySet {
+    let first = store.allocate_overlay_set(TemplateOverlaySet {
         expression_overrides: Some(expression_id),
         slot_resolution: None,
         wrapper_context: None,
     });
-    let second = registry.allocate_overlay_set(TemplateOverlaySet {
+    let second = store.allocate_overlay_set(TemplateOverlaySet {
         expression_overrides: None,
         slot_resolution: Some(slot_id),
         wrapper_context: None,
     });
-    let third = registry.allocate_overlay_set(TemplateOverlaySet {
+    let third = store.allocate_overlay_set(TemplateOverlaySet {
         expression_overrides: None,
         slot_resolution: None,
         wrapper_context: Some(wrapper_id),
     });
 
-    let composed = registry
+    let composed = store
         .compose_overlay_sets(&[first, second, third])
         .expect("composition should succeed");
-    let set = registry
+    let set = store
         .overlay_set(composed)
         .expect("composed overlay set should exist");
 
@@ -354,11 +348,11 @@ fn compose_overlay_sets_fills_in_none_dimensions_from_later_sets() {
 
 #[test]
 fn compose_overlay_sets_canonicalizes_to_existing_equivalent_set() {
-    let mut registry = TemplateIrRegistry::new();
+    let mut store = TemplateIrStore::new();
 
-    let expression_id = registry.allocate_expression_overlay(TirExpressionOverlay::default());
+    let expression_id = store.allocate_expression_overlay(TirExpressionOverlay::default());
 
-    let set_id = registry.allocate_overlay_set(TemplateOverlaySet {
+    let set_id = store.allocate_overlay_set(TemplateOverlaySet {
         expression_overrides: Some(expression_id),
         slot_resolution: None,
         wrapper_context: None,
@@ -366,40 +360,40 @@ fn compose_overlay_sets_canonicalizes_to_existing_equivalent_set() {
 
     // Composing a single set yields an equivalent set, so canonicalization
     // reuses the existing ID instead of allocating a duplicate.
-    let composed = registry
+    let composed = store
         .compose_overlay_sets(&[set_id])
         .expect("composition should succeed");
 
     assert_eq!(composed, set_id);
-    assert_eq!(registry.overlay_set_count(), 1);
+    assert_eq!(store.overlay_sets.len(), 2);
 }
 
 #[test]
 fn compose_overlay_sets_with_empty_input_yields_canonical_empty_set() {
-    let mut registry = TemplateIrRegistry::new();
+    let mut store = TemplateIrStore::new();
 
-    let empty_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
-    let composed = registry
+    let empty_id = store.allocate_overlay_set(TemplateOverlaySet::empty());
+    let composed = store
         .compose_overlay_sets(&[])
         .expect("empty composition should succeed");
 
     assert_eq!(composed, empty_id);
-    assert_eq!(registry.overlay_set_count(), 1);
+    assert_eq!(store.overlay_sets.len(), 1);
 }
 
 #[test]
 fn compose_overlay_sets_rejects_missing_set_ids() {
-    let mut registry = TemplateIrRegistry::new();
+    let mut store = TemplateIrStore::new();
 
-    let expression_id = registry.allocate_expression_overlay(TirExpressionOverlay::default());
-    let real_set = registry.allocate_overlay_set(TemplateOverlaySet {
+    let expression_id = store.allocate_expression_overlay(TirExpressionOverlay::default());
+    let real_set = store.allocate_overlay_set(TemplateOverlaySet {
         expression_overrides: Some(expression_id),
         slot_resolution: None,
         wrapper_context: None,
     });
     let missing_set = TemplateOverlaySetId::new(99);
 
-    let error = registry
+    let error = store
         .compose_overlay_sets(&[missing_set, real_set])
         .expect_err("missing overlay set IDs should be internal errors");
 
@@ -416,10 +410,7 @@ fn compose_overlay_sets_rejects_missing_set_ids() {
 
 #[test]
 fn slot_resolution_carries_source_template_ref() {
-    let source = TemplateRef::new(
-        TemplateStoreId::new(0),
-        super::super::ids::TemplateIrId::new(3),
-    );
+    let source = TemplateIrId::new(3);
     let resolution = TirSlotResolution::resolved(SlotKey::Default, vec![source]);
     assert_eq!(resolution.key, SlotKey::Default);
     assert_eq!(resolution.sources(), &[source]);
@@ -427,14 +418,8 @@ fn slot_resolution_carries_source_template_ref() {
 
 #[test]
 fn slot_resolution_records_multiple_sources_for_replay() {
-    let first = TemplateRef::new(
-        TemplateStoreId::new(0),
-        super::super::ids::TemplateIrId::new(3),
-    );
-    let second = TemplateRef::new(
-        TemplateStoreId::new(0),
-        super::super::ids::TemplateIrId::new(4),
-    );
+    let first = TemplateIrId::new(3);
+    let second = TemplateIrId::new(4);
 
     let resolution = TirSlotResolution::resolved(SlotKey::Positional(2), vec![first, second]);
 
@@ -501,10 +486,7 @@ fn expression_overlay_default_has_no_overrides() {
 
 #[test]
 fn slot_resolution_overlay_lookup_returns_resolution_for_known_occurrence() {
-    let source = TemplateRef::new(
-        TemplateStoreId::new(0),
-        super::super::ids::TemplateIrId::new(1),
-    );
+    let source = TemplateIrId::new(1);
     let overlay = TirSlotResolutionOverlay {
         resolutions: vec![(
             SlotOccurrenceId::new(0),
@@ -530,10 +512,7 @@ fn slot_resolution_overlay_lookup_returns_none_for_unknown_occurrence() {
 
 #[test]
 fn wrapper_context_records_inherited_wrapper_set() {
-    let wrapper_set = TemplateWrapperSetRef::new(
-        TemplateStoreId::new(0),
-        super::super::ids::TemplateWrapperSetId::new(1),
-    );
+    let wrapper_set = TemplateWrapperSetId::new(1);
 
     let context = TirWrapperContext::inherited(wrapper_set);
 

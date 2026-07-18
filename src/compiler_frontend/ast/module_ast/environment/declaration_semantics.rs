@@ -9,13 +9,12 @@ use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::const_values::resolver::classify_template_from_effective_tir;
 use crate::compiler_frontend::ast::module_ast::environment::TopLevelDeclarationTable;
 use crate::compiler_frontend::ast::templates::error::TemplateError;
-use crate::compiler_frontend::ast::templates::tir::TemplateIrRegistry;
+use crate::compiler_frontend::ast::templates::tir::TemplateIrStore;
 use crate::compiler_frontend::ast::type_resolution::ResolvedFunctionSignature;
 use crate::compiler_frontend::datatypes::definitions::TypeDefinition;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
-use crate::compiler_frontend::symbols::string_interning::StringTable;
 use rustc_hash::FxHashMap;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -51,15 +50,14 @@ impl DeclarationSemanticTable {
     /// WHY: the table is built after constant resolution and nominal type
     ///      registration, so only the remaining Constant-vs-Value distinction
     ///      needs expression constness classification. Template-valued
-    ///      declarations use their registry-qualified effective TIR views so
+    ///      declarations use their exact effective TIR views so module-local
     ///      store, phase, and overlay identity remain authoritative.
     pub(crate) fn from_environment(
         declaration_table: &TopLevelDeclarationTable,
         resolved_function_signatures_by_path: &FxHashMap<InternedPath, ResolvedFunctionSignature>,
         nominal_type_ids_by_path: &FxHashMap<InternedPath, TypeId>,
         type_environment: &TypeEnvironment,
-        template_ir_registry: &Rc<RefCell<TemplateIrRegistry>>,
-        string_table: &StringTable,
+        template_ir_store: &Rc<RefCell<TemplateIrStore>>,
     ) -> Result<Self, TemplateError> {
         let mut by_path = FxHashMap::default();
 
@@ -69,8 +67,7 @@ impl DeclarationSemanticTable {
                 resolved_function_signatures_by_path,
                 nominal_type_ids_by_path,
                 type_environment,
-                template_ir_registry,
-                string_table,
+                template_ir_store,
             )?;
             by_path.insert(declaration.id.clone(), kind);
         }
@@ -88,8 +85,7 @@ fn classify_declaration(
     resolved_function_signatures_by_path: &FxHashMap<InternedPath, ResolvedFunctionSignature>,
     nominal_type_ids_by_path: &FxHashMap<InternedPath, TypeId>,
     type_environment: &TypeEnvironment,
-    template_ir_registry: &Rc<RefCell<TemplateIrRegistry>>,
-    string_table: &StringTable,
+    template_ir_store: &Rc<RefCell<TemplateIrStore>>,
 ) -> Result<DeclarationSemanticKind, TemplateError> {
     if resolved_function_signatures_by_path.contains_key(&declaration.id) {
         return Ok(DeclarationSemanticKind::Function);
@@ -106,7 +102,7 @@ fn classify_declaration(
     let value_is_compile_time_constant = declaration
         .value
         .const_value_kind_with_template_classifier(&mut |template| {
-            classify_template_from_effective_tir(template, template_ir_registry, string_table)
+            classify_template_from_effective_tir(template, template_ir_store)
         })?
         .is_compile_time_value();
 

@@ -2,7 +2,6 @@ use super::*;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::templates::template::TemplateSegmentOrigin;
-use crate::compiler_frontend::ast::templates::tir::RegisteredTemplateIrStore;
 use crate::compiler_frontend::ast::templates::tir::TemplateIrNodeKind;
 use crate::compiler_frontend::compiler_messages::{
     DiagnosticPayload, InvalidTemplateDirectiveReason,
@@ -39,7 +38,7 @@ fn fresh_marks_template_to_skip_parent_child_wrappers() {
     assert!(effective_style.skip_parent_child_wrappers);
 
     // No $children directive means no wrapper-context overlay is attached.
-    let registry = context.registered_template_ir_store.registry().borrow();
+    let registry = context.template_ir_store.borrow();
     let overlay_set = registry
         .overlay_set(template.tir_reference.overlay_set_id)
         .expect("overlay set should exist");
@@ -61,7 +60,7 @@ fn children_directive_attaches_wrapper_context_to_direct_child() {
 
     // The $children directive attaches a wrapper-context overlay carrying
     // one inherited wrapper set for the direct child occurrence.
-    let registry = context.registered_template_ir_store.registry().borrow();
+    let registry = context.template_ir_store.borrow();
     let overlay_set = registry
         .overlay_set(template.tir_reference.overlay_set_id)
         .expect("overlay set should exist");
@@ -75,81 +74,6 @@ fn children_directive_attaches_wrapper_context_to_direct_child() {
         wrapper_overlay.contexts.len(),
         1,
         "one child occurrence should carry inherited wrapper context"
-    );
-}
-
-#[test]
-fn children_directive_classifies_foreign_slot_wrapper_from_registry() {
-    let mut string_table = StringTable::new();
-    let mut wrapper_tokens =
-        template_tokens_from_source("[:before[$slot]after]", &mut string_table);
-    let wrapper_context = new_constant_context(wrapper_tokens.src_path.to_owned());
-    let wrapper = Template::new(
-        &mut wrapper_tokens,
-        &wrapper_context,
-        vec![],
-        &mut string_table,
-    )
-    .expect("slot wrapper should parse");
-    let wrapper_reference = wrapper.tir_reference.clone();
-
-    let wrapper_name = string_table.intern("wrapper");
-    let declarations = vec![Declaration {
-        id: wrapper_tokens.src_path.append(wrapper_name),
-        value: Expression::template(wrapper, ValueMode::ImmutableOwned),
-    }];
-
-    let directive_store_id = wrapper_context
-        .registered_template_ir_store
-        .registry()
-        .borrow_mut()
-        .allocate_store();
-    let mut token_stream =
-        template_tokens_from_source("[$children(wrapper): [: child]]", &mut string_table);
-    let context = constant_template_context(&token_stream.src_path, &declarations)
-        .with_registered_template_ir_store(
-            RegisteredTemplateIrStore::from_registry_and_store_id(
-                Rc::clone(wrapper_context.registered_template_ir_store.registry()),
-                directive_store_id,
-            )
-            .expect("directive test store should be registered"),
-        );
-
-    let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
-        .expect("children directive should accept a registry-backed slot wrapper");
-
-    // The wrapper reference is stored in the wrapper-context overlay
-    // attached to the template's TIR reference. Resolve it through the
-    // overlay set and the store wrapper-set side table.
-    let registry = context.registered_template_ir_store.registry().borrow();
-    let overlay_set = registry
-        .overlay_set(template.tir_reference.overlay_set_id)
-        .expect("overlay set should exist");
-    let wrapper_overlay_id = overlay_set
-        .wrapper_context
-        .expect("$children should attach a wrapper-context overlay");
-    let wrapper_overlay = registry
-        .wrapper_context_overlay(wrapper_overlay_id)
-        .expect("wrapper-context overlay should exist");
-    let wrapper_context = &wrapper_overlay.contexts[0].1;
-    let wrapper_set_ref = wrapper_context
-        .inherited_wrapper_set
-        .expect("child occurrence should carry an inherited wrapper set");
-
-    let store = context.registered_template_ir_store.store().borrow();
-    let wrapper_set = store
-        .get_wrapper_set(wrapper_set_ref.wrapper_set_id)
-        .expect("wrapper set should exist in the store");
-    let reference = wrapper_set
-        .wrappers
-        .first()
-        .expect("children directive should record one slot wrapper");
-
-    assert!(reference.phase.is_at_least(TemplateTirPhase::Composed));
-    assert_eq!(reference.root, wrapper_reference.root);
-    assert_ne!(
-        reference.root.store_id,
-        context.registered_template_ir_store.store_id()
     );
 }
 
@@ -185,7 +109,7 @@ fn children_directive_accepts_const_string_reference() {
         .expect("children directive should accept const-folded references");
 
     // Resolve the wrapper reference through the TIR overlay system.
-    let registry = context.registered_template_ir_store.registry().borrow();
+    let registry = context.template_ir_store.borrow();
     let overlay_set = registry
         .overlay_set(template.tir_reference.overlay_set_id)
         .expect("overlay set should exist");
@@ -200,16 +124,16 @@ fn children_directive_accepts_const_string_reference() {
         .inherited_wrapper_set
         .expect("child occurrence should carry an inherited wrapper set");
 
-    let store = context.registered_template_ir_store.store().borrow();
+    let store = context.template_ir_store.borrow();
     let wrapper_set = store
-        .get_wrapper_set(wrapper_set_ref.wrapper_set_id)
+        .get_wrapper_set(wrapper_set_ref)
         .expect("wrapper set should exist in the store");
     let wrapper_reference = wrapper_set
         .wrappers
         .first()
         .expect("children directive should record one wrapper");
 
-    let wrapper_id = wrapper_reference.root.template_id;
+    let wrapper_id = wrapper_reference.root;
     let wrapper_tir = store
         .get_template(wrapper_id)
         .expect("normalized string wrapper TIR should exist in the module store");

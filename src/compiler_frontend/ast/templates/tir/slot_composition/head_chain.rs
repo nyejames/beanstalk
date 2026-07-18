@@ -16,16 +16,11 @@ use crate::compiler_frontend::ast::templates::template::{TemplateSegmentOrigin, 
 use crate::compiler_frontend::ast::templates::template_slots::{
     materialize_tir_native_runtime_slot_plan, tir_contributions_need_runtime,
 };
-use crate::compiler_frontend::ast::templates::tir::node::TirSlotPlaceholder;
-use crate::compiler_frontend::ast::templates::tir::overlays::{
-    TemplateOverlaySet, TemplateOverlaySetId, TirSlotResolutionOverlay,
-};
+use crate::compiler_frontend::ast::templates::tir::overlays::TemplateOverlaySetId;
 use crate::compiler_frontend::ast::templates::tir::refs::TemplateTirChildReference;
-use crate::compiler_frontend::ast::templates::tir::registry::TemplateIrRegistry;
 use crate::compiler_frontend::ast::templates::tir::view::TemplateTirPhase;
 use crate::compiler_frontend::ast::templates::tir::{
     TemplateIrId, TemplateIrNode, TemplateIrNodeId, TemplateIrNodeKind, TemplateIrStore,
-    TemplateStoreId,
 };
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -33,30 +28,22 @@ use crate::compiler_frontend::symbols::string_interning::StringTable;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use super::contributions::route_tir_fill_against_schema;
 use super::helpers::{
     ComposedTirRoot, SlotResolutionComposition, build_composed_wrapper_template,
     build_tir_fill_template, children_of_node, internal_compiler_error, rebuild_root_sequence,
-    root_node_id_for_template,
 };
-use super::overlays::{
-    allocate_slot_resolution_overlay_set, build_slot_resolution_entries,
-    merge_tir_slot_resolution_overlay_sets,
-};
-use super::schema::{
-    collect_tir_slot_placeholders_in_order, collect_tir_slot_schema,
-    expand_tir_slot_placeholders_into,
-};
+use super::overlays::allocate_slot_resolution_overlay_set;
+use super::schema::{collect_tir_slot_schema, expand_tir_slot_placeholders_into};
 
 /// Boxed diagnostic result for the TIR head-chain composition family.
 type HeadChainResult<T> = Result<T, Box<CompilerDiagnostic>>;
 
 /// Bundles the shared state threaded through recursive chain resolution.
 ///
-/// WHAT: carries the string table, accumulated slot compositions, the
-///       runtime-plan flag, and optional registry access so recursive
-///       `resolve_tir_chain_items` / `resolve_tir_chain_layer` calls stay
-///       readable without a long argument list.
+/// WHAT: carries the string table, accumulated slot compositions, and the
+///       runtime-plan flag so recursive `resolve_tir_chain_items` /
+///       `resolve_tir_chain_layer` calls stay readable without a long argument
+///       list.
 /// WHY: the same four values are passed unchanged through every recursion
 ///      level. Grouping them in one struct keeps the recursive call sites
 ///      short and makes it obvious that nested layers inherit the caller's
@@ -65,7 +52,6 @@ struct HeadChainResolutionInputs<'a> {
     string_table: &'a StringTable,
     slot_compositions: &'a mut Vec<SlotResolutionComposition>,
     allow_runtime_plans: bool,
-    registry: &'a Option<Rc<RefCell<TemplateIrRegistry>>>,
 }
 
 /// A layer in the TIR head-chain: a wrapper template and the items that should
@@ -126,12 +112,10 @@ pub(crate) fn compose_tir_head_chain(
     allow_runtime_plans: bool,
 ) -> HeadChainResult<TemplateIrNodeId> {
     let mut slot_compositions = Vec::new();
-    let registry = None;
     let mut inputs = HeadChainResolutionInputs {
         string_table,
         slot_compositions: &mut slot_compositions,
         allow_runtime_plans,
-        registry: &registry,
     };
     compose_tir_head_chain_into(store, template_id, &mut inputs)
 }
@@ -139,7 +123,7 @@ pub(crate) fn compose_tir_head_chain(
 /// Internal head-chain composition that also collects slot-bearing wrapper/fill
 /// pairs into `slot_compositions` for later overlay allocation.
 ///
-/// WHY: the registry-level entry point (`compose_tir_head_chain_with_overlays`)
+/// WHY: the slot-composition entry point (`compose_tir_head_chain_with_overlays`)
 ///      needs the pairs to allocate slot-resolution overlays after the store
 ///      borrow is released. The public `compose_tir_head_chain` discards them.
 fn compose_tir_head_chain_into(
@@ -172,14 +156,13 @@ fn compose_tir_head_chain_into(
     // the original root is unchanged and we can avoid allocating the head/body
     // partition vectors. This matters because many templates contain head
     // references (e.g. function calls) that are not slot-bearing wrappers.
-    if !has_tir_head_chain_receiver(store, root_children, inputs.registry)? {
+    if !has_tir_head_chain_receiver(store, root_children)? {
         return Ok(root_node_id);
     }
 
     let (head_children, body_children) = partition_tir_children_by_origin(store, root_children)?;
 
-    let (root_items, layers) =
-        build_tir_chain_graph(store, &head_children, &body_children, inputs.registry)?;
+    let (root_items, layers) = build_tir_chain_graph(store, &head_children, &body_children)?;
 
     let resolved_root_children = resolve_tir_chain_items(store, &root_items, &layers, inputs)?;
     let original_root_children = children_of_node(store, root_node_id)?;
@@ -194,51 +177,38 @@ fn compose_tir_head_chain_into(
     rebuild_root_sequence(store, root_node_id, resolved_root_children)
 }
 
-/// Composes the TIR head chain on a registry-owned store and threads a
+/// Composes the TIR head chain on the shared module-local store and threads a
 /// non-empty slot-resolution overlay-set ID onto the result when the
 /// composition resolved one or more slot-bearing wrappers.
 ///
 /// WHAT: runs the existing store-local structural head-chain composition
 ///       (unchanged behavior), collects slot-bearing wrapper/fill pairs, then
-///       releases the store borrow and allocates the overlay set through the
-///       registry. The store handle is cloned from the registry so the
-///       structural borrow is independent of the registry's internal `RefCell`,
-///       letting the overlay phase re-borrow the same store through the
-///       registry without conflict.
+///       releases the mutable store borrow before allocating the overlay set
+///       through the same shared store handle.
 /// WHY: production composition call sites need both the composed root for
 ///      structural expansion and the overlay-set ID for `TemplateTirReference`
 ///      threading. Keeping the orchestration in the slot-composition owner
 ///      avoids ad hoc overlay construction at call sites.
 pub(crate) fn compose_tir_head_chain_with_overlays(
-    registry: &Rc<RefCell<TemplateIrRegistry>>,
-    store_id: TemplateStoreId,
+    store_handle: &Rc<RefCell<TemplateIrStore>>,
     template_id: TemplateIrId,
     string_table: &StringTable,
     allow_runtime_plans: bool,
 ) -> HeadChainResult<ComposedTirRoot> {
     let (composed_root, slot_compositions) = {
-        let store_handle = registry.borrow().store_handle(store_id).ok_or_else(|| {
-            internal_compiler_error(
-                "TIR head-chain overlay composition: store ID was not present in the registry.",
-            )
-        })?;
-
         let mut store = store_handle.borrow_mut();
         let mut slot_compositions = Vec::new();
-        let registry_ref = Some(Rc::clone(registry));
         let mut inputs = HeadChainResolutionInputs {
             string_table,
             slot_compositions: &mut slot_compositions,
             allow_runtime_plans,
-            registry: &registry_ref,
         };
         let composed_root = compose_tir_head_chain_into(&mut store, template_id, &mut inputs)?;
         (composed_root, slot_compositions)
     };
 
     let slot_overlay_set_id = allocate_slot_resolution_overlay_set(
-        &mut registry.borrow_mut(),
-        store_id,
+        &mut store_handle.borrow_mut(),
         &slot_compositions,
         string_table,
     )?;
@@ -284,7 +254,6 @@ pub(super) fn root_sequence_children(
 fn has_tir_head_chain_receiver(
     store: &TemplateIrStore,
     children: &[TemplateIrNodeId],
-    registry: &Option<Rc<RefCell<TemplateIrRegistry>>>,
 ) -> HeadChainResult<bool> {
     let mut saw_body_origin = false;
 
@@ -312,7 +281,7 @@ fn has_tir_head_chain_receiver(
         }
 
         if matches!(child_node.kind, TemplateIrNodeKind::ChildTemplate { .. })
-            && is_tir_receiver(store, *child_id, registry)?.is_some()
+            && is_tir_receiver(store, *child_id)?.is_some()
         {
             return Ok(true);
         }
@@ -382,7 +351,6 @@ fn partition_tir_children_by_origin(
 fn is_tir_receiver(
     store: &TemplateIrStore,
     node_id: TemplateIrNodeId,
-    registry: &Option<Rc<RefCell<TemplateIrRegistry>>>,
 ) -> HeadChainResult<Option<TemplateTirChildReference>> {
     let Some(node) = store.get_node(node_id) else {
         return Err(Box::new(internal_compiler_error(
@@ -394,61 +362,9 @@ fn is_tir_receiver(
         return Ok(None);
     };
 
-    // Same-store fast path: read the referenced template directly from the
-    // composition store. This covers the vast majority of head-origin child
-    // references and avoids a registry borrow.
-    if let Some(template_id) = reference.template_id_in_store(store.store_id()) {
-        let Some(template_ir) = store.get_template(template_id) else {
-            return Err(Box::new(internal_compiler_error(
-                "TIR head-chain composition: child template ID was not present in the store.",
-            )));
-        };
-
-        // Slot helpers are not receivers: they carry contribution content for an
-        // immediate parent wrapper and must not open their own layers.
-        if matches!(
-            template_ir.kind,
-            TemplateType::SlotInsert(_) | TemplateType::SlotDefinition(_)
-        ) {
-            return Ok(None);
-        }
-
-        // A child template is a receiver when its TIR tree declares any slot
-        // placeholder, including slots nested inside child templates, branch
-        // chains, or loops. The cheap `slot_count` summary only counts direct
-        // slots, so the schema walk is required to catch wrappers whose slots
-        // are not immediate children of the root.
-        let schema = collect_tir_slot_schema(store, template_id)?;
-
-        return Ok(if schema.has_any_slots() {
-            Some(*reference)
-        } else {
-            None
-        });
-    }
-
-    // Cross-store wrapper: read the referenced template from its owning store
-    // through the registry so foreign slot-bearing wrappers are recognized as
-    // receivers without interpreting foreign IDs in the composition store.
-    let Some(registry) = registry else {
+    let Some(template_ir) = store.get_template(reference.root) else {
         return Err(Box::new(internal_compiler_error(
-            "TIR head-chain composition: cross-store child template reference requires a registry, but none is available.",
-        )));
-    };
-
-    let registry_borrow = registry.borrow();
-    let foreign_store_handle = registry_borrow
-        .store_handle(reference.root.store_id)
-        .ok_or_else(|| {
-            internal_compiler_error(
-                "TIR head-chain composition: cross-store child template store was not present in the registry.",
-            )
-        })?;
-    let foreign_store = foreign_store_handle.borrow();
-
-    let Some(template_ir) = foreign_store.get_template(reference.root.template_id) else {
-        return Err(Box::new(internal_compiler_error(
-            "TIR head-chain composition: cross-store child template ID was not present in its owning store.",
+            "TIR head-chain composition: child template ID was not present in the store.",
         )));
     };
 
@@ -459,7 +375,7 @@ fn is_tir_receiver(
         return Ok(None);
     }
 
-    let schema = collect_tir_slot_schema(&foreign_store, reference.root.template_id)?;
+    let schema = collect_tir_slot_schema(store, reference.root)?;
 
     Ok(if schema.has_any_slots() {
         Some(*reference)
@@ -480,14 +396,13 @@ fn build_tir_chain_graph(
     store: &TemplateIrStore,
     head_children: &[TemplateIrNodeId],
     body_children: &[TemplateIrNodeId],
-    registry: &Option<Rc<RefCell<TemplateIrRegistry>>>,
 ) -> HeadChainResult<(Vec<TirChainItem>, Vec<TirChainLayer>)> {
     let mut root_items = Vec::new();
     let mut layers = Vec::new();
     let mut active_layer: Option<usize> = None;
 
     for child_id in head_children {
-        if let Some(wrapper_reference) = is_tir_receiver(store, *child_id, registry)? {
+        if let Some(wrapper_reference) = is_tir_receiver(store, *child_id)? {
             let layer_index = layers.len();
 
             push_tir_chain_item(
@@ -607,31 +522,8 @@ fn resolve_tir_chain_layer(
         return Ok(original_node_id);
     }
 
-    // Cross-store wrapper: resolve through the overlay-only path. The wrapper
-    // tree stays in its owning (foreign) store; fill nodes and the composed
-    // ChildTemplate node stay in the composition store. A slot-resolution
-    // overlay is allocated on the registry and attached to the composed
-    // ChildTemplate reference so the fold path resolves slots in the wrapper's
-    // view context.
-    if layer.wrapper_reference.root.store_id != store.store_id() {
-        return resolve_cross_store_tir_chain_layer(
-            store,
-            layer_index,
-            layers,
-            original_node_id,
-            inputs,
-        );
-    }
-
     // Same-store wrapper: structural expansion path (existing behavior).
-    let wrapper_template_id = layer
-        .wrapper_reference
-        .template_id_in_store(store.store_id())
-        .ok_or_else(|| {
-            internal_compiler_error(
-                "TIR head-chain composition: effective wrapper reference is not in the current store while resolving a layer.",
-            )
-        })?;
+    let wrapper_template_id = layer.wrapper_reference.root;
 
     let resolved_fill_node_ids = resolve_tir_chain_items(store, &layer.fill_items, layers, inputs)?;
 
@@ -693,11 +585,9 @@ fn resolve_tir_chain_layer(
         build_composed_wrapper_template(store, wrapper_template_id, expanded_root)?
     };
 
-    // Record the wrapper/fill pair so the registry-level entry point can
-    // allocate a slot-resolution overlay after the store borrow is released.
-    // The fill template persists in the store, so the overlay path can
-    // re-route against it without re-discovering the chain graph.
-    let fill_reference = store.qualify_template_ref(fill_template_id);
+    // Record the wrapper/fill pair so the shared-store entry point can allocate
+    // a slot-resolution overlay after the structural borrow is released.
+    let fill_reference = fill_template_id;
     inputs
         .slot_compositions
         .push(SlotResolutionComposition::new(
@@ -714,168 +604,14 @@ fn resolve_tir_chain_layer(
     let original_location = original_node.location.to_owned();
 
     let occurrence_id = store.next_child_template_occurrence_id();
-    let reference = TemplateTirChildReference::same_store(
+    let reference = TemplateTirChildReference::new(
         composed_template_id,
-        store.store_id(),
         TemplateTirPhase::Parsed,
         TemplateOverlaySetId::empty(),
     );
     Ok(store.push_node(TemplateIrNode::new(
         TemplateIrNodeKind::ChildTemplate {
             reference,
-            occurrence_id,
-        },
-        original_location,
-    )))
-}
-
-/// Resolves a cross-store chain layer using the overlay-only path.
-///
-/// WHAT: when the head-origin wrapper template lives in a foreign store, the
-///       wrapper tree is not copied into the composition store. Instead, fill
-///       content is routed against the foreign wrapper's slot schema, a
-///       slot-resolution overlay is allocated on the registry, and the composed
-///       `ChildTemplate` node carries the foreign wrapper reference plus the
-///       overlay set. The fold path resolves slots in the wrapper's view
-///       context through this overlay.
-///
-/// WHY: "do not eagerly clone/copy the foreign wrapper tree" means structural
-///      expansion (which reads and pushes nodes in one store) cannot work
-///      cross-store. The overlay path records slot-to-fill mappings as data so
-///      `TirView` can resolve slots without structural mutation. This keeps
-///      fill nodes and derived nodes in the composition store while preserving
-///      the wrapper's root, phase, and overlay identity.
-fn resolve_cross_store_tir_chain_layer(
-    store: &mut TemplateIrStore,
-    layer_index: usize,
-    layers: &[TirChainLayer],
-    original_node_id: TemplateIrNodeId,
-    inputs: &mut HeadChainResolutionInputs,
-) -> HeadChainResult<TemplateIrNodeId> {
-    let layer = &layers[layer_index];
-    let Some(registry) = inputs.registry else {
-        return Err(Box::new(internal_compiler_error(
-            "TIR head-chain composition: cross-store wrapper reference requires a registry, but none is available.",
-        )));
-    };
-
-    // Resolve fill items recursively, threading the caller's real
-    // `slot_compositions` and `allow_runtime_plans` so nested same-store and
-    // cross-store layers inherit the same composition state as the parent.
-    let resolved_fill_node_ids = resolve_tir_chain_items(store, &layer.fill_items, layers, inputs)?;
-
-    // Build a fill template in the composition store from the resolved items.
-    let fill_template_id =
-        build_tir_fill_template(store, resolved_fill_node_ids, original_node_id)?;
-
-    // Read the wrapper's slot schema from its owning (foreign) store. The
-    // immutable registry borrow is released before any mutable registry borrow
-    // so the two never overlap.
-    let wrapper_store_id = layer.wrapper_reference.root.store_id;
-    let wrapper_template_id = layer.wrapper_reference.root.template_id;
-
-    let schema = {
-        let registry_borrow = registry.borrow();
-        let foreign_store_handle = registry_borrow
-            .store_handle(wrapper_store_id)
-            .ok_or_else(|| {
-                internal_compiler_error(
-                    "TIR head-chain composition: cross-store wrapper store was not present in the registry.",
-                )
-            })?;
-        let foreign_store = foreign_store_handle.borrow();
-        collect_tir_slot_schema(&foreign_store, wrapper_template_id)?
-    };
-
-    if !schema.has_any_slots() {
-        return Err(Box::new(internal_compiler_error(
-            "TIR head-chain composition: cross-store wrapper has no declared slots, so it should not have been identified as a receiver.",
-        )));
-    }
-
-    // Route fill content from the composition store against the foreign schema.
-    // This shares one fill-walking owner with the same-store path, so
-    // slot/insert traversal is not duplicated.
-    let routed =
-        route_tir_fill_against_schema(store, &schema, fill_template_id, inputs.string_table)?;
-
-    // Read slot placeholders from the foreign wrapper's tree so the overlay
-    // carries the wrapper's own occurrence IDs. The fill source templates are
-    // built in the composition store.
-    let placeholders: Vec<TirSlotPlaceholder> = {
-        let registry_borrow = registry.borrow();
-        let foreign_store_handle = registry_borrow
-            .store_handle(wrapper_store_id)
-            .ok_or_else(|| {
-                internal_compiler_error(
-                    "TIR head-chain composition: cross-store wrapper store was not present in the registry.",
-                )
-            })?;
-        let foreign_store = foreign_store_handle.borrow();
-        let root_node_id = root_node_id_for_template(&foreign_store, wrapper_template_id)?;
-        collect_tir_slot_placeholders_in_order(&foreign_store, root_node_id)?
-    };
-
-    let resolutions = build_slot_resolution_entries(store, placeholders, &routed)?;
-    let overlay = TirSlotResolutionOverlay { resolutions };
-
-    // Check whether the wrapper carries pre-existing overlay dimensions
-    // (expression overrides, wrapper context) that must survive composition.
-    // The immutable registry borrow is released before the mutable borrow for
-    // overlay allocation so the two never overlap.
-    let wrapper_overlay_set_id = layer.wrapper_reference.overlay_set_id;
-    let has_existing_overlays = {
-        let registry_borrow = registry.borrow();
-        registry_borrow
-            .overlay_set(wrapper_overlay_set_id)
-            .is_some_and(|set| !set.is_empty())
-    };
-
-    // Allocate the slot-resolution overlay and compose it with the wrapper's
-    // pre-existing overlay set. When the wrapper had no pre-existing overlays,
-    // the slot-only set is already complete. Otherwise, merge preserves
-    // expression overrides and wrapper context while adding slot resolution.
-    let overlay_set_id = {
-        let mut registry_borrow = registry.borrow_mut();
-        let slot_overlay_id = registry_borrow.allocate_slot_resolution_overlay(overlay);
-        let slot_only_set_id = registry_borrow.allocate_overlay_set(TemplateOverlaySet {
-            expression_overrides: None,
-            slot_resolution: Some(slot_overlay_id),
-            wrapper_context: None,
-        });
-
-        if has_existing_overlays {
-            merge_tir_slot_resolution_overlay_sets(
-                &mut registry_borrow,
-                wrapper_overlay_set_id,
-                slot_only_set_id,
-            )?
-        } else {
-            slot_only_set_id
-        }
-    };
-
-    // Create a composed ChildTemplate node that carries the foreign wrapper
-    // reference with the merged overlay set. The fold path will resolve slots
-    // through this overlay in the wrapper's view context while expression
-    // overrides and wrapper context from the original wrapper survive.
-    let original_node = store.get_node(original_node_id).ok_or_else(|| {
-        internal_compiler_error(
-            "TIR head-chain composition: original wrapper node ID was not present in the store.",
-        )
-    })?;
-
-    let original_location = original_node.location.to_owned();
-    let occurrence_id = store.next_child_template_occurrence_id();
-    let composed_reference = TemplateTirChildReference::new(
-        layer.wrapper_reference.root,
-        layer.wrapper_reference.phase,
-        overlay_set_id,
-    );
-
-    Ok(store.push_node(TemplateIrNode::new(
-        TemplateIrNodeKind::ChildTemplate {
-            reference: composed_reference,
             occurrence_id,
         },
         original_location,

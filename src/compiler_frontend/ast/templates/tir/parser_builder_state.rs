@@ -27,66 +27,10 @@ use super::builder::TemplateIrBuilder;
 use super::ids::{TemplateIrId, TemplateIrNodeId};
 use super::node::{TemplateIrBranch, TemplateIrNodeKind};
 use super::overlays::TemplateOverlaySetId;
-use super::refs::{TemplateRef, TemplateStoreId, TemplateTirChildReference};
-use super::store::{TemplateIrStore, TemplateIrStoreOwner};
+use super::refs::{TemplateTirChildReference, TemplateTirReference};
+use super::store::TemplateIrStore;
 use super::summary::TemplateIrSummary;
 use super::view::TemplateTirPhase;
-use std::sync::Arc;
-
-// -------------------------
-//  Finalized Parser-TIR Reference
-// -------------------------
-
-/// Long-lived reference to a finalized parser-emitted TIR template.
-///
-/// WHAT: holds the store-qualified root allocated when a parser builder finishes,
-///       plus the owner token needed to prove same-store origin.
-/// WHY: after parsing, the in-progress `TemplateParserIrBuilderState` is
-///      discarded. This narrow reference keeps the registry-resolvable identity
-///      without carrying builder-local children or summary state. The owner token
-///      remains necessary because `TemplateStoreId` is registry-local: direct-store
-///      consumers must reject a reference from another registry at the same index
-///      before using its `TemplateIrId` against the current store.
-#[derive(Clone, Debug)]
-pub(crate) struct TemplateTirReference {
-    pub(crate) root: TemplateRef,
-    pub(crate) store_owner: Arc<TemplateIrStoreOwner>,
-
-    /// Pipeline phase represented by this root reference.
-    ///
-    /// WHAT: records whether the referenced root is raw parser output,
-    ///       TIR-composed, TIR-formatted, or later finalized output.
-    /// WHY: render-unit formatting and later passes need to distinguish raw
-    ///      parser output from formatter-derived and finalized roots.
-    pub(crate) phase: TemplateTirPhase,
-
-    /// Registry-owned overlay-set ID carried by this reference.
-    ///
-    /// WHAT: identifies the `TemplateOverlaySet` in the module-local
-    ///       `TemplateIrRegistry` that holds contextual overlays (expression
-    ///       overrides, slot resolution, wrapper context) for this template.
-    ///       Production parser-emitted and composed references carry the
-    ///       canonical empty overlay set until non-empty overlay wiring lands.
-    /// WHY: threading the overlay-set ID on the reference lets later phases
-    ///      resolve contextual changes through one stable handle instead of ad
-    ///      hoc maps. Keeping it AST-template-local avoids exposing
-    ///      registry/view/overlay internals to HIR or backends.
-    pub(crate) overlay_set_id: TemplateOverlaySetId,
-}
-
-impl TemplateTirReference {
-    /// Returns true when this linear-template reference is a current structural root.
-    ///
-    /// WHAT: admits any root at phase Composed or higher. Composed roots are
-    /// the authority for slot-routed head-chain output; Formatted and Finalized
-    /// roots are authoritative once render-unit preparation has run.
-    /// WHY: parsed roots may still carry pre-format or pre-composition structure,
-    /// while later phases are safe for current-state consumers to reuse.
-    #[cfg(test)]
-    pub(crate) fn can_reuse_as_linear_current_state(&self) -> bool {
-        self.phase.is_at_least(TemplateTirPhase::Composed)
-    }
-}
 
 // -------------------------
 //  Parser TIR Builder State
@@ -107,16 +51,6 @@ pub(crate) struct TemplateParserIrBuilderState {
     children: Vec<TemplateIrNodeId>,
     summary: TemplateIrSummary,
 
-    /// Identity token proving this builder state belongs to a specific `TemplateIrStore`.
-    ///
-    /// WHAT: cloned from the store when the builder state starts; `Arc::ptr_eq`
-    ///       against the current store's owner proves the builder state's
-    ///       `template_id` is safe to use in that store.
-    /// WHY: cross-context template references may carry IDs from a different store;
-    ///      the owner token lets head-reference handling reject those IDs without
-    ///      comparing store handles or inspecting private vectors.
-    pub(crate) store_owner: Arc<TemplateIrStoreOwner>,
-
     /// Number of children recorded while the parser was still in the head section.
     ///
     /// WHAT: counts every node emitted by a head-record call (head text, head
@@ -128,35 +62,24 @@ pub(crate) struct TemplateParserIrBuilderState {
 }
 
 impl TemplateParserIrBuilderState {
-    pub(crate) fn new(store_owner: Arc<TemplateIrStoreOwner>) -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             template_id: None,
             children: Vec::new(),
             summary: TemplateIrSummary::default(),
-            store_owner,
             head_node_count: 0,
         }
     }
 
-    /// Returns a narrow finalized reference that preserves only the
-    /// store-qualified root and store-owner token, dropping all in-progress
-    /// child/summary state.
-    ///
-    /// WHAT: lets ordinary `Template::clone()` carry just enough information to
-    ///       prove same-store ownership of a finalized parser-emitted ID without
-    ///       preserving the full builder-state children or summary.
-    /// WHY: the builder state is parse-time only; the long-lived reference
-    ///      should be a small, explicitly named type rather than a trimmed builder state.
+    /// Returns the durable module-local reference for a finished root.
     pub(crate) fn finalized_reference(
         &self,
         template_id: TemplateIrId,
-        store_id: TemplateStoreId,
         overlay_set_id: TemplateOverlaySetId,
         phase: TemplateTirPhase,
     ) -> TemplateTirReference {
         TemplateTirReference {
-            root: TemplateRef::new(store_id, template_id),
-            store_owner: Arc::clone(&self.store_owner),
+            root: template_id,
             phase,
             overlay_set_id,
         }

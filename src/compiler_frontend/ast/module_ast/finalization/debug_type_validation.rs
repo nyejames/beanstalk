@@ -24,8 +24,7 @@ use crate::compiler_frontend::ast::templates::template_control_flow::{
     TemplateBranchSelector, TemplateLoopHeader,
 };
 use crate::compiler_frontend::ast::templates::tir::{
-    TemplateIrRegistry, TemplateIrStore, finalized_tir_view_for_template,
-    walk_tir_view_expression_payloads,
+    TemplateIrStore, finalized_tir_view_for_template, walk_tir_view_expression_payloads,
 };
 use crate::compiler_frontend::ast::templates::{
     OwnedRuntimeSlotApplicationHandoff, OwnedRuntimeSlotSiteRenderPiece, OwnedRuntimeTemplateBody,
@@ -40,14 +39,13 @@ use crate::compiler_frontend::datatypes::ids::TypeId;
 /// Context shared by every helper in this debug validation pass.
 ///
 /// WHAT: bundles the final module `TypeEnvironment` with the module-scoped
-///       `TemplateIrStore` and `TemplateIrRegistry` so template-expression
+///       `TemplateIrStore` and `TemplateIrStore` so template-expression
 ///       payload validation resolves one required finalized `TirView`.
 /// WHY: debug validation is read-only and short-lived; a small context struct
 ///      keeps the recursive walk signatures focused.
 struct DebugTypeValidationContext<'a> {
     type_environment: &'a TypeEnvironment,
     template_ir_store: &'a TemplateIrStore,
-    template_ir_registry: &'a TemplateIrRegistry,
 }
 
 /// Entry point for debug TypeId validation before HIR lowering.
@@ -64,12 +62,10 @@ pub(super) fn debug_validate_type_ids_for_hir(
     choice_definitions: &[AstChoiceDefinition],
     type_environment: &TypeEnvironment,
     template_ir_store: &TemplateIrStore,
-    template_ir_registry: &TemplateIrRegistry,
 ) {
     let context = DebugTypeValidationContext {
         type_environment,
         template_ir_store,
-        template_ir_registry,
     };
 
     for node in nodes {
@@ -594,11 +590,11 @@ fn debug_validate_fallible_handling_type_ids(
 
 /// Validates a template's nested expression payloads through one finalized `TirView`.
 ///
-/// WHAT: resolves the required finalized registry-backed `TirView` for the
+/// WHAT: resolves the required finalized module-store `TirView` for the
 ///       template and walks its effective expression payloads. Effective
 ///       expression overlays are authoritative for dynamic-expression splices,
 ///       branch selectors and loop headers. A template that reaches this
-///       boundary without a Finalized registry-backed identity is an internal
+///       boundary without a Finalized module-store identity is an internal
 ///       compiler invariant violation.
 /// WHY: debug validation consumes the same effective TIR representation that
 ///      later phases consume. The walk returns `()`; the required-view error
@@ -608,11 +604,7 @@ fn debug_validate_template_expression_payloads(
     template: &Template,
     context: &DebugTypeValidationContext,
 ) {
-    match finalized_tir_view_for_template(
-        template,
-        context.template_ir_store,
-        context.template_ir_registry,
-    ) {
+    match finalized_tir_view_for_template(template, context.template_ir_store) {
         Ok(view) => {
             let result = walk_tir_view_expression_payloads(&view, &mut |expression| {
                 debug_validate_expression_type_id(expression, context);

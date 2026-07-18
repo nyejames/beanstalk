@@ -18,16 +18,15 @@ use super::super::node::{
 };
 use super::super::overlays::{
     TemplateOverlaySet, TemplateOverlaySetId, TirExpressionOverlay, TirSlotResolutionKind,
-    TirSlotResolutionOverlay,
+    TirSlotResolutionOverlay, TirSlotResolutionOverlayId,
 };
-use super::super::refs::{TemplateRef, TemplateStoreId, TemplateTirChildReference};
-use super::super::registry::TemplateIrRegistry;
+use super::super::refs::TemplateTirChildReference;
 use super::super::slot_composition::{
     RoutedTirSlotContributions, TirSlotContributions, TirSlotSchema, apply_tir_child_wrappers,
-    apply_tir_child_wrappers_with_overlays, attach_tir_slot_resolution_overlay,
-    collect_tir_slot_schema, compose_tir_head_chain, compose_tir_head_chain_with_overlays,
-    compose_tir_slot_resolution_overlay_set, expand_tir_slot_placeholders,
-    materialize_tir_slot_resolution_overlay, route_tir_slot_contributions,
+    attach_tir_slot_resolution_overlay, collect_tir_slot_schema, compose_tir_head_chain,
+    compose_tir_head_chain_with_overlays, compose_tir_slot_resolution_overlay_set,
+    expand_tir_slot_placeholders, materialize_tir_slot_resolution_overlay,
+    route_tir_slot_contributions,
 };
 use super::super::store::TemplateIrStore;
 use super::super::summary::TemplateIrSummary;
@@ -46,7 +45,6 @@ use crate::compiler_frontend::compiler_messages::{
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::compiler_frontend::value_mode::ValueMode;
-
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -197,7 +195,7 @@ fn build_child_template_node_for_template(
     let mut builder = TemplateIrBuilder::new(store);
     builder.push_child_template_node(template_id, empty_location())
 }
-
+/// Builds a `ChildTemplate` node with an explicit effective view identity.
 fn build_child_template_node_with_reference(
     store: &mut TemplateIrStore,
     reference: TemplateTirChildReference,
@@ -1666,7 +1664,7 @@ fn nested_child_template_with_slots_is_expanded() {
         .expect("child node should exist")
         .kind
     {
-        TemplateIrNodeKind::ChildTemplate { reference, .. } => reference.root.template_id,
+        TemplateIrNodeKind::ChildTemplate { reference, .. } => reference.root,
         other => panic!("expected ChildTemplate node, found {other:?}"),
     };
 
@@ -1730,7 +1728,7 @@ fn nested_child_template_without_slots_is_unchanged() {
         .expect("child node should exist")
         .kind
     {
-        TemplateIrNodeKind::ChildTemplate { reference, .. } => reference.root.template_id,
+        TemplateIrNodeKind::ChildTemplate { reference, .. } => reference.root,
         other => panic!("expected ChildTemplate node, found {other:?}"),
     };
 
@@ -2457,7 +2455,7 @@ fn expect_child_template_id(node_id: TemplateIrNodeId, store: &TemplateIrStore) 
     let node = store.get_node(node_id).expect("node should exist");
 
     match &node.kind {
-        TemplateIrNodeKind::ChildTemplate { reference, .. } => reference.root.template_id,
+        TemplateIrNodeKind::ChildTemplate { reference, .. } => reference.root,
         other => panic!("expected ChildTemplate node, found {other:?}"),
     }
 }
@@ -2807,135 +2805,188 @@ fn mixed_children_wraps_only_direct_child() {
     );
 }
 
-// -------------------------
-//  Slot Resolution Overlay Materialization
-// -------------------------
-//
-// These tests exercise `materialize_tir_slot_resolution_overlay`, the first
-// Phase 6 overlay-composition step. They assert that routed TIR slot
-// contributions become a registry-owned `TirSlotResolutionOverlay` keyed by
-// `SlotOccurrenceId` with store-qualified `TemplateRef` sources, while the
-// structural `expand_tir_slot_placeholders` behavior is left unchanged.
+fn materialize_default_slot_overlay(
+    store: &mut TemplateIrStore,
+    string_table: &mut StringTable,
+    slot_count: usize,
+) -> (
+    TemplateIrId,
+    super::super::overlays::TirSlotResolutionOverlayId,
+) {
+    let wrapper = build_wrapper_with_slot_sequence(store, vec![SlotKey::Default; slot_count]);
+    let contribution = build_single_text_template(store, string_table, "filled");
+    let contribution_node = template_root_node_id(contribution, store);
+    let fill = build_fill_template(store, vec![contribution_node]);
+    let routed = route_tir_slot_contributions(store, wrapper, fill, string_table)
+        .expect("default slot contribution should route");
+    let wrapper_reference = TemplateTirChildReference::new(
+        wrapper,
+        TemplateTirPhase::Composed,
+        TemplateOverlaySetId::empty(),
+    );
+    let overlay_id = materialize_tir_slot_resolution_overlay(store, wrapper_reference, &routed)
+        .expect("slot resolution overlay should materialize");
+    (wrapper, overlay_id)
+}
 
-/// Retrieves the materialized overlay from the registry, panicking if missing.
 fn slot_resolution_overlay(
-    registry: &TemplateIrRegistry,
+    store: &TemplateIrStore,
     overlay_id: super::super::overlays::TirSlotResolutionOverlayId,
 ) -> &TirSlotResolutionOverlay {
-    registry
+    store
         .slot_resolution_overlay(overlay_id)
-        .expect("materialized overlay should be registry-owned and retrievable")
-}
-
-fn registry_with_store() -> (TemplateIrRegistry, TemplateStoreId) {
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.allocate_store();
-    (registry, store_id)
-}
-
-fn same_store_child_reference(
-    store_id: TemplateStoreId,
-    template_id: TemplateIrId,
-) -> TemplateTirChildReference {
-    TemplateTirChildReference::same_store(
-        template_id,
-        store_id,
-        TemplateTirPhase::Parsed,
-        super::super::overlays::TemplateOverlaySetId::empty(),
-    )
-}
-
-fn same_store_template_ref(store_id: TemplateStoreId, template_id: TemplateIrId) -> TemplateRef {
-    TemplateRef::new(store_id, template_id)
-}
-
-fn materialize_same_store_slot_resolution_overlay(
-    registry: &mut TemplateIrRegistry,
-    store_id: TemplateStoreId,
-    wrapper_template_id: TemplateIrId,
-    routed: &RoutedTirSlotContributions,
-) -> Result<super::super::overlays::TirSlotResolutionOverlayId, Box<CompilerDiagnostic>> {
-    materialize_tir_slot_resolution_overlay(
-        registry,
-        store_id,
-        same_store_child_reference(store_id, wrapper_template_id),
-        routed,
-    )
+        .expect("slot resolution overlay should exist")
 }
 
 #[test]
-fn overlay_materializes_default_slot_resolution() {
+fn slot_resolution_overlay_uses_direct_template_ids() {
+    let mut store = TemplateIrStore::new();
     let mut string_table = StringTable::new();
-    let (mut registry, store_id) = registry_with_store();
+    let (wrapper, overlay_id) = materialize_default_slot_overlay(&mut store, &mut string_table, 1);
+    let overlay = slot_resolution_overlay(&store, overlay_id);
 
-    let (wrapper, routed) = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
-        let wrapper = build_wrapper_with_slot_sequence(&mut store, vec![SlotKey::Default]);
-        let contribution = build_single_text_template(&mut store, &mut string_table, "filled");
-        let contribution_node = template_root_node_id(contribution, &store);
-        let fill = build_fill_template(&mut store, vec![contribution_node]);
-
-        let routed = route_tir_slot_contributions(&store, wrapper, fill, &string_table)
-            .expect("routing should succeed");
-
-        (wrapper, routed)
-    };
-
-    let overlay_id =
-        materialize_same_store_slot_resolution_overlay(&mut registry, store_id, wrapper, &routed)
-            .expect("overlay materialization should succeed");
-
-    let overlay = slot_resolution_overlay(&registry, overlay_id);
-    assert_eq!(overlay.resolutions.len(), 1, "one default slot occurrence");
-
+    assert_eq!(overlay.resolutions.len(), 1);
     let (occurrence_id, resolution) = &overlay.resolutions[0];
     assert_eq!(*occurrence_id, SlotOccurrenceId::new(0));
     assert_eq!(resolution.key, SlotKey::Default);
-    assert!(
-        matches!(resolution.kind, TirSlotResolutionKind::Resolved { .. }),
-        "default slot with contributions should resolve to a source list"
+    assert!(matches!(
+        resolution.kind,
+        TirSlotResolutionKind::Resolved { .. }
+    ));
+    let source = resolution.sources()[0];
+    assert!(store.get_template(source).is_some());
+    assert!(store.get_template(wrapper).is_some());
+}
+
+#[test]
+fn missing_slot_resolution_is_explicit() {
+    let mut store = TemplateIrStore::new();
+    let mut builder = TemplateIrBuilder::new(&mut store);
+    let slot = builder.push_slot_node(SlotKey::Default, empty_location());
+    let wrapper = builder.finish_template(
+        slot,
+        Style::default(),
+        TemplateType::String,
+        slot_summary(1),
+        empty_location(),
     );
-    assert_eq!(resolution.sources().len(), 1, "one source template ref");
-    let source_ref = resolution.sources()[0];
-    assert_eq!(source_ref.store_id, store_id);
+    let routed = RoutedTirSlotContributions {
+        schema: TirSlotSchema::default(),
+        contributions: TirSlotContributions::default(),
+    };
+    let overlay_id = materialize_tir_slot_resolution_overlay(
+        &mut store,
+        TemplateTirChildReference::new(
+            wrapper,
+            TemplateTirPhase::Composed,
+            TemplateOverlaySetId::empty(),
+        ),
+        &routed,
+    )
+    .expect("missing slot resolution should materialize");
+    let resolution = &slot_resolution_overlay(&store, overlay_id).resolutions[0].1;
+
+    assert!(matches!(resolution.kind, TirSlotResolutionKind::Missing));
+}
+
+#[test]
+fn attached_slot_resolution_is_visible_through_tir_view() {
+    let mut store = TemplateIrStore::new();
+    let mut string_table = StringTable::new();
+    let (wrapper, overlay_id) = materialize_default_slot_overlay(&mut store, &mut string_table, 1);
+    let overlay_set_id = attach_tir_slot_resolution_overlay(&mut store, overlay_id);
+    let view = TirView::new(&store, wrapper, TemplateTirPhase::Composed, overlay_set_id)
+        .expect("attached overlay should construct a view");
+
+    let resolution = view
+        .effective_slot_resolution(SlotOccurrenceId::new(0))
+        .expect("slot lookup should succeed")
+        .expect("attached slot should have a resolution");
+    assert!(matches!(
+        resolution.kind,
+        TirSlotResolutionKind::Resolved { .. }
+    ));
+}
+
+#[test]
+fn composed_overlay_set_uses_the_same_store() {
+    let mut store = TemplateIrStore::new();
+    let mut string_table = StringTable::new();
+    let wrapper = build_wrapper_with_slot_sequence(&mut store, vec![SlotKey::Default]);
+    let contribution = build_single_text_template(&mut store, &mut string_table, "filled");
+    let fill_node = template_root_node_id(contribution, &store);
+    let fill = build_fill_template(&mut store, vec![fill_node]);
+    let overlay_set_id = compose_tir_slot_resolution_overlay_set(
+        &mut store,
+        TemplateTirChildReference::new(
+            wrapper,
+            TemplateTirPhase::Composed,
+            TemplateOverlaySetId::empty(),
+        ),
+        fill,
+        &string_table,
+    )
+    .expect("same-store overlay composition should succeed");
+    let view = TirView::new(&store, wrapper, TemplateTirPhase::Composed, overlay_set_id)
+        .expect("composed overlay set should construct a view");
+
     assert!(
-        registry.template(source_ref).is_some(),
-        "overlay source ref should resolve through the same registry"
+        view.effective_slot_resolution(SlotOccurrenceId::new(0))
+            .expect("slot lookup should succeed")
+            .is_some()
     );
+}
+
+// -------------------------
+//  Slot Resolution Overlay Materialization Coverage
+// -------------------------
+//
+// The default and missing cases are pinned above. These tests cover named,
+// positional, repeated, and structural-preservation invariants for the
+// store-owned slot-resolution overlay path.
+
+/// Materializes a slot-resolution overlay for a wrapper with the given slot
+/// keys and fill contribution nodes, returning the wrapper and overlay IDs.
+fn materialize_slot_resolution_overlay(
+    store: &mut TemplateIrStore,
+    string_table: &mut StringTable,
+    slot_keys: Vec<SlotKey>,
+    fill_nodes: Vec<TemplateIrNodeId>,
+) -> (TemplateIrId, TirSlotResolutionOverlayId) {
+    let wrapper = build_wrapper_with_slot_sequence(store, slot_keys);
+    let fill = build_fill_template(store, fill_nodes);
+    let routed = route_tir_slot_contributions(store, wrapper, fill, string_table)
+        .expect("slot contribution routing should succeed");
+    let wrapper_reference = TemplateTirChildReference::new(
+        wrapper,
+        TemplateTirPhase::Composed,
+        TemplateOverlaySetId::empty(),
+    );
+    let overlay_id = materialize_tir_slot_resolution_overlay(store, wrapper_reference, &routed)
+        .expect("slot resolution overlay should materialize");
+    (wrapper, overlay_id)
 }
 
 #[test]
 fn overlay_materializes_named_slot_resolution() {
     let mut string_table = StringTable::new();
     let title = string_table.intern("title");
-    let (mut registry, store_id) = registry_with_store();
+    let mut store = TemplateIrStore::new();
 
-    let (wrapper, routed) = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
-        let wrapper = build_wrapper_with_slot_sequence(&mut store, vec![SlotKey::Named(title)]);
-        let insert_template =
-            build_slot_insert_template(&mut store, SlotKey::Named(title), &mut string_table);
-        let mut builder = TemplateIrBuilder::new(&mut store);
-        let insert_node = builder.push_insert_contribution_node(insert_template, empty_location());
-        let fill = build_fill_template(&mut store, vec![insert_node]);
+    let insert_template =
+        build_slot_insert_template(&mut store, SlotKey::Named(title), &mut string_table);
+    let mut builder = TemplateIrBuilder::new(&mut store);
+    let insert_node = builder.push_insert_contribution_node(insert_template, empty_location());
 
-        let routed = route_tir_slot_contributions(&store, wrapper, fill, &string_table)
-            .expect("routing should succeed");
+    let (_, overlay_id) = materialize_slot_resolution_overlay(
+        &mut store,
+        &mut string_table,
+        vec![SlotKey::Named(title)],
+        vec![insert_node],
+    );
+    let overlay = slot_resolution_overlay(&store, overlay_id);
 
-        (wrapper, routed)
-    };
-
-    let overlay_id =
-        materialize_same_store_slot_resolution_overlay(&mut registry, store_id, wrapper, &routed)
-            .expect("overlay materialization should succeed");
-
-    let overlay = slot_resolution_overlay(&registry, overlay_id);
     assert_eq!(overlay.resolutions.len(), 1, "one named slot occurrence");
-
     let (occurrence_id, resolution) = &overlay.resolutions[0];
     assert_eq!(*occurrence_id, SlotOccurrenceId::new(0));
     assert_eq!(resolution.key, SlotKey::Named(title));
@@ -2949,34 +3000,24 @@ fn overlay_materializes_named_slot_resolution() {
 #[test]
 fn overlay_materializes_positional_slot_resolution() {
     let mut string_table = StringTable::new();
-    let (mut registry, store_id) = registry_with_store();
+    let mut store = TemplateIrStore::new();
 
-    let (wrapper, routed) = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
-        let wrapper = build_wrapper_with_slot_sequence(&mut store, vec![SlotKey::Positional(0)]);
-        let contribution = build_single_text_template(&mut store, &mut string_table, "first");
-        let contribution_node = template_root_node_id(contribution, &store);
-        let fill = build_fill_template(&mut store, vec![contribution_node]);
+    let contribution = build_single_text_template(&mut store, &mut string_table, "first");
+    let contribution_node = template_root_node_id(contribution, &store);
 
-        let routed = route_tir_slot_contributions(&store, wrapper, fill, &string_table)
-            .expect("routing should succeed");
+    let (_, overlay_id) = materialize_slot_resolution_overlay(
+        &mut store,
+        &mut string_table,
+        vec![SlotKey::Positional(0)],
+        vec![contribution_node],
+    );
+    let overlay = slot_resolution_overlay(&store, overlay_id);
 
-        (wrapper, routed)
-    };
-
-    let overlay_id =
-        materialize_same_store_slot_resolution_overlay(&mut registry, store_id, wrapper, &routed)
-            .expect("overlay materialization should succeed");
-
-    let overlay = slot_resolution_overlay(&registry, overlay_id);
     assert_eq!(
         overlay.resolutions.len(),
         1,
         "one positional slot occurrence"
     );
-
     let (occurrence_id, resolution) = &overlay.resolutions[0];
     assert_eq!(*occurrence_id, SlotOccurrenceId::new(0));
     assert_eq!(resolution.key, SlotKey::Positional(0));
@@ -2988,82 +3029,26 @@ fn overlay_materializes_positional_slot_resolution() {
 }
 
 #[test]
-fn overlay_materializes_missing_slot_as_missing() {
-    let mut string_table = StringTable::new();
-    let missing_name = string_table.intern("missing");
-    let (mut registry, store_id) = registry_with_store();
-
-    let (wrapper, routed) = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
-        let wrapper =
-            build_wrapper_with_slot_sequence(&mut store, vec![SlotKey::Named(missing_name)]);
-
-        // An empty fill template routes no content, leaving the named slot missing.
-        let empty_fill = build_fill_template(&mut store, vec![]);
-
-        let routed = route_tir_slot_contributions(&store, wrapper, empty_fill, &string_table)
-            .expect("routing should succeed");
-
-        (wrapper, routed)
-    };
-
-    let overlay_id =
-        materialize_same_store_slot_resolution_overlay(&mut registry, store_id, wrapper, &routed)
-            .expect("overlay materialization should succeed");
-
-    let overlay = slot_resolution_overlay(&registry, overlay_id);
-    assert_eq!(overlay.resolutions.len(), 1, "one slot occurrence");
-
-    let (occurrence_id, resolution) = &overlay.resolutions[0];
-    assert_eq!(*occurrence_id, SlotOccurrenceId::new(0));
-    assert_eq!(resolution.key, SlotKey::Named(missing_name));
-    assert!(
-        resolution.is_missing(),
-        "slot with no routed contributions should be a Missing resolution"
-    );
-    assert!(
-        resolution.sources().is_empty(),
-        "missing slot should carry no source refs"
-    );
-}
-
-#[test]
 fn overlay_materializes_repeated_slot_sharing_source_list() {
     let mut string_table = StringTable::new();
     let title = string_table.intern("title");
-    let (mut registry, store_id) = registry_with_store();
+    let mut store = TemplateIrStore::new();
 
-    let (wrapper, routed) = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
+    // Two occurrences of the same named slot in one wrapper. Named/positional
+    // slots are idempotent in the schema, so repeated occurrences are valid;
+    // only a second default slot is rejected.
+    let insert_template =
+        build_slot_insert_template(&mut store, SlotKey::Named(title), &mut string_table);
+    let mut builder = TemplateIrBuilder::new(&mut store);
+    let insert_node = builder.push_insert_contribution_node(insert_template, empty_location());
 
-        // Two occurrences of the same named slot in one wrapper. Named/positional
-        // slots are idempotent in the schema, so repeated occurrences are valid;
-        // only a second default slot is rejected.
-        let wrapper = build_wrapper_with_slot_sequence(
-            &mut store,
-            vec![SlotKey::Named(title), SlotKey::Named(title)],
-        );
-        let insert_template =
-            build_slot_insert_template(&mut store, SlotKey::Named(title), &mut string_table);
-        let mut builder = TemplateIrBuilder::new(&mut store);
-        let insert_node = builder.push_insert_contribution_node(insert_template, empty_location());
-        let fill = build_fill_template(&mut store, vec![insert_node]);
-
-        let routed = route_tir_slot_contributions(&store, wrapper, fill, &string_table)
-            .expect("routing should succeed");
-
-        (wrapper, routed)
-    };
-
-    let overlay_id =
-        materialize_same_store_slot_resolution_overlay(&mut registry, store_id, wrapper, &routed)
-            .expect("overlay materialization should succeed");
-
-    let overlay = slot_resolution_overlay(&registry, overlay_id);
+    let (_, overlay_id) = materialize_slot_resolution_overlay(
+        &mut store,
+        &mut string_table,
+        vec![SlotKey::Named(title), SlotKey::Named(title)],
+        vec![insert_node],
+    );
+    let overlay = slot_resolution_overlay(&store, overlay_id);
     assert_eq!(overlay.resolutions.len(), 2, "two named slot occurrences");
 
     let (first_occurrence, first_resolution) = &overlay.resolutions[0];
@@ -3078,7 +3063,7 @@ fn overlay_materializes_repeated_slot_sharing_source_list() {
     let second_source = second_resolution.sources()[0];
     assert_eq!(
         first_source, second_source,
-        "repeated slot occurrences should share the same replayable source ref"
+        "repeated slot occurrences should share the same replayable source template"
     );
 }
 
@@ -3086,38 +3071,29 @@ fn overlay_materializes_repeated_slot_sharing_source_list() {
 fn overlay_materialization_preserves_structural_expansion() {
     // The overlay path must not alter the structural expansion behavior.
     let mut string_table = StringTable::new();
-    let (mut registry, store_id) = registry_with_store();
+    let mut store = TemplateIrStore::new();
 
-    let (wrapper, routed) = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
-        let wrapper = build_wrapper_with_slot_sequence(&mut store, vec![SlotKey::Default]);
-        let contribution = build_single_text_template(&mut store, &mut string_table, "filled");
-        let contribution_node = template_root_node_id(contribution, &store);
-        let fill = build_fill_template(&mut store, vec![contribution_node]);
+    let wrapper = build_wrapper_with_slot_sequence(&mut store, vec![SlotKey::Default]);
+    let contribution = build_single_text_template(&mut store, &mut string_table, "filled");
+    let contribution_node = template_root_node_id(contribution, &store);
+    let fill = build_fill_template(&mut store, vec![contribution_node]);
+    let routed = route_tir_slot_contributions(&store, wrapper, fill, &string_table)
+        .expect("routing should succeed");
+    let wrapper_reference = TemplateTirChildReference::new(
+        wrapper,
+        TemplateTirPhase::Composed,
+        TemplateOverlaySetId::empty(),
+    );
 
-        let routed = route_tir_slot_contributions(&store, wrapper, fill, &string_table)
-            .expect("routing should succeed");
-
-        (wrapper, routed)
-    };
-
-    // Materialize the overlay (exercising the new path) before expansion.
+    // Materialize the overlay (exercising the overlay path) before expansion.
     let _overlay_id =
-        materialize_same_store_slot_resolution_overlay(&mut registry, store_id, wrapper, &routed)
+        materialize_tir_slot_resolution_overlay(&mut store, wrapper_reference, &routed)
             .expect("overlay materialization should succeed");
 
     // Structural expansion should still produce the same filled result.
-    let expanded_root = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
-        expand_tir_slot_placeholders(&mut store, wrapper, &routed, &string_table)
-            .expect("structural expansion should still succeed")
-    };
+    let expanded_root = expand_tir_slot_placeholders(&mut store, wrapper, &routed, &string_table)
+        .expect("structural expansion should still succeed");
 
-    let store = registry.store(store_id).expect("store should exist");
     let child_kinds = root_child_kinds_for_node(expanded_root, &store);
     assert_eq!(child_kinds.len(), 1);
     assert!(
@@ -3126,100 +3102,15 @@ fn overlay_materialization_preserves_structural_expansion() {
     );
 }
 
-// -------------------------
-//  Overlay-Set Attachment Tests
-// -------------------------
-
-// These tests exercise `attach_tir_slot_resolution_overlay`, the second Phase 6
-// overlay-composition step. They verify that a materialized slot-resolution
-// overlay is attached to a registry-owned `TemplateOverlaySet`, that a `TirView`
-// constructed with the wrapper template ref observes the resolution through the
-// canonical overlay path, and that structural slot expansion remains unchanged.
-
 #[test]
 fn attach_overlay_set_carries_slot_resolution() {
     let mut string_table = StringTable::new();
-    let (mut registry, store_id) = registry_with_store();
+    let mut store = TemplateIrStore::new();
 
-    let (wrapper, routed) = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
-        let wrapper = build_wrapper_with_slot_sequence(&mut store, vec![SlotKey::Default]);
-        let contribution = build_single_text_template(&mut store, &mut string_table, "filled");
-        let contribution_node = template_root_node_id(contribution, &store);
-        let fill = build_fill_template(&mut store, vec![contribution_node]);
-
-        let routed = route_tir_slot_contributions(&store, wrapper, fill, &string_table)
-            .expect("routing should succeed");
-
-        (wrapper, routed)
-    };
-
-    let overlay_id =
-        materialize_same_store_slot_resolution_overlay(&mut registry, store_id, wrapper, &routed)
-            .expect("overlay materialization should succeed");
-
-    let overlay_set_id = attach_tir_slot_resolution_overlay(&mut registry, overlay_id);
-
-    let overlay_set = registry
-        .overlay_set(overlay_set_id)
-        .expect("attached overlay set should be registry-owned");
-    assert_eq!(
-        overlay_set.slot_resolution,
-        Some(overlay_id),
-        "overlay set should carry the materialized slot-resolution overlay ID"
-    );
-    assert!(
-        overlay_set.expression_overrides.is_none(),
-        "no expression overlay dimension should be set"
-    );
-    assert!(
-        overlay_set.wrapper_context.is_none(),
-        "no wrapper-context overlay dimension should be set"
-    );
-}
-
-#[test]
-fn tir_view_observes_attached_slot_resolution() {
-    let mut string_table = StringTable::new();
-    let (mut registry, store_id) = registry_with_store();
-
-    let (wrapper, routed) = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
-        let wrapper = build_wrapper_with_slot_sequence(&mut store, vec![SlotKey::Default]);
-        let contribution = build_single_text_template(&mut store, &mut string_table, "filled");
-        let contribution_node = template_root_node_id(contribution, &store);
-        let fill = build_fill_template(&mut store, vec![contribution_node]);
-
-        let routed = route_tir_slot_contributions(&store, wrapper, fill, &string_table)
-            .expect("routing should succeed");
-
-        (wrapper, routed)
-    };
-
-    let overlay_id =
-        materialize_same_store_slot_resolution_overlay(&mut registry, store_id, wrapper, &routed)
-            .expect("overlay materialization should succeed");
-
-    let overlay_set_id = attach_tir_slot_resolution_overlay(&mut registry, overlay_id);
-
-    // Qualify the wrapper template ref so the view can resolve it through the
-    // same registry that owns the overlay set.
-    let wrapper_ref = {
-        let store = registry.store(store_id).expect("store should exist");
-        store.qualify_template_ref(wrapper)
-    };
-
-    let view = TirView::new(
-        &registry,
-        wrapper_ref,
-        TemplateTirPhase::Composed,
-        overlay_set_id,
-    )
-    .expect("view should construct with the attached overlay set");
+    let (wrapper, overlay_id) = materialize_default_slot_overlay(&mut store, &mut string_table, 1);
+    let overlay_set_id = attach_tir_slot_resolution_overlay(&mut store, overlay_id);
+    let view = TirView::new(&store, wrapper, TemplateTirPhase::Composed, overlay_set_id)
+        .expect("view should construct with the attached overlay set");
 
     let occurrence_id = SlotOccurrenceId::new(0);
     let resolution = view
@@ -3238,56 +3129,41 @@ fn tir_view_observes_attached_slot_resolution() {
     assert_eq!(
         resolution.sources().len(),
         1,
-        "view should observe one source template ref"
-    );
-    let source_ref = resolution.sources()[0];
-    assert_eq!(
-        source_ref.store_id, store_id,
-        "view-observed source ref should resolve through the same store"
+        "view should observe one source template"
     );
     assert!(
-        registry.template(source_ref).is_some(),
-        "view-observed source ref should be registry-resolvable"
+        store.get_template(resolution.sources()[0]).is_some(),
+        "view-observed source should resolve through the same store"
     );
 }
 
 #[test]
 fn overlay_set_attachment_preserves_structural_expansion() {
     let mut string_table = StringTable::new();
-    let (mut registry, store_id) = registry_with_store();
+    let mut store = TemplateIrStore::new();
 
-    let (wrapper, routed) = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
-        let wrapper = build_wrapper_with_slot_sequence(&mut store, vec![SlotKey::Default]);
-        let contribution = build_single_text_template(&mut store, &mut string_table, "filled");
-        let contribution_node = template_root_node_id(contribution, &store);
-        let fill = build_fill_template(&mut store, vec![contribution_node]);
-
-        let routed = route_tir_slot_contributions(&store, wrapper, fill, &string_table)
-            .expect("routing should succeed");
-
-        (wrapper, routed)
-    };
-
+    let wrapper = build_wrapper_with_slot_sequence(&mut store, vec![SlotKey::Default]);
+    let contribution = build_single_text_template(&mut store, &mut string_table, "filled");
+    let contribution_node = template_root_node_id(contribution, &store);
+    let fill = build_fill_template(&mut store, vec![contribution_node]);
+    let routed = route_tir_slot_contributions(&store, wrapper, fill, &string_table)
+        .expect("routing should succeed");
+    let wrapper_reference = TemplateTirChildReference::new(
+        wrapper,
+        TemplateTirPhase::Composed,
+        TemplateOverlaySetId::empty(),
+    );
     let overlay_id =
-        materialize_same_store_slot_resolution_overlay(&mut registry, store_id, wrapper, &routed)
+        materialize_tir_slot_resolution_overlay(&mut store, wrapper_reference, &routed)
             .expect("overlay materialization should succeed");
 
-    // Attach the overlay set before structural expansion to confirm the new
+    // Attach the overlay set before structural expansion to confirm the overlay
     // path does not alter production slot expansion.
-    let _overlay_set_id = attach_tir_slot_resolution_overlay(&mut registry, overlay_id);
+    let _overlay_set_id = attach_tir_slot_resolution_overlay(&mut store, overlay_id);
 
-    let expanded_root = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
-        expand_tir_slot_placeholders(&mut store, wrapper, &routed, &string_table)
-            .expect("structural expansion should still succeed after attachment")
-    };
+    let expanded_root = expand_tir_slot_placeholders(&mut store, wrapper, &routed, &string_table)
+        .expect("structural expansion should still succeed after attachment");
 
-    let store = registry.store(store_id).expect("store should exist");
     let child_kinds = root_child_kinds_for_node(expanded_root, &store);
     assert_eq!(child_kinds.len(), 1);
     assert!(
@@ -3297,11 +3173,11 @@ fn overlay_set_attachment_preserves_structural_expansion() {
 }
 
 // -------------------------
-//  Registry-Owned Slot-Overlay Composition API
+//  Store-Owned Slot-Overlay Composition API
 // -------------------------
 //
 // These tests exercise `compose_tir_slot_resolution_overlay_set`, the
-// registry-owned entry point that bundles route, materialize, and attach for a
+// store-owned entry point that bundles route, materialize, and attach for a
 // single wrapper/fill pair. They confirm the bundled API produces the same
 // overlay shape as the manual primitive sequence, works for named slots, and
 // leaves structural expansion unchanged.
@@ -3309,51 +3185,40 @@ fn overlay_set_attachment_preserves_structural_expansion() {
 #[test]
 fn compose_tir_slot_resolution_overlay_set_default_slot_matches_manual_sequence() {
     let mut string_table = StringTable::new();
-    let (mut registry, store_id) = registry_with_store();
+    let mut store = TemplateIrStore::new();
 
-    let (wrapper, fill, routed) = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
-        let wrapper = build_wrapper_with_slot_sequence(&mut store, vec![SlotKey::Default]);
-        let contribution = build_single_text_template(&mut store, &mut string_table, "filled");
-        let contribution_node = template_root_node_id(contribution, &store);
-        let fill = build_fill_template(&mut store, vec![contribution_node]);
+    let wrapper = build_wrapper_with_slot_sequence(&mut store, vec![SlotKey::Default]);
+    let contribution = build_single_text_template(&mut store, &mut string_table, "filled");
+    let contribution_node = template_root_node_id(contribution, &store);
+    let fill = build_fill_template(&mut store, vec![contribution_node]);
+    let routed = route_tir_slot_contributions(&store, wrapper, fill, &string_table)
+        .expect("routing should succeed");
 
-        let routed = route_tir_slot_contributions(&store, wrapper, fill, &string_table)
-            .expect("routing should succeed");
-
-        (wrapper, fill, routed)
-    };
-
-    // Manual primitive sequence: materialize then attach. The store borrow is
-    // released before this so the registry can re-borrow the store mutably
-    // inside materialization.
+    // Manual primitive sequence: materialize then attach.
+    let wrapper_reference = TemplateTirChildReference::new(
+        wrapper,
+        TemplateTirPhase::Composed,
+        TemplateOverlaySetId::empty(),
+    );
     let manual_overlay_id =
-        materialize_same_store_slot_resolution_overlay(&mut registry, store_id, wrapper, &routed)
+        materialize_tir_slot_resolution_overlay(&mut store, wrapper_reference, &routed)
             .expect("manual materialization should succeed");
-    let manual_set_id = attach_tir_slot_resolution_overlay(&mut registry, manual_overlay_id);
+    let manual_set_id = attach_tir_slot_resolution_overlay(&mut store, manual_overlay_id);
 
-    // Bundled API: one call with registry/store identity, no separate store
-    // borrow held by the caller. The registry owns the store access. Each
-    // materialization allocates its own store-local source template, so the
-    // two overlay sets carry different source `TemplateRef`s and are not
-    // canonicalized to one ID; the assertion compares overlay shape, not ID.
-    let bundled_set_id = compose_tir_slot_resolution_overlay_set(
-        &mut registry,
-        store_id,
-        same_store_child_reference(store_id, wrapper),
-        same_store_template_ref(store_id, fill),
-        &string_table,
-    )
-    .expect("bundled overlay composition should succeed");
+    // Bundled API: one call with store identity. Each materialization allocates
+    // its own store-local source template, so the two overlay sets carry
+    // different source `TemplateIrId`s and are not canonicalized to one ID; the
+    // assertion compares overlay shape, not ID.
+    let bundled_set_id =
+        compose_tir_slot_resolution_overlay_set(&mut store, wrapper_reference, fill, &string_table)
+            .expect("bundled overlay composition should succeed");
 
-    let manual_set = registry
+    let manual_set = store
         .overlay_set(manual_set_id)
-        .expect("manual overlay set should be registry-owned");
-    let bundled_set = registry
+        .expect("manual overlay set should be store-owned");
+    let bundled_set = store
         .overlay_set(bundled_set_id)
-        .expect("bundled overlay set should be registry-owned");
+        .expect("bundled overlay set should be store-owned");
 
     // Both sets carry only the slot-resolution dimension.
     assert!(
@@ -3369,10 +3234,8 @@ fn compose_tir_slot_resolution_overlay_set_default_slot_matches_manual_sequence(
         "no wrapper-context overlay dimension should be set"
     );
 
-    // The bundled overlay resolves the same slot key with the same source count
-    // as the manual primitive sequence.
-    let manual_overlay = slot_resolution_overlay(&registry, manual_set.slot_resolution.unwrap());
-    let bundled_overlay = slot_resolution_overlay(&registry, bundled_set.slot_resolution.unwrap());
+    let manual_overlay = slot_resolution_overlay(&store, manual_set.slot_resolution.unwrap());
+    let bundled_overlay = slot_resolution_overlay(&store, bundled_set.slot_resolution.unwrap());
 
     assert_eq!(
         manual_overlay.resolutions.len(),
@@ -3387,14 +3250,14 @@ fn compose_tir_slot_resolution_overlay_set_default_slot_matches_manual_sequence(
     assert_eq!(
         manual_resolution.sources().len(),
         bundled_resolution.sources().len(),
-        "bundled API should produce the same number of source refs"
+        "bundled API should produce the same number of source templates"
     );
 
-    let source_ref = bundled_resolution.sources()[0];
-    assert_eq!(source_ref.store_id, store_id);
     assert!(
-        registry.template(source_ref).is_some(),
-        "bundled overlay source ref should resolve through the same registry"
+        store
+            .get_template(bundled_resolution.sources()[0])
+            .is_some(),
+        "bundled overlay source should resolve through the same store"
     );
 }
 
@@ -3402,38 +3265,34 @@ fn compose_tir_slot_resolution_overlay_set_default_slot_matches_manual_sequence(
 fn compose_tir_slot_resolution_overlay_set_named_slot_attaches_resolution() {
     let mut string_table = StringTable::new();
     let title = string_table.intern("title");
-    let (mut registry, store_id) = registry_with_store();
+    let mut store = TemplateIrStore::new();
 
-    let (wrapper, fill) = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
-        let wrapper = build_wrapper_with_slot_sequence(&mut store, vec![SlotKey::Named(title)]);
-        let insert_template =
-            build_slot_insert_template(&mut store, SlotKey::Named(title), &mut string_table);
-        let mut builder = TemplateIrBuilder::new(&mut store);
-        let insert_node = builder.push_insert_contribution_node(insert_template, empty_location());
-        let fill = build_fill_template(&mut store, vec![insert_node]);
-        (wrapper, fill)
-    };
+    let wrapper = build_wrapper_with_slot_sequence(&mut store, vec![SlotKey::Named(title)]);
+    let insert_template =
+        build_slot_insert_template(&mut store, SlotKey::Named(title), &mut string_table);
+    let mut builder = TemplateIrBuilder::new(&mut store);
+    let insert_node = builder.push_insert_contribution_node(insert_template, empty_location());
+    let fill = build_fill_template(&mut store, vec![insert_node]);
 
     let overlay_set_id = compose_tir_slot_resolution_overlay_set(
-        &mut registry,
-        store_id,
-        same_store_child_reference(store_id, wrapper),
-        same_store_template_ref(store_id, fill),
+        &mut store,
+        TemplateTirChildReference::new(
+            wrapper,
+            TemplateTirPhase::Composed,
+            TemplateOverlaySetId::empty(),
+        ),
+        fill,
         &string_table,
     )
     .expect("bundled overlay composition should succeed for a named slot");
 
-    let overlay_set = registry
+    let overlay_set = store
         .overlay_set(overlay_set_id)
-        .expect("overlay set should be registry-owned");
-
+        .expect("overlay set should be store-owned");
     let overlay_id = overlay_set
         .slot_resolution
         .expect("overlay set should carry a slot-resolution overlay");
-    let overlay = slot_resolution_overlay(&registry, overlay_id);
+    let overlay = slot_resolution_overlay(&store, overlay_id);
 
     assert_eq!(overlay.resolutions.len(), 1, "one named slot occurrence");
     let (_occurrence_id, resolution) = &overlay.resolutions[0];
@@ -3447,44 +3306,33 @@ fn compose_tir_slot_resolution_overlay_set_named_slot_attaches_resolution() {
 #[test]
 fn compose_tir_slot_resolution_overlay_set_preserves_structural_expansion() {
     let mut string_table = StringTable::new();
-    let (mut registry, store_id) = registry_with_store();
+    let mut store = TemplateIrStore::new();
 
-    let (wrapper, fill, routed) = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
-        let wrapper = build_wrapper_with_slot_sequence(&mut store, vec![SlotKey::Default]);
-        let contribution = build_single_text_template(&mut store, &mut string_table, "filled");
-        let contribution_node = template_root_node_id(contribution, &store);
-        let fill = build_fill_template(&mut store, vec![contribution_node]);
+    let wrapper = build_wrapper_with_slot_sequence(&mut store, vec![SlotKey::Default]);
+    let contribution = build_single_text_template(&mut store, &mut string_table, "filled");
+    let contribution_node = template_root_node_id(contribution, &store);
+    let fill = build_fill_template(&mut store, vec![contribution_node]);
+    let routed = route_tir_slot_contributions(&store, wrapper, fill, &string_table)
+        .expect("routing should succeed");
 
-        let routed = route_tir_slot_contributions(&store, wrapper, fill, &string_table)
-            .expect("routing should succeed");
-
-        (wrapper, fill, routed)
-    };
-
-    // Allocate the overlay set through the bundled registry-owned API. This
-    // must not alter the structural expansion produced by the existing
-    // store-local path.
+    // Allocate the overlay set through the bundled store-owned API. This must
+    // not alter the structural expansion produced by the existing store-local
+    // path.
     let _overlay_set_id = compose_tir_slot_resolution_overlay_set(
-        &mut registry,
-        store_id,
-        same_store_child_reference(store_id, wrapper),
-        same_store_template_ref(store_id, fill),
+        &mut store,
+        TemplateTirChildReference::new(
+            wrapper,
+            TemplateTirPhase::Composed,
+            TemplateOverlaySetId::empty(),
+        ),
+        fill,
         &string_table,
     )
     .expect("bundled overlay composition should succeed");
 
-    let expanded_root = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
-        expand_tir_slot_placeholders(&mut store, wrapper, &routed, &string_table)
-            .expect("structural expansion should still succeed after overlay allocation")
-    };
+    let expanded_root = expand_tir_slot_placeholders(&mut store, wrapper, &routed, &string_table)
+        .expect("structural expansion should still succeed after overlay allocation");
 
-    let store = registry.store(store_id).expect("store should exist");
     let child_kinds = root_child_kinds_for_node(expanded_root, &store);
     assert_eq!(child_kinds.len(), 1);
     assert!(
@@ -3493,69 +3341,26 @@ fn compose_tir_slot_resolution_overlay_set_preserves_structural_expansion() {
     );
 }
 
-#[test]
-fn slot_overlay_pair_rejects_refs_outside_the_composition_store() {
-    let mut string_table = StringTable::new();
-    let (mut registry, store_id) = registry_with_store();
-    let foreign_store_id = registry.allocate_store();
-
-    let (wrapper, fill) = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("composition store should be mutable");
-        let wrapper = build_wrapper_with_slot_sequence(&mut store, vec![SlotKey::Default]);
-        let contribution = build_single_text_template(&mut store, &mut string_table, "filled");
-        let contribution_node = template_root_node_id(contribution, &store);
-        let fill = build_fill_template(&mut store, vec![contribution_node]);
-        (wrapper, fill)
-    };
-
-    let wrong_wrapper = compose_tir_slot_resolution_overlay_set(
-        &mut registry,
-        store_id,
-        same_store_child_reference(foreign_store_id, wrapper),
-        same_store_template_ref(store_id, fill),
-        &string_table,
-    );
-    assert!(
-        wrong_wrapper.is_err(),
-        "overlay allocation must reject a wrapper ref from another store before routing"
-    );
-
-    let wrong_fill = compose_tir_slot_resolution_overlay_set(
-        &mut registry,
-        store_id,
-        same_store_child_reference(store_id, wrapper),
-        same_store_template_ref(foreign_store_id, fill),
-        &string_table,
-    );
-    assert!(
-        wrong_fill.is_err(),
-        "overlay allocation must reject a fill ref from another store before routing"
-    );
-}
-
 // -------------------------
-//  Registry-Level Composition With Overlay Threading Tests
+//  Head-Chain Composition With Overlay Threading
 // -------------------------
-
-// These tests exercise `compose_tir_head_chain_with_overlays` and
-// `apply_tir_child_wrappers_with_overlays`, the registry-level entry points that
-// run the existing store-local structural composition and then allocate a
-// non-empty slot-resolution overlay set from the collected wrapper/fill pairs.
-// They confirm that a single slot-bearing wrapper produces a non-empty overlay
-// set, that the overlay set carries the slot-resolution dimension, and that
-// structural expansion output matches the store-local path.
+//
+// These tests exercise `compose_tir_head_chain_with_overlays`, the store-owned
+// entry point that runs the store-local structural composition and then
+// allocates a non-empty slot-resolution overlay set from the collected
+// wrapper/fill pairs. They confirm that a single slot-bearing wrapper produces
+// a non-empty overlay set, that the overlay set carries only the
+// slot-resolution dimension, that composition preserves the wrapper's effective
+// view identity, that no overlay is allocated when no slots are resolved, and
+// that structural expansion output matches the store-local path.
 
 #[test]
 fn head_chain_with_overlays_threads_slot_overlay_for_single_receiver() {
     let mut string_table = StringTable::new();
-    let (registry, store_id) = registry_with_store();
+    let store = Rc::new(RefCell::new(TemplateIrStore::new()));
 
     let template_id = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
+        let mut store = store.borrow_mut();
         let wrapper = build_wrapper_with_slot_sequence(&mut store, vec![SlotKey::Default]);
         let wrapper_node = build_child_template_node_for_template(&mut store, wrapper);
         let head_fill = build_text_node(
@@ -3567,20 +3372,10 @@ fn head_chain_with_overlays_threads_slot_overlay_for_single_receiver() {
         build_template_with_children(&mut store, vec![wrapper_node, head_fill])
     };
 
-    let original_root = {
-        let store = registry.store(store_id).expect("store should exist");
-        template_root_node_id(template_id, &store)
-    };
+    let original_root = template_root_node_id(template_id, &store.borrow());
 
-    let registry = Rc::new(RefCell::new(registry));
-    let composed = compose_tir_head_chain_with_overlays(
-        &registry,
-        store_id,
-        template_id,
-        &string_table,
-        false,
-    )
-    .expect("registry-level head-chain composition should succeed");
+    let composed = compose_tir_head_chain_with_overlays(&store, template_id, &string_table, false)
+        .expect("store-level head-chain composition should succeed");
 
     assert_ne!(
         composed.root, original_root,
@@ -3591,10 +3386,10 @@ fn head_chain_with_overlays_threads_slot_overlay_for_single_receiver() {
         .slot_overlay_set_id
         .expect("one slot-bearing wrapper should produce a non-empty overlay set");
 
-    let registry_binding = registry.borrow();
-    let overlay_set = registry_binding
+    let store_binding = store.borrow();
+    let overlay_set = store_binding
         .overlay_set(overlay_set_id)
-        .expect("overlay set should be registry-owned");
+        .expect("overlay set should be store-owned");
     assert!(
         overlay_set.slot_resolution.is_some(),
         "overlay set should carry a slot-resolution overlay"
@@ -3612,25 +3407,28 @@ fn head_chain_with_overlays_threads_slot_overlay_for_single_receiver() {
 #[test]
 fn head_chain_preserves_the_effective_wrapper_view_identity() {
     let mut string_table = StringTable::new();
-    let (mut registry, store_id) = registry_with_store();
+    let store = Rc::new(RefCell::new(TemplateIrStore::new()));
 
-    let expression_overlay_id = registry.allocate_expression_overlay(TirExpressionOverlay {
-        overrides: Vec::new(),
-    });
-    let wrapper_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet {
-        expression_overrides: Some(expression_overlay_id),
-        slot_resolution: None,
-        wrapper_context: None,
-    });
+    let expression_overlay_id = {
+        let mut store = store.borrow_mut();
+        store.allocate_expression_overlay(TirExpressionOverlay {
+            overrides: Vec::new(),
+        })
+    };
+    let wrapper_overlay_set_id = {
+        let mut store = store.borrow_mut();
+        store.allocate_overlay_set(TemplateOverlaySet {
+            expression_overrides: Some(expression_overlay_id),
+            slot_resolution: None,
+            wrapper_context: None,
+        })
+    };
 
     let (template_id, wrapper_node_id, wrapper_reference) = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
+        let mut store = store.borrow_mut();
         let wrapper = build_wrapper_with_slot_sequence(&mut store, vec![SlotKey::Default]);
-        let wrapper_reference = TemplateTirChildReference::same_store(
+        let wrapper_reference = TemplateTirChildReference::new(
             wrapper,
-            store_id,
             TemplateTirPhase::Formatted,
             wrapper_overlay_set_id,
         );
@@ -3647,24 +3445,14 @@ fn head_chain_preserves_the_effective_wrapper_view_identity() {
         (template_id, wrapper_node_id, wrapper_reference)
     };
 
-    let registry = Rc::new(RefCell::new(registry));
-    let composed = compose_tir_head_chain_with_overlays(
-        &registry,
-        store_id,
-        template_id,
-        &string_table,
-        false,
-    )
-    .expect("same-store effective wrapper identity should compose");
+    let composed = compose_tir_head_chain_with_overlays(&store, template_id, &string_table, false)
+        .expect("same-store effective wrapper identity should compose");
     assert!(
         composed.slot_overlay_set_id.is_some(),
         "slot-bearing effective wrapper should reach overlay allocation"
     );
 
-    let registry_binding = registry.borrow();
-    let store = registry_binding
-        .store(store_id)
-        .expect("store should exist");
+    let store = store.borrow();
     let source_wrapper_node = store
         .get_node(wrapper_node_id)
         .expect("source wrapper node should remain in the store");
@@ -3680,12 +3468,10 @@ fn head_chain_preserves_the_effective_wrapper_view_identity() {
 #[test]
 fn head_chain_with_overlays_returns_none_when_no_slots_resolved() {
     let mut string_table = StringTable::new();
-    let (registry, store_id) = registry_with_store();
+    let store = Rc::new(RefCell::new(TemplateIrStore::new()));
 
     let template_id = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
+        let mut store = store.borrow_mut();
         // A template with only body text and no receivers: composition returns
         // the original root and no overlay.
         let body_text = build_text_node(
@@ -3697,20 +3483,10 @@ fn head_chain_with_overlays_returns_none_when_no_slots_resolved() {
         build_template_with_children(&mut store, vec![body_text])
     };
 
-    let original_root = {
-        let store = registry.store(store_id).expect("store should exist");
-        template_root_node_id(template_id, &store)
-    };
+    let original_root = template_root_node_id(template_id, &store.borrow());
 
-    let registry = Rc::new(RefCell::new(registry));
-    let composed = compose_tir_head_chain_with_overlays(
-        &registry,
-        store_id,
-        template_id,
-        &string_table,
-        false,
-    )
-    .expect("registry-level head-chain composition should succeed");
+    let composed = compose_tir_head_chain_with_overlays(&store, template_id, &string_table, false)
+        .expect("store-level head-chain composition should succeed");
 
     assert_eq!(
         composed.root, original_root,
@@ -3725,12 +3501,10 @@ fn head_chain_with_overlays_returns_none_when_no_slots_resolved() {
 #[test]
 fn head_chain_with_overlays_preserves_structural_expansion() {
     let mut string_table = StringTable::new();
-    let (registry, store_id) = registry_with_store();
+    let store = Rc::new(RefCell::new(TemplateIrStore::new()));
 
     let template_id = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
+        let mut store = store.borrow_mut();
         let wrapper = build_text_slot_text_wrapper(&mut store, &mut string_table, SlotKey::Default);
         let wrapper_node = build_child_template_node_for_template(&mut store, wrapper);
         let body_text = build_text_node(
@@ -3742,16 +3516,10 @@ fn head_chain_with_overlays_preserves_structural_expansion() {
         build_template_with_children(&mut store, vec![wrapper_node, body_text])
     };
 
-    // Run the registry-level overlay path.
-    let registry = Rc::new(RefCell::new(registry));
-    let overlay_composed = compose_tir_head_chain_with_overlays(
-        &registry,
-        store_id,
-        template_id,
-        &string_table,
-        false,
-    )
-    .expect("registry-level composition should succeed");
+    // Run the store-owned overlay path.
+    let overlay_composed =
+        compose_tir_head_chain_with_overlays(&store, template_id, &string_table, false)
+            .expect("store-level composition should succeed");
 
     // Run the store-local structural path on a fresh store with the same shape.
     // The composed root children should match, confirming the overlay path does
@@ -3774,529 +3542,12 @@ fn head_chain_with_overlays_preserves_structural_expansion() {
         compose_tir_head_chain(&mut local_store, local_template_id, &string_table, false)
             .expect("store-local composition should succeed");
 
-    let registry_binding = registry.borrow();
-    let store = registry_binding
-        .store(store_id)
-        .expect("store should exist");
-    let overlay_child_count = root_child_kinds_for_node(overlay_composed.root, &store).len();
+    let overlay_child_count =
+        root_child_kinds_for_node(overlay_composed.root, &store.borrow()).len();
     let local_child_count = root_child_kinds_for_node(local_composed_root, &local_store).len();
 
     assert_eq!(
         overlay_child_count, local_child_count,
         "overlay path should produce the same number of root children"
-    );
-}
-
-#[test]
-fn child_wrappers_with_overlays_threads_slot_overlay_for_slot_bearing_wrapper() {
-    let mut string_table = StringTable::new();
-    let (mut registry, store_id) = registry_with_store();
-
-    let (parent, wrapper) = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
-        let wrapper = build_wrapper_with_slot_sequence(&mut store, vec![SlotKey::Default]);
-        let child = build_single_text_template(&mut store, &mut string_table, "child");
-        let child_node = build_child_template_node_for_template(&mut store, child);
-        let parent = build_template_with_children(&mut store, vec![child_node]);
-        (parent, wrapper)
-    };
-
-    let original_root = {
-        let store = registry.store(store_id).expect("store should exist");
-        template_root_node_id(parent, &store)
-    };
-
-    let composed = apply_tir_child_wrappers_with_overlays(
-        &mut registry,
-        store_id,
-        parent,
-        &[wrapper],
-        &string_table,
-    )
-    .expect("registry-level child-wrapper composition should succeed");
-
-    assert_ne!(
-        composed.root, original_root,
-        "wrapper application should produce a new root"
-    );
-
-    let overlay_set_id = composed
-        .slot_overlay_set_id
-        .expect("one slot-bearing wrapper should produce a non-empty overlay set");
-
-    let overlay_set = registry
-        .overlay_set(overlay_set_id)
-        .expect("overlay set should be registry-owned");
-    assert!(
-        overlay_set.slot_resolution.is_some(),
-        "overlay set should carry a slot-resolution overlay"
-    );
-}
-
-#[test]
-fn child_wrappers_with_overlays_merges_multiple_slot_bearing_wrappers() {
-    let mut string_table = StringTable::new();
-    let (mut registry, store_id) = registry_with_store();
-
-    let (parent, first_wrapper, second_wrapper) = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
-        let first_wrapper = build_wrapper_with_slot_sequence(&mut store, vec![SlotKey::Default]);
-        let second_wrapper = build_wrapper_with_slot_sequence(&mut store, vec![SlotKey::Default]);
-        let child = build_single_text_template(&mut store, &mut string_table, "child");
-        let child_node = build_child_template_node_for_template(&mut store, child);
-        let parent = build_template_with_children(&mut store, vec![child_node]);
-        (parent, first_wrapper, second_wrapper)
-    };
-
-    let composed = apply_tir_child_wrappers_with_overlays(
-        &mut registry,
-        store_id,
-        parent,
-        &[first_wrapper, second_wrapper],
-        &string_table,
-    )
-    .expect("registry-level child-wrapper composition should succeed");
-
-    let overlay_set_id = composed
-        .slot_overlay_set_id
-        .expect("slot-bearing wrappers should produce one merged overlay set");
-    let overlay_set = registry
-        .overlay_set(overlay_set_id)
-        .expect("overlay set should be registry-owned");
-    let slot_overlay_id = overlay_set
-        .slot_resolution
-        .expect("merged overlay set should carry slot resolution");
-    let slot_overlay = registry
-        .slot_resolution_overlay(slot_overlay_id)
-        .expect("slot overlay should be registry-owned");
-
-    assert_eq!(
-        slot_overlay.resolutions.len(),
-        2,
-        "two slot-bearing wrappers should merge into one payload"
-    );
-
-    for (_, resolution) in &slot_overlay.resolutions {
-        assert!(
-            matches!(resolution.kind, TirSlotResolutionKind::Resolved { .. }),
-            "each wrapper slot should resolve to the current wrapped child"
-        );
-    }
-}
-
-#[test]
-fn child_wrappers_with_overlays_returns_none_for_slot_less_wrapper() {
-    let mut string_table = StringTable::new();
-    let (mut registry, store_id) = registry_with_store();
-
-    let (parent, wrapper) = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
-        // A wrapper without slots: structural composition prepends the wrapper
-        // content, but no slot-resolution overlay is allocated.
-        let wrapper = build_single_text_template(&mut store, &mut string_table, "prefix");
-        let child = build_single_text_template(&mut store, &mut string_table, "child");
-        let child_node = build_child_template_node_for_template(&mut store, child);
-        let parent = build_template_with_children(&mut store, vec![child_node]);
-        (parent, wrapper)
-    };
-
-    let composed = apply_tir_child_wrappers_with_overlays(
-        &mut registry,
-        store_id,
-        parent,
-        &[wrapper],
-        &string_table,
-    )
-    .expect("registry-level child-wrapper composition should succeed");
-
-    assert!(
-        composed.slot_overlay_set_id.is_none(),
-        "slot-less wrapper should produce no overlay set"
-    );
-}
-
-#[test]
-fn child_wrappers_with_overlays_preserves_structural_expansion() {
-    let mut string_table = StringTable::new();
-    let (mut registry, store_id) = registry_with_store();
-
-    let (parent, wrapper) = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
-        let wrapper = build_wrapper_with_slot_sequence(&mut store, vec![SlotKey::Default]);
-        let child = build_single_text_template(&mut store, &mut string_table, "child");
-        let child_node = build_child_template_node_for_template(&mut store, child);
-        let parent = build_template_with_children(&mut store, vec![child_node]);
-        (parent, wrapper)
-    };
-
-    let overlay_composed = apply_tir_child_wrappers_with_overlays(
-        &mut registry,
-        store_id,
-        parent,
-        &[wrapper],
-        &string_table,
-    )
-    .expect("registry-level composition should succeed");
-
-    // Run the store-local structural path on a fresh store with the same shape.
-    let mut local_store = TemplateIrStore::new();
-    let local_wrapper = build_wrapper_with_slot_sequence(&mut local_store, vec![SlotKey::Default]);
-    let local_child = build_single_text_template(&mut local_store, &mut string_table, "child");
-    let local_child_node = build_child_template_node_for_template(&mut local_store, local_child);
-    let local_parent = build_template_with_children(&mut local_store, vec![local_child_node]);
-
-    let local_composed_root = apply_tir_child_wrappers(
-        &mut local_store,
-        local_parent,
-        &[local_wrapper],
-        &string_table,
-    )
-    .expect("store-local wrapper application should succeed");
-
-    let store = registry.store(store_id).expect("store should exist");
-    let overlay_child_count = root_child_kinds_for_node(overlay_composed.root, &store).len();
-    let local_child_count = root_child_kinds_for_node(local_composed_root, &local_store).len();
-
-    assert_eq!(
-        overlay_child_count, local_child_count,
-        "overlay path should produce the same number of root children"
-    );
-}
-
-// -------------------------
-//  Cross-Store Head-Chain Composition Tests
-// -------------------------
-
-/// Builds a registry with two stores so tests can exercise cross-store wrapper
-/// references. The first store is the composition store; the second store
-/// holds foreign wrapper templates.
-fn registry_with_two_stores() -> (TemplateIrRegistry, TemplateStoreId, TemplateStoreId) {
-    let mut registry = TemplateIrRegistry::new();
-    let composition_store_id = registry.allocate_store();
-    let foreign_store_id = registry.allocate_store();
-    (registry, composition_store_id, foreign_store_id)
-}
-
-/// Fixture for cross-store head-chain composition tests.
-///
-/// WHAT: holds the wrapped registry, composition store ID, foreign wrapper
-///       template ID, composition template ID, original root, and string table
-///       so the three cross-store tests share one setup path without repeating
-///       registry/store/template construction.
-struct CrossStoreHeadChainFixture {
-    registry: Rc<RefCell<TemplateIrRegistry>>,
-    composition_store_id: TemplateStoreId,
-    foreign_wrapper: TemplateIrId,
-    template_id: TemplateIrId,
-    original_root: TemplateIrNodeId,
-    string_table: StringTable,
-}
-
-/// Builds a cross-store head-chain fixture: a foreign slot-bearing wrapper and
-/// a composition template whose head references that wrapper with the given
-/// phase and overlay-set identity, followed by body fill text.
-///
-/// WHAT: the caller supplies a registry (with any pre-allocated overlays), the
-///       store IDs, the wrapper reference phase and overlay-set ID, and the
-///       body fill text. The builder constructs a default-slot wrapper in the
-///       foreign store, a composition template in the composition store, and
-///       wraps the registry in `Rc<RefCell>`.
-/// WHY: the three cross-store tests differ only in the wrapper reference
-///      identity and the body text. Sharing the setup avoids duplicating
-///      registry/store/template construction while keeping each test's
-///      assertions self-contained.
-fn build_cross_store_head_chain_fixture(
-    registry: TemplateIrRegistry,
-    composition_store_id: TemplateStoreId,
-    foreign_store_id: TemplateStoreId,
-    phase: TemplateTirPhase,
-    overlay_set_id: TemplateOverlaySetId,
-    body_fill_text: &str,
-) -> CrossStoreHeadChainFixture {
-    let mut string_table = StringTable::new();
-
-    let foreign_wrapper = {
-        let mut foreign_store = registry
-            .store_mut(foreign_store_id)
-            .expect("foreign store should be mutable");
-        build_wrapper_with_slot_sequence(&mut foreign_store, vec![SlotKey::Default])
-    };
-
-    let wrapper_reference = TemplateTirChildReference::same_store(
-        foreign_wrapper,
-        foreign_store_id,
-        phase,
-        overlay_set_id,
-    );
-
-    let template_id = {
-        let mut store = registry
-            .store_mut(composition_store_id)
-            .expect("composition store should be mutable");
-        let wrapper_node = build_child_template_node_with_reference(&mut store, wrapper_reference);
-        let body_fill = build_text_node(
-            &mut store,
-            &mut string_table,
-            body_fill_text,
-            TemplateSegmentOrigin::Body,
-        );
-        build_template_with_children(&mut store, vec![wrapper_node, body_fill])
-    };
-
-    let original_root = {
-        let store = registry
-            .store(composition_store_id)
-            .expect("composition store should exist");
-        template_root_node_id(template_id, &store)
-    };
-
-    CrossStoreHeadChainFixture {
-        registry: Rc::new(RefCell::new(registry)),
-        composition_store_id,
-        foreign_wrapper,
-        template_id,
-        original_root,
-        string_table,
-    }
-}
-
-/// Composes a head-chain with a foreign slot-bearing wrapper and a default slot,
-/// verifying that the overlay-only path resolves the wrapper through its owning
-/// store without copying the foreign tree.
-#[test]
-fn head_chain_composes_foreign_wrapper_with_default_slot() {
-    let (registry, composition_store_id, foreign_store_id) = registry_with_two_stores();
-
-    let fixture = build_cross_store_head_chain_fixture(
-        registry,
-        composition_store_id,
-        foreign_store_id,
-        TemplateTirPhase::Parsed,
-        TemplateOverlaySetId::empty(),
-        "foreign fill",
-    );
-
-    let composed = compose_tir_head_chain_with_overlays(
-        &fixture.registry,
-        fixture.composition_store_id,
-        fixture.template_id,
-        &fixture.string_table,
-        false,
-    )
-    .expect("cross-store head-chain composition should succeed");
-
-    // The composed root must differ from the original because the cross-store
-    // wrapper was resolved through the overlay-only path, producing a new
-    // ChildTemplate node that carries the slot-resolution overlay set.
-    assert!(
-        composed.root != fixture.original_root,
-        "cross-store composition should produce a new root"
-    );
-
-    // The template-level slot_overlay_set_id should be None because the
-    // cross-store overlay is attached to the individual ChildTemplate node.
-    assert!(
-        composed.slot_overlay_set_id.is_none(),
-        "cross-store overlay should be on the ChildTemplate node, not the template-level set"
-    );
-
-    let registry_binding = fixture.registry.borrow();
-    let store = registry_binding
-        .store(fixture.composition_store_id)
-        .expect("composition store should exist");
-    let child_kinds = root_child_kinds_for_node(composed.root, &store);
-
-    assert_eq!(
-        child_kinds.len(),
-        1,
-        "composed root should have one child (the resolved foreign wrapper)"
-    );
-
-    let TemplateIrNodeKind::ChildTemplate { reference, .. } = child_kinds[0] else {
-        panic!("composed child should be a ChildTemplate node");
-    };
-
-    assert_eq!(
-        reference.root.store_id, foreign_store_id,
-        "composed reference should retain the foreign wrapper's store"
-    );
-    assert_eq!(
-        reference.root.template_id, fixture.foreign_wrapper,
-        "composed reference should retain the foreign wrapper's template ID"
-    );
-
-    // The overlay set on the composed reference should carry a slot-resolution
-    // overlay with one resolution for the default slot.
-    let overlay_set = registry_binding
-        .overlay_set(reference.overlay_set_id)
-        .expect("overlay set should be registry-owned");
-    let slot_overlay_id = overlay_set
-        .slot_resolution
-        .expect("overlay set should carry a slot-resolution overlay");
-    let slot_overlay = registry_binding
-        .slot_resolution_overlay(slot_overlay_id)
-        .expect("slot overlay should be registry-owned");
-
-    assert_eq!(
-        slot_overlay.resolutions.len(),
-        1,
-        "foreign wrapper with one default slot should have one resolution"
-    );
-
-    for (_, resolution) in &slot_overlay.resolutions {
-        assert!(
-            matches!(resolution.kind, TirSlotResolutionKind::Resolved { .. }),
-            "default slot should resolve to the body fill"
-        );
-    }
-}
-
-/// Verifies that a foreign wrapper with a specific phase and overlay set
-/// preserves that identity on the composed ChildTemplate node, with the
-/// slot-resolution overlay merged into the overlay set alongside the
-/// pre-existing expression overlay.
-#[test]
-fn head_chain_preserves_foreign_wrapper_phase_and_overlay_identity() {
-    let (mut registry, composition_store_id, foreign_store_id) = registry_with_two_stores();
-
-    // Allocate a non-empty expression overlay on the registry so the wrapper
-    // carries a distinct overlay identity.
-    let expression_overlay_id = registry.allocate_expression_overlay(TirExpressionOverlay {
-        overrides: Vec::new(),
-    });
-    let wrapper_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet {
-        expression_overrides: Some(expression_overlay_id),
-        slot_resolution: None,
-        wrapper_context: None,
-    });
-
-    let fixture = build_cross_store_head_chain_fixture(
-        registry,
-        composition_store_id,
-        foreign_store_id,
-        TemplateTirPhase::Formatted,
-        wrapper_overlay_set_id,
-        "fill content",
-    );
-
-    let composed = compose_tir_head_chain_with_overlays(
-        &fixture.registry,
-        fixture.composition_store_id,
-        fixture.template_id,
-        &fixture.string_table,
-        false,
-    )
-    .expect("cross-store head-chain composition should succeed");
-
-    let registry_binding = fixture.registry.borrow();
-    let store = registry_binding
-        .store(fixture.composition_store_id)
-        .expect("composition store should exist");
-    let child_kinds = root_child_kinds_for_node(composed.root, &store);
-
-    assert_eq!(child_kinds.len(), 1, "composed root should have one child");
-
-    let TemplateIrNodeKind::ChildTemplate { reference, .. } = child_kinds[0] else {
-        panic!("composed child should be a ChildTemplate node");
-    };
-
-    // The composed reference must preserve the foreign wrapper's root and phase.
-    assert_eq!(
-        reference.root.store_id, foreign_store_id,
-        "composed reference should retain the foreign wrapper's store"
-    );
-    assert_eq!(
-        reference.root.template_id, fixture.foreign_wrapper,
-        "composed reference should retain the foreign wrapper's template ID"
-    );
-    assert_eq!(
-        reference.phase,
-        TemplateTirPhase::Formatted,
-        "composed reference should preserve the wrapper's Formatted phase"
-    );
-
-    // The composed overlay set must carry both the slot-resolution overlay
-    // (newly allocated) and the original expression overlay ID (preserved
-    // from the wrapper's pre-existing overlay set). This proves every
-    // pre-existing overlay dimension survives composition.
-    let overlay_set = registry_binding
-        .overlay_set(reference.overlay_set_id)
-        .expect("overlay set should be registry-owned");
-    assert!(
-        overlay_set.slot_resolution.is_some(),
-        "composed overlay set should carry a slot-resolution overlay"
-    );
-    assert_eq!(
-        overlay_set.expression_overrides,
-        Some(expression_overlay_id),
-        "composed overlay set should preserve the wrapper's expression overlay ID"
-    );
-}
-
-/// Verifies that a missing foreign store produces a precise internal
-/// diagnostic rather than a content fallback or silent success.
-#[test]
-fn head_chain_foreign_wrapper_missing_store_produces_diagnostic() {
-    let mut string_table = StringTable::new();
-    let (registry, composition_store_id) = registry_with_store();
-
-    // Build a head-origin child referencing a non-existent foreign store.
-    let template_id = {
-        let mut store = registry
-            .store_mut(composition_store_id)
-            .expect("composition store should be mutable");
-        let bogus_store_id = TemplateStoreId::new(999);
-        let wrapper_reference = TemplateTirChildReference::same_store(
-            TemplateIrId::new(0),
-            bogus_store_id,
-            TemplateTirPhase::Parsed,
-            TemplateOverlaySetId::empty(),
-        );
-        let wrapper_node = build_child_template_node_with_reference(&mut store, wrapper_reference);
-        let body_fill = build_text_node(
-            &mut store,
-            &mut string_table,
-            "fill",
-            TemplateSegmentOrigin::Body,
-        );
-        build_template_with_children(&mut store, vec![wrapper_node, body_fill])
-    };
-
-    let registry = Rc::new(RefCell::new(registry));
-    let result = compose_tir_head_chain_with_overlays(
-        &registry,
-        composition_store_id,
-        template_id,
-        &string_table,
-        false,
-    );
-
-    assert!(
-        result.is_err(),
-        "missing foreign store should produce a diagnostic, not a silent success"
-    );
-
-    let diagnostic = result.unwrap_err();
-    let CompilerDiagnostic {
-        payload: DiagnosticPayload::InfrastructureError { msg, .. },
-        ..
-    } = diagnostic.as_ref()
-    else {
-        panic!(
-            "expected an InfrastructureError diagnostic for missing foreign store, got: {:?}",
-            diagnostic.payload
-        );
-    };
-    assert!(
-        msg.contains("cross-store child template store was not present in the registry"),
-        "diagnostic message should report the missing foreign store, got: {msg}",
     );
 }

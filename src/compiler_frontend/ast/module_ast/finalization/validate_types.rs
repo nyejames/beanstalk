@@ -28,8 +28,7 @@ use crate::compiler_frontend::ast::templates::runtime_handoff::{
 };
 use crate::compiler_frontend::ast::templates::template::Template;
 use crate::compiler_frontend::ast::templates::tir::{
-    TemplateIrRegistry, TemplateIrStore, finalized_tir_view_for_template,
-    walk_tir_view_expression_payloads,
+    TemplateIrStore, finalized_tir_view_for_template, walk_tir_view_expression_payloads,
 };
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorType};
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
@@ -40,14 +39,13 @@ use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 /// Context shared by every helper in this type-boundary validation pass.
 ///
 /// WHAT: bundles the final module `TypeEnvironment` with the module-scoped
-///       `TemplateIrStore` and `TemplateIrRegistry` so template-expression
+///       `TemplateIrStore` and `TemplateIrStore` so template-expression
 ///       payload validation resolves one required finalized `TirView`.
 /// WHY: the pass is read-only and short-lived; a small context struct keeps the
 ///      recursive walk signatures focused and stage-local.
 struct TypeValidationContext<'a> {
     type_environment: &'a TypeEnvironment,
     template_ir_store: &'a TemplateIrStore,
-    template_ir_registry: &'a TemplateIrRegistry,
 }
 
 impl AstFinalizer<'_, '_> {
@@ -57,16 +55,10 @@ impl AstFinalizer<'_, '_> {
         module_constants: &[Declaration],
         _string_table: &StringTable,
     ) -> Result<(), CompilerError> {
-        let template_ir_store = self.context.registered_template_ir_store.store().borrow();
-        let template_ir_registry = self
-            .context
-            .registered_template_ir_store
-            .registry()
-            .borrow();
+        let template_ir_store = self.context.template_ir_store.borrow();
         let context = TypeValidationContext {
             type_environment: &self.environment.type_environment,
             template_ir_store: &template_ir_store,
-            template_ir_registry: &template_ir_registry,
         };
 
         for node in ast {
@@ -314,7 +306,7 @@ fn validate_expression(
 
         // Template and collection literals.
         ExpressionKind::Template(template) => {
-            // A finalized registry-backed TIR view is required after normalization.
+            // A finalized module-store TIR view is required after normalization.
             validate_template_expression_payloads(template, context)?;
             Ok(())
         }
@@ -420,11 +412,11 @@ fn validate_owned_runtime_slot_application_handoff(
 
 /// Validates a template's nested expression payloads through one finalized `TirView`.
 ///
-/// WHAT: resolves the required finalized registry-backed `TirView` for the
+/// WHAT: resolves the required finalized module-store `TirView` for the
 ///       template and walks its effective expression payloads. Effective
 ///       expression overlays are authoritative for dynamic-expression splices,
 ///       branch selectors and loop headers. A template that reaches this
-///       boundary without a Finalized registry-backed identity is an internal
+///       boundary without a Finalized module-store identity is an internal
 ///       compiler invariant violation.
 /// WHY: type-boundary validation must validate the same effective TIR
 ///      representation that later phases consume; there is no raw same-store
@@ -433,11 +425,7 @@ fn validate_template_expression_payloads(
     template: &Template,
     context: &TypeValidationContext,
 ) -> Result<(), CompilerError> {
-    let view = finalized_tir_view_for_template(
-        template,
-        context.template_ir_store,
-        context.template_ir_registry,
-    )?;
+    let view = finalized_tir_view_for_template(template, context.template_ir_store)?;
 
     walk_tir_view_expression_payloads(&view, &mut |expression| {
         validate_expression(expression, context)

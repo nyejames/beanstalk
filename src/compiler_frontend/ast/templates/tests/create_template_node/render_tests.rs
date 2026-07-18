@@ -34,7 +34,7 @@ fn collect_formatted_body_text_locations_from_tir(
     let store = context.template_ir_store();
     let store = store.borrow();
     let tir = store
-        .get_template(reference.root.template_id)
+        .get_template(reference.root)
         .expect("referenced TIR template should exist");
 
     let mut locations = Vec::new();
@@ -77,7 +77,7 @@ fn collect_formatted_body_text_from_tir(
     let store = context.template_ir_store();
     let store = store.borrow();
     let tir = store
-        .get_template(reference.root.template_id)
+        .get_template(reference.root)
         .expect("referenced TIR template should exist");
 
     let mut texts = Vec::new();

@@ -1,8 +1,8 @@
-//! Central AST-local read API over the TIR registry.
+//! Central AST-local read API over the TIR store.
 //!
 //! WHAT: `TirView` is the single borrowed read surface that all future template
 //! consumers use to inspect a structural root plus its overlay context inside a
-//! `TemplateIrRegistry`. It pairs a store-qualified root `TemplateRef`, a
+//! `TemplateIrStore`. It pairs a module-local root `TemplateIrId`, a
 //! `TemplateTirPhase`, and a `TemplateOverlaySetId` so consumers never reach
 //! into raw stores or combine overlay maps ad hoc.
 //!
@@ -10,7 +10,7 @@
 //! central view, each consumer would re-implement store traversal, overlay
 //! resolution, and phase checking, creating duplicated logic and stage-boundary
 //! leaks. `TirView` keeps raw store traversal internal to the
-//! view/registry/builder/transform modules and exposes only the narrow facts
+//! view/store/builder/transform modules and exposes only the narrow facts
 //! that composition, formatting, folding, and finalization need.
 //!
 //! ## Phase semantics
@@ -29,7 +29,7 @@
 //!
 //! ## Overlay resolution
 //!
-//! The view carries one `TemplateOverlaySetId` resolved by the registry's
+//! The view carries one `TemplateOverlaySetId` resolved by the store's
 //! canonical composition path. The overlay-dimension entry accessors
 //! ([`TirView::expression_overlay`], [`TirView::slot_resolution_overlay`],
 //! [`TirView::wrapper_context_overlay`]) resolve which overlays are in play.
@@ -43,20 +43,16 @@
 //!
 //! ## Ownership contract
 //!
-//! `TirView` is AST-local and borrowed: it holds `&'a TemplateIrRegistry` and
-//! lives only as long as the registry. It is not exposed to HIR, backends, or
+//! `TirView` is AST-local and borrowed: it holds `&'a TemplateIrStore` and
+//! lives only as long as the store. It is not exposed to HIR, backends, or
 //! the public API.
 
-use std::cell::Ref;
 use std::fmt;
-use std::sync::Arc;
 
 use crate::compiler_frontend::compiler_errors::CompilerError;
 
 use super::ids::ChildTemplateOccurrenceId;
-#[cfg(test)]
-use super::ids::TemplateIrNodeId;
-use super::ids::{ExpressionSiteId, SlotOccurrenceId};
+use super::ids::{ExpressionSiteId, SlotOccurrenceId, TemplateIrId, TemplateIrNodeId};
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::templates::template::Template;
 #[cfg(test)]
@@ -70,8 +66,6 @@ use super::overlays::{
     TemplateOverlaySet, TemplateOverlaySetId, TirExpressionOverlay, TirSlotResolution,
     TirSlotResolutionOverlay, TirWrapperContext, TirWrapperContextOverlay,
 };
-use super::refs::{TemplateNodeRef, TemplateRef};
-use super::registry::TemplateIrRegistry;
 use super::store::TemplateIrStore;
 
 // -------------------------
@@ -133,28 +127,26 @@ impl fmt::Display for TemplateTirPhase {
 //  Finalized TirView Resolution
 // -------------------------
 
-/// Resolves the required finalized registry-backed `TirView` for a `Template`.
+/// Resolves the required finalized store-backed `TirView` for a `Template`.
 ///
 /// WHAT: the single authority used by AST-to-HIR handoff, final type-boundary
 ///       validation and debug TypeId validation. It requires the template's
-///       `tir_reference` to be at least `Finalized`, to belong to the exact
-///       direct module store owner and to resolve its root and overlay set
+///       `tir_reference` to be at least `Finalized`, to resolve its root and
+///       overlay set in the exact module store
 ///       through `TirView`. Every missing authority condition is an explicit
 ///       internal `CompilerError`. No caller may downgrade to a raw same-store
 ///       path.
 /// WHY: after normalization every template that reaches the AST-to-HIR boundary
-///      owns a Finalized registry-backed identity. A missing phase, owner,
-///      store, root or overlay is a compiler bug, not permission to reconstruct
+///      owns a Finalized store-backed identity. A missing phase, root or overlay
+///      is a compiler bug, not permission to reconstruct
 ///      template meaning from raw stores. Centralizing the required resolution
 ///      keeps the authority boundary in one place and removes duplicate local
 ///      fallback helpers from AST finalization.
 pub(crate) fn finalized_tir_view_for_template<'a>(
     template: &Template,
-    store: &TemplateIrStore,
-    registry: &'a TemplateIrRegistry,
+    store: &'a TemplateIrStore,
 ) -> Result<TirView<'a>, CompilerError> {
     let reference = &template.tir_reference;
-    let store_owner = store.owner();
 
     if !reference.phase.is_at_least(TemplateTirPhase::Finalized) {
         return Err(CompilerError::compiler_error(format!(
@@ -162,36 +154,8 @@ pub(crate) fn finalized_tir_view_for_template<'a>(
             reference.phase
         )));
     }
-    if !Arc::ptr_eq(&reference.store_owner, &store_owner) {
-        return Err(CompilerError::compiler_error(
-            "finalized_tir_view_for_template: template TIR reference store owner does not match the module store owner",
-        ));
-    }
-    if reference.root.store_id != store.store_id() {
-        return Err(CompilerError::compiler_error(format!(
-            "finalized_tir_view_for_template: template TIR reference store id {} does not match the module store id {}",
-            reference.root.store_id,
-            store.store_id()
-        )));
-    }
-
-    let registered_store = registry.store(reference.root.store_id).ok_or_else(|| {
-        CompilerError::compiler_error(format!(
-            "finalized_tir_view_for_template: module store {} is not registered",
-            reference.root.store_id
-        ))
-    })?;
-    let registered_store_owner = registered_store.owner();
-    if !Arc::ptr_eq(&registered_store_owner, &store_owner) {
-        return Err(CompilerError::compiler_error(format!(
-            "finalized_tir_view_for_template: registry store {} does not match the direct module store owner",
-            reference.root.store_id
-        )));
-    }
-    drop(registered_store);
-
     TirView::with_minimum_phase(
-        registry,
+        store,
         reference.root,
         reference.phase,
         TemplateTirPhase::Finalized,
@@ -203,12 +167,12 @@ pub(crate) fn finalized_tir_view_for_template<'a>(
 //  TirView
 // -------------------------
 
-/// Borrowed read view over a registry-owned structural root plus overlay set.
+/// Borrowed read view over a store-owned structural root plus overlay set.
 ///
-/// WHAT: pairs an immutable borrow of `TemplateIrRegistry` with a store-qualified
-///       root `TemplateRef`, a pipeline `TemplateTirPhase`, and a
+/// WHAT: pairs an immutable borrow of `TemplateIrStore` with a module-local
+///       root `TemplateIrId`, a pipeline `TemplateTirPhase`, and a
 ///       `TemplateOverlaySetId`. All read access goes through narrow methods
-///       that validate registry IDs and return `CompilerError` on failure.
+///       that validate root and overlay IDs and return `CompilerError` on failure.
 ///
 /// WHY: this is the single production read API for template consumers. It
 ///      keeps raw store traversal internal and centralizes phase and overlay
@@ -223,8 +187,8 @@ pub(crate) fn finalized_tir_view_for_template<'a>(
 /// referenced from the current root.
 #[derive(Clone)]
 pub(crate) struct TirView<'a> {
-    registry: &'a TemplateIrRegistry,
-    root: TemplateRef,
+    store: &'a TemplateIrStore,
+    root: TemplateIrId,
     phase: TemplateTirPhase,
     overlay_set_id: TemplateOverlaySetId,
 }
@@ -246,33 +210,33 @@ impl<'a> TirView<'a> {
 
     /// Creates a view over `root` at `phase` with the given overlay set.
     ///
-    /// WHAT: validates that `root` resolves to a template in the registry and
+    /// WHAT: validates that `root` resolves to a template in the store and
     ///       that `overlay_set_id` resolves to an allocated overlay set.
-    /// WHY: every consumer should go through a constructor so invalid registry
+    /// WHY: every consumer should go through a constructor so invalid store
     ///      IDs produce a structured `CompilerError` instead of a silent
     ///      placeholder or a later lookup panic.
     pub(crate) fn new(
-        registry: &'a TemplateIrRegistry,
-        root: TemplateRef,
+        store: &'a TemplateIrStore,
+        root: TemplateIrId,
         phase: TemplateTirPhase,
         overlay_set_id: TemplateOverlaySetId,
     ) -> Result<TirView<'a>, CompilerError> {
-        if registry.template(root).is_none() {
+        if store.get_template(root).is_none() {
             return Err(CompilerError::compiler_error(format!(
-                "TirView::new: root template {} does not exist in the registry",
+                "TirView::new: root template {} does not exist in the store",
                 root
             )));
         }
 
-        if registry.overlay_set(overlay_set_id).is_none() {
+        if store.overlay_set(overlay_set_id).is_none() {
             return Err(CompilerError::compiler_error(format!(
-                "TirView::new: overlay set {} does not exist in the registry",
+                "TirView::new: overlay set {} does not exist in the store",
                 overlay_set_id
             )));
         }
 
         Ok(TirView {
-            registry,
+            store,
             root,
             phase,
             overlay_set_id,
@@ -288,8 +252,8 @@ impl<'a> TirView<'a> {
     ///      need to fail early with a structured error when a root is not ready
     ///      for their stage, rather than silently reading incomplete data.
     pub(crate) fn with_minimum_phase(
-        registry: &'a TemplateIrRegistry,
-        root: TemplateRef,
+        store: &'a TemplateIrStore,
+        root: TemplateIrId,
         phase: TemplateTirPhase,
         minimum_phase: TemplateTirPhase,
         overlay_set_id: TemplateOverlaySetId,
@@ -301,13 +265,13 @@ impl<'a> TirView<'a> {
             )));
         }
 
-        Self::new(registry, root, phase, overlay_set_id)
+        Self::new(store, root, phase, overlay_set_id)
     }
 
-    /// Constructs a child view over a store-qualified child `TemplateRef`.
+    /// Constructs a child view over a module-local child `TemplateIrId`.
     ///
     /// WHAT: creates a new `TirView` for a child template referenced from the
-    ///       current root, sharing the same registry borrow. The child's
+    ///       current root, sharing the same store borrow. The child's
     ///       `phase` and `overlay_set_id` are provided by the caller because a
     ///       child template may carry a different pipeline phase and overlay
     ///       context than its parent.
@@ -317,25 +281,25 @@ impl<'a> TirView<'a> {
     ///      the parent, preventing ad hoc store traversal at call sites.
     pub(crate) fn child_view(
         &self,
-        child: TemplateRef,
+        child: TemplateIrId,
         phase: TemplateTirPhase,
         overlay_set_id: TemplateOverlaySetId,
     ) -> Result<TirView<'a>, CompilerError> {
-        // Skip registry.template() validation: the caller already verified the
-        // child template exists in the store. Calling registry.template() here
+        // Skip store.template() validation: the caller already verified the
+        // child template exists in the store. Calling store.template() here
         // would borrow the store's RefCell, which panics when the caller holds a
         // mutable store borrow (e.g. during effective-view classification).
-        // Overlay-set validation only touches registry-internal Vecs, so it is
+        // Overlay-set validation only touches store-internal Vecs, so it is
         // safe under any store borrow state.
-        if self.registry.overlay_set(overlay_set_id).is_none() {
+        if self.store.overlay_set(overlay_set_id).is_none() {
             return Err(CompilerError::compiler_error(format!(
-                "TirView::child_view: overlay set {} does not exist in the registry",
+                "TirView::child_view: overlay set {} does not exist in the store",
                 overlay_set_id
             )));
         }
 
         Ok(TirView {
-            registry: self.registry,
+            store: self.store,
             root: child,
             phase,
             overlay_set_id,
@@ -346,8 +310,8 @@ impl<'a> TirView<'a> {
     //  Narrow read accessors
     // -------------------------
 
-    /// Returns the store-qualified root `TemplateRef` this view was built over.
-    pub(crate) fn root_ref(&self) -> TemplateRef {
+    /// Returns the module-local root ID this view was built over.
+    pub(crate) fn root_ref(&self) -> TemplateIrId {
         self.root
     }
 
@@ -361,45 +325,26 @@ impl<'a> TirView<'a> {
         self.overlay_set_id
     }
 
-    /// Returns the registry backing this view for TIR-internal consumers.
+    /// Borrows the module-local store that owns this view's structural root.
     ///
-    /// WHAT: exposes the already-borrowed registry only inside the TIR module so
-    ///       consumers that first extract read-only view data can perform a
-    ///       separate append-only writeback through the same store authority.
-    /// WHY: formatter output needs to append derived `Text`/`Sequence` nodes
-    ///      after reading through `TirView`, but callers must not hold a mutable
-    ///      store borrow while the view is resolving nodes.
-    pub(in crate::compiler_frontend::ast::templates::tir) fn registry_ref(
-        &self,
-    ) -> &'a TemplateIrRegistry {
-        self.registry
-    }
-
-    /// Borrows the registry store that owns this view's structural root.
-    ///
-    /// WHAT: gives view consumers read-only access to the already-qualified
-    ///       store without reopening registry lookup or cloning the store.
-    /// WHY: const-required validation needs to pair child views with their
-    ///      owning store while following cross-store references. Keeping that
-    ///      lookup on `TirView` preserves root/store identity at the boundary.
-    pub(crate) fn store(&self) -> Result<Ref<'a, TemplateIrStore>, CompilerError> {
-        self.registry.store(self.root.store_id).ok_or_else(|| {
-            CompilerError::compiler_error(format!(
-                "TirView::store: root store {} is not registered; this is a compiler bug",
-                self.root.store_id
-            ))
-        })
+    /// WHAT: gives view consumers read-only access to the one module store
+    ///       backing this view without reopening a borrow or cloning the store.
+    /// WHY: const-required validation pairs child views with their owning
+    ///      store while following module-local references. Keeping that
+    ///      lookup on `TirView` preserves root and overlay identity at the boundary.
+    pub(crate) fn store(&self) -> &'a TemplateIrStore {
+        self.store
     }
 
     /// Returns the resolved overlay set for this view.
     ///
-    /// WHAT: borrows the registry-owned `TemplateOverlaySet` that was validated
-    ///       at construction.  Because the view holds an immutable registry
+    /// WHAT: borrows the store-owned `TemplateOverlaySet` that was validated
+    ///       at construction.  Because the view holds an immutable store
     ///       borrow, the set cannot be removed during the view's lifetime.
     /// WHY: consumers read the resolved overlay set through the view instead of
     ///      holding their own copy, keeping overlay identity centralized.
     pub(crate) fn overlay_set(&self) -> Result<&'a TemplateOverlaySet, CompilerError> {
-        self.registry.overlay_set(self.overlay_set_id).ok_or_else(|| {
+        self.store.overlay_set(self.overlay_set_id).ok_or_else(|| {
             CompilerError::compiler_error(format!(
                 "TirView::overlay_set: overlay set {} was valid at construction but is now missing; this is a compiler bug",
                 self.overlay_set_id
@@ -409,11 +354,11 @@ impl<'a> TirView<'a> {
 
     /// Returns an immutable borrow of the root template entry.
     ///
-    /// WHAT: resolves the store-qualified `TemplateRef` into the underlying
-    ///       `TemplateIr` through the registry.  Returns `CompilerError` if the
+    /// WHAT: resolves the module-local `TemplateIrId` into the underlying
+    ///       `TemplateIr` through the store.  Returns `CompilerError` if the
     ///       root is no longer resolvable (an internal invariant violation).
-    pub(crate) fn root_template(&self) -> Result<Ref<'a, TemplateIr>, CompilerError> {
-        self.registry.template(self.root).ok_or_else(|| {
+    pub(crate) fn root_template(&self) -> Result<&'a TemplateIr, CompilerError> {
+        self.store.get_template(self.root).ok_or_else(|| {
             CompilerError::compiler_error(format!(
                 "TirView::root_template: root {} was valid at construction but is now missing; this is a compiler bug",
                 self.root
@@ -424,23 +369,22 @@ impl<'a> TirView<'a> {
     /// Returns an immutable borrow of the root node for focused view tests.
     ///
     /// WHAT: resolves the root template, reads its `root` node ID, and looks up
-    ///       that node through the registry.
+    ///       that node through the store.
     /// WHY: focused tests use this to verify view-level root traversal without
     ///      reopening raw store access in production callers.
     #[cfg(test)]
-    pub(crate) fn root_node(&self) -> Result<Ref<'a, TemplateIrNode>, CompilerError> {
+    pub(crate) fn root_node(&self) -> Result<&'a TemplateIrNode, CompilerError> {
         let root_node_id = {
             let template = self.root_template()?;
             template.root
         };
 
-        let node_ref = TemplateNodeRef::new(self.root.store_id, root_node_id);
-        self.effective_node(node_ref)
+        self.effective_node(root_node_id)
     }
 
     /// Returns an immutable borrow of the effective node at `node_ref`.
     ///
-    /// WHAT: looks up a store-qualified node through the registry. The
+    /// WHAT: looks up a module-local node through the store. The
     ///       "effective" node is the structural node as stored; per-site
     ///       expression overrides and per-occurrence slot resolutions are
     ///       resolved through the occurrence-keyed lookup methods rather than
@@ -451,11 +395,11 @@ impl<'a> TirView<'a> {
     ///      overlay resolution without changing call sites.
     pub(crate) fn effective_node(
         &self,
-        node_ref: TemplateNodeRef,
-    ) -> Result<Ref<'a, TemplateIrNode>, CompilerError> {
-        self.registry.node(node_ref).ok_or_else(|| {
+        node_ref: TemplateIrNodeId,
+    ) -> Result<&'a TemplateIrNode, CompilerError> {
+        self.store.get_node(node_ref).ok_or_else(|| {
             CompilerError::compiler_error(format!(
-                "TirView::effective_node: node {} does not exist in the registry",
+                "TirView::effective_node: node {} does not exist in the store",
                 node_ref
             ))
         })
@@ -466,18 +410,18 @@ impl<'a> TirView<'a> {
     // -------------------------
     //
     // These accessors resolve the overlay-set ID into the concrete per-dimension
-    // overlay entry stored on the registry. Returning `None` means "this overlay
+    // overlay entry stored on the store. Returning `None` means "this overlay
     // dimension has no entry for this view's overlay set." A set that names a
-    // missing overlay entry is an internal registry invariant error.
+    // missing overlay entry is an internal store invariant error.
     // Occurrence-keyed lookups on top of these entries are provided by the
     // methods in the "Occurrence-keyed overlay lookups" section below.
 
     /// Returns the expression overlay entry, if the overlay set has one.
     ///
     /// WHAT: resolves the `expression_overrides` dimension of the overlay set
-    ///       into the registry-owned `TirExpressionOverlay` entry.
+    ///       into the store-owned `TirExpressionOverlay` entry.
     /// WHY: consumers that inspect expression overrides read them through the
-    ///      view rather than reaching into the registry directly.  The concrete
+    ///      view rather than reaching into the store directly.  The concrete
     ///      payload carries expression overrides keyed by `ExpressionSiteId`.
     pub(crate) fn expression_overlay(
         &self,
@@ -486,15 +430,12 @@ impl<'a> TirView<'a> {
             return Ok(None);
         };
 
-        let overlay = self
-            .registry
-            .expression_overlay(overlay_id)
-            .ok_or_else(|| {
-                CompilerError::compiler_error(format!(
-                    "TirView::expression_overlay: overlay {} does not exist in the registry",
-                    overlay_id
-                ))
-            })?;
+        let overlay = self.store.expression_overlay(overlay_id).ok_or_else(|| {
+            CompilerError::compiler_error(format!(
+                "TirView::expression_overlay: overlay {} does not exist in the store",
+                overlay_id
+            ))
+        })?;
 
         Ok(Some(overlay))
     }
@@ -502,9 +443,9 @@ impl<'a> TirView<'a> {
     /// Returns the slot resolution overlay entry, if the overlay set has one.
     ///
     /// WHAT: resolves the `slot_resolution` dimension of the overlay set into the
-    ///       registry-owned `TirSlotResolutionOverlay` entry.
+    ///       store-owned `TirSlotResolutionOverlay` entry.
     /// WHY: consumers that inspect slot resolution read it through the view
-    ///      rather than reaching into the registry directly.  The concrete
+    ///      rather than reaching into the store directly.  The concrete
     ///      payload carries slot resolutions keyed by `SlotOccurrenceId`.
     pub(crate) fn slot_resolution_overlay(
         &self,
@@ -514,11 +455,11 @@ impl<'a> TirView<'a> {
         };
 
         let overlay = self
-            .registry
+            .store
             .slot_resolution_overlay(overlay_id)
             .ok_or_else(|| {
                 CompilerError::compiler_error(format!(
-                    "TirView::slot_resolution_overlay: overlay {} does not exist in the registry",
+                    "TirView::slot_resolution_overlay: overlay {} does not exist in the store",
                     overlay_id
                 ))
             })?;
@@ -529,7 +470,7 @@ impl<'a> TirView<'a> {
     /// Returns the wrapper context overlay entry, if the overlay set has one.
     ///
     /// WHAT: resolves the `wrapper_context` dimension of the overlay set into the
-    ///       registry-owned `TirWrapperContextOverlay` entry.
+    ///       store-owned `TirWrapperContextOverlay` entry.
     /// WHY: view-native folding consults wrapper-context overlays at
     ///      child-template occurrence boundaries instead of mutating the child
     ///      template's structural wrapper set.
@@ -541,11 +482,11 @@ impl<'a> TirView<'a> {
         };
 
         let overlay = self
-            .registry
+            .store
             .wrapper_context_overlay(overlay_id)
             .ok_or_else(|| {
                 CompilerError::compiler_error(format!(
-                    "TirView::wrapper_context_overlay: overlay {} does not exist in the registry",
+                    "TirView::wrapper_context_overlay: overlay {} does not exist in the store",
                     overlay_id
                 ))
             })?;
@@ -588,7 +529,7 @@ impl<'a> TirView<'a> {
     #[cfg(test)]
     pub(crate) fn effective_expression_for_node(
         &self,
-        node_ref: TemplateNodeRef,
+        node_ref: TemplateIrNodeId,
     ) -> Result<Option<&'a Expression>, CompilerError> {
         let site_id = {
             let node = self.effective_node(node_ref)?;
@@ -746,20 +687,19 @@ impl<'a> TirView<'a> {
     //  Private traversal helpers
     // -------------------------
 
-    /// Resolves the store-qualified root node ref for test-only traversal helpers.
+    /// Resolves the module-local root node ID for test-only traversal helpers.
     ///
     /// WHAT: reads the root template entry, extracts its root `TemplateIrNodeId`,
-    ///       and pairs it with this view's store ID to produce a
-    ///       `TemplateNodeRef` suitable for `effective_node` lookups.
+    ///       and returns that `TemplateIrNodeId` for `effective_node` lookups.
     /// WHY: the test-only source-location helpers start their traversal from
     ///      the root node, so the root-node-ID extraction stays in one place.
     #[cfg(test)]
-    fn root_node_ref(&self) -> Result<TemplateNodeRef, CompilerError> {
+    fn root_node_ref(&self) -> Result<TemplateIrNodeId, CompilerError> {
         let root_node_id = {
             let template = self.root_template()?;
             template.root
         };
-        Ok(TemplateNodeRef::new(self.root.store_id, root_node_id))
+        Ok(root_node_id)
     }
 
     /// Recursively searches `node_ref` and its inline structural descendants for a
@@ -767,7 +707,7 @@ impl<'a> TirView<'a> {
     ///
     /// WHAT: borrows the node through `effective_node`, applies `matches` to its
     ///       kind and location, then recurses into structural children only. The
-    ///       `Ref` is dropped before recursing so the registry's `RefCell` is not
+    ///       `Ref` is dropped before recursing so the store's `RefCell` is not
     ///       held across recursive calls.
     /// WHY: the three source-location helpers share the same traversal shape but
     ///       differ only in which node kind and which ID field they match on.
@@ -778,7 +718,7 @@ impl<'a> TirView<'a> {
     #[cfg(test)]
     fn find_location_in_subtree(
         &self,
-        node_ref: TemplateNodeRef,
+        node_ref: TemplateIrNodeId,
         matches: &impl Fn(&TemplateIrNodeKind, &SourceLocation) -> Option<SourceLocation>,
     ) -> Result<Option<SourceLocation>, CompilerError> {
         let (found, children) = {
@@ -793,8 +733,7 @@ impl<'a> TirView<'a> {
         }
 
         for child_node_id in children {
-            let child_ref = TemplateNodeRef::new(node_ref.store_id, child_node_id);
-            if let Some(location) = self.find_location_in_subtree(child_ref, matches)? {
+            if let Some(location) = self.find_location_in_subtree(child_node_id, matches)? {
                 return Ok(Some(location));
             }
         }

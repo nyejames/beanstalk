@@ -54,7 +54,7 @@ pub(crate) use overlays::merge_tir_slot_resolution_overlay_sets;
 pub(crate) use helpers::ComposedTirRoot;
 
 #[cfg(test)]
-pub(crate) use child_wrappers::{apply_tir_child_wrappers, apply_tir_child_wrappers_with_overlays};
+pub(crate) use child_wrappers::apply_tir_child_wrappers;
 #[cfg(test)]
 pub(crate) use contributions::route_tir_slot_contributions;
 pub(crate) use contributions::{RoutedTirSlotContributions, TirSlotContributions};

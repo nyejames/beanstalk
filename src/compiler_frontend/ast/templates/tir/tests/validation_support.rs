@@ -97,10 +97,8 @@ pub(crate) fn validate_tir_store(store: &TemplateIrStore) -> Option<CompilerDiag
     }
 
     // Check that every wrapper-set entry's template refs point to valid
-    // templates in this store. Wrapper sets now store store-qualified
-    // `TemplateRef`s; validation ensures the store-local template ID is in
-    // bounds and the store ID matches the owning store, so out-of-bounds or
-    // wrong-store wrapper refs are caught here rather than during folding.
+    // templates in this store. Validation ensures the template ID is in bounds,
+    // so out-of-bounds wrapper refs are caught here rather than during folding.
     if let Some(diagnostic) = validate_wrapper_sets(store) {
         return Some(diagnostic);
     }
@@ -147,26 +145,14 @@ pub(crate) fn validate_tir_store(store: &TemplateIrStore) -> Option<CompilerDiag
 
 /// Validates that every wrapper-set template ref points to a valid template.
 ///
-/// WHAT: for each entry in the wrapper-set side table, checks that the
-/// store-local `template_id` of each `TemplateRef` is in bounds and that the
-/// `store_id` matches the owning store. This catches construction defects where a
-/// wrapper set references a template from the wrong store or a stale ID.
+/// WHAT: for each entry in the wrapper-set side table, checks that each local
+/// `TemplateIrId` is in bounds.
 fn validate_wrapper_sets(store: &TemplateIrStore) -> Option<CompilerDiagnostic> {
-    let store_id = store.store_id();
-
     for (set_index, wrapper_set) in store.wrapper_sets.iter().enumerate() {
         let wrapper_set_id = TemplateWrapperSetId::new(set_index);
 
         for reference in &wrapper_set.wrappers {
-            if reference.root.store_id != store_id {
-                return Some(out_of_store_wrapper_template_ref_diagnostic(
-                    wrapper_set_id,
-                    reference,
-                    store_id,
-                ));
-            }
-
-            if reference.root.template_id.index() >= store.templates.len() {
+            if reference.root.index() >= store.templates.len() {
                 return Some(out_of_bounds_wrapper_template_ref_diagnostic(
                     wrapper_set_id,
                     reference,
@@ -603,10 +589,11 @@ fn validate_node_references(
         }
 
         TemplateIrNodeKind::ChildTemplate { reference, .. } => {
-            if let Some(template_id) = reference.template_id_in_store(store.store_id())
-                && template_id.index() >= store.templates.len()
-            {
-                return Some(out_of_bounds_template_ref_diagnostic(node_id, template_id));
+            if reference.root.index() >= store.templates.len() {
+                return Some(out_of_bounds_template_ref_diagnostic(
+                    node_id,
+                    reference.root,
+                ));
             }
         }
 
@@ -856,17 +843,6 @@ fn out_of_bounds_template_ref_diagnostic(
     tir_validation_diagnostic(format!(
         "TIR validation: node {} references template {} which is out of bounds",
         node_id, template_id
-    ))
-}
-
-fn out_of_store_wrapper_template_ref_diagnostic(
-    wrapper_set_id: TemplateWrapperSetId,
-    reference: &TemplateWrapperReference,
-    expected_store_id: crate::compiler_frontend::ast::templates::tir::refs::TemplateStoreId,
-) -> CompilerDiagnostic {
-    tir_validation_diagnostic(format!(
-        "TIR validation: wrapper set {} references template {} from store {} but the owning store is {}",
-        wrapper_set_id, reference, reference.root.store_id, expected_store_id
     ))
 }
 

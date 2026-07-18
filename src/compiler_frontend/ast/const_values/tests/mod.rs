@@ -20,9 +20,8 @@ use crate::compiler_frontend::ast::expressions::expression_types::ConstValueKind
 use crate::compiler_frontend::ast::templates::template::Template;
 use crate::compiler_frontend::ast::templates::template::{SlotKey, Style, TemplateType};
 use crate::compiler_frontend::ast::templates::tir::{
-    SlotOccurrenceId, TemplateIrBuilder, TemplateIrRegistry, TemplateIrStore, TemplateIrSummary,
-    TemplateOverlaySet, TemplateRef, TemplateTirPhase, TemplateTirReference, TirSlotResolution,
-    TirSlotResolutionOverlay,
+    SlotOccurrenceId, TemplateIrBuilder, TemplateIrStore, TemplateIrSummary, TemplateOverlaySet,
+    TemplateTirPhase, TemplateTirReference, TirSlotResolution, TirSlotResolutionOverlay,
 };
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
@@ -39,15 +38,7 @@ fn make_resolver<'a>(
     string_table: &'a mut StringTable,
     store: &mut TemplateIrStore,
 ) -> ConstValueResolver<'a> {
-    // Adopt the fixture store into the same registry topology production
-    // finalization uses. Const classification must never need a detached-store
-    // compatibility path solely for these resolver tests.
-    let store = Rc::new(RefCell::new(std::mem::take(store)));
-    let mut registry = TemplateIrRegistry::new();
-    registry.adopt_store(store);
-    registry.allocate_overlay_set(TemplateOverlaySet::empty());
-
-    ConstValueResolver::new(string_table, Rc::new(RefCell::new(registry)))
+    ConstValueResolver::new(string_table, Rc::new(RefCell::new(std::mem::take(store))))
 }
 
 fn make_environment_with(
@@ -506,19 +497,15 @@ fn body_local_mutable_declaration_fails() {
 
 /// Builds a finalized slot template whose effective overlay resolves one fill.
 ///
-/// WHAT: gives the resolver a registry-qualified root plus the slot-resolution
+/// WHAT: gives the resolver a module-local root plus the slot-resolution
 ///       overlay that makes the template an effective wrapper value.
 /// WHY: const-fact classification must preserve the overlay-backed wrapper
-///      category rather than reconstructing the template's empty content mirror.
-fn build_resolved_slot_template_registry() -> (Template, Rc<RefCell<TemplateIrRegistry>>) {
+///      category rather than reading only the structural root.
+fn build_resolved_slot_template_store() -> (Template, Rc<RefCell<TemplateIrStore>>) {
     let location = SourceLocation::default();
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.allocate_store();
-    let store_handle = registry
-        .store_handle(store_id)
-        .expect("test store should exist");
+    let store_handle = Rc::new(RefCell::new(TemplateIrStore::new()));
 
-    let (template_id, fill_template_id, store_owner) = {
+    let (template_id, fill_template_id) = {
         let mut store = store_handle.borrow_mut();
 
         let mut fill_builder = TemplateIrBuilder::new(&mut store);
@@ -541,43 +528,44 @@ fn build_resolved_slot_template_registry() -> (Template, Rc<RefCell<TemplateIrRe
             location.clone(),
         );
 
-        (template_id, fill_template_id, store.owner())
+        (template_id, fill_template_id)
     };
 
-    let slot_overlay_id = registry.allocate_slot_resolution_overlay(TirSlotResolutionOverlay {
-        resolutions: vec![(
-            SlotOccurrenceId::new(0),
-            TirSlotResolution::resolved(
-                SlotKey::Default,
-                vec![TemplateRef::new(store_id, fill_template_id)],
-            ),
-        )],
-    });
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet {
-        expression_overrides: None,
-        slot_resolution: Some(slot_overlay_id),
-        wrapper_context: None,
-    });
+    let slot_overlay_id =
+        store_handle
+            .borrow_mut()
+            .allocate_slot_resolution_overlay(TirSlotResolutionOverlay {
+                resolutions: vec![(
+                    SlotOccurrenceId::new(0),
+                    TirSlotResolution::resolved(SlotKey::Default, vec![fill_template_id]),
+                )],
+            });
+    let overlay_set_id = store_handle
+        .borrow_mut()
+        .allocate_overlay_set(TemplateOverlaySet {
+            expression_overrides: None,
+            slot_resolution: Some(slot_overlay_id),
+            wrapper_context: None,
+        });
 
     let template = Template {
         kind: TemplateType::String,
         tir_reference: TemplateTirReference {
-            root: TemplateRef::new(store_id, template_id),
-            store_owner,
+            root: template_id,
             phase: TemplateTirPhase::Finalized,
             overlay_set_id,
         },
         location,
     };
 
-    (template, Rc::new(RefCell::new(registry)))
+    (template, store_handle)
 }
 
 #[test]
 fn slot_template_const_fact_uses_effective_tir_view() {
     let mut string_table = StringTable::new();
 
-    let (template, registry) = build_resolved_slot_template_registry();
+    let (template, registry) = build_resolved_slot_template_store();
     let declaration = Declaration {
         id: InternedPath::from_single_str("wrapper", &mut string_table),
         value: Expression::template(template, ValueMode::ImmutableOwned),

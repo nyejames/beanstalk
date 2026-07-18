@@ -318,9 +318,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 SignatureTypeFallbackPolicy::StrictCapacity,
                 false,
             )?;
-            let template_ir_registry =
-                Rc::clone(self.context.registered_template_ir_store.registry());
-            let template_ir_store = Rc::clone(self.context.registered_template_ir_store.store());
+            let template_ir_store = Rc::clone(&self.context.template_ir_store);
             let mut type_resolution_context = self.type_resolution_context_for_with_traits(
                 &visibility,
                 generic_parameter_scope.as_ref(),
@@ -331,7 +329,6 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 &header.tokens.src_path,
                 &unresolved_fields,
                 &mut type_resolution_context,
-                &template_ir_registry,
                 &template_ir_store,
                 string_table,
             )
@@ -1016,7 +1013,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                     template_const_loop_iteration_limit: self
                         .context
                         .template_const_loop_iteration_limit,
-                    registered_template_ir_store: self.context.registered_template_ir_store.clone(),
+                    template_ir_store: self.context.template_ir_store.clone(),
                     build_profile: self.context.build_profile,
                     warnings: &mut self.warnings,
                     rendered_path_usages: self.rendered_path_usages.clone(),
@@ -1167,7 +1164,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
             Arc::clone(&self.context.external_package_registry),
             vec![],
             0,
-            self.context.registered_template_ir_store.clone(),
+            self.context.template_ir_store.clone(),
         )
         .with_style_directives(self.context.style_directives)
         .with_build_profile(self.context.build_profile)

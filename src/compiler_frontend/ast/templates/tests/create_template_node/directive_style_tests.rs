@@ -773,7 +773,7 @@ fn runtime_templates_with_code_format_only_static_body_strings() {
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("template should parse");
 
-    let store = context.registered_template_ir_store.store().borrow();
+    let store = context.template_ir_store.borrow();
     assert!(tir_root_has_head_dynamic_expression(
         &template,
         &store,

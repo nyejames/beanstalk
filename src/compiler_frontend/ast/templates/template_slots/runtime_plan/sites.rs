@@ -209,7 +209,7 @@ impl RuntimeWrapperSitePlanBuilder<'_> {
         for wrapper_ref in wrapper_refs.into_iter().rev() {
             add_ast_counter(AstCounter::TemplateWrapperApplications, 1);
 
-            let wrapper_id = wrapper_ref.root.template_id;
+            let wrapper_id = wrapper_ref.root;
 
             let Some(wrapper_root) = self
                 .store
@@ -345,39 +345,20 @@ fn build_tir_wrapper_render_pieces(
         }
 
         TemplateIrNodeKind::ChildTemplate { reference, .. } => {
-            match reference.template_id_in_store(store.store_id()) {
-                Some(template_id) => {
-                    let template = store.get_template(template_id).ok_or_else(|| {
-                        CompilerError::compiler_error(format!(
-                            "Runtime slot site planning found same-store child template {} missing from TIR store {}.",
-                            template_id,
-                            store.store_id()
-                        ))
-                    })?;
+            let template = store.get_template(reference.root).ok_or_else(|| {
+                CompilerError::compiler_error(format!(
+                    "Runtime slot site planning found child template {} missing from the TIR store.",
+                    reference.root
+                ))
+            })?;
 
-                    build_tir_wrapper_render_pieces(
-                        template.root,
-                        inner_plan,
-                        target_key,
-                        store,
-                        copy_state,
-                    )
-                }
-
-                None => {
-                    // Foreign reference: keep on the subtree-copy authority
-                    // path. Same-store authority is required above, so a
-                    // reference to another store stays on the existing copy
-                    // owner instead of being resolved here.
-                    let copied_root = copy_tir_subtree_with_active_slot_plan(
-                        wrapper_root,
-                        None,
-                        store,
-                        copy_state,
-                    )?;
-                    Ok(vec![TemplateSlotSiteRenderPiece::Render(copied_root)])
-                }
-            }
+            build_tir_wrapper_render_pieces(
+                template.root,
+                inner_plan,
+                target_key,
+                store,
+                copy_state,
+            )
         }
 
         _ => {

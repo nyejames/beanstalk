@@ -13,18 +13,17 @@
 use super::*;
 
 #[cfg(test)]
-use crate::compiler_frontend::ast::templates::tir::{TemplateIrRegistry, TemplateIrStore};
+use crate::compiler_frontend::ast::templates::tir::TemplateIrStore;
 
 #[cfg(test)]
 impl ScopeContext {
     /// Build a scope context backed by a fresh isolated TIR store for tests
     /// that do not own the shared module-level store.
     ///
-    /// WHAT: adopts an empty `TemplateIrStore` into a fresh registry so the
+    /// WHAT: adopts an empty `TemplateIrStore` as the fresh module store so the
     ///       context satisfies the required-store constructor invariant of
     ///       `ScopeContext::new` without borrowing a production module store.
-    /// WHY: `ScopeContext::new` requires the shared module
-    ///      `RegisteredTemplateIrStore`; tests that exercise non-template scope
+    /// WHY: `ScopeContext::new` requires the shared module TIR store; tests that exercise non-template scope
     ///      behaviour need an isolated store without assembling one inline at
     ///      every call site. Tests that must share a specific store should build
     ///      that store explicitly and pass it to `ScopeContext::new`, or swap it
@@ -37,10 +36,7 @@ impl ScopeContext {
         expected_result_type_ids: Vec<TypeId>,
         scope_frame_capacity: usize,
     ) -> ScopeContext {
-        let registered_template_ir_store = RegisteredTemplateIrStore::adopt_into(
-            Rc::new(RefCell::new(TemplateIrRegistry::new())),
-            Rc::new(RefCell::new(TemplateIrStore::new())),
-        );
+        let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
         ScopeContext::new(
             kind,
             scope,
@@ -48,47 +44,23 @@ impl ScopeContext {
             external_package_registry,
             expected_result_type_ids,
             scope_frame_capacity,
-            registered_template_ir_store,
+            template_ir_store,
         )
     }
 }
 
 impl ScopeContext {
-    /// Swap the registered TIR store on an already-built scope context.
-    ///
-    /// WHAT: replaces the context's registered store with another
-    ///       `RegisteredTemplateIrStore`. Test-only: production contexts receive
-    ///       the shared module store through `ScopeContext::new` and never
-    ///       replace it after construction.
-    /// WHY: isolated tests assemble a context through a shared helper and then
-    ///      need to share another context's store so template refs resolve
-    ///      against the same registry owner. Production has no replacement path.
-    #[cfg(test)]
-    pub(crate) fn with_registered_template_ir_store(
-        mut self,
-        registered_store: RegisteredTemplateIrStore,
-    ) -> ScopeContext {
-        self.registered_template_ir_store = registered_store;
-        self
-    }
-
     /// Set the shared parser-emitted TIR store for this scope tree.
     ///
-    /// WHAT: adopts the given store into a fresh registry-backed primary store so the
-    ///       context never carries a store handle without a matching registry owner.
-    /// WHY: tests and isolated contexts construct a store directly and then need a
-    ///      registry-backed identity so the context does not drift into two unrelated
-    ///      ownership paths. Production callers receive the shared module store
-    ///      through `ScopeContext::new` instead.
+    /// WHAT: replaces the isolated test store with the explicitly shared module store.
+    /// WHY: tests that inspect one store across contexts must pass that handle
+    /// directly, just like production contexts do.
     #[cfg(test)]
     pub(crate) fn with_template_ir_store(
         mut self,
         store: Rc<RefCell<TemplateIrStore>>,
     ) -> ScopeContext {
-        self.registered_template_ir_store = RegisteredTemplateIrStore::adopt_into(
-            Rc::new(RefCell::new(TemplateIrRegistry::new())),
-            store,
-        );
+        self.template_ir_store = store;
         self
     }
 
@@ -98,7 +70,7 @@ impl ScopeContext {
     /// language or HIR-facing API.
     #[cfg(test)]
     pub(crate) fn template_ir_store(&self) -> Rc<RefCell<TemplateIrStore>> {
-        Rc::clone(self.registered_template_ir_store.store())
+        Rc::clone(&self.template_ir_store)
     }
 
     // --------------------------

@@ -13,19 +13,14 @@
 //! The entry point creates one `AstBuildContext`, then each phase narrows to `AstPhaseContext`
 //! and re-borrows the `StringTable` as needed.
 //!
-//! ## TIR registry ownership
+//! ## TIR store ownership
 //!
-//! `AstPhaseContext` owns the module-local TIR registry through a
-//! `RegisteredTemplateIrStore` that couples the registry, the store-level ID, and the
-//! matching direct store handle. The registry allocates a capacity-sized primary store;
-//! the coupled value lets all parser contexts share one registered-store identity without
-//! assembling the three components independently.
+//! `AstPhaseContext` allocates one module-local `TemplateIrStore`. All production
+//! parser and semantic contexts receive clones of that shared handle.
 
 use crate::compiler_frontend::FrontendBuildProfile;
 use crate::compiler_frontend::arena::FrontendArenaCapacityEstimate;
-use crate::compiler_frontend::ast::templates::tir::{
-    RegisteredTemplateIrStore, TemplateIrRegistry,
-};
+use crate::compiler_frontend::ast::templates::tir::TemplateIrStore;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
@@ -87,16 +82,8 @@ pub(crate) struct AstPhaseContext<'a> {
     pub(crate) template_const_loop_iteration_limit: usize,
     pub(crate) capacity_estimate: FrontendArenaCapacityEstimate,
 
-    /// Registered TIR store: couples the module-local registry, store ID and direct store
-    /// handle for this AST phase.
-    ///
-    /// WHAT: allocates the capacity-sized primary store through the registry and couples
-    ///       it with the store ID and direct handle so child scope contexts share one
-    ///       registered-store value.
-    /// WHY: the final TIR system allows multiple stores per module; the coupled value
-    ///      keeps store identity explicit and prevents callers from assigning a store
-    ///      handle that does not match the registry entry.
-    pub(crate) registered_template_ir_store: RegisteredTemplateIrStore,
+    /// Shared module-local TIR store for this AST phase.
+    pub(crate) template_ir_store: Rc<RefCell<TemplateIrStore>>,
 }
 
 impl<'a> AstPhaseContext<'a> {
@@ -119,9 +106,9 @@ impl<'a> AstPhaseContext<'a> {
             capacity_estimate,
         } = context;
 
-        let registry = Rc::new(RefCell::new(TemplateIrRegistry::new()));
-        let registered_template_ir_store =
-            RegisteredTemplateIrStore::allocate_primary_with_capacity(registry, capacity_estimate);
+        let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::with_capacity_estimate(
+            capacity_estimate,
+        )));
 
         (
             Self {
@@ -133,7 +120,7 @@ impl<'a> AstPhaseContext<'a> {
                 path_format_config,
                 template_const_loop_iteration_limit,
                 capacity_estimate,
-                registered_template_ir_store,
+                template_ir_store,
             },
             string_table,
         )

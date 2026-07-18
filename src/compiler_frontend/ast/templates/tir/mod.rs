@@ -13,7 +13,7 @@
 //! TIR is owned by the AST template subsystem. It does not own HIR, backend,
 //! or public API data. The store is module-scoped and dropped after AST
 //! template processing for that module completes. HIR and backends never see
-//! TIR IDs, stores, views, overlays, or registry values.
+//! TIR IDs, stores, views, overlays, or store values.
 //!
 //! ## Phase model
 //!
@@ -27,13 +27,11 @@
 //! Consumers require a minimum phase: folding needs `Composed`, and HIR handoff
 //! needs `Finalized`.
 //!
-//! ## Registry, views, and overlays
+//! ## Store, views, and overlays
 //!
-//! `TemplateIrRegistry` owns all stores and overlay side tables for one module.
-//! `TirView` is the single production read API: it pairs a store-qualified root
-//! with a phase and an overlay-set ID, and resolves effective expressions,
-//! slot resolutions, and wrapper contexts without mutating shared structural
-//! roots.
+//! `TemplateIrStore` owns all structural and overlay data for one module.
+//! `TirView` is the single production read API: it pairs a module-local root
+//! with a phase and an overlay-set ID.
 //!
 //! ## Module layout
 //!
@@ -41,8 +39,7 @@
 //! tir/
 //! ├── mod.rs                           Module entry and narrow re-exports
 //! ├── ids.rs                           Typed store IDs (template, node, wrapper set, slot plan)
-//! ├── refs.rs                          Store-qualified final TIR references
-//! ├── registry.rs                      Module-local registry for stores, refs, and overlays
+//! ├── refs.rs                          Module-local durable TIR references
 //! ├── overlays.rs                      Final overlay set and overlay dimension handles
 //! ├── store.rs                         TemplateIrStore — central owned storage
 //! ├── node.rs                          TemplateIr, TemplateIrNode, TemplateIrNodeKind
@@ -57,7 +54,6 @@
 //! ├── fold.rs                          TIR-native compile-time folding
 //! ├── formatter_view.rs                TIR-native formatter feed
 //! ├── render_unit.rs                   Render-unit and aggregate-wrapper preparation
-//! ├── foreign_slot_insert_proxy.rs      Cross-store SlotInsert proxy construction
 //! ├── handoff_materialization.rs       Build owned runtime-template trees for HIR lowering
 //! ├── slot_plan.rs                     Runtime slot route handoff side tables
 //! ├── slot_composition/                TIR-native slot schema and contribution routing
@@ -83,23 +79,23 @@ mod expression_payload_walker;
 mod ids;
 mod subtree_copy;
 
-// `refs` defines the active store-qualified handle types consumed by the
-// registry, view, folding, formatting, metadata, validation, and handoff paths.
-mod refs;
+// `refs` defines durable module-local identities consumed by view, folding,
+// formatting, metadata, validation, and handoff paths.
+pub(crate) mod refs;
 
-// `registry` owns AST-local TIR stores plus overlay storage. Production
-// construction, finalization, view, folding, formatting, metadata, and
-// slot-composition paths use the active registry surface, while focused
-// tests keep currently-unused freeze/domain helpers gated to test builds.
-mod registry;
+// `TemplateIrStore` owns AST-local template IR plus overlay storage.
+// Production construction, finalization, view, folding, formatting,
+// metadata, and slot-composition paths use the active store surface, while
+// focused tests keep currently-unused freeze/domain helpers gated to test
+// builds.
 
 // `overlays` defines active overlay-set and overlay-dimension payloads. The
-// production registry/view paths consume expression and slot-resolution
+// production store/view paths consume expression and slot-resolution
 // overlays; focused tests keep the wrapper-context payload surface covered
 // until production allocates that overlay dimension.
 mod overlays;
 
-// `view` is the central AST-local read API over registry-owned template roots
+// `view` is the central AST-local read API over store-owned template roots
 // and body/root subtrees plus overlay sets. It is consumed by production final
 // type-boundary and debug validation as well as tests.
 mod view;
@@ -137,12 +133,6 @@ mod formatter_view;
 mod handoff_materialization;
 
 mod render_unit;
-
-// `foreign_slot_insert_proxy` builds local proxy templates for cross-store
-// SlotInsert heads. Render-unit conversion calls it as orchestration; the
-// module owns proxy construction and derived-template creation, routing all
-// foreign-store mutation through `TemplateIrRegistry::store_mut`.
-mod foreign_slot_insert_proxy;
 
 // Runtime slot-plan handoff side-table types consumed by reactive metadata and HIR lowering.
 mod slot_plan;
@@ -192,28 +182,11 @@ pub(crate) use node::{
     TemplateIr, TemplateIrBranch, TemplateIrNode, TemplateIrNodeKind, TirSlotPlaceholder,
 };
 pub(crate) use store::TemplateIrStore;
-// `TemplateIrStoreOwner` is only needed by focused TIR tests through this
-// re-export; production code imports it directly from `store`.
-#[cfg(test)]
-pub(crate) use store::TemplateIrStoreOwner;
 #[cfg(test)]
 pub(crate) use summary::TemplateIrSummary;
 
-// Registry-qualified handles used by production TIR registry and view consumers.
-#[cfg(test)]
-pub(crate) use refs::TemplateTirChildReference;
-#[cfg(test)]
-pub(crate) use refs::TemplateWrapperSetRef;
-pub(crate) use refs::{TemplateNodeRef, TemplateRef, TemplateStoreId, TemplateWrapperReference};
+pub(crate) use refs::{TemplateTirReference, TemplateWrapperReference};
 pub(crate) use wrapper_sets::{attach_wrapper_context_overlay, wrapper_reference_for_template};
-
-// Extra store-qualified ref types needed by focused TIR tests. Keep them off
-// the normal production surface.
-#[cfg(test)]
-pub(crate) use refs::TemplateStringDomainId;
-
-// Module-local TIR registry: owns all stores and validates cross-store references.
-pub(crate) use registry::{RegisteredTemplateIrStore, TemplateIrRegistry};
 
 // Final overlay set and expression-overlay types consumed by production
 // template creation and finalization.
@@ -248,9 +221,6 @@ pub(crate) use slot_composition::{
     wrap_tir_node_in_wrappers,
 };
 
-// Parser builder state: the in-progress parser TIR accumulator.
-pub(crate) use parser_builder_state::TemplateTirReference;
-
 // Parser-local construction context: owns the in-progress builder state while
 // a template is being parsed and shaped, keeping parse-time accumulator state
 // off the long-lived `Template` struct.
@@ -273,13 +243,7 @@ pub(crate) use classification::{
 // and by production template folding paths.
 pub(crate) use fold::fold_tir_view;
 pub(crate) use fold::fold_tir_view_prepared;
-#[cfg(test)]
-pub(crate) use fold::fold_tir_view_read_only;
 pub(crate) use fold_safety::tir_view_is_empty_overlay_linear_fold_safe;
-#[cfg(test)]
-pub(crate) use fold_safety::tir_view_is_expression_overlay_linear_fold_safe;
-#[cfg(test)]
-pub(crate) use fold_safety::tir_view_is_read_only_fold_safe;
 pub(crate) use fold_safety::{PreparedTirViewFold, prepare_tir_view_fold};
 
 // Fold cache: AST-phase-local cache for TIR fold results. The primary cache is
@@ -307,5 +271,5 @@ pub(crate) use slot_plan::{
     TemplateSlotSiteRenderPiece, TemplateSlotSiteRenderPlan, convert_tir_tree_to_active_slot_plan,
 };
 
-// Central read API over registry-owned template roots and overlay sets.
+// Central read API over store-owned template roots and overlay sets.
 pub(crate) use view::{TemplateTirPhase, TirView, finalized_tir_view_for_template};

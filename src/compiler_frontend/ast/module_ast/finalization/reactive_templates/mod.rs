@@ -20,7 +20,7 @@ mod types;
 
 use super::finalizer::AstFinalizer;
 use crate::compiler_frontend::ast::ast_nodes::AstNode;
-use crate::compiler_frontend::ast::templates::tir::{TemplateIrRegistry, TemplateIrStore};
+use crate::compiler_frontend::ast::templates::tir::TemplateIrStore;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 
 impl AstFinalizer<'_, '_> {
@@ -32,24 +32,14 @@ impl AstFinalizer<'_, '_> {
         // Borrow the module-scoped TIR store mutably so annotation can update
         // same-store finalized body roots directly. Later normalization then
         // observes the same annotated expressions instead of stale body content.
-        let mut store = self
-            .context
-            .registered_template_ir_store
-            .store()
-            .borrow_mut();
-        let mut registry = self
-            .context
-            .registered_template_ir_store
-            .registry()
-            .borrow_mut();
-        propagate_reactive_template_metadata_in_ast(ast, &mut store, &mut registry)
+        let mut store = self.context.template_ir_store.borrow_mut();
+        propagate_reactive_template_metadata_in_ast(ast, &mut store)
     }
 }
 
 pub(crate) fn propagate_reactive_template_metadata_in_ast(
     ast: &mut [AstNode],
     store: &mut TemplateIrStore,
-    registry: &mut TemplateIrRegistry,
 ) -> Result<(), CompilerError> {
     let mut function_flows = flow::initialize_function_template_flows(ast);
 
@@ -67,13 +57,7 @@ pub(crate) fn propagate_reactive_template_metadata_in_ast(
     }
 
     let mut value_environment = types::ReactiveTemplateValueEnvironment::default();
-    annotation::annotate_nodes(
-        ast,
-        &function_flows,
-        &mut value_environment,
-        store,
-        registry,
-    )
+    annotation::annotate_nodes(ast, &function_flows, &mut value_environment, store)
 }
 
 #[cfg(test)]

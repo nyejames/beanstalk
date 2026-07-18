@@ -19,7 +19,7 @@
 //! ## Key safety
 //!
 //! The key includes only dimensions that are stable and identity-bearing today:
-//! - store-qualified root `TemplateRef`;
+//! - module-local root `TemplateIrId`;
 //! - pipeline `TemplateTirPhase`;
 //! - canonical `TemplateOverlaySetId`;
 //! - const-loop iteration limit;
@@ -35,7 +35,7 @@ use std::collections::HashMap;
 
 use crate::compiler_frontend::ast::templates::template_folding::TemplateEmission;
 use crate::compiler_frontend::ast::templates::tir::overlays::TemplateOverlaySetId;
-use crate::compiler_frontend::ast::templates::tir::refs::TemplateRef;
+use crate::compiler_frontend::ast::templates::tir::refs::TemplateIrId;
 use crate::compiler_frontend::ast::templates::tir::view::TemplateTirPhase;
 
 // -------------------------
@@ -53,8 +53,8 @@ use crate::compiler_frontend::ast::templates::tir::view::TemplateTirPhase;
 ///      remaining context dimensions explicit.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct TirFoldCacheKey {
-    /// Store-qualified root template ref.
-    pub(crate) root: TemplateRef,
+    /// Module-local root template ID.
+    pub(crate) root: TemplateIrId,
 
     /// Pipeline phase of the root.
     pub(crate) phase: TemplateTirPhase,

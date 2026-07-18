@@ -61,10 +61,9 @@ use crate::compiler_frontend::ast::templates::runtime_handoff::{
 use crate::compiler_frontend::ast::templates::template::Template;
 use crate::compiler_frontend::ast::templates::template::{TemplateConstValueKind, TemplateType};
 use crate::compiler_frontend::ast::templates::tir::{
-    ExpressionSiteId, TemplateIrRegistry, TemplateIrStore, TemplateOverlaySet, TemplateTirPhase,
-    TemplateTirReference, TirExpressionOverlay, TirTemplateClassification, TirView,
-    classify_effective_tir_view_template, collect_effective_tir_expression_overlay_payloads,
-    finalized_tir_view_for_template,
+    ExpressionSiteId, TemplateIrStore, TemplateOverlaySet, TemplateTirPhase, TemplateTirReference,
+    TirExpressionOverlay, TirTemplateClassification, TirView, classify_effective_tir_view_template,
+    collect_effective_tir_expression_overlay_payloads, finalized_tir_view_for_template,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_messages::{
@@ -88,7 +87,6 @@ struct TemplateNormalizationContext<'a, 'strings> {
     template_const_loop_iteration_limit: usize,
     string_table: &'strings mut StringTable,
     template_ir_store: Rc<RefCell<TemplateIrStore>>,
-    template_ir_registry: Rc<RefCell<TemplateIrRegistry>>,
 }
 
 impl AstFinalizer<'_, '_> {
@@ -125,10 +123,7 @@ impl AstFinalizer<'_, '_> {
                     .context
                     .template_const_loop_iteration_limit,
                 string_table,
-                template_ir_store: Rc::clone(self.context.registered_template_ir_store.store()),
-                template_ir_registry: Rc::clone(
-                    self.context.registered_template_ir_store.registry(),
-                ),
+                template_ir_store: Rc::clone(&self.context.template_ir_store),
             };
             normalize_ast_node_templates(node, &mut normalization_context)?;
         }
@@ -579,7 +574,6 @@ fn normalize_expression_templates_with_context(
                         template_const_loop_iteration_limit: context
                             .template_const_loop_iteration_limit,
                         template_ir_store: &context.template_ir_store,
-                        template_ir_registry: Rc::clone(&context.template_ir_registry),
                     },
                 )?;
 
@@ -793,24 +787,19 @@ fn reactive_template_metadata_from_current_store(
     // the same finalized TIR roots that HIR handoff materialization consumes.
     // Use the final effective `TirView` so expression overlays are honored.
     let store = context.template_ir_store.borrow();
-    let registry = context.template_ir_registry.borrow();
-    reactive_template_metadata_from_store(template, &store, &registry)
+    reactive_template_metadata_from_store(template, &store)
 }
 
 fn reactive_template_metadata_from_store(
     template: &Template,
     store: &TemplateIrStore,
-    registry: &TemplateIrRegistry,
 ) -> Result<Option<ReactiveTemplateMetadata>, CompilerError> {
     let mut metadata = ReactiveTemplateMetadata::template_backed();
-    reactive_template_metadata::merge_reactive_template_metadata_with_store_and_registry(
+    reactive_template_metadata::merge_reactive_template_metadata_with_store(
         template,
         store,
-        registry,
         &mut metadata,
-        &mut |expression| {
-            expression_reactive_template_metadata_from_store(expression, store, registry)
-        },
+        &mut |expression| expression_reactive_template_metadata_from_store(expression, store),
     )?;
 
     Ok(Some(metadata))
@@ -838,24 +827,17 @@ fn classify_final_effective_template_view(
         .into());
     }
 
-    let registry = Rc::clone(&context.template_ir_registry);
-
-    if !template_reference_matches_current_store(&reference, context) {
-        return Err(CompilerError::compiler_error(format!(
-            "Template HIR normalization requires root {} to belong to the module TIR store.",
-            reference.root
-        ))
-        .into());
-    }
-
-    let registry = registry.borrow();
-    let view = TirView::with_minimum_phase(
-        &registry,
-        reference.root,
-        reference.phase,
-        TemplateTirPhase::Finalized,
-        reference.overlay_set_id,
-    )?;
+    let initial_classification = {
+        let store = context.template_ir_store.borrow();
+        let view = TirView::with_minimum_phase(
+            &store,
+            reference.root,
+            reference.phase,
+            TemplateTirPhase::Finalized,
+            reference.overlay_set_id,
+        )?;
+        classify_effective_tir_view_template(&view, &store)?
+    };
 
     let mut store = context.template_ir_store.borrow_mut();
 
@@ -863,27 +845,32 @@ fn classify_final_effective_template_view(
     // may refresh the generic String/StringFunction classification; the single
     // synchronization owner writes both `TemplateIr.kind` and the durable
     // `Template.kind` cache so they cannot drift.
-    let initial_classification =
-        classify_effective_tir_view_template(&view, &store, context.string_table)?;
-
     template
         .synchronize_kind_from_classification(&mut store, &initial_classification)
         .map_err(TemplateNormalizationError::from)?;
 
-    classify_effective_tir_view_template(&view, &store, context.string_table).map_err(Into::into)
+    drop(store);
+    let store = context.template_ir_store.borrow();
+    let view = TirView::with_minimum_phase(
+        &store,
+        reference.root,
+        reference.phase,
+        TemplateTirPhase::Finalized,
+        reference.overlay_set_id,
+    )?;
+    classify_effective_tir_view_template(&view, &store).map_err(Into::into)
 }
 
 fn expression_reactive_template_metadata_from_store(
     expression: &Expression,
     store: &TemplateIrStore,
-    registry: &TemplateIrRegistry,
 ) -> Result<Option<ReactiveTemplateMetadata>, CompilerError> {
     if let Some(metadata) = &expression.reactive_template {
         return Ok(Some(metadata.clone()));
     }
 
     if let ExpressionKind::Template(template) = &expression.kind {
-        return reactive_template_metadata_from_store(template, store, registry);
+        return reactive_template_metadata_from_store(template, store);
     }
 
     Ok(None)
@@ -916,21 +903,17 @@ fn normalize_expression_overlays_for_template_reference(
     template: &mut Template,
     context: &mut TemplateNormalizationContext<'_, '_>,
 ) -> Result<(), TemplateNormalizationError> {
-    // Keep normalized payloads in the same registry-owned overlay set consumed
+    // Keep normalized payloads in the shared overlay set consumed
     // by the finalized effective view and runtime handoff materializer. This
     // preserves shared TIR nodes while covering dynamic expressions, selectors,
     // loop headers, and every reachable control-flow body from one root pass.
     let reference = template.tir_reference.clone();
-    let registry = Rc::clone(&context.template_ir_registry);
-
-    let is_same_store_reference = template_reference_matches_current_store(&reference, context);
-    let should_mark_finalized =
-        is_same_store_reference && reference.phase.is_at_least(TemplateTirPhase::Composed);
-    let expression_payloads = if is_same_store_reference {
-        collect_same_store_expression_overlay_payloads(&reference, context)?
-    } else {
-        Vec::new()
-    };
+    // Same-store is now the only path: every TIR reference is local to this
+    // module store, so expression-overlay payloads are always collected. Phase
+    // promotion to Finalized is gated separately below, so parsed references
+    // can receive normalized overlays without becoming finalized views.
+    let should_mark_finalized = reference.phase.is_at_least(TemplateTirPhase::Composed);
+    let expression_payloads = collect_expression_overlay_payloads(&reference, context)?;
     if expression_payloads.is_empty() {
         if should_mark_finalized {
             template.tir_reference.phase = TemplateTirPhase::Finalized;
@@ -948,8 +931,8 @@ fn normalize_expression_overlays_for_template_reference(
         normalized_overrides.push((site_id, Box::new(expression)));
     }
 
-    let mut registry = registry.borrow_mut();
-    let existing_overlay_set = registry
+    let mut store = context.template_ir_store.borrow_mut();
+    let existing_overlay_set = store
         .overlay_set(reference.overlay_set_id)
         .cloned()
         .ok_or_else(|| {
@@ -965,7 +948,7 @@ fn normalize_expression_overlays_for_template_reference(
 
     let mut overrides = if let Some(existing_overlay_id) = existing_overlay_set.expression_overrides
     {
-        let existing_overlay = registry
+        let existing_overlay = store
             .expression_overlay(existing_overlay_id)
             .ok_or_else(|| {
                 CompilerError::compiler_error(format!(
@@ -985,14 +968,14 @@ fn normalize_expression_overlays_for_template_reference(
     overrides.extend(normalized_overrides);
 
     let expression_overlay_id =
-        registry.allocate_expression_overlay(TirExpressionOverlay { overrides });
-    let expression_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet {
+        store.allocate_expression_overlay(TirExpressionOverlay { overrides });
+    let expression_overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet {
         expression_overrides: Some(expression_overlay_id),
         slot_resolution: None,
         wrapper_context: None,
     });
     let overlay_set_id =
-        registry.compose_overlay_sets(&[reference.overlay_set_id, expression_overlay_set_id])?;
+        store.compose_overlay_sets(&[reference.overlay_set_id, expression_overlay_set_id])?;
 
     template.tir_reference.overlay_set_id = overlay_set_id;
     if should_mark_finalized {
@@ -1002,25 +985,14 @@ fn normalize_expression_overlays_for_template_reference(
     Ok(())
 }
 
-fn template_reference_matches_current_store(
-    reference: &TemplateTirReference,
-    context: &TemplateNormalizationContext<'_, '_>,
-) -> bool {
-    let store = context.template_ir_store.borrow();
-    reference.root.store_id == store.store_id()
-        && std::sync::Arc::ptr_eq(&reference.store_owner, &store.owner())
-}
-
-fn collect_same_store_expression_overlay_payloads(
+fn collect_expression_overlay_payloads(
     reference: &TemplateTirReference,
     context: &TemplateNormalizationContext<'_, '_>,
 ) -> Result<Vec<(ExpressionSiteId, Expression)>, TemplateNormalizationError> {
     let store = context.template_ir_store.borrow();
-    let registry = context.template_ir_registry.borrow();
     let expression_payloads = collect_effective_tir_expression_overlay_payloads(
         &store,
-        &registry,
-        reference.root.template_id,
+        reference.root,
         reference.overlay_set_id,
     )?;
 
@@ -1040,7 +1012,7 @@ fn normalize_runtime_slot_template_expression_for_hir(
 
 /// Materializes the neutral AST-to-HIR payload from the final effective TIR view.
 ///
-/// WHAT: consumes the classification already derived from the registry-backed
+/// WHAT: consumes the classification already derived from the store-backed
 ///       final view, rejects escaped insert helpers and then builds either the
 ///       specialized slot-application handoff or the general owned runtime
 ///       handoff from that same view.
@@ -1053,10 +1025,9 @@ fn materialize_runtime_template_handoff_for_hir(
     classification: &TirTemplateClassification,
     reactive_template: Option<ReactiveTemplateMetadata>,
 ) -> Result<Option<NormalizedTemplateExpression>, TemplateNormalizationError> {
-    let registry_rc = Rc::clone(&context.template_ir_registry);
-    let registry = registry_rc.borrow();
-    let store = context.template_ir_store.borrow();
-    let view = finalized_tir_view_for_template(template, &store, &registry)?;
+    let store_handle = Rc::clone(&context.template_ir_store);
+    let store = store_handle.borrow();
+    let view = finalized_tir_view_for_template(template, &store)?;
 
     // Const-foldable templates and helper artifacts are lowered by AST folding,
     // not by the HIR runtime-template path.
@@ -1080,9 +1051,7 @@ fn materialize_runtime_template_handoff_for_hir(
         .into());
     }
 
-    if let Some(handoff) =
-        store.owned_runtime_slot_handoff_for_tir_view(&view, Rc::clone(&registry_rc))?
-    {
+    if let Some(handoff) = store.owned_runtime_slot_handoff_for_tir_view(&view)? {
         increment_ast_counter(AstCounter::RuntimeTemplateHandoffsMaterialized);
         return Ok(Some(NormalizedTemplateExpression::RuntimeSlotApplication(
             handoff,
@@ -1097,7 +1066,7 @@ fn materialize_runtime_template_handoff_for_hir(
             context.project_path_resolver,
             context.string_table,
             context.template_const_loop_iteration_limit,
-            Some(Rc::clone(&context.template_ir_registry)),
+            Some(Rc::clone(&context.template_ir_store)),
         );
         store.owned_runtime_template_handoff_for_tir_view_with_fold_context(
             &view,
@@ -1191,18 +1160,17 @@ fn is_illegal_final_template_helper_value(
 
 /// Reads the authoritative template kind from the owning TIR store entry.
 ///
-/// WHAT: resolves the template's TIR reference through the module registry and
+/// WHAT: resolves the template's TIR reference through the module store and
 ///       returns `TemplateIr.kind`.
 /// WHY: `TemplateIr.kind` is the sole post-construction kind owner.
 fn effective_template_kind(
     template: &Template,
     context: &TemplateNormalizationContext<'_, '_>,
 ) -> Result<TemplateType, TemplateNormalizationError> {
-    let registry = Rc::clone(&context.template_ir_registry);
-    let registry = registry.borrow();
-    template.tir_kind_via_registry(&registry).ok_or_else(|| {
+    let store = context.template_ir_store.borrow();
+    template.tir_kind_from_store(&store).ok_or_else(|| {
         CompilerError::compiler_error(
-            "AST finalization template kind was not found in its registry-backed TIR store.",
+            "AST finalization template kind was not found in the module TIR store.",
         )
         .into()
     })

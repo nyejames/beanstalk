@@ -1,7 +1,7 @@
 use super::*;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{
-    ConstRecordState, Expression, ExpressionKind, ReactiveSource, ReactiveSourceKind,
+    ConstRecordState, Expression, ReactiveSource, ReactiveSourceKind,
 };
 use crate::compiler_frontend::ast::templates::styles::markdown::markdown_formatter;
 use crate::compiler_frontend::ast::templates::template::Template;
@@ -9,15 +9,19 @@ use crate::compiler_frontend::ast::templates::template::{
     CommentDirectiveKind, ReactiveSubscription, SlotKey, Style, TemplateConstValueKind,
     TemplateSegmentOrigin, TemplateType,
 };
+use crate::compiler_frontend::ast::templates::template_build_state::TemplateBuildState;
+use crate::compiler_frontend::ast::templates::template_control_flow::TemplateControlFlowValidationMode;
 use crate::compiler_frontend::ast::templates::template_control_flow::TemplateLoopControlKind;
+use crate::compiler_frontend::ast::templates::template_head_parser::{
+    TemplateHeadParseRequest, parse_template_head,
+};
 use crate::compiler_frontend::ast::templates::template_render_units::install_formatted_tir_reference_for_linear_template;
 use crate::compiler_frontend::ast::templates::tir::{
-    TemplateIrBuilder, TemplateIrNodeId, TemplateIrNodeKind, TemplateIrStore, TemplateIrStoreOwner,
-    TemplateIrSummary, TemplateOverlaySet, TemplateRef, TemplateTirPhase, TemplateTirReference,
-    TirTemplateClassification,
+    TemplateIrBuilder, TemplateIrNodeId, TemplateIrNodeKind, TemplateIrSummary, TemplateOverlaySet,
+    TemplateTirPhase, TemplateTirReference, TirTemplateClassification,
 };
+use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationTable};
-use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, DiagnosticPayload};
 use crate::compiler_frontend::datatypes::datatype::DataType;
 use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
@@ -58,7 +62,7 @@ fn parse_const_required_template(
 }
 
 fn tir_root_child_ids(template: &Template, store: &TemplateIrStore) -> Vec<TemplateIrNodeId> {
-    let template_id = template.tir_reference.root.template_id;
+    let template_id = template.tir_reference.root;
     let template_ir = store
         .get_template(template_id)
         .expect("parser TIR template should exist");
@@ -226,7 +230,7 @@ fn parser_tir_root_kind<'store>(
     template: &Template,
     store: &'store TemplateIrStore,
 ) -> &'store TemplateIrNodeKind {
-    let template_id = template.tir_reference.root.template_id;
+    let template_id = template.tir_reference.root;
     let template_ir = store
         .get_template(template_id)
         .expect("parser TIR template should exist");
@@ -310,7 +314,7 @@ fn parser_tir_records_if_else_if_else_branch_chain() {
     let store = store.borrow();
 
     let parent_template = store
-        .get_template(template.tir_reference.root.template_id)
+        .get_template(template.tir_reference.root)
         .expect("parent parser TIR template should exist");
     assert!(parent_template.summary.has_control_flow);
 
@@ -378,7 +382,7 @@ fn branch_chain_from_root(
     Vec<crate::compiler_frontend::ast::templates::tir::TemplateIrBranch>,
     Option<TemplateIrNodeId>,
 ) {
-    let template_id = template.tir_reference.root.template_id;
+    let template_id = template.tir_reference.root;
     let template_ir = store
         .get_template(template_id)
         .expect("parser TIR template should exist");
@@ -517,7 +521,7 @@ fn parser_tir_records_loop_node() {
     let store = store.borrow();
 
     let parent_template = store
-        .get_template(template.tir_reference.root.template_id)
+        .get_template(template.tir_reference.root)
         .expect("parent parser TIR template should exist");
     assert!(parent_template.summary.has_control_flow);
 
@@ -674,7 +678,7 @@ fn parser_tir_records_default_slot_placeholder() {
     );
 
     let parent_template = store
-        .get_template(template.tir_reference.root.template_id)
+        .get_template(template.tir_reference.root)
         .expect("parent parser TIR template should exist");
     assert_eq!(parent_template.summary.slot_count, 1);
     assert!(parent_template.summary.has_slots);
@@ -865,7 +869,7 @@ fn parser_tir_preserves_reactive_head_and_nested_child_metadata() {
     assert_eq!(parser_tir_text(children[1], &store, &string_table), " body");
 
     let parent_template = store
-        .get_template(template.tir_reference.root.template_id)
+        .get_template(template.tir_reference.root)
         .expect("parent parser TIR template should exist");
     assert!(parent_template.summary.has_reactivity);
 }
@@ -1028,7 +1032,7 @@ fn inline_code_head_insert_records_formatted_tir_phase() {
     // TIR tree; the formatter only reclassifies it as an expression anchor for
     // the formatter pipeline, preserving inline-code span behavior.
     let parent_template = store
-        .get_template(tir_reference.root.template_id)
+        .get_template(tir_reference.root)
         .expect("formatted TIR template should exist");
     assert!(
         parent_template.summary.child_template_count > 0,
@@ -1176,22 +1180,15 @@ fn build_template_with_direct_tir_root(
         let mut builder = TemplateIrBuilder::new(&mut store);
         builder.finish_template(root, style.clone(), kind.clone(), summary, location.clone())
     };
-    let (resolved_store_id, store_owner) = {
-        let store = context.template_ir_store();
-        let store = store.borrow();
-        (store.store_id(), Arc::clone(&store.owner()))
-    };
     let overlay_set_id = context
-        .registered_template_ir_store
-        .registry()
+        .template_ir_store
         .borrow_mut()
         .allocate_overlay_set(TemplateOverlaySet::empty());
     Template {
         kind,
         location,
         tir_reference: TemplateTirReference {
-            root: TemplateRef::new(resolved_store_id, template_id),
-            store_owner,
+            root: template_id,
             phase: TemplateTirPhase::Parsed,
             overlay_set_id,
         },
@@ -1240,9 +1237,9 @@ fn pure_direct_dynamic_formatter_template_records_formatted_tir_phase() {
 
     let style = effective_tir_style(&template, &context);
     let has_control_flow = {
-        let store = context.registered_template_ir_store.store().borrow();
+        let store = context.template_ir_store.borrow();
         store
-            .control_flow_node_id_for_template(template.tir_reference.root.template_id)
+            .control_flow_node_id_for_template(template.tir_reference.root)
             .is_some()
     };
     let tir_reference = &mut template.tir_reference;
@@ -1326,9 +1323,9 @@ fn reactive_body_segment_records_formatted_tir_phase() {
 
     let style = effective_tir_style(&template, &context);
     let has_control_flow = {
-        let store = context.registered_template_ir_store.store().borrow();
+        let store = context.template_ir_store.borrow();
         store
-            .control_flow_node_id_for_template(template.tir_reference.root.template_id)
+            .control_flow_node_id_for_template(template.tir_reference.root)
             .is_some()
     };
     let tir_reference = &mut template.tir_reference;
@@ -1431,9 +1428,9 @@ fn reactive_literal_text_segment_records_formatted_tir_phase() {
 
     let style = effective_tir_style(&template, &context);
     let has_control_flow = {
-        let store = context.registered_template_ir_store.store().borrow();
+        let store = context.template_ir_store.borrow();
         store
-            .control_flow_node_id_for_template(template.tir_reference.root.template_id)
+            .control_flow_node_id_for_template(template.tir_reference.root)
             .is_some()
     };
     let tir_reference = &mut template.tir_reference;
@@ -1468,64 +1465,6 @@ fn reactive_literal_text_segment_records_formatted_tir_phase() {
             .map(|subscription| &subscription.source.path),
         Some(&expected_source_path),
         "formatting must preserve the text node's reactive side-table entry"
-    );
-}
-
-#[test]
-fn linear_formatter_installation_reports_wrong_store_owner_as_internal_error() {
-    // A linear template whose durable `store_owner` does not match the
-    // registered construction store has lost its authoritative TIR identity.
-    // Formatter installation must report this as an internal error rather
-    // than silently skipping formatting.
-    let mut string_table = StringTable::new();
-    let context =
-        new_constant_context(InternedPath::from_single_str("main.bst", &mut string_table));
-    let location = SourceLocation::default();
-
-    let mut template = build_template_with_direct_tir_root(
-        &context,
-        TemplateType::String,
-        Style::default(),
-        location.clone(),
-        move |store, string_table| {
-            let text_id = string_table.intern("body");
-            let mut builder = TemplateIrBuilder::new(store);
-            let text =
-                builder.push_text_node(text_id, 4, TemplateSegmentOrigin::Body, location.clone());
-            let root = builder.push_sequence_node(vec![text], location.clone());
-            (root, TemplateIrSummary::default())
-        },
-        &mut string_table,
-    );
-
-    template.tir_reference.store_owner = TemplateIrStoreOwner::new();
-
-    let style = Style::default();
-    let has_control_flow = false;
-    let tir_reference = &mut template.tir_reference;
-    let error = install_formatted_tir_reference_for_linear_template(
-        tir_reference,
-        has_control_flow,
-        &style,
-        &context,
-        &mut string_table,
-    )
-    .expect_err("mismatched store owner should be an internal error");
-
-    let diagnostic = error.into_diagnostic();
-    let CompilerDiagnostic {
-        payload: DiagnosticPayload::InfrastructureError { msg, .. },
-        ..
-    } = &diagnostic
-    else {
-        panic!(
-            "expected InfrastructureError for mismatched store owner, got: {:?}",
-            diagnostic.payload
-        );
-    };
-    assert!(
-        msg.contains("does not match the registered construction store"),
-        "error message should name the store-owner mismatch, got: {msg}"
     );
 }
 
@@ -1610,9 +1549,7 @@ fn first_child_template_id(
         .iter()
         .find_map(
             |child_id| match &store.get_node(*child_id).expect("child should exist").kind {
-                TemplateIrNodeKind::ChildTemplate { reference, .. } => {
-                    Some(reference.root.template_id)
-                }
+                TemplateIrNodeKind::ChildTemplate { reference, .. } => Some(reference.root),
                 _ => None,
             },
         )
@@ -1736,7 +1673,7 @@ fn formatted_tir_reference_installs_with_opaque_body_child_template() {
     );
 
     let parent_template = store
-        .get_template(template.tir_reference.root.template_id)
+        .get_template(template.tir_reference.root)
         .expect("parent parser TIR template should exist");
     assert_eq!(parent_template.summary.child_template_count, 1);
 
@@ -1760,7 +1697,7 @@ fn formatted_tir_reference_installs_with_opaque_body_child_template() {
         .expect("middle child node should exist")
         .kind
     {
-        TemplateIrNodeKind::ChildTemplate { reference, .. } => reference.root.template_id,
+        TemplateIrNodeKind::ChildTemplate { reference, .. } => reference.root,
         other => {
             panic!("expected formatter output to preserve ChildTemplate node, found {other:?}")
         }
@@ -2027,7 +1964,7 @@ fn formatted_tir_reference_installs_formatted_control_flow_branch_body() {
     let store = store.borrow();
 
     let parent_template = store
-        .get_template(template.tir_reference.root.template_id)
+        .get_template(template.tir_reference.root)
         .expect("parent parser TIR template should exist");
 
     assert!(
@@ -2061,7 +1998,7 @@ fn formatted_tir_reference_installs_formatted_branch_and_fallback_bodies() {
     let store = store.borrow();
 
     let parent_template = store
-        .get_template(template.tir_reference.root.template_id)
+        .get_template(template.tir_reference.root)
         .expect("parent parser TIR template should exist");
     assert!(parent_template.summary.has_control_flow);
 
@@ -2116,7 +2053,7 @@ fn formatted_tir_reference_installs_formatted_loop_body() {
     let store = store.borrow();
 
     let parent_template = store
-        .get_template(template.tir_reference.root.template_id)
+        .get_template(template.tir_reference.root)
         .expect("parent parser TIR template should exist");
     assert!(parent_template.summary.has_control_flow);
 
@@ -2296,7 +2233,7 @@ fn durable_kind_cache_matches_tir_kind_after_construction() {
     let (template, store) = parse_template(r#"["head": body]"#, &mut string_table);
     let store = store.borrow();
     let tir_kind = store
-        .get_template(template.tir_reference.root.template_id)
+        .get_template(template.tir_reference.root)
         .expect("TIR entry should exist")
         .kind
         .clone();
@@ -2310,9 +2247,9 @@ fn durable_kind_cache_matches_tir_kind_after_construction() {
     let context = runtime_template_context(&token_stream.src_path, &mut string_table);
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("runtime template should parse");
-    let store = context.registered_template_ir_store.store().borrow();
+    let store = context.template_ir_store.borrow();
     let tir_kind = store
-        .get_template(template.tir_reference.root.template_id)
+        .get_template(template.tir_reference.root)
         .expect("TIR entry should exist")
         .kind
         .clone();
@@ -2325,7 +2262,7 @@ fn durable_kind_cache_matches_tir_kind_after_construction() {
     let (template, store) = parse_template("[$doc: doc body]", &mut string_table);
     let store = store.borrow();
     let tir_kind = store
-        .get_template(template.tir_reference.root.template_id)
+        .get_template(template.tir_reference.root)
         .expect("TIR entry should exist")
         .kind
         .clone();
@@ -2352,7 +2289,7 @@ fn durable_kind_synchronization_updates_tir_and_cache_together() {
 
     let store = store.borrow();
     let tir_kind = store
-        .get_template(template.tir_reference.root.template_id)
+        .get_template(template.tir_reference.root)
         .expect("TIR entry should exist")
         .kind
         .clone();
@@ -2380,7 +2317,7 @@ fn parser_tir_records_finalized_same_store_child_template_as_child_template_node
         .expect("middle child node should exist")
         .kind
     {
-        TemplateIrNodeKind::ChildTemplate { reference, .. } => reference.root.template_id,
+        TemplateIrNodeKind::ChildTemplate { reference, .. } => reference.root,
         other => panic!("expected ChildTemplate node for finalized child, found {other:?}"),
     };
 
@@ -2391,12 +2328,90 @@ fn parser_tir_records_finalized_same_store_child_template_as_child_template_node
     assert!(!child_template.summary.has_control_flow);
 
     let parent_template = store
-        .get_template(template.tir_reference.root.template_id)
+        .get_template(template.tir_reference.root)
         .expect("parent parser TIR template should exist");
     assert_eq!(parent_template.summary.child_template_count, 1);
     assert!(parent_template.summary.is_const_evaluable_shape);
 
     assert_eq!(parent_template.summary.max_depth, 1);
+}
+
+#[test]
+fn parser_records_template_valued_head_as_structural_child_before_body_parse() {
+    let mut string_table = StringTable::new();
+    let shared_store = Rc::new(RefCell::new(TemplateIrStore::new()));
+
+    let wrapper_scope =
+        InternedPath::from_single_str("main.bst/#const_template0", &mut string_table);
+    let wrapper_name = string_table.intern("wrapper");
+    let wrapper_path = wrapper_scope.append(wrapper_name);
+
+    let mut wrapper_tokens = template_tokens_from_source("[:head]", &mut string_table);
+    let wrapper_context = new_constant_context(wrapper_tokens.src_path.to_owned())
+        .with_template_ir_store(Rc::clone(&shared_store));
+    let wrapper = Template::new(
+        &mut wrapper_tokens,
+        &wrapper_context,
+        vec![],
+        &mut string_table,
+    )
+    .expect("wrapper template should parse");
+
+    let declaration = Declaration {
+        id: wrapper_path,
+        value: Expression::template(wrapper.clone(), ValueMode::ImmutableOwned),
+    };
+    let mut parent_tokens = template_tokens_from_source("[wrapper: body]", &mut string_table);
+    let parent_context = ScopeContext::new_for_tests(
+        ContextKind::Constant,
+        parent_tokens.src_path.to_owned(),
+        Rc::new(TopLevelDeclarationTable::new(vec![declaration])),
+        Arc::new(ExternalPackageRegistry::default()),
+        vec![],
+        0,
+    )
+    .with_template_ir_store(Rc::clone(&shared_store));
+    let mut type_environment = TypeEnvironment::new();
+    let mut compatibility_cache = TypeCompatibilityCache::new();
+    let mut type_interner = AstTypeInterner::new(&mut type_environment, &mut compatibility_cache);
+    let mut build_state = TemplateBuildState::new();
+    let mut construction_context = TemplateConstructionContext::new(
+        Rc::clone(&shared_store),
+        parent_tokens.current_location(),
+    );
+
+    let _parsed_head = parse_template_head(
+        &mut parent_tokens,
+        TemplateHeadParseRequest {
+            context: &parent_context,
+            type_interner: &mut type_interner,
+            build_state: &mut build_state,
+            construction_context: &mut construction_context,
+            control_flow_validation: TemplateControlFlowValidationMode::RuntimeCapable,
+            string_table: &mut string_table,
+        },
+    )
+    .expect("template-valued head should parse");
+
+    let root_children = construction_context.builder().root_children();
+    assert_eq!(root_children.len(), 1);
+    let store = shared_store.borrow();
+    let child_node = store
+        .get_node(root_children[0])
+        .expect("parser head child should exist");
+    match &child_node.kind {
+        TemplateIrNodeKind::ChildTemplate { reference, .. } => {
+            assert_eq!(reference.root, wrapper.tir_reference.root);
+            assert_eq!(reference.phase, wrapper.tir_reference.phase);
+            assert_eq!(
+                reference.overlay_set_id,
+                wrapper.tir_reference.overlay_set_id
+            );
+        }
+        other => panic!(
+            "template-valued head must be structural before render-unit preparation, found {other:?}"
+        ),
+    }
 }
 
 #[test]
@@ -2451,7 +2466,7 @@ fn parser_tir_records_same_store_template_valued_head_reference_as_child_templat
         .expect("head child node should exist")
         .kind
     {
-        TemplateIrNodeKind::ChildTemplate { reference, .. } => reference.root.template_id,
+        TemplateIrNodeKind::ChildTemplate { reference, .. } => reference.root,
         other => panic!("expected ChildTemplate head node, found {other:?}"),
     };
 
@@ -2465,85 +2480,6 @@ fn parser_tir_records_same_store_template_valued_head_reference_as_child_templat
     assert_eq!(
         parser_tir_text(child_root_children[0], &store, &string_table),
         "head"
-    );
-
-    assert_eq!(
-        parser_tir_text(parent_child_ids[1], &store, &string_table),
-        " body"
-    );
-}
-
-#[test]
-fn parser_tir_recursively_materializes_cross_store_template_valued_head() {
-    let mut string_table = StringTable::new();
-    let wrapper_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-    let parent_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-
-    let wrapper_scope =
-        InternedPath::from_single_str("main.bst/#const_template0", &mut string_table);
-    let wrapper_name = string_table.intern("wrapper");
-    let wrapper_path = wrapper_scope.append(wrapper_name);
-
-    let mut wrapper_tokens = template_tokens_from_source("[:head]", &mut string_table);
-    let wrapper_context = new_constant_context(wrapper_tokens.src_path.to_owned())
-        .with_template_ir_store(Rc::clone(&wrapper_store));
-    let wrapper = Template::new(
-        &mut wrapper_tokens,
-        &wrapper_context,
-        vec![],
-        &mut string_table,
-    )
-    .expect("wrapper template should parse");
-
-    let declaration = Declaration {
-        id: wrapper_path,
-        value: Expression::template(wrapper, ValueMode::ImmutableOwned),
-    };
-
-    let mut parent_tokens = template_tokens_from_source("[wrapper: body]", &mut string_table);
-    let parent_context = ScopeContext::new_for_tests(
-        ContextKind::Constant,
-        parent_tokens.src_path.to_owned(),
-        Rc::new(TopLevelDeclarationTable::new(vec![declaration])),
-        Arc::new(ExternalPackageRegistry::default()),
-        vec![],
-        0,
-    )
-    .with_template_ir_store(Rc::clone(&parent_store));
-    let parent = Template::new(
-        &mut parent_tokens,
-        &parent_context,
-        vec![],
-        &mut string_table,
-    )
-    .expect("parent template should parse");
-    let store = parent_store.borrow();
-    let parent_child_ids = tir_root_child_ids(&parent, &store);
-    assert_eq!(parent_child_ids.len(), 2);
-
-    // The parser-emitted TIR is the sole semantic owner for linear templates.
-    // Cross-store template-valued head expressions remain DynamicExpression nodes
-    // in the parent store because the parser TIR root is the production path.
-    let head_expression = match &store
-        .get_node(parent_child_ids[0])
-        .expect("head child node should exist")
-        .kind
-    {
-        TemplateIrNodeKind::DynamicExpression { expression, .. } => expression,
-        other => panic!("expected DynamicExpression head node, found {other:?}"),
-    };
-    let wrapper_ref = match &head_expression.kind {
-        ExpressionKind::Template(t) => t,
-        other => panic!("expected Template expression in head, found {other:?}"),
-    };
-    // The wrapper template was parsed in its own store and already carries a
-    // formatted TIR reference; the parent does not need to materialize it locally.
-    assert!(
-        wrapper_ref
-            .tir_reference
-            .phase
-            .is_at_least(TemplateTirPhase::Formatted),
-        "cross-store wrapper template should already be formatted in its own store"
     );
 
     assert_eq!(
@@ -2570,7 +2506,7 @@ fn parser_tir_skips_conditional_child_wrappers_for_fresh_control_flow_child() {
         .expect("parent child node should exist")
         .kind
     {
-        TemplateIrNodeKind::ChildTemplate { reference, .. } => reference.root.template_id,
+        TemplateIrNodeKind::ChildTemplate { reference, .. } => reference.root,
         other => panic!("expected ChildTemplate node, found {other:?}"),
     };
 

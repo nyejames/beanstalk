@@ -1,7 +1,7 @@
 //! Shared safety gates for view-backed template folding.
 //!
 //! WHAT: centralizes the conservative checks used before callers fold a stable
-//! `TirView` through the direct registry-backed path.
+//! `TirView` through the direct store-backed path.
 //!
 //! WHY: keeping these policies in TIR avoids slightly different finalization
 //! and HIR-handoff gates as individual overlay dimensions become foldable.
@@ -17,18 +17,16 @@ use crate::compiler_frontend::ast::templates::tir::overlays::{
     TemplateOverlaySet, TemplateOverlaySetId, TirSlotResolutionKind, TirWrapperContext,
 };
 use crate::compiler_frontend::ast::templates::tir::refs::{
-    TemplateRef, TemplateStoreId, TemplateTirChildReference, TemplateWrapperReference,
+    TemplateTirChildReference, TemplateWrapperReference,
 };
-use crate::compiler_frontend::ast::templates::tir::registry::TemplateIrRegistry;
 use crate::compiler_frontend::ast::templates::tir::slot_composition::collect_tir_slot_schema;
 use crate::compiler_frontend::ast::templates::tir::slot_plan::TemplateSlotSiteRenderPiece;
-use crate::compiler_frontend::ast::templates::tir::store::{TemplateIrStore, TemplateIrStoreOwner};
+use crate::compiler_frontend::ast::templates::tir::store::TemplateIrStore;
 use crate::compiler_frontend::ast::templates::tir::view::{TemplateTirPhase, TirView};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 use std::collections::HashSet;
-use std::sync::Arc;
 
 /// Returns `Ok(true)` when a `TirView` can be folded through the narrow
 /// shortcut used by callers that still expect empty-overlay behavior.
@@ -44,19 +42,13 @@ pub(crate) fn tir_view_is_empty_overlay_linear_fold_safe(
     store: &TemplateIrStore,
 ) -> Result<bool, CompilerError> {
     let root = view.root_ref();
-    if root.store_id != store.store_id() {
-        // The HIR handoff shortcut is intentionally unavailable when the child
-        // belongs to a foreign store. Its owning-store path remains responsible
-        // for materializing that child.
-        return Ok(false);
-    }
 
     let _authority = validate_view_fold_authority(view, store)?;
     let overlay_set = view.overlay_set()?;
 
     if overlay_set.is_empty() {
         let mut visiting = HashSet::new();
-        return template_root_is_linear_fold_safe(view, store, root.template_id, &mut visiting);
+        return template_root_is_linear_fold_safe(view, store, root, &mut visiting);
     }
 
     if overlay_set.expression_overrides.is_none()
@@ -73,7 +65,7 @@ pub(crate) fn tir_view_is_empty_overlay_linear_fold_safe(
             store,
             Some(view),
             view,
-            root.template_id,
+            root,
             false,
             &mut walk,
             &string_table,
@@ -87,11 +79,11 @@ pub(crate) fn tir_view_is_empty_overlay_linear_fold_safe(
 /// Named reason why a `TirView` was rejected by the view-native fold safety
 /// gate.
 ///
-/// WHAT: attributes each registry-backed fold fallback to a specific overlay or
+/// WHAT: attributes each store-backed fold fallback to a specific overlay or
 /// structural shape so counter evidence can rank which shapes dominate the
 /// remaining current-state materialization volume.
 ///
-/// WHY: the generic `TirRegistryBackedFoldFallbacks` counter only shows how many
+/// WHY: the generic `TirFinalizationFold*` counters only show how many
 /// attempts fell back. Named reasons let the performance plan decide whether the
 /// dominant blocker is an overlay dimension (potentially fixable through
 /// Phase 3-5 fold shapes) or a structural tree shape (potentially needing
@@ -100,7 +92,7 @@ pub(crate) fn tir_view_is_empty_overlay_linear_fold_safe(
 pub(crate) enum TirFoldFallbackReason {
     // --- Overlay-level reasons ---
     /// The overlay set carries a wrapper-context overlay with an unsupported
-    /// shape such as a cross-store/non-virtual wrapper set, so the view-native
+    /// shape such as a non-virtual wrapper set, so the view-native
     /// fold walker cannot expand it.
     WrapperContextOverlay,
 
@@ -156,7 +148,7 @@ pub(crate) enum TirFoldFallbackReason {
 ///      so the shared wrapper-safety helpers can receive the same cycle stack
 ///      without double-reference issues.
 struct ViewNativeWalkContext {
-    visiting_templates: HashSet<TemplateRef>,
+    visiting_templates: HashSet<TemplateIrId>,
     slot_resolution_active: bool,
     expression_overlay_stack: Vec<TemplateOverlaySetId>,
 }
@@ -164,29 +156,21 @@ struct ViewNativeWalkContext {
 impl ViewNativeWalkContext {
     /// Resolves the expression-overlay stack at one child or wrapper boundary.
     ///
-    /// WHAT: mirrors the fold walk's root-first stack transitions for same-store,
-    ///       below-Composed, and foreign references.
+    /// WHAT: mirrors the fold walk's root-first stack transitions for
+    ///       below-Composed references.
     /// WHY: wrapper eligibility must classify effective expressions with the
     ///      same outer overrides that the eventual fold or handoff consumes.
     fn expression_stack_for_boundary(
         &self,
-        owning_store_id: TemplateStoreId,
-        root: TemplateRef,
         phase: TemplateTirPhase,
         overlay_set_id: TemplateOverlaySetId,
     ) -> Vec<TemplateOverlaySetId> {
         if phase.is_at_least(TemplateTirPhase::Composed) {
-            if root.store_id == owning_store_id {
-                let mut stack = self.expression_overlay_stack.clone();
-                stack.push(overlay_set_id);
-                stack
-            } else {
-                vec![overlay_set_id]
-            }
-        } else if root.store_id == owning_store_id {
-            self.expression_overlay_stack.clone()
+            let mut stack = self.expression_overlay_stack.clone();
+            stack.push(overlay_set_id);
+            stack
         } else {
-            Vec::new()
+            self.expression_overlay_stack.clone()
         }
     }
 }
@@ -206,10 +190,9 @@ struct VirtualWrapperNodeSafetyContext<'a> {
 ///      walker may skip untaken branches, empty loops or cached roots. This
 ///      pass keeps required authority validation independent from those choices.
 ///
-/// A `None` view describes the direct store-local fold path. When a registry is
+/// A `None` view describes the direct store-local fold path. When a view is
 /// available, it still validates exact store and overlay identity for nested
-/// references. Foreign references are intentionally opaque to this
-/// current-store authority pass.
+/// references.
 pub(crate) enum FoldAuthorityResult {
     Valid(FoldAuthorityToken),
     ChildTemplateCycle,
@@ -230,16 +213,7 @@ pub(crate) enum PreparedTirFoldDecision {
 }
 
 #[derive(Clone)]
-pub(crate) struct FoldAuthorityToken {
-    store_id: TemplateStoreId,
-    owner: Arc<TemplateIrStoreOwner>,
-}
-
-impl FoldAuthorityToken {
-    pub(crate) fn matches_store(&self, store: &TemplateIrStore) -> bool {
-        self.store_id == store.store_id() && Arc::ptr_eq(&self.owner, &store.owner())
-    }
-}
+pub(crate) struct FoldAuthorityToken {}
 
 /// Authority and shape facts prepared for one top-level view fold.
 ///
@@ -249,10 +223,9 @@ impl FoldAuthorityToken {
 /// WHY: authority belongs to `FoldAuthorityWalk`; the eligibility walkers only
 ///      inspect shapes after this preparation has completed.
 pub(crate) struct PreparedTirViewFold {
-    root: TemplateRef,
+    root: TemplateIrId,
     phase: TemplateTirPhase,
     overlay_set_id: TemplateOverlaySetId,
-    store_owner: Arc<TemplateIrStoreOwner>,
     authority: FoldAuthorityResult,
     decision: PreparedTirFoldDecision,
 }
@@ -299,18 +272,7 @@ impl PreparedTirViewFold {
                 view.overlay_set_id()
             )));
         }
-        if !Arc::ptr_eq(&self.store_owner, &store.owner()) {
-            return Err(CompilerError::compiler_error(
-                "TIR fold preparation store owner does not match the supplied store.",
-            ));
-        }
-
-        let view_store_owner = view.store()?.owner();
-        if !Arc::ptr_eq(&self.store_owner, &view_store_owner) {
-            return Err(CompilerError::compiler_error(
-                "TIR fold preparation store owner does not match the view's registered store.",
-            ));
-        }
+        let _ = store;
 
         Ok(())
     }
@@ -325,15 +287,7 @@ fn validate_view_fold_authority(
     store: &TemplateIrStore,
 ) -> Result<FoldAuthorityResult, CompilerError> {
     let root = view.root_ref();
-    if root.store_id != store.store_id() {
-        return Err(CompilerError::compiler_error(format!(
-            "TIR view fold safety: view root {} does not belong to supplied store {}.",
-            root,
-            store.store_id()
-        )));
-    }
-
-    validate_tir_fold_authority(Some(view), store, root.template_id, None)
+    validate_tir_fold_authority(Some(view), store, root)
 }
 
 pub(crate) fn prepare_tir_view_fold(
@@ -350,7 +304,7 @@ pub(crate) fn prepare_tir_view_fold(
             store,
             Some(view),
             view,
-            view.root_ref().template_id,
+            view.root_ref(),
             false,
             &mut visiting,
         )?
@@ -369,7 +323,6 @@ pub(crate) fn prepare_tir_view_fold(
         root: view.root_ref(),
         phase: view.phase(),
         overlay_set_id: view.overlay_set_id(),
-        store_owner: store.owner(),
         authority,
         decision,
     })
@@ -383,13 +336,9 @@ pub(crate) fn validate_tir_fold_authority(
     view: Option<&TirView<'_>>,
     store: &TemplateIrStore,
     template_id: TemplateIrId,
-    registry: Option<&TemplateIrRegistry>,
 ) -> Result<FoldAuthorityResult, CompilerError> {
     // A structural child below Composed intentionally has no `TirView`, but
-    // its descendants may still carry later-phase overlay identity. Preserve
-    // the root view's registry for those descendants so the preflight follows
-    // the same authority path as the fold itself.
-    let registry = registry.or_else(|| view.map(|view| view.registry_ref()));
+    // its descendants still resolve through the same module-local store.
     let mut walk = FoldAuthorityWalk {
         visiting_templates: HashSet::new(),
         visiting_nodes: HashSet::new(),
@@ -397,15 +346,12 @@ pub(crate) fn validate_tir_fold_authority(
         child_template_cycle: false,
     };
 
-    walk.validate_root(store, template_id, view, registry)?;
+    walk.validate_root(store, template_id, view)?;
 
     if walk.child_template_cycle {
         Ok(FoldAuthorityResult::ChildTemplateCycle)
     } else {
-        Ok(FoldAuthorityResult::Valid(FoldAuthorityToken {
-            store_id: store.store_id(),
-            owner: store.owner(),
-        }))
+        Ok(FoldAuthorityResult::Valid(FoldAuthorityToken {}))
     }
 }
 
@@ -422,9 +368,8 @@ impl FoldAuthorityWalk {
         store: &TemplateIrStore,
         template_id: TemplateIrId,
         view: Option<&TirView<'_>>,
-        registry: Option<&TemplateIrRegistry>,
     ) -> Result<(), CompilerError> {
-        self.validate_template(store, template_id, view, registry)
+        self.validate_template(store, template_id, view)
     }
 
     fn validate_template(
@@ -432,7 +377,6 @@ impl FoldAuthorityWalk {
         store: &TemplateIrStore,
         template_id: TemplateIrId,
         view: Option<&TirView<'_>>,
-        registry: Option<&TemplateIrRegistry>,
     ) -> Result<(), CompilerError> {
         if !self.visiting_templates.insert(template_id) {
             // Recursive child-template references are semantic cycle
@@ -445,20 +389,20 @@ impl FoldAuthorityWalk {
         let result = (|| {
             let template = store
                 .get_template(template_id)
-                .ok_or_else(|| missing_template_error(store, template_id))?;
+                .ok_or_else(|| missing_template_error(template_id))?;
 
-            self.validate_template_identity(store, template_id, template.root, view, registry)?;
+            self.validate_template_identity(store, template_id, template.root, view)?;
             self.validate_node_exists(store, template.root)?;
 
             if let Some(wrapper_set_id) = template.conditional_child_wrapper_set {
-                self.validate_wrapper_set(store, wrapper_set_id, view, registry)?;
+                self.validate_wrapper_set(store, wrapper_set_id, view)?;
             }
 
             if let Some(slot_plan_id) = template.runtime_slot_plan {
-                self.validate_slot_plan(store, slot_plan_id, view, registry)?;
+                self.validate_slot_plan(store, slot_plan_id, view)?;
             }
 
-            self.validate_node(store, template.root, view, registry)
+            self.validate_node(store, template.root, view)
         })();
 
         self.visiting_templates.remove(&template_id);
@@ -471,33 +415,15 @@ impl FoldAuthorityWalk {
         template_id: TemplateIrId,
         root_node_id: TemplateIrNodeId,
         view: Option<&TirView<'_>>,
-        registry: Option<&TemplateIrRegistry>,
     ) -> Result<(), CompilerError> {
         if let Some(view) = view {
-            if view.root_ref().store_id != store.store_id() {
-                return Err(CompilerError::compiler_error(format!(
-                    "TIR fold safety: view root {} does not belong to supplied store {}.",
-                    view.root_ref(),
-                    store.store_id()
-                )));
-            }
-
-            if view.root_ref().template_id != template_id {
+            if view.root_ref() != template_id {
                 return Err(CompilerError::compiler_error(format!(
                     "TIR fold safety: view root {} does not match walked template {}.",
                     view.root_ref(),
                     template_id
                 )));
             }
-
-            let view_store = view.store()?;
-            if !Arc::ptr_eq(&view_store.owner(), &store.owner()) {
-                return Err(CompilerError::compiler_error(format!(
-                    "TIR fold safety: view root {} does not have the same store owner as supplied store.",
-                    view.root_ref()
-                )));
-            }
-            drop(view_store);
 
             let view_template = view.root_template()?;
             if view_template.root != root_node_id {
@@ -507,41 +433,18 @@ impl FoldAuthorityWalk {
                     root_node_id
                 )));
             }
-            drop(view_template);
 
             let overlay_set = view.overlay_set()?;
-            validate_overlay_set_dimensions(
-                view.registry_ref(),
-                view.overlay_set_id(),
-                overlay_set,
-            )?;
+            validate_overlay_set_dimensions(view.store(), view.overlay_set_id(), overlay_set)?;
             return Ok(());
         }
 
-        let Some(registry) = registry else {
-            return Ok(());
-        };
-
-        let registry_store = registry.store(store.store_id()).ok_or_else(|| {
-            CompilerError::compiler_error(format!(
-                "TIR fold safety: supplied store {} is not registered in the fold registry.",
-                store.store_id()
-            ))
-        })?;
-        if !Arc::ptr_eq(&registry_store.owner(), &store.owner()) {
+        let template = store
+            .get_template(template_id)
+            .ok_or_else(|| missing_template_error(template_id))?;
+        if template.root != root_node_id {
             return Err(CompilerError::compiler_error(format!(
-                "TIR fold safety: registry store {} does not have the same owner as supplied store.",
-                store.store_id()
-            )));
-        }
-        drop(registry_store);
-
-        let registry_template = registry
-            .template(TemplateRef::new(store.store_id(), template_id))
-            .ok_or_else(|| missing_template_error(store, template_id))?;
-        if registry_template.root != root_node_id {
-            return Err(CompilerError::compiler_error(format!(
-                "TIR fold safety: registry root for template {} does not match supplied template root node {}.",
+                "TIR fold safety: root for template {} does not match supplied template root node {}.",
                 template_id, root_node_id
             )));
         }
@@ -556,7 +459,7 @@ impl FoldAuthorityWalk {
     ) -> Result<(), CompilerError> {
         store
             .get_node(node_id)
-            .ok_or_else(|| missing_node_error(store, node_id))
+            .ok_or_else(|| missing_node_error(node_id))
             .map(|_| ())
     }
 
@@ -565,7 +468,6 @@ impl FoldAuthorityWalk {
         store: &TemplateIrStore,
         node_id: TemplateIrNodeId,
         view: Option<&TirView<'_>>,
-        registry: Option<&TemplateIrRegistry>,
     ) -> Result<(), CompilerError> {
         if !self.visiting_nodes.insert(node_id) {
             return Err(CompilerError::compiler_error(format!(
@@ -577,12 +479,12 @@ impl FoldAuthorityWalk {
         let result = (|| {
             let node = store
                 .get_node(node_id)
-                .ok_or_else(|| missing_node_error(store, node_id))?;
+                .ok_or_else(|| missing_node_error(node_id))?;
 
             match &node.kind {
                 TemplateIrNodeKind::Sequence { children } => {
                     for child in children {
-                        self.validate_node(store, *child, view, registry)?;
+                        self.validate_node(store, *child, view)?;
                     }
                 }
 
@@ -593,40 +495,20 @@ impl FoldAuthorityWalk {
                     if let Some(view) = view
                         && let Some(context) = view.effective_wrapper_context(*occurrence_id)?
                         && let Some(wrapper_set_ref) = context.inherited_wrapper_set
-                        && wrapper_set_ref.store_id == store.store_id()
                     {
-                        // The occurrence-local wrapper context belongs to the
-                        // current store even when the child root is foreign.
-                        // Validate it before treating that child subtree as
-                        // opaque to this authority walk.
-                        self.validate_wrapper_set(
-                            store,
-                            wrapper_set_ref.wrapper_set_id,
-                            Some(view),
-                            registry,
-                        )?;
+                        self.validate_wrapper_set(store, wrapper_set_ref, Some(view))?;
                     }
 
-                    let Some(child_template_id) = reference.template_id_in_store(store.store_id())
-                    else {
-                        // Foreign child authority belongs to its owning store
-                        // and is intentionally not part of this local pass.
-                        return Ok(());
-                    };
+                    let child_template_id = reference.root;
 
                     let child_view = if reference.phase.is_at_least(TemplateTirPhase::Composed) {
-                        self.validate_overlay_reference(view, registry, reference.overlay_set_id)?;
-                        self.child_view_for_reference(view, registry, reference)?
+                        self.validate_overlay_reference(store, reference.overlay_set_id)?;
+                        self.child_view_for_reference(store, view, reference)?
                     } else {
                         None
                     };
 
-                    self.validate_template(
-                        store,
-                        child_template_id,
-                        child_view.as_ref(),
-                        registry,
-                    )?;
+                    self.validate_template(store, child_template_id, child_view.as_ref())?;
                 }
 
                 TemplateIrNodeKind::Slot { placeholder } => {
@@ -637,7 +519,7 @@ impl FoldAuthorityWalk {
                     .into_iter()
                     .flatten()
                     {
-                        self.validate_wrapper_set(store, wrapper_set_id, view, registry)?;
+                        self.validate_wrapper_set(store, wrapper_set_id, view)?;
                     }
 
                     if let Some(view) = view
@@ -646,21 +528,12 @@ impl FoldAuthorityWalk {
                         && let TirSlotResolutionKind::Resolved { sources } = &resolution.kind
                     {
                         for source in sources {
-                            if source.store_id != store.store_id() {
-                                continue;
-                            }
-
                             let source_view = view.child_view(
                                 *source,
                                 TemplateTirPhase::Composed,
                                 TemplateOverlaySetId::empty(),
                             )?;
-                            self.validate_template(
-                                store,
-                                source.template_id,
-                                Some(&source_view),
-                                registry,
-                            )?;
+                            self.validate_template(store, *source, Some(&source_view))?;
                         }
                     }
                 }
@@ -668,22 +541,17 @@ impl FoldAuthorityWalk {
                 TemplateIrNodeKind::InsertContribution { template } => {
                     // An insert contribution carries a local helper template,
                     // not a child occurrence that inherits the walked root's
-                    // view identity. Validate its own root through registry
-                    // authority while leaving the parent view out of the
-                    // nested template identity check.
-                    if let Some(view) = view {
-                        self.validate_template(store, *template, None, Some(view.registry_ref()))?;
-                    } else {
-                        self.validate_template(store, *template, None, registry)?;
-                    }
+                    // view identity. Validate its own root while leaving the
+                    // parent view out of the nested template identity check.
+                    self.validate_template(store, *template, None)?;
                 }
 
                 TemplateIrNodeKind::BranchChain { branches, fallback } => {
                     for branch in branches {
-                        self.validate_node(store, branch.body, view, registry)?;
+                        self.validate_node(store, branch.body, view)?;
                     }
                     if let Some(fallback) = fallback {
-                        self.validate_node(store, *fallback, view, registry)?;
+                        self.validate_node(store, *fallback, view)?;
                     }
                 }
 
@@ -692,14 +560,14 @@ impl FoldAuthorityWalk {
                     aggregate_wrapper,
                     ..
                 } => {
-                    self.validate_node(store, *body, view, registry)?;
+                    self.validate_node(store, *body, view)?;
                     if let Some(aggregate_wrapper) = aggregate_wrapper {
-                        self.validate_node(store, *aggregate_wrapper, view, registry)?;
+                        self.validate_node(store, *aggregate_wrapper, view)?;
                     }
                 }
 
                 TemplateIrNodeKind::RuntimeSlotSite { plan, .. } => {
-                    self.validate_slot_plan(store, *plan, view, registry)?;
+                    self.validate_slot_plan(store, *plan, view)?;
                 }
 
                 TemplateIrNodeKind::Text { .. }
@@ -720,7 +588,6 @@ impl FoldAuthorityWalk {
         store: &TemplateIrStore,
         slot_plan_id: TemplateSlotPlanId,
         view: Option<&TirView<'_>>,
-        registry: Option<&TemplateIrRegistry>,
     ) -> Result<(), CompilerError> {
         if !self.visiting_slot_plans.insert(slot_plan_id) {
             return Ok(());
@@ -729,16 +596,16 @@ impl FoldAuthorityWalk {
         let result = (|| {
             let slot_plan = store
                 .get_slot_plan(slot_plan_id)
-                .ok_or_else(|| missing_slot_plan_error(store, slot_plan_id))?;
+                .ok_or_else(|| missing_slot_plan_error(slot_plan_id))?;
 
             for source in &slot_plan.contribution_sources {
-                self.validate_node(store, source.render_root, view, registry)?;
+                self.validate_node(store, source.render_root, view)?;
             }
 
             for site in &slot_plan.slot_sites {
                 for piece in &site.render_plan.pieces {
                     if let TemplateSlotSiteRenderPiece::Render(node_id) = piece {
-                        self.validate_node(store, *node_id, view, registry)?;
+                        self.validate_node(store, *node_id, view)?;
                     }
                 }
             }
@@ -755,31 +622,19 @@ impl FoldAuthorityWalk {
         store: &TemplateIrStore,
         wrapper_set_id: TemplateWrapperSetId,
         view: Option<&TirView<'_>>,
-        registry: Option<&TemplateIrRegistry>,
     ) -> Result<(), CompilerError> {
         let wrapper_set = store
             .get_wrapper_set(wrapper_set_id)
-            .ok_or_else(|| missing_wrapper_set_error(store, wrapper_set_id))?;
+            .ok_or_else(|| missing_wrapper_set_error(wrapper_set_id))?;
 
         for wrapper in &wrapper_set.wrappers {
-            if wrapper.root.store_id != store.store_id() {
-                // Foreign wrappers are resolved by their owning store and do
-                // not participate in current-store authority validation.
-                continue;
-            }
-
             let wrapper_view = if wrapper.phase.is_at_least(TemplateTirPhase::Composed) {
-                self.validate_overlay_reference(view, registry, wrapper.overlay_set_id)?;
-                self.wrapper_view_for_reference(view, registry, wrapper)?
+                self.validate_overlay_reference(store, wrapper.overlay_set_id)?;
+                self.wrapper_view_for_reference(store, view, wrapper)?
             } else {
                 None
             };
-            self.validate_template(
-                store,
-                wrapper.root.template_id,
-                wrapper_view.as_ref(),
-                registry,
-            )?;
+            self.validate_template(store, wrapper.root, wrapper_view.as_ref())?;
         }
 
         Ok(())
@@ -787,34 +642,18 @@ impl FoldAuthorityWalk {
 
     fn validate_overlay_reference(
         &self,
-        view: Option<&TirView<'_>>,
-        registry: Option<&TemplateIrRegistry>,
+        store: &TemplateIrStore,
         overlay_set_id: TemplateOverlaySetId,
     ) -> Result<(), CompilerError> {
-        if let Some(view) = view {
-            return validate_overlay_set_authority(view.registry_ref(), overlay_set_id);
-        }
-
-        // The direct store-local fold path may carry the canonical empty ID
-        // without a registry-backed empty set. It does not resolve that ID as
-        // a view, so no registry lookup is required for this no-overlay case.
-        if overlay_set_id == TemplateOverlaySetId::empty() {
-            return Ok(());
-        }
-
-        if let Some(registry) = registry {
-            return validate_overlay_set_authority(registry, overlay_set_id);
-        }
-
-        Err(missing_overlay_set_error(overlay_set_id))
+        validate_overlay_set_authority(store, overlay_set_id)
     }
 
-    fn child_view_for_reference<'registry>(
+    fn child_view_for_reference<'store>(
         &self,
-        view: Option<&TirView<'registry>>,
-        registry: Option<&'registry TemplateIrRegistry>,
+        store: &'store TemplateIrStore,
+        view: Option<&TirView<'store>>,
         reference: &TemplateTirChildReference,
-    ) -> Result<Option<TirView<'registry>>, CompilerError> {
+    ) -> Result<Option<TirView<'store>>, CompilerError> {
         if reference.phase.is_at_least(TemplateTirPhase::Composed) {
             if let Some(view) = view {
                 return view
@@ -822,26 +661,24 @@ impl FoldAuthorityWalk {
                     .map(Some);
             }
 
-            if let Some(registry) = registry {
-                return TirView::new(
-                    registry,
-                    reference.root,
-                    reference.phase,
-                    reference.overlay_set_id,
-                )
-                .map(Some);
-            }
+            return TirView::new(
+                store,
+                reference.root,
+                reference.phase,
+                reference.overlay_set_id,
+            )
+            .map(Some);
         }
 
         Ok(None)
     }
 
-    fn wrapper_view_for_reference<'registry>(
+    fn wrapper_view_for_reference<'store>(
         &self,
-        view: Option<&TirView<'registry>>,
-        registry: Option<&'registry TemplateIrRegistry>,
+        store: &'store TemplateIrStore,
+        view: Option<&TirView<'store>>,
         reference: &TemplateWrapperReference,
-    ) -> Result<Option<TirView<'registry>>, CompilerError> {
+    ) -> Result<Option<TirView<'store>>, CompilerError> {
         if !reference.phase.is_at_least(TemplateTirPhase::Composed) {
             return Ok(None);
         }
@@ -852,42 +689,14 @@ impl FoldAuthorityWalk {
                 .map(Some);
         }
 
-        if let Some(registry) = registry {
-            return TirView::new(
-                registry,
-                reference.root,
-                reference.phase,
-                reference.overlay_set_id,
-            )
-            .map(Some);
-        }
-
-        Ok(None)
+        TirView::new(
+            store,
+            reference.root,
+            reference.phase,
+            reference.overlay_set_id,
+        )
+        .map(Some)
     }
-}
-
-/// Classifies why a `TirView` cannot be folded through the view-native path,
-/// returning `Ok(None)` when the view is safe and `Ok(Some(reason))` when it is
-/// not. Malformed authority returns `Err` instead of a fallback reason.
-///
-/// WHAT: mirrors the overlay-dimension checks and structural tree walk from
-///       `tir_view_is_expression_overlay_linear_fold_safe`, but returns a named
-///       reason instead of a bare `bool`. The bool entrypoint delegates here so
-///       all callers share one safety authority and no duplicate walk logic is
-///       introduced.
-///
-/// WHY: finalization fold fallback attribution needs to know *which* overlay or
-///      structural shape caused the fallback, not just that the view was
-///      rejected. Keeping the classification in the safety module preserves
-///      single ownership of the fold-safety policy.
-#[cfg(test)]
-pub(crate) fn classify_view_native_fold_safety(
-    view: &TirView<'_>,
-    store: &TemplateIrStore,
-) -> Result<Option<TirFoldFallbackReason>, CompilerError> {
-    let _authority = validate_view_fold_authority(view, store)?;
-    let string_table = StringTable::new();
-    classify_view_native_fold_safety_after_authority(view, store, &string_table)
 }
 
 fn classify_view_native_fold_safety_after_authority(
@@ -926,7 +735,7 @@ fn classify_view_native_fold_safety_after_authority(
         store,
         Some(view),
         view,
-        root.template_id,
+        root,
         false,
         &mut walk,
         string_table,
@@ -937,25 +746,6 @@ fn classify_view_native_fold_safety_after_authority(
     } else {
         Ok(reason)
     }
-}
-
-/// Returns `Ok(true)` when a `TirView` can be folded through the view-native
-/// path without cloning or mutating the module `TemplateIrStore`. Malformed
-/// authority returns `Err`; valid unsupported shapes return `Ok(false)`.
-///
-/// WHAT: delegates to `classify_view_native_fold_safety` so the bool and
-///       reason-returning callers share one safety authority.
-///
-/// WHY: the fold walker consults `TirView` for effective expressions and
-///      slot resolutions instead of cloning and mutating the store. This safety
-///      gate is the conservative boundary between shapes that can borrow the
-///      live store and shapes that still need the current-state fallback.
-#[cfg(test)]
-pub(crate) fn tir_view_is_expression_overlay_linear_fold_safe(
-    view: &TirView<'_>,
-    store: &TemplateIrStore,
-) -> Result<bool, CompilerError> {
-    Ok(classify_view_native_fold_safety(view, store)?.is_none())
 }
 
 fn template_root_is_linear_fold_safe(
@@ -970,7 +760,7 @@ fn template_root_is_linear_fold_safe(
 
     let template_ir = store
         .get_template(template_id)
-        .ok_or_else(|| missing_template_error(store, template_id))?;
+        .ok_or_else(|| missing_template_error(template_id))?;
 
     let is_linear = tir_node_is_linear_fold_safe(view, store, template_ir.root, visiting);
     visiting.remove(&template_id);
@@ -985,7 +775,7 @@ fn tir_node_is_linear_fold_safe(
 ) -> Result<bool, CompilerError> {
     let node = store
         .get_node(node_id)
-        .ok_or_else(|| missing_node_error(store, node_id))?;
+        .ok_or_else(|| missing_node_error(node_id))?;
 
     let is_linear = match &node.kind {
         TemplateIrNodeKind::Sequence { children } => {
@@ -1030,9 +820,7 @@ fn tir_node_is_linear_fold_safe(
         }
 
         TemplateIrNodeKind::ChildTemplate { reference, .. } => {
-            if let Some(child_template_id) = reference.template_id_in_store(store.store_id()) {
-                template_root_is_linear_fold_safe(view, store, child_template_id, visiting)?;
-            }
+            template_root_is_linear_fold_safe(view, store, reference.root, visiting)?;
             false
         }
 
@@ -1062,7 +850,7 @@ fn tir_node_is_linear_fold_safe(
 fn check_template_root_view_native_overlay_fold_safety(
     store: &TemplateIrStore,
     view: Option<&TirView<'_>>,
-    registry_view: &TirView<'_>,
+    module_view: &TirView<'_>,
     template_id: TemplateIrId,
     in_aggregate_wrapper: bool,
     walk: &mut ViewNativeWalkContext,
@@ -1070,7 +858,7 @@ fn check_template_root_view_native_overlay_fold_safety(
 ) -> Result<Option<TirFoldFallbackReason>, CompilerError> {
     // A template already on the visiting stack would recurse indefinitely in
     // the fold walker, which has no child-template cycle guard.
-    let template_ref = TemplateRef::new(store.store_id(), template_id);
+    let template_ref = template_id;
     if !walk.visiting_templates.insert(template_ref) {
         return Ok(Some(TirFoldFallbackReason::ChildTemplateCycle));
     }
@@ -1078,7 +866,7 @@ fn check_template_root_view_native_overlay_fold_safety(
     let result = (|| {
         let template = store
             .get_template(template_id)
-            .ok_or_else(|| missing_template_error(store, template_id))?;
+            .ok_or_else(|| missing_template_error(template_id))?;
 
         // Runtime slot plans require HIR/runtime lowering, not compile-time folding.
         if template.runtime_slot_plan.is_some() {
@@ -1093,7 +881,7 @@ fn check_template_root_view_native_overlay_fold_safety(
             && !wrapper_set_is_virtual_fold_safe(
                 store,
                 view,
-                registry_view,
+                module_view,
                 wrapper_set_id,
                 walk,
                 string_table,
@@ -1113,7 +901,7 @@ fn check_template_root_view_native_overlay_fold_safety(
         check_tir_node_view_native_overlay_fold_safety(
             store,
             view,
-            registry_view,
+            module_view,
             template.root,
             in_aggregate_wrapper,
             walk,
@@ -1138,7 +926,7 @@ fn check_template_root_view_native_overlay_fold_safety(
 fn check_tir_node_view_native_overlay_fold_safety(
     store: &TemplateIrStore,
     view: Option<&TirView<'_>>,
-    registry_view: &TirView<'_>,
+    module_view: &TirView<'_>,
     node_id: TemplateIrNodeId,
     in_aggregate_wrapper: bool,
     walk: &mut ViewNativeWalkContext,
@@ -1146,7 +934,7 @@ fn check_tir_node_view_native_overlay_fold_safety(
 ) -> Result<Option<TirFoldFallbackReason>, CompilerError> {
     let node = store
         .get_node(node_id)
-        .ok_or_else(|| missing_node_error(store, node_id))?;
+        .ok_or_else(|| missing_node_error(node_id))?;
 
     match &node.kind {
         TemplateIrNodeKind::Sequence { children } => {
@@ -1154,7 +942,7 @@ fn check_tir_node_view_native_overlay_fold_safety(
                 if let Some(reason) = check_tir_node_view_native_overlay_fold_safety(
                     store,
                     view,
-                    registry_view,
+                    module_view,
                     *child,
                     in_aggregate_wrapper,
                     walk,
@@ -1206,7 +994,7 @@ fn check_tir_node_view_native_overlay_fold_safety(
                 if let Some(reason) = check_tir_node_view_native_overlay_fold_safety(
                     store,
                     view,
-                    registry_view,
+                    module_view,
                     branch.body,
                     in_aggregate_wrapper,
                     walk,
@@ -1219,7 +1007,7 @@ fn check_tir_node_view_native_overlay_fold_safety(
                 && let Some(reason) = check_tir_node_view_native_overlay_fold_safety(
                     store,
                     view,
-                    registry_view,
+                    module_view,
                     *fallback_id,
                     in_aggregate_wrapper,
                     walk,
@@ -1239,7 +1027,7 @@ fn check_tir_node_view_native_overlay_fold_safety(
             if let Some(reason) = check_tir_node_view_native_overlay_fold_safety(
                 store,
                 view,
-                registry_view,
+                module_view,
                 *body,
                 false,
                 walk,
@@ -1251,7 +1039,7 @@ fn check_tir_node_view_native_overlay_fold_safety(
                 && let Some(reason) = check_tir_node_view_native_overlay_fold_safety(
                     store,
                     view,
-                    registry_view,
+                    module_view,
                     *wrapper_id,
                     true,
                     walk,
@@ -1289,16 +1077,7 @@ fn check_tir_node_view_native_overlay_fold_safety(
                 return Ok(Some(TirFoldFallbackReason::WrapperContextOverlay));
             }
 
-            let Some(child_template_id) = reference.template_id_in_store(store.store_id()) else {
-                return check_foreign_child_view_native_overlay_fold_safety(
-                    view,
-                    registry_view,
-                    reference,
-                    in_aggregate_wrapper,
-                    walk,
-                    string_table,
-                );
-            };
+            let child_template_id = reference.root;
 
             // Below-Composed children fold from their structural roots. Their
             // recorded overlay ID is not consumed by that path, so it must not
@@ -1309,7 +1088,7 @@ fn check_tir_node_view_native_overlay_fold_safety(
                 let result = check_template_root_view_native_overlay_fold_safety(
                     store,
                     None,
-                    registry_view,
+                    module_view,
                     child_template_id,
                     in_aggregate_wrapper,
                     walk,
@@ -1326,7 +1105,7 @@ fn check_tir_node_view_native_overlay_fold_safety(
                 Some(view) => {
                     view.child_view(reference.root, reference.phase, reference.overlay_set_id)?
                 }
-                None => registry_view.child_view(
+                None => module_view.child_view(
                     reference.root,
                     reference.phase,
                     reference.overlay_set_id,
@@ -1336,12 +1115,8 @@ fn check_tir_node_view_native_overlay_fold_safety(
             // Update slot-resolution activity for the exact child view so slots
             // do not inherit the parent's overlay dimensions.
             let saved_slot_resolution_active = walk.slot_resolution_active;
-            let child_expression_overlay_stack = walk.expression_stack_for_boundary(
-                store.store_id(),
-                reference.root,
-                reference.phase,
-                reference.overlay_set_id,
-            );
+            let child_expression_overlay_stack =
+                walk.expression_stack_for_boundary(reference.phase, reference.overlay_set_id);
             let saved_expression_overlay_stack = std::mem::replace(
                 &mut walk.expression_overlay_stack,
                 child_expression_overlay_stack,
@@ -1350,7 +1125,7 @@ fn check_tir_node_view_native_overlay_fold_safety(
             let result = check_template_root_view_native_overlay_fold_safety(
                 store,
                 Some(&child_view),
-                registry_view,
+                module_view,
                 child_template_id,
                 in_aggregate_wrapper,
                 walk,
@@ -1388,88 +1163,6 @@ fn check_tir_node_view_native_overlay_fold_safety(
     }
 }
 
-/// Follows a foreign child through the same exact shape path that folding will
-/// consume, while leaving authority validation to the fold boundary for that
-/// owning store.
-fn check_foreign_child_view_native_overlay_fold_safety(
-    view: Option<&TirView<'_>>,
-    registry_view: &TirView<'_>,
-    reference: &TemplateTirChildReference,
-    in_aggregate_wrapper: bool,
-    walk: &mut ViewNativeWalkContext,
-    string_table: &StringTable,
-) -> Result<Option<TirFoldFallbackReason>, CompilerError> {
-    let child_store_handle = registry_view
-        .registry_ref()
-        .store_handle(reference.root.store_id)
-        .ok_or_else(|| {
-            CompilerError::compiler_error(format!(
-                "TIR fold safety: foreign child store {} is not registered.",
-                reference.root.store_id
-            ))
-        })?;
-    let child_store = child_store_handle.borrow();
-
-    if !reference.phase.is_at_least(TemplateTirPhase::Composed) {
-        let saved_slot_resolution_active = walk.slot_resolution_active;
-        let child_expression_overlay_stack = walk.expression_stack_for_boundary(
-            registry_view.root_ref().store_id,
-            reference.root,
-            reference.phase,
-            reference.overlay_set_id,
-        );
-        let saved_expression_overlay_stack = std::mem::replace(
-            &mut walk.expression_overlay_stack,
-            child_expression_overlay_stack,
-        );
-        walk.slot_resolution_active = false;
-        let result = check_template_root_view_native_overlay_fold_safety(
-            &child_store,
-            None,
-            registry_view,
-            reference.root.template_id,
-            in_aggregate_wrapper,
-            walk,
-            string_table,
-        );
-        walk.slot_resolution_active = saved_slot_resolution_active;
-        walk.expression_overlay_stack = saved_expression_overlay_stack;
-        return result;
-    }
-
-    let child_view = match view {
-        Some(view) => view.child_view(reference.root, reference.phase, reference.overlay_set_id)?,
-        None => {
-            registry_view.child_view(reference.root, reference.phase, reference.overlay_set_id)?
-        }
-    };
-    let child_has_slot_resolution = child_view.slot_resolution_overlay()?.is_some();
-    let saved_slot_resolution_active = walk.slot_resolution_active;
-    let child_expression_overlay_stack = walk.expression_stack_for_boundary(
-        registry_view.root_ref().store_id,
-        reference.root,
-        reference.phase,
-        reference.overlay_set_id,
-    );
-    let saved_expression_overlay_stack = std::mem::replace(
-        &mut walk.expression_overlay_stack,
-        child_expression_overlay_stack,
-    );
-    walk.slot_resolution_active = child_has_slot_resolution;
-    let result = check_template_root_view_native_overlay_fold_safety(
-        &child_store,
-        Some(&child_view),
-        registry_view,
-        reference.root.template_id,
-        in_aggregate_wrapper,
-        walk,
-        string_table,
-    );
-    walk.slot_resolution_active = saved_slot_resolution_active;
-    walk.expression_overlay_stack = saved_expression_overlay_stack;
-    result
-}
-
 fn slot_placeholder_has_wrapper_context(placeholder: &TirSlotPlaceholder) -> bool {
     placeholder.applied_child_wrapper_set.is_some()
         || placeholder.child_wrapper_set.is_some()
@@ -1477,12 +1170,12 @@ fn slot_placeholder_has_wrapper_context(placeholder: &TirSlotPlaceholder) -> boo
 }
 
 fn validate_overlay_set_dimensions(
-    registry: &TemplateIrRegistry,
+    store: &TemplateIrStore,
     overlay_set_id: TemplateOverlaySetId,
     overlay_set: &TemplateOverlaySet,
 ) -> Result<(), CompilerError> {
     if let Some(overlay_id) = overlay_set.expression_overrides
-        && registry.expression_overlay(overlay_id).is_none()
+        && store.expression_overlay(overlay_id).is_none()
     {
         return Err(missing_overlay_dimension_error(
             overlay_set_id,
@@ -1492,7 +1185,7 @@ fn validate_overlay_set_dimensions(
     }
 
     if let Some(overlay_id) = overlay_set.slot_resolution
-        && registry.slot_resolution_overlay(overlay_id).is_none()
+        && store.slot_resolution_overlay(overlay_id).is_none()
     {
         return Err(missing_overlay_dimension_error(
             overlay_set_id,
@@ -1502,7 +1195,7 @@ fn validate_overlay_set_dimensions(
     }
 
     if let Some(overlay_id) = overlay_set.wrapper_context
-        && registry.wrapper_context_overlay(overlay_id).is_none()
+        && store.wrapper_context_overlay(overlay_id).is_none()
     {
         return Err(missing_overlay_dimension_error(
             overlay_set_id,
@@ -1515,56 +1208,46 @@ fn validate_overlay_set_dimensions(
 }
 
 fn validate_overlay_set_authority(
-    registry: &TemplateIrRegistry,
+    store: &TemplateIrStore,
     overlay_set_id: TemplateOverlaySetId,
 ) -> Result<(), CompilerError> {
-    let overlay_set = registry
+    let overlay_set = store
         .overlay_set(overlay_set_id)
         .ok_or_else(|| missing_overlay_set_error(overlay_set_id))?;
-    validate_overlay_set_dimensions(registry, overlay_set_id, overlay_set)
+    validate_overlay_set_dimensions(store, overlay_set_id, overlay_set)
 }
 
-fn missing_template_error(store: &TemplateIrStore, template_id: TemplateIrId) -> CompilerError {
+fn missing_template_error(template_id: TemplateIrId) -> CompilerError {
     CompilerError::compiler_error(format!(
-        "TIR fold safety: template {} is not present in store {}.",
-        template_id,
-        store.store_id()
+        "TIR fold safety: template {} is not present in the module store.",
+        template_id
     ))
 }
 
-fn missing_node_error(store: &TemplateIrStore, node_id: TemplateIrNodeId) -> CompilerError {
+fn missing_node_error(node_id: TemplateIrNodeId) -> CompilerError {
     CompilerError::compiler_error(format!(
-        "TIR fold safety: node {} is not present in store {}.",
-        node_id,
-        store.store_id()
+        "TIR fold safety: node {} is not present in the module store.",
+        node_id
     ))
 }
 
-fn missing_wrapper_set_error(
-    store: &TemplateIrStore,
-    wrapper_set_id: TemplateWrapperSetId,
-) -> CompilerError {
+fn missing_wrapper_set_error(wrapper_set_id: TemplateWrapperSetId) -> CompilerError {
     CompilerError::compiler_error(format!(
-        "TIR fold safety: wrapper set {} is not present in store {}.",
-        wrapper_set_id,
-        store.store_id()
+        "TIR fold safety: wrapper set {} is not present in the module store.",
+        wrapper_set_id
     ))
 }
 
-fn missing_slot_plan_error(
-    store: &TemplateIrStore,
-    slot_plan_id: TemplateSlotPlanId,
-) -> CompilerError {
+fn missing_slot_plan_error(slot_plan_id: TemplateSlotPlanId) -> CompilerError {
     CompilerError::compiler_error(format!(
-        "TIR fold safety: slot plan {} is not present in store {}.",
-        slot_plan_id,
-        store.store_id()
+        "TIR fold safety: slot plan {} is not present in the module store.",
+        slot_plan_id
     ))
 }
 
 fn missing_overlay_set_error(overlay_set_id: TemplateOverlaySetId) -> CompilerError {
     CompilerError::compiler_error(format!(
-        "TIR fold safety: overlay set {} is not present in the registry.",
+        "TIR fold safety: overlay set {} is not present in the module store.",
         overlay_set_id
     ))
 }
@@ -1584,55 +1267,12 @@ fn missing_overlay_dimension_error(
 //  Read-only (snapshot-free) fold safety
 // -------------------------
 
-/// Returns `Ok(true)` when a `TirView` root can be folded without cloning or
-/// mutating the module `TemplateIrStore`. Malformed same-store authority
-/// returns `Err`; valid unsupported shapes return `Ok(false)`.
-///
-/// WHAT: walks the structural TIR tree — crossing same-store child-template
-///       boundaries — and verifies that no reachable template or node requires
-///       store mutation during folding. Runtime slot plans and runtime slot sites
-///       are rejected because their output must be resolved during HIR lowering,
-///       not compile-time folding.
-///
-/// WHY: Phase 3A of the TIR performance plan removes the full-store clone for
-///      the common empty-overlay case. This safety gate is the conservative
-///      boundary between shapes that can borrow the live store and shapes that
-///      still need a cloned workspace.
-#[cfg(test)]
-pub(crate) fn tir_view_is_read_only_fold_safe(
-    view: &TirView<'_>,
-    store: &TemplateIrStore,
-) -> Result<bool, CompilerError> {
-    let root = view.root_ref();
-    if root.store_id != store.store_id() {
-        return Err(CompilerError::compiler_error(format!(
-            "TIR read-only fold safety: view root {} does not belong to supplied store {}.",
-            root,
-            store.store_id()
-        )));
-    }
-
-    if !view.overlay_set()?.is_empty() {
-        return Ok(false);
-    }
-
-    let mut visiting = HashSet::new();
-    template_root_is_read_only_fold_safe(
-        store,
-        Some(view),
-        view,
-        root.template_id,
-        false,
-        &mut visiting,
-    )
-}
-
 /// Checks one template root for read-only fold safety, crossing into same-store
 /// child templates recursively.
 fn template_root_is_read_only_fold_safe(
     store: &TemplateIrStore,
     view: Option<&TirView<'_>>,
-    registry_view: &TirView<'_>,
+    module_view: &TirView<'_>,
     template_id: TemplateIrId,
     in_aggregate_wrapper: bool,
     visiting: &mut HashSet<TemplateIrId>,
@@ -1645,7 +1285,7 @@ fn template_root_is_read_only_fold_safe(
 
     let template = store
         .get_template(template_id)
-        .ok_or_else(|| missing_template_error(store, template_id))?;
+        .ok_or_else(|| missing_template_error(template_id))?;
 
     // Runtime slot plans require HIR/runtime lowering, not compile-time folding.
     if template.runtime_slot_plan.is_some() {
@@ -1658,11 +1298,7 @@ fn template_root_is_read_only_fold_safe(
     // wrapper subtrees while malformed authority propagates as an error.
     if let Some(wrapper_set_id) = template.conditional_child_wrapper_set {
         let mut wrapper_walk = ViewNativeWalkContext {
-            visiting_templates: visiting
-                .iter()
-                .copied()
-                .map(|template_id| TemplateRef::new(store.store_id(), template_id))
-                .collect(),
+            visiting_templates: visiting.iter().copied().collect(),
             slot_resolution_active: false,
             expression_overlay_stack: view
                 .map(|view| vec![view.overlay_set_id()])
@@ -1672,7 +1308,7 @@ fn template_root_is_read_only_fold_safe(
         if !wrapper_set_is_virtual_fold_safe(
             store,
             view,
-            registry_view,
+            module_view,
             wrapper_set_id,
             &mut wrapper_walk,
             &string_table,
@@ -1684,7 +1320,7 @@ fn template_root_is_read_only_fold_safe(
     let safe = tir_node_is_read_only_fold_safe(
         store,
         view,
-        registry_view,
+        module_view,
         template.root,
         in_aggregate_wrapper,
         visiting,
@@ -1697,14 +1333,14 @@ fn template_root_is_read_only_fold_safe(
 fn tir_node_is_read_only_fold_safe(
     store: &TemplateIrStore,
     view: Option<&TirView<'_>>,
-    registry_view: &TirView<'_>,
+    module_view: &TirView<'_>,
     node_id: TemplateIrNodeId,
     in_aggregate_wrapper: bool,
     visiting: &mut HashSet<TemplateIrId>,
 ) -> Result<bool, CompilerError> {
     let node = store
         .get_node(node_id)
-        .ok_or_else(|| missing_node_error(store, node_id))?;
+        .ok_or_else(|| missing_node_error(node_id))?;
 
     match &node.kind {
         TemplateIrNodeKind::Sequence { children } => {
@@ -1713,7 +1349,7 @@ fn tir_node_is_read_only_fold_safe(
                 safe &= tir_node_is_read_only_fold_safe(
                     store,
                     view,
-                    registry_view,
+                    module_view,
                     *child,
                     in_aggregate_wrapper,
                     visiting,
@@ -1732,16 +1368,14 @@ fn tir_node_is_read_only_fold_safe(
 
         TemplateIrNodeKind::ChildTemplate { reference, .. } => {
             // Only same-store child references can be folded read-only.
-            let Some(child_template_id) = reference.template_id_in_store(store.store_id()) else {
-                return Ok(false);
-            };
+            let child_template_id = reference.root;
             // The child's overlay set must also be empty. Look it up through
-            // the registry that backs the parent view.
+            // the store that backs the parent view.
             if !reference.phase.is_at_least(TemplateTirPhase::Composed) {
                 return template_root_is_read_only_fold_safe(
                     store,
                     None,
-                    registry_view,
+                    module_view,
                     child_template_id,
                     in_aggregate_wrapper,
                     visiting,
@@ -1752,7 +1386,7 @@ fn tir_node_is_read_only_fold_safe(
                 Some(view) => {
                     view.child_view(reference.root, reference.phase, reference.overlay_set_id)?
                 }
-                None => registry_view.child_view(
+                None => module_view.child_view(
                     reference.root,
                     reference.phase,
                     reference.overlay_set_id,
@@ -1762,7 +1396,7 @@ fn tir_node_is_read_only_fold_safe(
             // for the read-only shortcut, a missing child remains an authority
             // failure rather than a normal read-only fallback.
             if store.get_template(child_template_id).is_none() {
-                return Err(missing_template_error(store, child_template_id));
+                return Err(missing_template_error(child_template_id));
             }
             let child_overlay_safe = child_view.overlay_set()?;
             if !child_overlay_safe.is_empty() {
@@ -1772,7 +1406,7 @@ fn tir_node_is_read_only_fold_safe(
             template_root_is_read_only_fold_safe(
                 store,
                 Some(&child_view),
-                registry_view,
+                module_view,
                 child_template_id,
                 in_aggregate_wrapper,
                 visiting,
@@ -1785,7 +1419,7 @@ fn tir_node_is_read_only_fold_safe(
                 safe &= tir_node_is_read_only_fold_safe(
                     store,
                     view,
-                    registry_view,
+                    module_view,
                     branch.body,
                     in_aggregate_wrapper,
                     visiting,
@@ -1795,7 +1429,7 @@ fn tir_node_is_read_only_fold_safe(
                 safe &= tir_node_is_read_only_fold_safe(
                     store,
                     view,
-                    registry_view,
+                    module_view,
                     *fallback_id,
                     in_aggregate_wrapper,
                     visiting,
@@ -1810,19 +1444,13 @@ fn tir_node_is_read_only_fold_safe(
             aggregate_wrapper,
             ..
         } => {
-            let mut safe = tir_node_is_read_only_fold_safe(
-                store,
-                view,
-                registry_view,
-                *body,
-                false,
-                visiting,
-            )?;
+            let mut safe =
+                tir_node_is_read_only_fold_safe(store, view, module_view, *body, false, visiting)?;
             if let Some(wrapper_id) = aggregate_wrapper {
                 safe &= tir_node_is_read_only_fold_safe(
                     store,
                     view,
-                    registry_view,
+                    module_view,
                     *wrapper_id,
                     true,
                     visiting,
@@ -1849,7 +1477,7 @@ fn tir_node_is_read_only_fold_safe(
             template_root_is_read_only_fold_safe(
                 store,
                 view,
-                registry_view,
+                module_view,
                 *template,
                 false,
                 visiting,
@@ -1870,13 +1498,11 @@ fn tir_node_is_read_only_fold_safe(
 ///       walks each wrapper template through the node shapes that the virtual
 ///       wrapper fold path supports. `IfChildEmits` is safe because the fold
 ///       helper receives the already-folded child emission and can decide from
-///       that structural result. Cross-store wrapper sets remain on the
-///       semantic fallback path because this safety walk is scoped to the
-///       current store.
+///       that structural result. Non-virtual wrapper sets remain on the semantic
+///       fallback path because this safety walk is scoped to the current store.
 /// WHY: wrapper-context overlays are now a supported overlay dimension, but
-///      only same-store virtual wrapper trees are admitted by this safety walk
-///      today. Cross-store wrapper folding has its own owning-store authority
-///      boundary, so this gate keeps those shapes on the semantic fallback path.
+///      only virtual wrapper trees are admitted by this safety walk today, so
+///      this gate keeps non-virtual shapes on the semantic fallback path.
 fn wrapper_context_is_view_native_fold_safe(
     store: &TemplateIrStore,
     view: &TirView<'_>,
@@ -1893,18 +1519,7 @@ fn wrapper_context_is_view_native_fold_safe(
         return Ok(true);
     };
 
-    if wrapper_set_ref.store_id != store.store_id() {
-        return Ok(false);
-    }
-
-    wrapper_set_is_virtual_fold_safe(
-        store,
-        Some(view),
-        view,
-        wrapper_set_ref.wrapper_set_id,
-        walk,
-        string_table,
-    )
+    wrapper_set_is_virtual_fold_safe(store, Some(view), view, wrapper_set_ref, walk, string_table)
 }
 
 /// Returns `Ok(true)` when every wrapper in the set can be folded by the
@@ -1921,19 +1536,15 @@ fn wrapper_context_is_view_native_fold_safe(
 fn wrapper_set_is_virtual_fold_safe(
     store: &TemplateIrStore,
     view: Option<&TirView<'_>>,
-    registry_view: &TirView<'_>,
+    module_view: &TirView<'_>,
     wrapper_set_id: TemplateWrapperSetId,
     walk: &mut ViewNativeWalkContext,
     string_table: &StringTable,
 ) -> Result<bool, CompilerError> {
     let wrapper_set = store
         .get_wrapper_set(wrapper_set_id)
-        .ok_or_else(|| missing_wrapper_set_error(store, wrapper_set_id))?;
+        .ok_or_else(|| missing_wrapper_set_error(wrapper_set_id))?;
     for wrapper in &wrapper_set.wrappers {
-        if wrapper.root.store_id != store.store_id() {
-            return Ok(false);
-        }
-
         // Wrapper references own their slot, expression, and nested-wrapper
         // dimensions. Match folding by entering the exact wrapper view before
         // walking its root; Parsed wrappers deliberately keep structural reads.
@@ -1943,18 +1554,14 @@ fn wrapper_set_is_virtual_fold_safe(
                     view.child_view(wrapper.root, wrapper.phase, wrapper.overlay_set_id)?
                 }
                 None => {
-                    registry_view.child_view(wrapper.root, wrapper.phase, wrapper.overlay_set_id)?
+                    module_view.child_view(wrapper.root, wrapper.phase, wrapper.overlay_set_id)?
                 }
             })
         } else {
             None
         };
-        let wrapper_expression_overlay_stack = walk.expression_stack_for_boundary(
-            store.store_id(),
-            wrapper.root,
-            wrapper.phase,
-            wrapper.overlay_set_id,
-        );
+        let wrapper_expression_overlay_stack =
+            walk.expression_stack_for_boundary(wrapper.phase, wrapper.overlay_set_id);
         let saved_expression_overlay_stack = std::mem::replace(
             &mut walk.expression_overlay_stack,
             wrapper_expression_overlay_stack,
@@ -1962,8 +1569,8 @@ fn wrapper_set_is_virtual_fold_safe(
         let result = wrapper_template_is_virtual_fold_safe(
             store,
             wrapper_view.as_ref(),
-            registry_view,
-            wrapper.root.template_id,
+            module_view,
+            wrapper.root,
             false,
             walk,
             string_table,
@@ -1980,13 +1587,13 @@ fn wrapper_set_is_virtual_fold_safe(
 fn wrapper_template_is_virtual_fold_safe(
     store: &TemplateIrStore,
     view: Option<&TirView<'_>>,
-    registry_view: &TirView<'_>,
+    module_view: &TirView<'_>,
     template_id: TemplateIrId,
     in_aggregate_wrapper: bool,
     walk: &mut ViewNativeWalkContext,
     string_table: &StringTable,
 ) -> Result<bool, CompilerError> {
-    let template_ref = TemplateRef::new(store.store_id(), template_id);
+    let template_ref = template_id;
     if !walk.visiting_templates.insert(template_ref) {
         return Ok(false);
     }
@@ -1994,7 +1601,7 @@ fn wrapper_template_is_virtual_fold_safe(
     let safe = (|| {
         let template = store
             .get_template(template_id)
-            .ok_or_else(|| missing_template_error(store, template_id))?;
+            .ok_or_else(|| missing_template_error(template_id))?;
 
         if template.runtime_slot_plan.is_some()
             || matches!(
@@ -2010,11 +1617,10 @@ fn wrapper_template_is_virtual_fold_safe(
         if !wrapper_expression_tree_is_const_evaluable(
             store,
             view,
-            registry_view,
+            module_view,
             template_id,
             template.root,
             &walk.expression_overlay_stack,
-            string_table,
         )? {
             return Ok(false);
         }
@@ -2035,7 +1641,7 @@ fn wrapper_template_is_virtual_fold_safe(
         wrapper_node_is_virtual_fold_safe(
             store,
             view,
-            registry_view,
+            module_view,
             template.root,
             &mut node_context,
         )
@@ -2048,18 +1654,17 @@ fn wrapper_template_is_virtual_fold_safe(
 fn wrapper_expression_tree_is_const_evaluable(
     store: &TemplateIrStore,
     view: Option<&TirView<'_>>,
-    registry_view: &TirView<'_>,
+    module_view: &TirView<'_>,
     template_id: TemplateIrId,
     root_node_id: TemplateIrNodeId,
     expression_overlay_stack: &[TemplateOverlaySetId],
-    string_table: &StringTable,
 ) -> Result<bool, CompilerError> {
     let structural_view;
     let expression_view = match view {
         Some(view) => view,
         None => {
-            structural_view = registry_view.child_view(
-                TemplateRef::new(store.store_id(), template_id),
+            structural_view = module_view.child_view(
+                template_id,
                 TemplateTirPhase::Parsed,
                 TemplateOverlaySetId::empty(),
             )?;
@@ -2070,7 +1675,6 @@ fn wrapper_expression_tree_is_const_evaluable(
     match tir_view_subtree_is_const_evaluable_value_with_expression_stack(
         expression_view,
         store,
-        string_table,
         root_node_id,
         &[],
         expression_overlay_stack,
@@ -2086,22 +1690,15 @@ fn wrapper_expression_tree_is_const_evaluable(
 /// Checks one non-injected resolved slot source through the exact source view
 /// used by folding (`Composed` plus the canonical empty overlay).
 fn resolved_slot_source_is_virtual_fold_safe(
-    registry_view: &TirView<'_>,
-    source: TemplateRef,
+    module_view: &TirView<'_>,
+    source: TemplateIrId,
     walk: &mut ViewNativeWalkContext,
     string_table: &StringTable,
 ) -> Result<bool, CompilerError> {
-    let registry = registry_view.registry_ref();
-    let source_store_handle = registry.store_handle(source.store_id).ok_or_else(|| {
-        CompilerError::compiler_error(format!(
-            "TIR fold safety: resolved slot source store {} is not registered.",
-            source.store_id
-        ))
-    })?;
-    let source_store = source_store_handle.borrow();
+    let source_store = module_view.store();
     let source_template = source_store
-        .get_template(source.template_id)
-        .ok_or_else(|| missing_template_error(&source_store, source.template_id))?;
+        .get_template(source)
+        .ok_or_else(|| missing_template_error(source))?;
 
     if matches!(
         source_template.kind,
@@ -2110,40 +1707,35 @@ fn resolved_slot_source_is_virtual_fold_safe(
         return Ok(false);
     }
 
-    let source_view = registry_view.child_view(
+    let source_view = module_view.child_view(
         source,
         TemplateTirPhase::Composed,
         TemplateOverlaySetId::empty(),
     )?;
-    let source_expression_overlay_stack = walk.expression_stack_for_boundary(
-        registry_view.root_ref().store_id,
-        source,
-        TemplateTirPhase::Composed,
-        TemplateOverlaySetId::empty(),
-    );
+    let source_expression_overlay_stack = walk
+        .expression_stack_for_boundary(TemplateTirPhase::Composed, TemplateOverlaySetId::empty());
     let saved_expression_overlay_stack = std::mem::replace(
         &mut walk.expression_overlay_stack,
         source_expression_overlay_stack,
     );
     let result = (|| {
         if !wrapper_expression_tree_is_const_evaluable(
-            &source_store,
+            source_store,
             Some(&source_view),
-            registry_view,
-            source.template_id,
+            module_view,
+            source,
             source_template.root,
             &walk.expression_overlay_stack,
-            string_table,
         )? {
             return Ok(false);
         }
         let saved_slot_resolution_active = walk.slot_resolution_active;
         walk.slot_resolution_active = false;
         let result = check_template_root_view_native_overlay_fold_safety(
-            &source_store,
+            source_store,
             Some(&source_view),
-            registry_view,
-            source.template_id,
+            module_view,
+            source,
             false,
             walk,
             string_table,
@@ -2158,7 +1750,7 @@ fn resolved_slot_source_is_virtual_fold_safe(
 fn wrapper_node_is_virtual_fold_safe(
     store: &TemplateIrStore,
     view: Option<&TirView<'_>>,
-    registry_view: &TirView<'_>,
+    module_view: &TirView<'_>,
     node_id: TemplateIrNodeId,
     context: &mut VirtualWrapperNodeSafetyContext<'_>,
 ) -> Result<bool, CompilerError> {
@@ -2166,14 +1758,14 @@ fn wrapper_node_is_virtual_fold_safe(
     let fill_target_key = context.fill_target_key;
     let node = store
         .get_node(node_id)
-        .ok_or_else(|| missing_node_error(store, node_id))?;
+        .ok_or_else(|| missing_node_error(node_id))?;
 
     match &node.kind {
         TemplateIrNodeKind::Sequence { children } => {
             let mut safe = true;
             for child in children {
                 safe &=
-                    wrapper_node_is_virtual_fold_safe(store, view, registry_view, *child, context)?;
+                    wrapper_node_is_virtual_fold_safe(store, view, module_view, *child, context)?;
             }
             Ok(safe)
         }
@@ -2203,7 +1795,7 @@ fn wrapper_node_is_virtual_fold_safe(
             {
                 for source in sources {
                     if !resolved_slot_source_is_virtual_fold_safe(
-                        registry_view,
+                        module_view,
                         *source,
                         context.walk,
                         context.string_table,
@@ -2221,9 +1813,7 @@ fn wrapper_node_is_virtual_fold_safe(
             occurrence_id,
             ..
         } => {
-            let Some(child_template_id) = reference.template_id_in_store(store.store_id()) else {
-                return Ok(false);
-            };
+            let child_template_id = reference.root;
             // Nested virtual-wrapper children can carry their own occurrence
             // context. Validate it through the existing wrapper-context owner
             // before deciding that the child subtree is virtual-fold-safe.
@@ -2248,7 +1838,7 @@ fn wrapper_node_is_virtual_fold_safe(
                     Some(view) => {
                         view.child_view(reference.root, reference.phase, reference.overlay_set_id)?
                     }
-                    None => registry_view.child_view(
+                    None => module_view.child_view(
                         reference.root,
                         reference.phase,
                         reference.overlay_set_id,
@@ -2265,12 +1855,9 @@ fn wrapper_node_is_virtual_fold_safe(
                 .flatten()
                 .is_some();
             let saved_slot_resolution_active = context.walk.slot_resolution_active;
-            let child_expression_overlay_stack = context.walk.expression_stack_for_boundary(
-                store.store_id(),
-                reference.root,
-                reference.phase,
-                reference.overlay_set_id,
-            );
+            let child_expression_overlay_stack = context
+                .walk
+                .expression_stack_for_boundary(reference.phase, reference.overlay_set_id);
             let saved_expression_overlay_stack = std::mem::replace(
                 &mut context.walk.expression_overlay_stack,
                 child_expression_overlay_stack,
@@ -2280,7 +1867,7 @@ fn wrapper_node_is_virtual_fold_safe(
             let result = wrapper_template_is_virtual_fold_safe(
                 store,
                 child_view.as_ref(),
-                registry_view,
+                module_view,
                 child_template_id,
                 in_aggregate_wrapper,
                 context.walk,
@@ -2301,7 +1888,7 @@ fn wrapper_node_is_virtual_fold_safe(
                 safe &= wrapper_node_is_virtual_fold_safe(
                     store,
                     view,
-                    registry_view,
+                    module_view,
                     branch.body,
                     context,
                 )?;
@@ -2310,7 +1897,7 @@ fn wrapper_node_is_virtual_fold_safe(
                 safe &= wrapper_node_is_virtual_fold_safe(
                     store,
                     view,
-                    registry_view,
+                    module_view,
                     *fallback_id,
                     context,
                 )?;
@@ -2330,14 +1917,14 @@ fn wrapper_node_is_virtual_fold_safe(
             let original_in_aggregate_wrapper = context.in_aggregate_wrapper;
             context.in_aggregate_wrapper = false;
             let mut safe =
-                wrapper_node_is_virtual_fold_safe(store, view, registry_view, *body, context)?;
+                wrapper_node_is_virtual_fold_safe(store, view, module_view, *body, context)?;
             context.in_aggregate_wrapper = original_in_aggregate_wrapper;
             if let Some(wrapper_id) = aggregate_wrapper {
                 context.in_aggregate_wrapper = true;
                 safe &= wrapper_node_is_virtual_fold_safe(
                     store,
                     view,
-                    registry_view,
+                    module_view,
                     *wrapper_id,
                     context,
                 )?;

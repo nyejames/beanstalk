@@ -142,11 +142,10 @@ pub(crate) fn route_tir_slot_contributions(
 ///       `InsertContribution` nodes by their target slot key, groups remaining
 ///       nodes into loose contribution chunks, and routes loose chunks to
 ///       positional slots first, then the default slot.
-/// WHY: cross-store head-chain composition reads the wrapper schema from the
-///      wrapper's owning (foreign) store but routes fill content from the
-///      composition store. Separating schema collection from fill routing lets
-///      both same-store and cross-store callers share one fill-walking owner
-///      without duplicating the insert/loose-content traversal.
+/// WHY: head-chain composition reads the wrapper schema and routes fill
+///      content from the one module store. Separating schema collection from
+///      fill routing keeps one fill-walking owner without duplicating the
+///      insert/loose-content traversal.
 pub(super) fn route_tir_fill_against_schema(
     store: &TemplateIrStore,
     schema: &TirSlotSchema,
@@ -178,23 +177,16 @@ pub(super) fn route_tir_fill_against_schema(
         let insert_info = match &child_node.kind {
             TemplateIrNodeKind::InsertContribution { template } => Some(*template),
             TemplateIrNodeKind::ChildTemplate { reference, .. } => {
-                match reference.template_id_in_store(store.store_id()) {
-                    // Foreign child references remain ordinary loose content;
-                    // their template authority belongs to another TIR store.
-                    None => None,
-                    Some(template_id) => {
-                        let template = store.get_template(template_id).ok_or_else(|| {
-                            Box::new(internal_compiler_error(
-                                "TIR slot routing: same-store child template ID was not present in the store.",
-                            ))
-                        })?;
+                let template = store.get_template(reference.root).ok_or_else(|| {
+                    Box::new(internal_compiler_error(
+                        "TIR slot routing: child template ID was not present in the store.",
+                    ))
+                })?;
 
-                        if matches!(template.kind, TemplateType::SlotInsert(_)) {
-                            Some(template_id)
-                        } else {
-                            None
-                        }
-                    }
+                if matches!(template.kind, TemplateType::SlotInsert(_)) {
+                    Some(reference.root)
+                } else {
+                    None
                 }
             }
 

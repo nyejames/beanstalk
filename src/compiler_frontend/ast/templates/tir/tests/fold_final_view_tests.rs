@@ -2,11 +2,11 @@
 //!
 //! WHAT: exercises `fold_tir_view` for final effective views rooted at
 //!       control-flow bodies, aggregate wrappers, formatted text, and foldable
-//!       runtime slot applications. These tests prove the registry-backed fold
+//!       runtime slot applications. These tests prove the store-backed fold
 //!       path handles the shapes that `try_classify_final_effective_template_view`
 //!       deems sufficient.
 //!
-//! WHY: production finalization folds through stable registry-backed `TirView`s,
+//! WHY: production finalization folds through stable store-backed `TirView`s,
 //!      so the final-view entry point needs focused coverage for those surfaces.
 
 use crate::compiler_frontend::ast::ast_nodes::{LoopBindings, RangeEndKind, RangeLoopSpec};
@@ -29,11 +29,9 @@ use crate::compiler_frontend::ast::templates::tir::node::{
     TemplateIrBranch, TemplateIrNode, TemplateIrNodeKind,
 };
 use crate::compiler_frontend::ast::templates::tir::overlays::TemplateOverlaySet;
-use crate::compiler_frontend::ast::templates::tir::registry::TemplateIrRegistry;
 use crate::compiler_frontend::ast::templates::tir::store::TemplateIrStore;
 use crate::compiler_frontend::ast::templates::tir::summary::TemplateIrSummary;
 use crate::compiler_frontend::ast::templates::tir::view::{TemplateTirPhase, TirView};
-use crate::compiler_frontend::ast::templates::tir::{TemplateRef, format_tir_template};
 use crate::compiler_frontend::ast::templates::{
     OwnedRuntimeSlotApplicationHandoff, OwnedRuntimeTemplateNode,
 };
@@ -68,7 +66,7 @@ fn build_test_fold_context<'a>(
     resolver: &'a ProjectPathResolver,
     path_format: &'a PathStringFormatConfig,
     source_scope: &'a InternedPath,
-    registry: &'a Rc<RefCell<TemplateIrRegistry>>,
+    store: &'a Rc<RefCell<TemplateIrStore>>,
 ) -> TemplateFoldContext<'a> {
     TemplateFoldContext {
         string_table,
@@ -76,7 +74,7 @@ fn build_test_fold_context<'a>(
         path_format_config: path_format,
         source_file_scope: source_scope,
         template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
-        template_ir_registry: Some(Rc::clone(registry)),
+        template_ir_store: Some(Rc::clone(store)),
         bindings: vec![],
         fold_cache: TirFoldCache::new(),
     }
@@ -101,11 +99,10 @@ fn emission_to_string(emission: TemplateEmission, string_table: &StringTable) ->
     }
 }
 
-/// Builds a registry and a view over a freshly constructed same-store template,
+/// Builds a shared store and a view over a freshly constructed template,
 /// then folds it through `fold_tir_view`.
 struct FinalViewFoldFixture {
-    registry: Rc<RefCell<TemplateIrRegistry>>,
-    store_id: crate::compiler_frontend::ast::templates::tir::refs::TemplateStoreId,
+    store: Rc<RefCell<TemplateIrStore>>,
     template_id: crate::compiler_frontend::ast::templates::tir::ids::TemplateIrId,
     overlay_set_id: crate::compiler_frontend::ast::templates::tir::overlays::TemplateOverlaySetId,
 }
@@ -120,23 +117,18 @@ where
         &mut TemplateIrStore,
     ) -> crate::compiler_frontend::ast::templates::tir::ids::TemplateIrId,
 {
-    let registry = Rc::new(RefCell::new(TemplateIrRegistry::new()));
-    let store_id = registry.borrow_mut().allocate_store();
-    let overlay_set_id = registry
+    let store = Rc::new(RefCell::new(TemplateIrStore::new()));
+    let overlay_set_id = store
         .borrow_mut()
         .allocate_overlay_set(TemplateOverlaySet::empty());
 
     let template_id = {
-        let registry_borrow = registry.borrow_mut();
-        let mut store = registry_borrow
-            .store_mut(store_id)
-            .expect("store should exist");
-        build_template(string_table, &mut store)
+        let mut store_borrow = store.borrow_mut();
+        build_template(string_table, &mut store_borrow)
     };
 
     FinalViewFoldFixture {
-        registry,
-        store_id,
+        store,
         template_id,
         overlay_set_id,
     }
@@ -151,27 +143,16 @@ fn fold_final_view_fixture(
     let path_format = PathStringFormatConfig::default();
     let source_scope = InternedPath::new();
 
-    let registry_borrow = fixture.registry.borrow();
-    let view = TirView::new(
-        &registry_borrow,
-        TemplateRef::new(fixture.store_id, fixture.template_id),
-        phase,
-        fixture.overlay_set_id,
-    )
-    .expect("test view should construct");
-
-    let store = registry_borrow
-        .store_handle(fixture.store_id)
-        .expect("store handle should exist")
-        .borrow()
-        .clone();
+    let store = fixture.store.borrow();
+    let view = TirView::new(&store, fixture.template_id, phase, fixture.overlay_set_id)
+        .expect("test view should construct");
 
     let mut fold_context = build_test_fold_context(
         string_table,
         &resolver,
         &path_format,
         &source_scope,
-        &fixture.registry,
+        &fixture.store,
     );
 
     fold_tir_view(&view, &store, &mut fold_context)
@@ -551,9 +532,8 @@ fn final_view_fold_aggregate_output_outside_wrapper_is_error() {
 // -------------------------
 
 fn build_formatted_markdown_fixture(string_table: &mut StringTable) -> FinalViewFoldFixture {
-    let registry = Rc::new(RefCell::new(TemplateIrRegistry::new()));
-    let store_id = registry.borrow_mut().allocate_store();
-    let overlay_set_id = registry
+    let store = Rc::new(RefCell::new(TemplateIrStore::new()));
+    let overlay_set_id = store
         .borrow_mut()
         .allocate_overlay_set(TemplateOverlaySet::empty());
     let style = Style {
@@ -562,11 +542,8 @@ fn build_formatted_markdown_fixture(string_table: &mut StringTable) -> FinalView
     };
 
     let template_id = {
-        let registry_borrow = registry.borrow_mut();
-        let mut store = registry_borrow
-            .store_mut(store_id)
-            .expect("store should exist");
-        let mut builder = TemplateIrBuilder::new(&mut store);
+        let mut store_borrow = store.borrow_mut();
+        let mut builder = TemplateIrBuilder::new(&mut store_borrow);
         let text = string_table.intern("Hello `code`");
         let root = builder.push_text_node(
             text,
@@ -584,25 +561,22 @@ fn build_formatted_markdown_fixture(string_table: &mut StringTable) -> FinalView
     };
 
     let formatted_root = {
-        let registry_borrow = registry.borrow();
-        let view = TirView::new(
-            &registry_borrow,
-            TemplateRef::new(store_id, template_id),
+        let mut store_borrow = store.borrow_mut();
+        crate::compiler_frontend::ast::templates::tir::formatter_view::format_tir_template(
+            &mut store_borrow,
+            template_id,
             TemplateTirPhase::Parsed,
             overlay_set_id,
+            &style,
+            string_table,
         )
-        .expect("parsed view should construct");
-        format_tir_template(&view, &style, string_table)
-            .expect("TIR formatter should succeed")
-            .root
+        .expect("TIR formatter should succeed")
+        .root
     };
 
     {
-        let registry_borrow = registry.borrow_mut();
-        let mut store = registry_borrow
-            .store_mut(store_id)
-            .expect("store should exist");
-        store
+        let mut store_borrow = store.borrow_mut();
+        store_borrow
             .templates
             .get_mut(template_id.index())
             .expect("formatted template should exist")
@@ -610,8 +584,7 @@ fn build_formatted_markdown_fixture(string_table: &mut StringTable) -> FinalView
     }
 
     FinalViewFoldFixture {
-        registry,
-        store_id,
+        store,
         template_id,
         overlay_set_id,
     }

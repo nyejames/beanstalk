@@ -14,8 +14,8 @@ use crate::compiler_frontend::ast::templates::error::TemplateError;
 use crate::compiler_frontend::ast::templates::template::Style;
 use crate::compiler_frontend::ast::templates::tir::{
     ControlFlowBodyKind, TemplateConstructionContext, TemplateIr, TemplateIrBranch,
-    TemplateIrNodeId, TemplateIrNodeKind, TemplateRef, TemplateTirPhase, TemplateTirReference,
-    TemplateWrapperReference, TirView, apply_inherited_child_wrappers_to_body_root,
+    TemplateIrNodeId, TemplateIrNodeKind, TemplateTirPhase, TemplateTirReference,
+    TemplateWrapperReference, apply_inherited_child_wrappers_to_body_root,
     build_branch_body_candidate_from_tir_nodes, compose_tir_head_chain, format_tir_body_root,
     head_prefix_tir_nodes, prepare_loop_aggregate_wrapper, replace_control_flow_body_tir_root,
     replace_loop_aggregate_wrapper_tir_root, run_tir_formatter_with_warnings, sequence_children,
@@ -23,7 +23,6 @@ use crate::compiler_frontend::ast::templates::tir::{
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use std::sync::Arc;
 
 /// Installs formatter output as the current same-store TIR reference.
 ///
@@ -48,41 +47,26 @@ pub(in crate::compiler_frontend::ast::templates) fn install_formatted_tir_refere
         return Ok(());
     }
 
-    let store = context.registered_template_ir_store.store().borrow();
-    let store_owner = store.owner();
-    if !Arc::ptr_eq(&reference.store_owner, &store_owner) {
-        return Err(CompilerError::compiler_error(
-            "Linear formatter installation: durable TIR reference does not match the registered construction store.",
-        )
-        .into());
-    }
+    let store = context.template_ir_store.borrow();
 
-    let original_template = store
-        .get_template(reference.root.template_id)
-        .cloned()
-        .ok_or_else(|| {
-            CompilerError::compiler_error(
-                "Template TIR reference pointed at a missing same-store template.",
-            )
-        })?;
+    let original_template = store.get_template(reference.root).cloned().ok_or_else(|| {
+        CompilerError::compiler_error(
+            "Template TIR reference pointed at a missing same-store template.",
+        )
+    })?;
 
     drop(store);
 
-    let formatter_result = {
-        let registry = context.registered_template_ir_store.registry().borrow();
-        let root_ref = reference.root;
-        let view = TirView::new(
-            &registry,
-            root_ref,
-            reference.phase,
-            reference.overlay_set_id,
-        )
-        .map_err(TemplateError::from)?;
-
-        run_tir_formatter_with_warnings(&view, style, context, string_table)?
-    };
-
-    let mut store = context.registered_template_ir_store.store().borrow_mut();
+    let mut store = context.template_ir_store.borrow_mut();
+    let formatter_result = run_tir_formatter_with_warnings(
+        &mut store,
+        reference.root,
+        reference.phase,
+        reference.overlay_set_id,
+        style,
+        context,
+        string_table,
+    )?;
     let formatted_template_id = store.push_template(TemplateIr::new(
         formatter_result.root,
         original_template.style,
@@ -92,11 +76,7 @@ pub(in crate::compiler_frontend::ast::templates) fn install_formatted_tir_refere
     ));
 
     *tir_reference = TemplateTirReference {
-        root: TemplateRef::new(
-            context.registered_template_ir_store.store_id(),
-            formatted_template_id,
-        ),
-        store_owner,
+        root: formatted_template_id,
         phase: TemplateTirPhase::Formatted,
         overlay_set_id: reference.overlay_set_id,
     };
@@ -145,7 +125,7 @@ fn prepare_branch_body_tir_root(
     // shared head-prefix atoms, so reusing them avoids rebuilding TIR from
     // the formatted TIR root.
     let head_prefix_nodes = {
-        let store = context.registered_template_ir_store.store().borrow();
+        let store = context.template_ir_store.borrow();
         head_prefix_tir_nodes(&store, root_children).map_err(TemplateError::from)?
     };
 
@@ -156,16 +136,13 @@ fn prepare_branch_body_tir_root(
     // Format the body root before inherited wrappers and head-chain composition
     // so the final body tree carries formatted text while wrappers remain opaque
     // anchors. The store borrow is released around this call because the TIR
-    // formatter mutates the registry-owned store through `TirView`.
+    // formatter mutates the shared module store through `TirView`.
     let body_root = format_tir_body_root(body_root, style, context, string_table)?;
 
-    let mut store = context.registered_template_ir_store.store().borrow_mut();
-    let registry = context.registered_template_ir_store.registry().borrow();
-
+    let mut store = context.template_ir_store.borrow_mut();
     let body_root = apply_inherited_child_wrappers_to_body_root(
         body_root,
         child_wrappers,
-        &registry,
         &mut store,
         string_table,
     )?;
@@ -174,12 +151,8 @@ fn prepare_branch_body_tir_root(
 
     // Build a temporary template combining the head-prefix nodes with the body
     // children, then compose so head-chain wrappers apply to the body.
-    let candidate_id = build_branch_body_candidate_from_tir_nodes(
-        &head_prefix_nodes,
-        &body_children,
-        &mut store,
-        &registry,
-    )?;
+    let candidate_id =
+        build_branch_body_candidate_from_tir_nodes(&head_prefix_nodes, &body_children, &mut store)?;
     let composed_root = compose_tir_head_chain(&mut store, candidate_id, string_table, true)?;
 
     replace_control_flow_body_tir_root(&mut store, control_flow_node_id, body_kind, composed_root)
@@ -274,19 +247,17 @@ fn prepare_loop_body_tir_root(
     // directly without content-to-TIR materialization.
 
     // Release the store borrow around the TIR formatter call; the formatter
-    // authority mutates the registry-owned store through `TirView`.
+    // authority mutates the shared module store through `TirView`.
     let body_root = format_tir_body_root(body_root, style, context, string_table)?;
 
-    let mut store = context.registered_template_ir_store.store().borrow_mut();
+    let mut store = context.template_ir_store.borrow_mut();
     let body_root =
         trim_whitespace_before_loop_control_boundary(body_root, &mut store, string_table)
             .map_err(TemplateError::from)?;
 
-    let registry = context.registered_template_ir_store.registry().borrow();
     let body_root = apply_inherited_child_wrappers_to_body_root(
         body_root,
         child_wrappers,
-        &registry,
         &mut store,
         string_table,
     )?;
@@ -368,7 +339,7 @@ pub(in crate::compiler_frontend::ast::templates) fn prepare_control_flow_render_
     // body node IDs in the TIR store; render-unit preparation reads and
     // updates them directly.
     let control_flow_node_id = {
-        let store = context.registered_template_ir_store.store().borrow();
+        let store = context.template_ir_store.borrow();
         construction_context
             .builder()
             .control_flow_node_id(&store)
@@ -380,7 +351,7 @@ pub(in crate::compiler_frontend::ast::templates) fn prepare_control_flow_render_
     };
 
     let kind = {
-        let store = context.registered_template_ir_store.store().borrow();
+        let store = context.template_ir_store.borrow();
         let node = store.get_node(control_flow_node_id).ok_or_else(|| {
             CompilerError::compiler_error(
                 "Control-flow node disappeared from the TIR store during render-unit preparation.",
@@ -519,14 +490,9 @@ fn prepare_loop_render_units(
     // head-prefix nodes instead of rebuilding from content atoms.
     let root_children = construction_context.builder().root_children().to_vec();
 
-    let mut template_ir_store = context.registered_template_ir_store.store().borrow_mut();
-    let registry = context.registered_template_ir_store.registry().borrow();
-    let aggregate_wrapper = prepare_loop_aggregate_wrapper(
-        &root_children,
-        string_table,
-        &registry,
-        &mut template_ir_store,
-    )?;
+    let mut template_ir_store = context.template_ir_store.borrow_mut();
+    let aggregate_wrapper =
+        prepare_loop_aggregate_wrapper(&root_children, string_table, &mut template_ir_store)?;
 
     // Install the composed TIR aggregate-wrapper subtree onto the owning
     // `Loop` node.

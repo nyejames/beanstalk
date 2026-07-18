@@ -15,6 +15,7 @@
 //! the AST stage finishes template processing for that module.
 
 use crate::compiler_frontend::arena::capacity::FrontendArenaCapacityEstimate;
+use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::templates::error::TemplateError;
 use crate::compiler_frontend::ast::templates::template::{
     ReactiveSubscription, SlotPlaceholder, TemplateType,
@@ -29,15 +30,18 @@ use crate::compiler_frontend::ast::templates::tir::node::{
     TemplateIr, TemplateIrNode, TemplateIrNodeKind, TemplateLoopHeaderExpressionSites,
     TirSlotPlaceholder,
 };
-use crate::compiler_frontend::ast::templates::tir::refs::{
-    TemplateRef, TemplateStoreId, TemplateStringDomainId, TemplateWrapperReference,
+use crate::compiler_frontend::ast::templates::tir::overlays::{
+    TemplateOverlaySet, TemplateOverlaySetId, TirExpressionOverlay, TirExpressionOverlayId,
+    TirSlotResolutionOverlay, TirSlotResolutionOverlayId, TirWrapperContextOverlay,
+    TirWrapperContextOverlayId,
 };
+use crate::compiler_frontend::ast::templates::tir::refs::TemplateWrapperReference;
 use crate::compiler_frontend::ast::templates::tir::slot_plan::TemplateSlotPlan;
 use crate::compiler_frontend::ast::templates::tir::wrapper_sets::wrapper_sets_are_equivalent;
+use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::instrumentation::{AstCounter, increment_ast_counter};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use std::collections::HashSet;
-use std::sync::Arc;
 
 // -------------------------
 //  Side-table types
@@ -55,29 +59,21 @@ use std::sync::Arc;
 /// typed side-table ID.
 /// WHY: many sibling templates inherit wrappers from their parent; storing them
 /// as effective refs outside `TemplateIr` keeps the core template record small,
-/// avoids recursive `Template` ownership, makes cross-store ownership explicit,
+/// avoids recursive `Template` ownership, makes store-local ownership explicit,
 /// and gives later phases a clear place to deduplicate identical wrapper
 /// combinations.
 ///
-/// Design constraint: wrapper sets must store effective wrapper references
-/// (root, phase, overlay-set ID), not bare `TemplateRef`. A wrapper's effective
-/// identity is not only its structural root — it also has a phase and overlay-set
-/// context. Storing all three fields prevents a subtle bug where a wrapper with
-/// the same structural root but a different overlay context is treated as
-/// equivalent. Content-based composition must NOT remain as a permanent
-/// fallback for cross-store wrappers. Eager TIR copying is NOT the primary
-/// model; copying is permitted only as copy-on-write materialization.
+/// Design constraint: wrapper sets store effective wrapper references (root,
+/// phase, and overlay-set ID). A wrapper's effective identity is not only its
+/// structural root — it also has a phase and overlay context.
 #[derive(Clone, Debug)]
 pub(crate) struct TemplateWrapperSet {
     /// Effective wrapper template refs that must be applied around a child
     /// template's output during folding, ordered from innermost to outermost as
     /// they were stored on the AST `Template`.
     ///
-    /// WHY: wrapper sets may be referenced cross-store through the registry;
-    /// storing effective refs rather than bare store-local `TemplateIrId`s keeps
-    /// that ownership explicit and lets validation reject out-of-bounds or
-    /// wrong-store wrapper references without silently relying on the current
-    /// store.
+    /// WHY: storing the effective view identity keeps wrapper reuse precise
+    /// without duplicating template content.
     pub(crate) wrappers: Vec<TemplateWrapperReference>,
 }
 
@@ -94,60 +90,8 @@ pub(crate) struct TemplateFormatterAnchor {
 }
 
 // -------------------------
-//  Template Store State
-// -------------------------
-
-/// Lifecycle state of a `TemplateIrStore` inside the module-local registry.
-///
-/// WHAT: distinguishes a store that is still accepting parser/builder mutations
-/// from one that has been frozen into a module-local string domain.
-/// WHY: cross-store references are only valid between frozen stores that share
-/// the same string domain; a building store must not be referenced from outside.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum TemplateStoreState {
-    /// The store is under construction and may still receive parser/builder writes.
-    Building,
-
-    /// The store has been frozen and assigned to a module-local string domain.
-    ///
-    /// WHAT: all interned string identities in the store have been reconciled
-    /// with the string domain identified by `string_domain`.
-    /// WHY: cross-store references are valid only when both stores belong to the
-    /// same domain, ensuring string IDs resolve consistently.
-    #[allow(
-        dead_code,
-        reason = "cross-store freeze is test-only while TIR stays module-scoped; production match arms still cover it"
-    )]
-    FrozenModuleLocal {
-        string_domain: TemplateStringDomainId,
-    },
-}
-
-// -------------------------
 //  Template IR Store
 // -------------------------
-
-/// Identity token for one logical TIR store origin.
-///
-/// WHAT: every directly constructed store receives a fresh token. Durable
-///       template references and read-only snapshots cloned from that store
-///       share the token, so `Arc::ptr_eq` proves common store origin.
-/// WHY: `TemplateStoreId` is a registry-local index and can collide numerically
-///      across registries. Direct-store consumers use this token when an active
-///      borrow prevents resolving the reference back through the registry.
-///
-/// NOTE: `Arc` is used instead of `Rc` so that `Template` (which may carry a
-///       finalized TIR reference) remains `Send + Sync` and existing
-///       `Arc<Template>` usage keeps clippy's thread-safety lint happy.
-#[derive(Debug)]
-pub(crate) struct TemplateIrStoreOwner(());
-
-impl TemplateIrStoreOwner {
-    /// Creates a new unique owner token.
-    pub(crate) fn new() -> Arc<Self> {
-        Arc::new(Self(()))
-    }
-}
 
 /// Central owned storage for all TIR data within one module's template subsystem.
 ///
@@ -168,7 +112,7 @@ impl TemplateIrStoreOwner {
 ///
 /// Construction APIs preserve these invariants. Focused malformed-store tests
 /// exercise them through `tests/validation_support.rs`.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub(crate) struct TemplateIrStore {
     /// Document-order counter for `Slot` node occurrences.
     ///
@@ -206,6 +150,12 @@ pub(crate) struct TemplateIrStore {
     /// Slot routing plans.
     pub(crate) slot_plans: Vec<TemplateSlotPlan>,
 
+    /// Overlay sets and payloads for effective template views.
+    pub(crate) overlay_sets: Vec<TemplateOverlaySet>,
+    pub(crate) expression_overlays: Vec<TirExpressionOverlay>,
+    pub(crate) slot_resolution_overlays: Vec<TirSlotResolutionOverlay>,
+    pub(crate) wrapper_context_overlays: Vec<TirWrapperContextOverlay>,
+
     /// Formatter opaque anchors.
     #[allow(
         dead_code,
@@ -222,24 +172,6 @@ pub(crate) struct TemplateIrStore {
     /// WHY: reactive literal text must survive TIR formatting and current-state
     ///      materialization without broadening the `TemplateIrNodeKind` enum shape.
     pub(crate) node_reactive_subscriptions: Vec<Option<ReactiveSubscription>>,
-
-    /// Logical origin token for this store.
-    ///
-    /// WHAT: references finalized from this store carry a clone of the token.
-    /// WHY: consumers compare it before using a store-local `TemplateIrId`, since
-    ///      equal registry-local store IDs do not imply a common store origin.
-    owner: Arc<TemplateIrStoreOwner>,
-
-    /// Registry-level ID for this store.
-    ///
-    /// WHAT: assigned by `TemplateIrRegistry::adopt_store` when the store is
-    ///       registered. Defaults to index 0 so stores created directly outside
-    ///       the registry (tests) still produce well-formed `TemplateRef`s.
-    /// WHY: the store needs its own `TemplateStoreId` to qualify store-local
-    ///      `TemplateIrId`s into store-qualified `TemplateRef`s when building
-    ///      wrapper sets, without callers having to thread the ID through every
-    ///      store-local API.
-    store_id: TemplateStoreId,
 }
 
 impl TemplateIrStore {
@@ -253,10 +185,12 @@ impl TemplateIrStore {
             nodes: Vec::new(),
             wrapper_sets: Vec::new(),
             slot_plans: Vec::new(),
+            overlay_sets: vec![TemplateOverlaySet::empty()],
+            expression_overlays: Vec::new(),
+            slot_resolution_overlays: Vec::new(),
+            wrapper_context_overlays: Vec::new(),
             formatter_anchors: Vec::new(),
             node_reactive_subscriptions: Vec::new(),
-            owner: TemplateIrStoreOwner::new(),
-            store_id: TemplateStoreId::new(0),
         }
     }
 
@@ -285,62 +219,13 @@ impl TemplateIrStore {
             nodes: Vec::with_capacity(node_capacity),
             wrapper_sets: Vec::with_capacity(side_capacity),
             slot_plans: Vec::with_capacity(side_capacity),
+            overlay_sets: vec![TemplateOverlaySet::empty()],
+            expression_overlays: Vec::with_capacity(side_capacity),
+            slot_resolution_overlays: Vec::with_capacity(side_capacity),
+            wrapper_context_overlays: Vec::with_capacity(side_capacity),
             formatter_anchors: Vec::with_capacity(side_capacity),
             node_reactive_subscriptions: Vec::with_capacity(node_capacity),
-            owner: TemplateIrStoreOwner::new(),
-            store_id: TemplateStoreId::new(0),
         }
-    }
-
-    /// Returns the logical origin token for this store.
-    pub(crate) fn owner(&self) -> Arc<TemplateIrStoreOwner> {
-        Arc::clone(&self.owner)
-    }
-
-    /// Returns the registry-level store ID assigned to this store.
-    ///
-    /// WHAT: defaults to index 0 when the store was created outside the
-    ///       registry; set to the real ID by `TemplateIrRegistry::adopt_store`.
-    /// WHY: callers and `push_or_reuse_wrapper_set` need the store's own ID to
-    ///      qualify store-local `TemplateIrId`s into `TemplateRef`s.
-    pub(crate) fn store_id(&self) -> TemplateStoreId {
-        self.store_id
-    }
-
-    /// Stamps the store with its registry-assigned `TemplateStoreId`.
-    ///
-    /// WHAT: called once by `TemplateIrRegistry::adopt_store` after the store is
-    ///       registered. Existing self-qualified wrapper refs are rewritten from
-    ///       the previous store ID to the assigned ID.
-    /// WHY: the store cannot know its own index at construction time because
-    ///      the registry assigns it; this method closes that gap so the store
-    ///      can self-qualify template IDs into store-qualified refs. Tests may
-    ///      also adopt a prebuilt store, so wrapper refs created before adoption
-    ///      must not keep the direct-construction default ID.
-    pub(crate) fn set_store_id(&mut self, store_id: TemplateStoreId) {
-        let previous_store_id = self.store_id;
-        self.store_id = store_id;
-
-        if previous_store_id == store_id {
-            return;
-        }
-
-        for wrapper_set in &mut self.wrapper_sets {
-            for wrapper_ref in &mut wrapper_set.wrappers {
-                if wrapper_ref.root.store_id == previous_store_id {
-                    wrapper_ref.root.store_id = store_id;
-                }
-            }
-        }
-    }
-
-    /// Qualifies a store-local `TemplateIrId` into a store-qualified `TemplateRef`.
-    ///
-    /// WHAT: pairs the template ID with this store's registry-level `TemplateStoreId`.
-    /// WHY: wrapper sets store `TemplateRef`s so cross-store ownership is explicit;
-    ///      this helper is the single point where store-local IDs become qualified.
-    pub(crate) fn qualify_template_ref(&self, template_id: TemplateIrId) -> TemplateRef {
-        TemplateRef::new(self.store_id, template_id)
     }
 
     /// Assigns and returns the next `SlotOccurrenceId` in document order.
@@ -641,7 +526,7 @@ impl TemplateIrStore {
                     return None;
                 };
 
-                let template_id = reference.template_id_in_store(self.store_id)?;
+                let template_id = reference.root;
                 let template_ir = self.templates.get(template_id.index())?;
                 self.find_control_flow_node_in_subtree(template_ir.root, visited)
             }
@@ -742,6 +627,152 @@ impl TemplateIrStore {
     /// Returns a reference to the slot plan at the given ID, or `None` if out of bounds.
     pub(crate) fn get_slot_plan(&self, id: TemplateSlotPlanId) -> Option<&TemplateSlotPlan> {
         self.slot_plans.get(id.index())
+    }
+
+    // -------------------------
+    //  Overlay storage
+    // -------------------------
+
+    /// Allocates an overlay set, reusing an equivalent set when possible.
+    pub(crate) fn allocate_overlay_set(&mut self, set: TemplateOverlaySet) -> TemplateOverlaySetId {
+        for (index, existing) in self.overlay_sets.iter().enumerate() {
+            if *existing == set {
+                return TemplateOverlaySetId::new(index);
+            }
+        }
+
+        let id = TemplateOverlaySetId::new(self.overlay_sets.len());
+        self.overlay_sets.push(set);
+        id
+    }
+
+    /// Returns an overlay set by its module-local ID.
+    pub(crate) fn overlay_set(&self, id: TemplateOverlaySetId) -> Option<&TemplateOverlaySet> {
+        self.overlay_sets.get(id.index())
+    }
+
+    /// Allocates an expression overlay payload.
+    pub(crate) fn allocate_expression_overlay(
+        &mut self,
+        overlay: TirExpressionOverlay,
+    ) -> TirExpressionOverlayId {
+        let id = TirExpressionOverlayId::new(self.expression_overlays.len());
+        self.expression_overlays.push(overlay);
+        id
+    }
+
+    /// Allocates a slot-resolution overlay payload.
+    pub(crate) fn allocate_slot_resolution_overlay(
+        &mut self,
+        overlay: TirSlotResolutionOverlay,
+    ) -> TirSlotResolutionOverlayId {
+        let id = TirSlotResolutionOverlayId::new(self.slot_resolution_overlays.len());
+        self.slot_resolution_overlays.push(overlay);
+        id
+    }
+
+    /// Allocates a wrapper-context overlay payload.
+    pub(crate) fn allocate_wrapper_context_overlay(
+        &mut self,
+        overlay: TirWrapperContextOverlay,
+    ) -> TirWrapperContextOverlayId {
+        let id = TirWrapperContextOverlayId::new(self.wrapper_context_overlays.len());
+        self.wrapper_context_overlays.push(overlay);
+        id
+    }
+
+    /// Returns an expression overlay payload by ID.
+    pub(crate) fn expression_overlay(
+        &self,
+        id: TirExpressionOverlayId,
+    ) -> Option<&TirExpressionOverlay> {
+        self.expression_overlays.get(id.index())
+    }
+
+    /// Returns a slot-resolution overlay payload by ID.
+    pub(crate) fn slot_resolution_overlay(
+        &self,
+        id: TirSlotResolutionOverlayId,
+    ) -> Option<&TirSlotResolutionOverlay> {
+        self.slot_resolution_overlays.get(id.index())
+    }
+
+    /// Returns a wrapper-context overlay payload by ID.
+    pub(crate) fn wrapper_context_overlay(
+        &self,
+        id: TirWrapperContextOverlayId,
+    ) -> Option<&TirWrapperContextOverlay> {
+        self.wrapper_context_overlays.get(id.index())
+    }
+
+    /// Resolves an expression site through an overlay stack.
+    pub(crate) fn expression_for_overlay_stack(
+        &self,
+        overlay_set_ids: &[TemplateOverlaySetId],
+        site_id: ExpressionSiteId,
+    ) -> Result<Option<&Expression>, CompilerError> {
+        for overlay_set_id in overlay_set_ids.iter().copied() {
+            let overlay_set = self.overlay_set(overlay_set_id).ok_or_else(|| {
+                CompilerError::compiler_error(format!(
+                    "TIR expression resolution referenced missing overlay set {}",
+                    overlay_set_id
+                ))
+            })?;
+
+            let Some(expression_overlay_id) = overlay_set.expression_overrides else {
+                continue;
+            };
+
+            let expression_overlay =
+                self.expression_overlay(expression_overlay_id)
+                    .ok_or_else(|| {
+                        CompilerError::compiler_error(format!(
+                            "TIR expression resolution referenced missing expression overlay {}",
+                            expression_overlay_id
+                        ))
+                    })?;
+
+            if let Some(expression) = expression_overlay.expression_for_site(site_id) {
+                return Ok(Some(expression));
+            }
+        }
+
+        Ok(None)
+    }
+
+    /// Composes overlay sets in resolution order.
+    pub(crate) fn compose_overlay_sets(
+        &mut self,
+        sets: &[TemplateOverlaySetId],
+    ) -> Result<TemplateOverlaySetId, CompilerError> {
+        let mut expression_overrides = None;
+        let mut slot_resolution = None;
+        let mut wrapper_context = None;
+
+        for set_id in sets {
+            let set = self.overlay_set(*set_id).ok_or_else(|| {
+                CompilerError::compiler_error(format!(
+                    "compose_overlay_sets: {} does not exist",
+                    set_id
+                ))
+            })?;
+
+            if set.wrapper_context.is_some() {
+                wrapper_context = set.wrapper_context;
+            }
+            if set.slot_resolution.is_some() {
+                slot_resolution = set.slot_resolution;
+            }
+            if set.expression_overrides.is_some() {
+                expression_overrides = set.expression_overrides;
+            }
+        }
+
+        Ok(self.allocate_overlay_set(TemplateOverlaySet {
+            expression_overrides,
+            slot_resolution,
+            wrapper_context,
+        }))
     }
 }
 

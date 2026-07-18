@@ -42,11 +42,10 @@ use crate::compiler_frontend::ast::templates::tir::node::{
 use crate::compiler_frontend::ast::templates::tir::overlays::{
     TemplateOverlaySetId, TirSlotResolutionKind, TirWrapperApplicationMode, TirWrapperContext,
 };
-use crate::compiler_frontend::ast::templates::tir::parser_builder_state::TemplateTirReference;
+use crate::compiler_frontend::ast::templates::tir::refs::TemplateTirReference;
 use crate::compiler_frontend::ast::templates::tir::refs::{
-    TemplateRef, TemplateTirChildReference, TemplateWrapperReference,
+    TemplateTirChildReference, TemplateWrapperReference,
 };
-use crate::compiler_frontend::ast::templates::tir::registry::TemplateIrRegistry;
 use crate::compiler_frontend::ast::templates::tir::slot_composition::collect_tir_slot_schema;
 use crate::compiler_frontend::ast::templates::tir::store::TemplateIrStore;
 use crate::compiler_frontend::ast::templates::tir::view::{TemplateTirPhase, TirView};
@@ -62,8 +61,6 @@ use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::compiler_frontend::type_coercion::string::{
     FoldedStringPiece, fold_expression_kind_to_string,
 };
-use std::sync::Arc;
-use std::{cell::RefCell, rc::Rc};
 
 // -------------------------
 //  Capacity helpers
@@ -116,7 +113,7 @@ fn record_tir_fold_output_intern(byte_len: usize) {
 ///
 /// WHAT: every effective template source enters one of the fold-owned template
 /// entry points before its root is walked, including slot-resolution sources,
-/// wrapper-context wrappers and cross-store children.
+/// wrapper-context wrappers and child-template references.
 /// WHY: checking the selected template entry avoids scratch materialization,
 /// compatibility-content reads and repeated whole-descendant prepasses. Raw
 /// consumed `InsertContribution` nodes that aren't reachable from the effective
@@ -138,36 +135,31 @@ fn reject_slot_insert_template(kind: &TemplateType) -> Result<(), TemplateError>
 ///       the store currently being traversed.
 /// WHY: recursive node, control-flow, and wrapper folds must preserve both
 ///      pieces of traversal state without expanding `TemplateFoldContext`.
-struct FoldTraversalInput<'view, 'registry> {
-    effective_view: Option<&'view TirView<'registry>>,
-    expression_registry: Option<&'registry TemplateIrRegistry>,
+struct FoldTraversalInput<'view, 'store> {
+    effective_view: Option<&'view TirView<'store>>,
+    store: &'store TemplateIrStore,
     expression_overlay_stack: Vec<TemplateOverlaySetId>,
-    active_roots: Vec<TemplateRef>,
+    active_roots: Vec<TemplateIrId>,
     authority: Option<FoldAuthorityToken>,
 }
 
-impl<'view, 'registry> FoldTraversalInput<'view, 'registry> {
+impl<'view, 'store> FoldTraversalInput<'view, 'store> {
     /// Resolves one expression site through the active root-first overlay stack.
     ///
-    /// WHAT: delegates expression lookup to the registry owner shared by TIR
-    ///       normalization, annotation, and HIR handoff.
+    /// WHAT: delegates expression lookup to the shared module-local store.
     /// WHY: a child view owns slot and wrapper dimensions, but same-store
     ///       folding must retain every active outer root expression overlay.
     fn effective_expression_for_site(
         &self,
         site_id: ExpressionSiteId,
-    ) -> Result<Option<&'registry Expression>, TemplateError> {
+    ) -> Result<Option<&'store Expression>, TemplateError> {
         if self.expression_overlay_stack.is_empty() {
             return Ok(None);
         }
 
-        let registry = self.expression_registry.ok_or_else(|| {
-            CompilerError::compiler_error(
-                "TIR fold: active expression overlays require their owning registry.",
-            )
-        })?;
-
-        Ok(registry.expression_for_overlay_stack(&self.expression_overlay_stack, site_id)?)
+        Ok(self
+            .store
+            .expression_for_overlay_stack(&self.expression_overlay_stack, site_id)?)
     }
 
     /// Extends the expression context for a composed-or-later same-store root.
@@ -181,22 +173,18 @@ impl<'view, 'registry> FoldTraversalInput<'view, 'registry> {
     }
 }
 
-/// Extends the active fold-root path, rejecting registry-qualified re-entry.
+/// Extends the active fold-root path, rejecting re-entry.
 ///
-/// WHAT: carries one root-first path across same-store and foreign fold
-///       boundaries so A -> B -> A cannot recurse through fresh view entry
-///       points.
-/// WHY: authority validation is intentionally store-local. This separate
-///      traversal fact guards the cross-store recursion that authority cannot
-///      see without introducing a second authority walk.
+/// WHAT: carries one root-first path across nested fold boundaries so recursive
+///       child references cannot re-enter an active root.
+/// WHY: the fold walker and authority pass share this exact root identity.
 fn push_active_fold_root(
-    active_roots: &[TemplateRef],
-    root: TemplateRef,
+    active_roots: &[TemplateIrId],
+    root: TemplateIrId,
     current_store: &TemplateIrStore,
-    registry: Option<&TemplateIrRegistry>,
-) -> Result<Vec<TemplateRef>, TemplateError> {
+) -> Result<Vec<TemplateIrId>, TemplateError> {
     if active_roots.contains(&root) {
-        let location = fold_cycle_location(active_roots, root, current_store, registry);
+        let location = fold_cycle_location(active_roots, root, current_store);
         return Err(CompilerDiagnostic::invalid_template_structure(
             InvalidTemplateStructureReason::NonFoldableConstTemplate,
             location,
@@ -210,158 +198,38 @@ fn push_active_fold_root(
 }
 
 fn fold_cycle_location(
-    active_roots: &[TemplateRef],
-    reentered_root: TemplateRef,
+    active_roots: &[TemplateIrId],
+    reentered_root: TemplateIrId,
     current_store: &TemplateIrStore,
-    registry: Option<&TemplateIrRegistry>,
 ) -> SourceLocation {
-    if reentered_root.store_id == current_store.store_id()
-        && let Some(template) = current_store.get_template(reentered_root.template_id)
-    {
-        return template.location.clone();
-    }
-
-    if let Some(registry) = registry
-        && let Some(store_handle) = registry.store_handle(reentered_root.store_id)
-        && let Ok(store) = store_handle.try_borrow()
-        && let Some(template) = store.get_template(reentered_root.template_id)
-    {
+    if let Some(template) = current_store.get_template(reentered_root) {
         return template.location.clone();
     }
 
     active_roots
         .last()
-        .and_then(|root| {
-            if root.store_id == current_store.store_id() {
-                current_store
-                    .get_template(root.template_id)
-                    .map(|template| template.location.clone())
-            } else {
-                None
-            }
-        })
+        .and_then(|root| current_store.get_template(*root))
+        .map(|template| template.location.clone())
         .unwrap_or_default()
-}
-
-/// Authority prepared for one foreign wrapper before output-dependent decisions.
-///
-/// WHAT: keeps the owning store handle and validated authority token alongside
-///       the wrapper identity so output-producing application does not repeat
-///       the foreign safety walk.
-/// WHY: `IfChildEmits` must reject malformed foreign wrappers even when the
-///      child emits no output, while valid output paths must reuse that proof.
-struct PreparedForeignWrapper {
-    store_handle: Rc<RefCell<TemplateIrStore>>,
-    authority: FoldAuthorityToken,
-    active_roots: Vec<TemplateRef>,
 }
 
 struct PreparedWrapperReference {
     reference: TemplateWrapperReference,
-    foreign: Option<PreparedForeignWrapper>,
 }
 
 fn prepare_wrapper_references(
-    store: &TemplateIrStore,
     wrapper_references: &[TemplateWrapperReference],
-    fold_context: &TemplateFoldContext<'_>,
-    active_roots: &[TemplateRef],
 ) -> Result<Vec<PreparedWrapperReference>, TemplateError> {
-    let registry_handle = fold_context.template_ir_registry.as_ref().map(Rc::clone);
-    let mut prepared_references = Vec::with_capacity(wrapper_references.len());
-
-    for &reference in wrapper_references {
-        if reference.root.store_id == store.store_id() {
-            prepared_references.push(PreparedWrapperReference {
-                reference,
-                foreign: None,
-            });
-            continue;
-        }
-
-        let registry_handle = registry_handle.as_ref().ok_or_else(|| {
-            CompilerError::compiler_error(
-                "TIR wrapper fold: cross-store wrapper requires a registry, but none is available.",
-            )
-        })?;
-        let registry = registry_handle.borrow();
-        let wrapper_active_roots =
-            push_active_fold_root(active_roots, reference.root, store, Some(&registry))?;
-        let store_handle = registry
-            .store_handle(reference.root.store_id)
-            .ok_or_else(|| {
-                CompilerError::compiler_error(
-                    "TIR wrapper fold: cross-store wrapper store not found in registry.",
-                )
-            })?;
-
-        // Construct the exact wrapper view before borrowing its store. The
-        // constructor validates the root and overlay-set identity, while the
-        // dimension accessors validate each overlay payload.
-        let wrapper_view = if reference.phase.is_at_least(TemplateTirPhase::Composed) {
-            let view = TirView::with_minimum_phase(
-                &registry,
-                reference.root,
-                reference.phase,
-                TemplateTirPhase::Composed,
-                reference.overlay_set_id,
-            )?;
-            view.overlay_set()?;
-            view.expression_overlay()?;
-            view.slot_resolution_overlay()?;
-            view.wrapper_context_overlay()?;
-            Some(view)
-        } else {
-            None
-        };
-
-        let authority = {
-            let wrapper_store = store_handle.borrow();
-            fold_authority_token(
-                validate_tir_fold_authority(
-                    wrapper_view.as_ref(),
-                    &wrapper_store,
-                    reference.root.template_id,
-                    Some(&registry),
-                )?,
-                &wrapper_store,
-                reference.root.template_id,
-            )?
-        };
-
-        prepared_references.push(PreparedWrapperReference {
-            reference,
-            foreign: Some(PreparedForeignWrapper {
-                store_handle,
-                authority,
-                active_roots: wrapper_active_roots,
-            }),
-        });
-    }
-
-    Ok(prepared_references)
+    Ok(wrapper_references
+        .iter()
+        .copied()
+        .map(|reference| PreparedWrapperReference { reference })
+        .collect())
 }
 
 // -------------------------
 //  Public entry point
 // -------------------------
-
-/// Folds a registry-backed `TirView` using a borrowed store.
-///
-/// WHAT: delegates to `fold_tir_view` with a store borrowed from the module
-///       owner. The caller must still verify the read-only safety gate before
-///       using this entry point.
-/// WHY: the fold walker reads structural nodes and view overlays without
-///      mutating the store. Keeping that contract in the signature lets
-///      finalization and HIR handoff use live module stores.
-#[cfg(test)]
-pub(crate) fn fold_tir_view_read_only(
-    view: &TirView<'_>,
-    store: &TemplateIrStore,
-    fold_context: &mut TemplateFoldContext<'_>,
-) -> Result<TemplateEmission, TemplateError> {
-    fold_tir_view(view, store, fold_context)
-}
 
 /// Folds a view after a caller-owned safety preparation has validated its
 /// authority graph.
@@ -399,21 +267,12 @@ pub(crate) fn fold_tir_view_prepared(
         .into());
     }
 
-    if view.root_ref().store_id != store.store_id() {
-        return Err(CompilerError::compiler_error(format!(
-            "fold_tir_view_prepared: view root belongs to {}, but folding store is {}",
-            view.root_ref().store_id,
-            store.store_id()
-        ))
-        .into());
-    }
-
     let root = view.root_ref();
-    let active_roots = push_active_fold_root(&[], root, store, Some(view.registry_ref()))?;
-    let authority = fold_authority_token(preparation.into_authority(), store, root.template_id)?;
+    let active_roots = push_active_fold_root(&[], root, store)?;
+    let authority = fold_authority_token(preparation.into_authority(), store, root)?;
     let fold_input = FoldTraversalInput {
         effective_view: Some(view),
-        expression_registry: Some(view.registry_ref()),
+        store: view.store(),
         expression_overlay_stack: vec![view.overlay_set_id()],
         active_roots,
         authority: Some(authority),
@@ -468,14 +327,13 @@ fn fold_tir_view_with_expression_stack_and_active_roots(
     store: &TemplateIrStore,
     fold_context: &mut TemplateFoldContext<'_>,
     expression_overlay_stack: Vec<TemplateOverlaySetId>,
-    active_roots: Vec<TemplateRef>,
+    active_roots: Vec<TemplateIrId>,
 ) -> Result<TemplateEmission, TemplateError> {
     // Extract identity up front so cache lookup does not repeatedly query the
     // view during the hot path.
     let root = view.root_ref();
     let phase = view.phase();
-    let active_roots =
-        push_active_fold_root(&active_roots, root, store, Some(view.registry_ref()))?;
+    let active_roots = push_active_fold_root(&active_roots, root, store)?;
 
     if !phase.is_at_least(TemplateTirPhase::Composed) {
         return Err(CompilerError::compiler_error(format!(
@@ -485,27 +343,18 @@ fn fold_tir_view_with_expression_stack_and_active_roots(
         .into());
     }
 
-    if root.store_id != store.store_id() {
-        return Err(CompilerError::compiler_error(format!(
-            "fold_tir_view: view root belongs to {}, but folding store is {}",
-            root.store_id,
-            store.store_id()
-        ))
-        .into());
-    }
-
     // Validate all current-store authority before consulting the cache. A
     // cached emission must not hide a malformed branch, loop body, wrapper or
     // other node that the fold boundary still claims to own.
     let authority = fold_authority_token(
-        validate_tir_fold_authority(Some(view), store, root.template_id, None)?,
+        validate_tir_fold_authority(Some(view), store, root)?,
         store,
-        root.template_id,
+        root,
     )?;
 
     let fold_input = FoldTraversalInput {
         effective_view: Some(view),
-        expression_registry: Some(view.registry_ref()),
+        store: view.store(),
         expression_overlay_stack,
         active_roots,
         authority: Some(authority),
@@ -531,18 +380,14 @@ fn fold_tir_view_prevalidated(
             "TIR fold: prevalidated view fold requires an effective TirView input.",
         )
     })?;
-    let authority = fold_input.authority.as_ref().ok_or_else(|| {
+    // The fold authority token is an internal invariant of view-native
+    // folding: its presence is required even though the bound value is not
+    // read directly here.
+    fold_input.authority.as_ref().ok_or_else(|| {
         CompilerError::compiler_error(
             "TIR fold: prevalidated view fold requires a fold authority token.",
         )
     })?;
-
-    if !authority.matches_store(store) {
-        return Err(CompilerError::compiler_error(
-            "TIR fold: prevalidated authority does not belong to the supplied store.",
-        )
-        .into());
-    }
 
     let root = view.root_ref();
     if fold_input.active_roots.last() != Some(&root) {
@@ -566,7 +411,7 @@ fn fold_tir_view_prevalidated(
         bindings_empty,
     };
 
-    // Attribute one `fold_tir_view` entry per registry-backed view fold, across
+    // Attribute one `fold_tir_view` entry per store-backed view fold, across
     // finalization, doc-fragment, and HIR-handoff callers.
     increment_ast_counter(AstCounter::TirViewFoldsAttempted);
 
@@ -601,38 +446,13 @@ fn fold_tir_view_prevalidated(
     // instead of cloning the store. When no overlays are present, the input's
     // effective view still falls through to structural reads for every site
     // that has no overlay entry.
-    let result = fold_tir_template_with_view(store, root.template_id, fold_context, fold_input)?;
+    let result = fold_tir_template_with_view(store, root, fold_context, fold_input)?;
 
     if cache_identity_matches_expression_stack && bindings_empty {
         fold_context.fold_cache.insert(cache_key, result);
     }
 
     Ok(result)
-}
-
-pub(crate) fn fold_tir_template(
-    store: &TemplateIrStore,
-    template_id: TemplateIrId,
-    fold_context: &mut TemplateFoldContext<'_>,
-) -> Result<TemplateEmission, TemplateError> {
-    let registry_handle = fold_context.template_ir_registry.as_ref().map(Rc::clone);
-    let registry = registry_handle.as_ref().map(|registry| registry.borrow());
-    let root = TemplateRef::new(store.store_id(), template_id);
-    let active_roots = push_active_fold_root(&[], root, store, registry.as_deref())?;
-    let authority_result =
-        validate_tir_fold_authority(None, store, template_id, registry.as_deref())?;
-    let authority = fold_authority_token(authority_result, store, template_id)?;
-    let expression_registry = registry.as_deref();
-
-    let fold_input = FoldTraversalInput {
-        effective_view: None,
-        expression_registry,
-        expression_overlay_stack: Vec::new(),
-        active_roots,
-        authority: Some(authority),
-    };
-
-    fold_tir_template_with_view(store, template_id, fold_context, &fold_input)
 }
 
 /// Folds a TIR template, optionally consulting a `TirView` for overlay-effective
@@ -652,18 +472,14 @@ fn fold_tir_template_with_view(
 ) -> Result<TemplateEmission, TemplateError> {
     add_ast_counter(AstCounter::TirFoldTemplatesFolded, 1);
 
-    let authority = fold_input.authority.as_ref().ok_or_else(|| {
+    // The fold authority token is an internal invariant of view-native
+    // folding: its presence is required even though the bound value is not
+    // read directly here.
+    fold_input.authority.as_ref().ok_or_else(|| {
         CompilerError::compiler_error("TIR fold: template fold requires a fold authority token.")
     })?;
 
-    if !authority.matches_store(store) {
-        return Err(CompilerError::compiler_error(
-            "TIR fold: prevalidated authority does not belong to the template store.",
-        )
-        .into());
-    }
-
-    let template_ref = TemplateRef::new(store.store_id(), template_id);
+    let template_ref = template_id;
     if fold_input.active_roots.last() != Some(&template_ref) {
         return Err(CompilerError::compiler_error(format!(
             "TIR fold: active root stack does not end at template root {}.",
@@ -1066,48 +882,31 @@ fn fold_tir_dynamic_expression(
 }
 
 /// Reads a nested AST template's kind from its authoritative TIR entry.
-///
-/// Same-store folds work without a registry. Cross-store folds require the
-/// registry, matching the structural reference fold path below. Missing kind
-/// authority is an internal error rather than a signal to render the template.
 fn nested_template_kind(
     template: &Template,
     store: &TemplateIrStore,
-    fold_context: &TemplateFoldContext<'_>,
+    _fold_context: &TemplateFoldContext<'_>,
 ) -> Result<TemplateType, TemplateError> {
-    if let Some(kind) = template.tir_kind_from_store(store) {
-        return Ok(kind);
-    }
-
-    let registry = fold_context.template_ir_registry.as_ref().ok_or_else(|| {
+    template.tir_kind_from_store(store).ok_or_else(|| {
         CompilerError::compiler_error(format!(
-            "TIR fold: nested template {} requires its registry to resolve the authoritative kind.",
-            template.tir_reference.root
-        ))
-    })?;
-    let registry = registry.borrow();
-
-    template.tir_kind_via_registry(&registry).ok_or_else(|| {
-        CompilerError::compiler_error(format!(
-            "TIR fold: nested template kind for {} was not found in its registry-backed store.",
+            "TIR fold: nested template kind for {} was not found in the module store.",
             template.tir_reference.root
         ))
         .into()
     })
 }
 
-/// Folds a store-qualified child-template reference against its owning store.
+/// Folds a module-local child-template reference against the module store.
 ///
 /// WHAT: uses the precise `root`/`phase`/`overlay_set_id` identity stored on the
 ///       `ChildTemplate` node to build a `TirView` and fold through
 ///       `fold_tir_view`. Same-store below-Composed references retain the
-///       structural fallback used by callers without a registry. Composed
-///       references and cross-store references use the module-local registry
-///       to preserve their exact view identity.
+///       structural fallback used by callers without a view. Composed
+///       references use the module-local store to preserve their exact view
+///       identity.
 /// WHY: child-template nodes carry enough identity for precise view-based
-///      folding. Selecting the store from the qualified root keeps cache and
-///      overlay identity intact instead of interpreting a foreign template ID
-///      against the parent store.
+///      folding. Reading the root from the active store keeps cache and
+///      overlay identity intact.
 fn fold_child_template_reference(
     store: &TemplateIrStore,
     reference: &TemplateTirChildReference,
@@ -1117,12 +916,12 @@ fn fold_child_template_reference(
     fold_template_reference(store, reference, None, fold_context, fold_input)
 }
 
-/// Resolves one effective template reference through the current store or the
-/// module registry, then enters the canonical template fold path.
+/// Resolves one effective template reference through the module store, then
+/// enters the canonical template fold path.
 ///
-/// `owned_reference` is supplied for AST `Template` payloads, whose owner token
-/// must match the selected store. Structural child references are already
-/// store-qualified by their owning TIR node and pass `None`.
+/// `owned_reference` is supplied for AST `Template` payloads so their phase is
+/// checked before folding. Structural child references already carry their
+/// module-local root, phase, and overlay identity and pass `None`.
 fn fold_template_reference(
     store: &TemplateIrStore,
     reference: &TemplateTirChildReference,
@@ -1142,195 +941,47 @@ fn fold_template_reference(
         .into());
     }
 
-    let registry = fold_context.template_ir_registry.as_ref().map(Rc::clone);
-
-    if reference.root.store_id == store.store_id() {
-        if let Some(owned_reference) = owned_reference
-            && !Arc::ptr_eq(&owned_reference.store_owner, &store.owner())
-        {
-            return Err(CompilerError::compiler_error(format!(
-                "TIR fold: nested template {} does not belong to the current store.",
-                owned_reference.root
-            ))
-            .into());
-        }
-
-        // A child below Composed is a genuine shortcut-unavailable state, not
-        // an authority failure: production composition paths record child
-        // references at Parsed phase before the parent advances. Fall through
-        // to the structural fold while retaining the outer expression stack.
-        // Composed-or-later children consume their own view dimensions and
-        // append their exact overlay to the root-first expression context.
-        if reference.phase.is_at_least(TemplateTirPhase::Composed) {
-            let registry_borrow = registry.as_ref().map(|registry| registry.borrow());
-            let child_registry = fold_input
-                .expression_registry
-                .or(registry_borrow.as_deref())
-                .ok_or_else(|| {
-                    CompilerError::compiler_error(
-                        "TIR fold: composed same-store child requires its registry-backed view.",
-                    )
-                })?;
-            let child_view = TirView::with_minimum_phase(
-                child_registry,
-                reference.root,
-                reference.phase,
-                TemplateTirPhase::Composed,
-                reference.overlay_set_id,
-            )?;
-            if owned_reference.is_some() {
-                return fold_tir_view_with_expression_stack_and_active_roots(
-                    &child_view,
-                    store,
-                    fold_context,
-                    fold_input.expression_stack_with_overlay(reference.overlay_set_id),
-                    fold_input.active_roots.clone(),
-                );
-            }
-            let child_active_roots = push_active_fold_root(
-                &fold_input.active_roots,
-                reference.root,
-                store,
-                Some(child_registry),
-            )?;
-            let child_fold_input = FoldTraversalInput {
-                effective_view: Some(&child_view),
-                expression_registry: Some(child_registry),
-                expression_overlay_stack: fold_input
-                    .expression_stack_with_overlay(reference.overlay_set_id),
-                active_roots: child_active_roots,
-                authority: fold_input.authority.clone(),
-            };
-            if fold_input.authority.is_some() {
-                return fold_tir_view_prevalidated(store, fold_context, &child_fold_input);
-            }
-            return fold_tir_view_with_expression_stack_and_active_roots(
-                &child_view,
-                store,
-                fold_context,
-                fold_input.expression_stack_with_overlay(reference.overlay_set_id),
-                fold_input.active_roots.clone(),
-            );
-        }
-
-        if let Some(authority) = fold_input.authority.as_ref() {
-            let child_active_roots = push_active_fold_root(
-                &fold_input.active_roots,
-                reference.root,
-                store,
-                fold_input.expression_registry,
-            )?;
-            let structural_fold_input = FoldTraversalInput {
-                effective_view: None,
-                expression_registry: fold_input.expression_registry,
-                expression_overlay_stack: fold_input.expression_overlay_stack.clone(),
-                active_roots: child_active_roots,
-                authority: Some(authority.clone()),
-            };
-            return fold_tir_template_with_view(
-                store,
-                reference.root.template_id,
-                fold_context,
-                &structural_fold_input,
-            );
-        }
-
-        return fold_tir_template(store, reference.root.template_id, fold_context);
-    }
-
-    let registry = registry.ok_or_else(|| {
-        CompilerError::compiler_error(format!(
-            "TIR fold: cross-store child template {} requires the module-local registry, but none is available.",
-            reference.root
-        ))
-    })?;
-
-    let registry_borrow = registry.borrow();
-    let child_active_roots = push_active_fold_root(
-        &fold_input.active_roots,
-        reference.root,
-        store,
-        Some(&registry_borrow),
-    )?;
-    let child_store_handle = registry_borrow
-        .store_handle(reference.root.store_id)
-        .ok_or_else(|| {
-            CompilerError::compiler_error(format!(
-                "TIR fold: cross-store child template store {} is not registered.",
-                reference.root.store_id
-            ))
-        })?;
-
-    // Same Parsed-phase fallthrough as the same-store path: cross-store children
-    // may also be recorded at Parsed phase during composition. Only
-    // Composed-or-later children require a view-backed fold, and only those
-    // propagate overlay-set resolution failures as authority errors.
-    if !reference.phase.is_at_least(TemplateTirPhase::Composed) {
-        let child_store = child_store_handle.borrow();
-        let authority = fold_authority_token(
-            validate_tir_fold_authority(
-                None,
-                &child_store,
-                reference.root.template_id,
-                Some(&registry_borrow),
-            )?,
-            &child_store,
-            reference.root.template_id,
+    if reference.phase.is_at_least(TemplateTirPhase::Composed) {
+        let child_store = store;
+        let child_view = TirView::with_minimum_phase(
+            child_store,
+            reference.root,
+            reference.phase,
+            TemplateTirPhase::Composed,
+            reference.overlay_set_id,
         )?;
+        let child_active_roots =
+            push_active_fold_root(&fold_input.active_roots, reference.root, store)?;
         let child_fold_input = FoldTraversalInput {
-            effective_view: None,
-            expression_registry: Some(&registry_borrow),
-            expression_overlay_stack: Vec::new(),
+            effective_view: Some(&child_view),
+            store: child_store,
+            expression_overlay_stack: fold_input
+                .expression_stack_with_overlay(reference.overlay_set_id),
             active_roots: child_active_roots,
-            authority: Some(authority),
+            authority: fold_input.authority.clone(),
         };
-        return fold_tir_template_with_view(
-            &child_store,
-            reference.root.template_id,
+        if fold_input.authority.is_some() {
+            return fold_tir_view_prevalidated(child_store, fold_context, &child_fold_input);
+        }
+        return fold_tir_view_with_expression_stack_and_active_roots(
+            &child_view,
+            child_store,
             fold_context,
-            &child_fold_input,
+            fold_input.expression_stack_with_overlay(reference.overlay_set_id),
+            fold_input.active_roots.clone(),
         );
     }
 
-    let child_view = TirView::with_minimum_phase(
-        &registry_borrow,
-        reference.root,
-        reference.phase,
-        TemplateTirPhase::Composed,
-        reference.overlay_set_id,
-    )?;
-    let child_store = child_store_handle.borrow();
-
-    if let Some(owned_reference) = owned_reference
-        && !Arc::ptr_eq(&owned_reference.store_owner, &child_store.owner())
-    {
-        return Err(CompilerError::compiler_error(format!(
-            "TIR fold: nested template {} does not belong to its registered store.",
-            owned_reference.root
-        ))
-        .into());
-    }
-
-    let authority = fold_authority_token(
-        validate_tir_fold_authority(
-            Some(&child_view),
-            &child_store,
-            reference.root.template_id,
-            Some(&registry_borrow),
-        )?,
-        &child_store,
-        reference.root.template_id,
-    )?;
-    let child_fold_input = FoldTraversalInput {
-        effective_view: Some(&child_view),
-        expression_registry: Some(&registry_borrow),
-        // A foreign root starts a fresh expression boundary, while retaining
-        // the registry-qualified active-root path for cycle detection.
-        expression_overlay_stack: vec![reference.overlay_set_id],
+    let child_active_roots =
+        push_active_fold_root(&fold_input.active_roots, reference.root, store)?;
+    let structural_fold_input = FoldTraversalInput {
+        effective_view: None,
+        store: fold_input.store,
+        expression_overlay_stack: fold_input.expression_overlay_stack.clone(),
         active_roots: child_active_roots,
-        authority: Some(authority),
+        authority: fold_input.authority.clone(),
     };
-    fold_tir_view_prevalidated(&child_store, fold_context, &child_fold_input)
+    fold_tir_template_with_view(store, reference.root, fold_context, &structural_fold_input)
 }
 
 /// Applies the wrapper-context overlay for a child-template occurrence, if any.
@@ -1367,20 +1018,11 @@ fn apply_wrapper_context_overlay_to_child_emission(
         None => return Ok(emission),
     };
 
-    if wrapper_set_ref.store_id != store.store_id() {
-        return Err(CompilerError::compiler_error(
-            "TIR fold: inherited wrapper set is not in the current store.",
+    let wrapper_set = store.get_wrapper_set(wrapper_set_ref).ok_or_else(|| {
+        CompilerError::compiler_error(
+            "TIR fold: inherited wrapper set referenced by overlay is missing.",
         )
-        .into());
-    }
-
-    let wrapper_set = store
-        .get_wrapper_set(wrapper_set_ref.wrapper_set_id)
-        .ok_or_else(|| {
-            CompilerError::compiler_error(
-                "TIR fold: inherited wrapper set referenced by overlay is missing.",
-            )
-        })?;
+    })?;
 
     let wrapper_references: Vec<TemplateWrapperReference> = wrapper_set.wrappers.clone();
 
@@ -1447,15 +1089,9 @@ fn fold_conditional_child_wrappers_around_emission(
     fold_context: &mut TemplateFoldContext<'_>,
     fold_input: &FoldTraversalInput<'_, '_>,
 ) -> Result<TemplateEmission, TemplateError> {
-    // Foreign wrappers must be validated before output-dependent shortcuts.
-    // Same-store wrappers retain the enclosing authority token and need no
-    // separate preparation pass.
-    let prepared_wrappers = prepare_wrapper_references(
-        store,
-        wrapper_references,
-        fold_context,
-        &fold_input.active_roots,
-    )?;
+    // Wrappers retain the enclosing authority token and need no separate
+    // preparation pass.
+    let prepared_wrappers = prepare_wrapper_references(wrapper_references)?;
 
     let (output, signal_kind) = match emission {
         TemplateEmission::NoOutput => {
@@ -1530,72 +1166,6 @@ fn fold_conditional_child_wrappers_around_emission(
     ))
 }
 
-fn fold_foreign_wrapper_around_child_output(
-    wrapper_reference: TemplateWrapperReference,
-    prepared_foreign: &PreparedForeignWrapper,
-    child_output: StringId,
-    fold_context: &mut TemplateFoldContext<'_>,
-) -> Result<StringId, TemplateError> {
-    let registry_handle = fold_context
-        .template_ir_registry
-        .as_ref()
-        .map(Rc::clone)
-        .ok_or_else(|| {
-            CompilerError::compiler_error(
-                "TIR wrapper fold: prepared cross-store wrapper requires its registry.",
-            )
-        })?;
-    let registry = registry_handle.borrow();
-
-    // Reconstruct the exact foreign view only for the output-producing path.
-    // Preparation already validated its root and every overlay dimension.
-    let wrapper_view = if wrapper_reference
-        .phase
-        .is_at_least(TemplateTirPhase::Composed)
-    {
-        Some(TirView::with_minimum_phase(
-            &registry,
-            wrapper_reference.root,
-            wrapper_reference.phase,
-            TemplateTirPhase::Composed,
-            wrapper_reference.overlay_set_id,
-        )?)
-    } else {
-        None
-    };
-
-    let wrapper_store = prepared_foreign.store_handle.borrow();
-    let wrapper_template = wrapper_store
-        .get_template(wrapper_reference.root.template_id)
-        .cloned()
-        .ok_or_else(|| {
-            CompilerError::compiler_error(format!(
-                "TIR wrapper fold: wrapper template {} not found in store {}.",
-                wrapper_reference.root.template_id, wrapper_reference.root.store_id
-            ))
-        })?;
-    let wrapper_fold_input = FoldTraversalInput {
-        effective_view: wrapper_view.as_ref(),
-        expression_registry: Some(&registry),
-        expression_overlay_stack: if wrapper_view.is_some() {
-            vec![wrapper_reference.overlay_set_id]
-        } else {
-            Vec::new()
-        },
-        active_roots: prepared_foreign.active_roots.clone(),
-        authority: Some(prepared_foreign.authority.clone()),
-    };
-
-    fold_tir_wrapper_with_input(
-        &wrapper_store,
-        wrapper_reference.root.template_id,
-        &wrapper_template,
-        child_output,
-        fold_context,
-        &wrapper_fold_input,
-    )
-}
-
 /// Folds a single wrapper template around an already-folded child output string
 /// without pushing synthetic nodes into the store.
 ///
@@ -1615,23 +1185,14 @@ fn fold_tir_wrapper_around_child_output(
     fold_input: &FoldTraversalInput<'_, '_>,
 ) -> Result<StringId, TemplateError> {
     let wrapper_reference = prepared_wrapper.reference;
-    if let Some(prepared_foreign) = prepared_wrapper.foreign.as_ref() {
-        return fold_foreign_wrapper_around_child_output(
-            wrapper_reference,
-            prepared_foreign,
-            child_output,
-            fold_context,
-        );
-    }
-
     let wrapper_store = store;
     let wrapper_template = wrapper_store
-        .get_template(wrapper_reference.root.template_id)
+        .get_template(wrapper_reference.root)
         .cloned()
         .ok_or_else(|| {
             CompilerError::compiler_error(format!(
-                "TIR wrapper fold: wrapper template {} not found in store {}.",
-                wrapper_reference.root.template_id, wrapper_reference.root.store_id
+                "TIR wrapper fold: wrapper template {} not found in the module store.",
+                wrapper_reference.root
             ))
         })?;
 
@@ -1640,31 +1201,18 @@ fn fold_tir_wrapper_around_child_output(
             "TIR wrapper fold: same-store wrapper requires the enclosing fold authority token.",
         )
     })?;
-    if !authority.matches_store(wrapper_store) {
-        return Err(CompilerError::compiler_error(
-            "TIR wrapper fold: same-store wrapper authority does not belong to the supplied store.",
-        )
-        .into());
-    }
-
     let wrapper_active_roots = push_active_fold_root(
         &fold_input.active_roots,
         wrapper_reference.root,
         wrapper_store,
-        fold_input.expression_registry,
     )?;
 
     if wrapper_reference
         .phase
         .is_at_least(TemplateTirPhase::Composed)
     {
-        let registry = fold_input.expression_registry.ok_or_else(|| {
-            CompilerError::compiler_error(
-                "TIR wrapper fold: composed same-store wrapper requires its registry-backed view.",
-            )
-        })?;
         let wrapper_view = TirView::with_minimum_phase(
-            registry,
+            wrapper_store,
             wrapper_reference.root,
             wrapper_reference.phase,
             TemplateTirPhase::Composed,
@@ -1672,7 +1220,7 @@ fn fold_tir_wrapper_around_child_output(
         )?;
         let wrapper_fold_input = FoldTraversalInput {
             effective_view: Some(&wrapper_view),
-            expression_registry: Some(registry),
+            store: wrapper_store,
             expression_overlay_stack: fold_input
                 .expression_stack_with_overlay(wrapper_reference.overlay_set_id),
             active_roots: wrapper_active_roots.clone(),
@@ -1680,7 +1228,7 @@ fn fold_tir_wrapper_around_child_output(
         };
         return fold_tir_wrapper_with_input(
             wrapper_store,
-            wrapper_reference.root.template_id,
+            wrapper_reference.root,
             &wrapper_template,
             child_output,
             fold_context,
@@ -1692,7 +1240,7 @@ fn fold_tir_wrapper_around_child_output(
     // the enclosing same-store expression context for any descendants.
     let wrapper_fold_input = FoldTraversalInput {
         effective_view: None,
-        expression_registry: fold_input.expression_registry,
+        store: fold_input.store,
         expression_overlay_stack: fold_input.expression_overlay_stack.clone(),
         active_roots: wrapper_active_roots,
         authority: Some(authority.clone()),
@@ -1700,7 +1248,7 @@ fn fold_tir_wrapper_around_child_output(
 
     fold_tir_wrapper_with_input(
         wrapper_store,
-        wrapper_reference.root.template_id,
+        wrapper_reference.root,
         &wrapper_template,
         child_output,
         fold_context,
@@ -1712,8 +1260,8 @@ fn fold_tir_wrapper_around_child_output(
 ///
 /// WHAT: applies the wrapper's effective slot routing and preserves injected
 ///      child precedence at the loose-fill target.
-/// WHY: the same wrapper identity is used by both direct and cross-store entry
-///      paths, so the output walk must not discard its exact view.
+/// WHY: the same wrapper identity is shared across entry paths, so the
+///      output walk must not discard its exact view.
 fn fold_tir_wrapper_with_input(
     wrapper_store: &TemplateIrStore,
     wrapper_template_id: TemplateIrId,
@@ -1865,13 +1413,7 @@ fn fold_tir_wrapper_node_with_child_output(
                 .transpose()?
                 .flatten()
                 .cloned();
-            let child_template_id = reference
-                .template_id_in_store(store.store_id())
-                .ok_or_else(|| {
-                    CompilerError::compiler_error(
-                        "TIR wrapper fold: child template reference is not in the current store.",
-                    )
-                })?;
+            let child_template_id = reference.root;
 
             let child_template = store
                 .get_template(child_template_id)
@@ -1886,13 +1428,8 @@ fn fold_tir_wrapper_node_with_child_output(
             let child_emission = if child_template.runtime_slot_plan.is_some() {
                 Ok(TemplateEmission::NoOutput)
             } else if reference.phase.is_at_least(TemplateTirPhase::Composed) {
-                let registry = fold_input.expression_registry.ok_or_else(|| {
-                    CompilerError::compiler_error(
-                        "TIR wrapper fold: composed same-store child requires its registry-backed view.",
-                    )
-                })?;
                 let child_view = TirView::with_minimum_phase(
-                    registry,
+                    store,
                     reference.root,
                     reference.phase,
                     TemplateTirPhase::Composed,
@@ -1902,11 +1439,10 @@ fn fold_tir_wrapper_node_with_child_output(
                     &fold_input.active_roots,
                     reference.root,
                     store,
-                    Some(registry),
                 )?;
                 let child_fold_input = FoldTraversalInput {
                     effective_view: Some(&child_view),
-                    expression_registry: Some(registry),
+                    store,
                     expression_overlay_stack: fold_input
                         .expression_stack_with_overlay(reference.overlay_set_id),
                     active_roots: child_active_roots,
@@ -1925,11 +1461,10 @@ fn fold_tir_wrapper_node_with_child_output(
                     &fold_input.active_roots,
                     reference.root,
                     store,
-                    fold_input.expression_registry,
                 )?;
                 let child_fold_input = FoldTraversalInput {
                     effective_view: None,
-                    expression_registry: fold_input.expression_registry,
+                    store: fold_input.store,
                     expression_overlay_stack: fold_input.expression_overlay_stack.clone(),
                     active_roots: child_active_roots,
                     authority: fold_input.authority.clone(),
@@ -2757,13 +2292,7 @@ fn fold_tir_aggregate_wrapper_child_template(
     fold_context: &mut TemplateFoldContext<'_>,
     fold_input: &FoldTraversalInput<'_, '_>,
 ) -> Result<Option<TemplateLoopControlKind>, TemplateError> {
-    let template_id = reference
-        .template_id_in_store(store.store_id())
-        .ok_or_else(|| {
-            CompilerError::compiler_error(
-                "TIR aggregate-wrapper fold: child template reference is not in the current store.",
-            )
-        })?;
+    let template_id = reference.root;
     let template = store
         .get_template(template_id)
         .cloned()
@@ -2777,27 +2306,18 @@ fn fold_tir_aggregate_wrapper_child_template(
     }
 
     if reference.phase.is_at_least(TemplateTirPhase::Composed) {
-        let registry = fold_input.expression_registry.ok_or_else(|| {
-            CompilerError::compiler_error(
-                "TIR aggregate-wrapper fold: composed same-store child requires its registry-backed view.",
-            )
-        })?;
         let child_view = TirView::with_minimum_phase(
-            registry,
+            store,
             reference.root,
             reference.phase,
             TemplateTirPhase::Composed,
             reference.overlay_set_id,
         )?;
-        let child_active_roots = push_active_fold_root(
-            &fold_input.active_roots,
-            reference.root,
-            store,
-            Some(registry),
-        )?;
+        let child_active_roots =
+            push_active_fold_root(&fold_input.active_roots, reference.root, store)?;
         let child_fold_input = FoldTraversalInput {
             effective_view: Some(&child_view),
-            expression_registry: Some(registry),
+            store,
             expression_overlay_stack: fold_input
                 .expression_stack_with_overlay(reference.overlay_set_id),
             active_roots: child_active_roots,
@@ -2814,15 +2334,11 @@ fn fold_tir_aggregate_wrapper_child_template(
         );
     }
 
-    let child_active_roots = push_active_fold_root(
-        &fold_input.active_roots,
-        reference.root,
-        store,
-        fold_input.expression_registry,
-    )?;
+    let child_active_roots =
+        push_active_fold_root(&fold_input.active_roots, reference.root, store)?;
     let child_fold_input = FoldTraversalInput {
         effective_view: None,
-        expression_registry: fold_input.expression_registry,
+        store: fold_input.store,
         expression_overlay_stack: fold_input.expression_overlay_stack.clone(),
         active_roots: child_active_roots,
         authority: fold_input.authority.clone(),

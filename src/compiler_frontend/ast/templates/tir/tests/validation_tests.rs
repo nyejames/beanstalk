@@ -10,13 +10,14 @@ use super::super::ids::{
     TemplateSlotPlanId,
 };
 use super::super::node::{TemplateIr, TemplateIrNode, TemplateIrNodeKind, TirSlotPlaceholder};
-use super::super::refs::{TemplateRef, TemplateStoreId, TemplateWrapperReference};
+use super::super::refs::TemplateTirChildReference;
+use super::super::refs::TemplateWrapperReference;
 use super::super::slot_plan::{
     TemplateSlotPlan, TemplateSlotSitePlan, TemplateSlotSiteRenderPiece, TemplateSlotSiteRenderPlan,
 };
 use super::super::store::{TemplateIrStore, TemplateWrapperSet};
 use super::super::summary::TemplateIrSummary;
-use super::super::{TemplateOverlaySetId, TemplateTirChildReference, TemplateTirPhase};
+use super::super::{TemplateOverlaySetId, TemplateTirPhase};
 use super::validation_support::validate_tir_store;
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, ExpressionValueShape,
@@ -655,9 +656,8 @@ fn store_with_unique_child_template_occurrence_ids_is_valid() {
         empty_location(),
     ));
 
-    let child_a_reference = TemplateTirChildReference::same_store(
+    let child_a_reference = TemplateTirChildReference::new(
         TemplateIrId::new(0),
-        store.store_id(),
         TemplateTirPhase::Parsed,
         TemplateOverlaySetId::empty(),
     );
@@ -668,9 +668,8 @@ fn store_with_unique_child_template_occurrence_ids_is_valid() {
         },
         empty_location(),
     ));
-    let child_b_reference = TemplateTirChildReference::same_store(
+    let child_b_reference = TemplateTirChildReference::new(
         TemplateIrId::new(1),
-        store.store_id(),
         TemplateTirPhase::Parsed,
         TemplateOverlaySetId::empty(),
     );
@@ -722,9 +721,8 @@ fn store_with_duplicate_child_template_occurrence_ids_is_invalid() {
         empty_location(),
     ));
 
-    let child_a_reference = TemplateTirChildReference::same_store(
+    let child_a_reference = TemplateTirChildReference::new(
         TemplateIrId::new(0),
-        store.store_id(),
         TemplateTirPhase::Parsed,
         TemplateOverlaySetId::empty(),
     );
@@ -735,9 +733,8 @@ fn store_with_duplicate_child_template_occurrence_ids_is_invalid() {
         },
         empty_location(),
     ));
-    let child_b_reference = TemplateTirChildReference::same_store(
+    let child_b_reference = TemplateTirChildReference::new(
         TemplateIrId::new(0),
-        store.store_id(),
         TemplateTirPhase::Parsed,
         TemplateOverlaySetId::empty(),
     );
@@ -978,7 +975,7 @@ fn store_with_valid_wrapper_set_refs_is_valid() {
         empty_location(),
     ));
 
-    let wrapper_ref = store.qualify_template_ref(wrapper_template_id);
+    let wrapper_ref = wrapper_template_id;
     store.push_wrapper_set(TemplateWrapperSet {
         wrappers: vec![TemplateWrapperReference::new(
             wrapper_ref,
@@ -994,8 +991,8 @@ fn store_with_valid_wrapper_set_refs_is_valid() {
 fn wrapper_set_with_out_of_bounds_template_ref_is_invalid() {
     let mut store = TemplateIrStore::new();
 
-    // Create a TemplateRef pointing to a template that does not exist.
-    let stale_ref = TemplateRef::new(store.store_id(), TemplateIrId::new(99));
+    // Create a TemplateIrId pointing to a template that does not exist.
+    let stale_ref = TemplateIrId::new(99);
     store.push_wrapper_set(TemplateWrapperSet {
         wrappers: vec![TemplateWrapperReference::new(
             stale_ref,
@@ -1008,24 +1005,4 @@ fn wrapper_set_with_out_of_bounds_template_ref_is_invalid() {
     assert!(diagnostic.is_some());
     let msg = format!("{:?}", diagnostic.unwrap());
     assert!(msg.contains("out of bounds"));
-}
-
-#[test]
-fn wrapper_set_with_wrong_store_template_ref_is_invalid() {
-    let mut store = TemplateIrStore::new();
-
-    // Create a TemplateRef pointing to a different store.
-    let wrong_store_ref = TemplateRef::new(TemplateStoreId::new(99), TemplateIrId::new(0));
-    store.push_wrapper_set(TemplateWrapperSet {
-        wrappers: vec![TemplateWrapperReference::new(
-            wrong_store_ref,
-            TemplateTirPhase::Finalized,
-            TemplateOverlaySetId::empty(),
-        )],
-    });
-
-    let diagnostic = validate_tir_store(&store);
-    assert!(diagnostic.is_some());
-    let msg = format!("{:?}", diagnostic.unwrap());
-    assert!(msg.contains("from store"));
 }

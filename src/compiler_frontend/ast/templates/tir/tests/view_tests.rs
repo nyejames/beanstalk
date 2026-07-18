@@ -6,10 +6,10 @@
 //! accessors, and invariant errors for invalid refs.
 //!
 //! WHY: `TirView` is the central read API for all future template consumers.
-//! These tests guard the invariants later phases depend on: invalid registry
+//! These tests guard the invariants later phases depend on: invalid store
 //! IDs produce `CompilerError` instead of panics, minimum-phase checks reject
 //! unready roots, and overlay dimension accessors resolve entries through the
-//! registry-owned overlay set.
+//! store-owned overlay set.
 
 use super::super::builder::TemplateIrBuilder;
 use super::super::ids::{
@@ -21,8 +21,7 @@ use super::super::overlays::{
     TirSlotResolution, TirSlotResolutionOverlay, TirWrapperApplicationMode, TirWrapperContext,
     TirWrapperContextOverlay,
 };
-use super::super::refs::{TemplateNodeRef, TemplateRef, TemplateStoreId};
-use super::super::registry::TemplateIrRegistry;
+use super::super::store::TemplateIrStore;
 use super::super::summary::TemplateIrSummary;
 use super::super::view::{TemplateTirPhase, TirView};
 use crate::compiler_frontend::ast::expressions::expression::{
@@ -65,7 +64,7 @@ fn bool_expression() -> Expression {
 /// Builds a template whose root is a single `DynamicExpression` node.
 ///
 /// WHAT: returns the template ID and the root node ID so tests can construct a
-///       `TemplateNodeRef` and query the view for effective expressions.
+///       `TemplateIrNodeId` and query the view for effective expressions.
 fn build_template_with_dynamic_expression(
     store: &mut super::super::store::TemplateIrStore,
 ) -> (TemplateIrId, TemplateIrNodeId) {
@@ -124,33 +123,21 @@ fn build_template_with_text_child(
     )
 }
 
-/// Creates a registry with one store containing one empty template and an
-/// empty overlay set. Returns the registry, store ID, template `TemplateRef`,
-/// and overlay set ID.
-struct TestRegistry {
-    registry: TemplateIrRegistry,
-    store_id: TemplateStoreId,
-    root_ref: TemplateRef,
+/// Creates one module-local store containing an empty template and an empty overlay set.
+struct TestStore {
+    store: TemplateIrStore,
+    root_ref: TemplateIrId,
     overlay_set_id: TemplateOverlaySetId,
 }
 
-fn build_test_registry() -> TestRegistry {
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.allocate_store();
+fn build_test_store() -> TestStore {
+    let mut store = TemplateIrStore::new();
+    let template_id = build_empty_template(&mut store);
+    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet::empty());
 
-    let template_id = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
-        build_empty_template(&mut store)
-    };
-
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
-
-    TestRegistry {
-        registry,
-        store_id,
-        root_ref: TemplateRef::new(store_id, template_id),
+    TestStore {
+        store,
+        root_ref: template_id,
         overlay_set_id,
     }
 }
@@ -195,35 +182,29 @@ fn phase_display_matches_variant_names() {
 
 #[test]
 fn new_succeeds_for_valid_root_and_overlay_set() {
-    let TestRegistry {
-        registry,
+    let TestStore {
+        store,
         root_ref,
         overlay_set_id,
         ..
-    } = build_test_registry();
+    } = build_test_store();
 
-    let view = TirView::new(
-        &registry,
-        root_ref,
-        TemplateTirPhase::Parsed,
-        overlay_set_id,
-    );
+    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, overlay_set_id);
 
     assert!(view.is_ok());
 }
 
 #[test]
 fn new_fails_for_missing_root_template() {
-    let TestRegistry {
-        registry,
-        store_id,
+    let TestStore {
+        store,
         overlay_set_id,
         ..
-    } = build_test_registry();
+    } = build_test_store();
 
-    let missing_root = TemplateRef::new(store_id, TemplateIrId::new(99));
+    let missing_root = TemplateIrId::new(99);
     let error = TirView::new(
-        &registry,
+        &store,
         missing_root,
         TemplateTirPhase::Parsed,
         overlay_set_id,
@@ -253,38 +234,24 @@ fn dynamic_expression_site_id(
 
 #[test]
 fn effective_expression_for_site_returns_override_when_present() {
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.allocate_store();
+    let mut store = TemplateIrStore::new();
 
-    let (template_id, root_node) = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
-        build_template_with_dynamic_expression(&mut store)
-    };
+    let (template_id, root_node) = { build_template_with_dynamic_expression(&mut store) };
 
-    let site_id = {
-        let store = registry.store(store_id).expect("store should exist");
-        dynamic_expression_site_id(&store, root_node)
-    };
+    let site_id = { dynamic_expression_site_id(&store, root_node) };
 
-    let expression_overlay_id = registry.allocate_expression_overlay(TirExpressionOverlay {
+    let expression_overlay_id = store.allocate_expression_overlay(TirExpressionOverlay {
         overrides: vec![(site_id, Box::new(bool_expression()))],
     });
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet {
+    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet {
         expression_overrides: Some(expression_overlay_id),
         slot_resolution: None,
         wrapper_context: None,
     });
 
-    let root_ref = TemplateRef::new(store_id, template_id);
-    let view = TirView::new(
-        &registry,
-        root_ref,
-        TemplateTirPhase::Parsed,
-        overlay_set_id,
-    )
-    .expect("view should construct");
+    let root_ref = template_id;
+    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, overlay_set_id)
+        .expect("view should construct");
 
     assert!(
         view.effective_expression_for_site(site_id)
@@ -296,25 +263,14 @@ fn effective_expression_for_site_returns_override_when_present() {
 
 #[test]
 fn effective_expression_for_site_returns_none_without_overlay() {
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.allocate_store();
+    let mut store = TemplateIrStore::new();
 
-    let template_id = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
-        build_empty_template(&mut store)
-    };
+    let template_id = { build_empty_template(&mut store) };
 
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
-    let root_ref = TemplateRef::new(store_id, template_id);
-    let view = TirView::new(
-        &registry,
-        root_ref,
-        TemplateTirPhase::Parsed,
-        overlay_set_id,
-    )
-    .expect("view should construct");
+    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet::empty());
+    let root_ref = template_id;
+    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, overlay_set_id)
+        .expect("view should construct");
 
     assert!(
         view.effective_expression_for_site(ExpressionSiteId::new(0))
@@ -326,41 +282,27 @@ fn effective_expression_for_site_returns_none_without_overlay() {
 
 #[test]
 fn effective_expression_for_site_returns_none_for_uncovered_site() {
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.allocate_store();
+    let mut store = TemplateIrStore::new();
 
-    let (template_id, root_node) = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
-        build_template_with_dynamic_expression(&mut store)
-    };
+    let (template_id, root_node) = { build_template_with_dynamic_expression(&mut store) };
 
-    let site_id = {
-        let store = registry.store(store_id).expect("store should exist");
-        dynamic_expression_site_id(&store, root_node)
-    };
+    let site_id = { dynamic_expression_site_id(&store, root_node) };
 
     // The overlay covers a different site than the one we query.
     let other_site = ExpressionSiteId::new(100);
     assert_ne!(other_site, site_id);
-    let expression_overlay_id = registry.allocate_expression_overlay(TirExpressionOverlay {
+    let expression_overlay_id = store.allocate_expression_overlay(TirExpressionOverlay {
         overrides: vec![(other_site, Box::new(bool_expression()))],
     });
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet {
+    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet {
         expression_overrides: Some(expression_overlay_id),
         slot_resolution: None,
         wrapper_context: None,
     });
 
-    let root_ref = TemplateRef::new(store_id, template_id);
-    let view = TirView::new(
-        &registry,
-        root_ref,
-        TemplateTirPhase::Parsed,
-        overlay_set_id,
-    )
-    .expect("view should construct");
+    let root_ref = template_id;
+    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, overlay_set_id)
+        .expect("view should construct");
 
     assert!(
         view.effective_expression_for_site(site_id)
@@ -372,40 +314,26 @@ fn effective_expression_for_site_returns_none_for_uncovered_site() {
 
 #[test]
 fn effective_expression_for_node_returns_override_for_dynamic_expression() {
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.allocate_store();
+    let mut store = TemplateIrStore::new();
 
-    let (template_id, root_node) = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
-        build_template_with_dynamic_expression(&mut store)
-    };
+    let (template_id, root_node) = { build_template_with_dynamic_expression(&mut store) };
 
-    let site_id = {
-        let store = registry.store(store_id).expect("store should exist");
-        dynamic_expression_site_id(&store, root_node)
-    };
+    let site_id = { dynamic_expression_site_id(&store, root_node) };
 
-    let expression_overlay_id = registry.allocate_expression_overlay(TirExpressionOverlay {
+    let expression_overlay_id = store.allocate_expression_overlay(TirExpressionOverlay {
         overrides: vec![(site_id, Box::new(bool_expression()))],
     });
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet {
+    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet {
         expression_overrides: Some(expression_overlay_id),
         slot_resolution: None,
         wrapper_context: None,
     });
 
-    let root_ref = TemplateRef::new(store_id, template_id);
-    let view = TirView::new(
-        &registry,
-        root_ref,
-        TemplateTirPhase::Parsed,
-        overlay_set_id,
-    )
-    .expect("view should construct");
+    let root_ref = template_id;
+    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, overlay_set_id)
+        .expect("view should construct");
 
-    let node_ref = TemplateNodeRef::new(store_id, root_node);
+    let node_ref = root_node;
     assert!(
         view.effective_expression_for_node(node_ref)
             .expect("expression lookup should succeed")
@@ -416,13 +344,9 @@ fn effective_expression_for_node_returns_override_for_dynamic_expression() {
 
 #[test]
 fn effective_expression_for_node_returns_none_for_non_expression_node() {
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.allocate_store();
+    let mut store = TemplateIrStore::new();
 
     let (template_id, root_node) = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
         let mut string_table =
             crate::compiler_frontend::symbols::string_interning::StringTable::new();
         build_template_with_text_child(&mut store, string_table.intern("text"));
@@ -433,27 +357,22 @@ fn effective_expression_for_node_returns_none_for_non_expression_node() {
         (TemplateIrId::new(0), template.root)
     };
 
-    let expression_overlay_id = registry.allocate_expression_overlay(TirExpressionOverlay {
+    let expression_overlay_id = store.allocate_expression_overlay(TirExpressionOverlay {
         overrides: vec![(ExpressionSiteId::new(0), Box::new(bool_expression()))],
     });
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet {
+    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet {
         expression_overrides: Some(expression_overlay_id),
         slot_resolution: None,
         wrapper_context: None,
     });
 
-    let root_ref = TemplateRef::new(store_id, template_id);
-    let view = TirView::new(
-        &registry,
-        root_ref,
-        TemplateTirPhase::Parsed,
-        overlay_set_id,
-    )
-    .expect("view should construct");
+    let root_ref = template_id;
+    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, overlay_set_id)
+        .expect("view should construct");
 
     // The root node is a Sequence, not a DynamicExpression, so no override
     // should be returned even though the overlay has an entry for site 0.
-    let node_ref = TemplateNodeRef::new(store_id, root_node);
+    let node_ref = root_node;
     assert!(
         view.effective_expression_for_node(node_ref)
             .expect("expression lookup should succeed")
@@ -464,38 +383,27 @@ fn effective_expression_for_node_returns_none_for_non_expression_node() {
 
 #[test]
 fn effective_slot_resolution_returns_resolution_when_present() {
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.allocate_store();
+    let mut store = TemplateIrStore::new();
 
-    let template_id = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
-        build_empty_template(&mut store)
-    };
+    let template_id = { build_empty_template(&mut store) };
 
-    let source = TemplateRef::new(store_id, template_id);
+    let source = template_id;
     let occurrence_id = SlotOccurrenceId::new(0);
-    let slot_overlay_id = registry.allocate_slot_resolution_overlay(TirSlotResolutionOverlay {
+    let slot_overlay_id = store.allocate_slot_resolution_overlay(TirSlotResolutionOverlay {
         resolutions: vec![(
             occurrence_id,
             TirSlotResolution::resolved(SlotKey::Default, vec![source]),
         )],
     });
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet {
+    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet {
         expression_overrides: None,
         slot_resolution: Some(slot_overlay_id),
         wrapper_context: None,
     });
 
-    let root_ref = TemplateRef::new(store_id, template_id);
-    let view = TirView::new(
-        &registry,
-        root_ref,
-        TemplateTirPhase::Parsed,
-        overlay_set_id,
-    )
-    .expect("view should construct");
+    let root_ref = template_id;
+    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, overlay_set_id)
+        .expect("view should construct");
 
     let resolution = view
         .effective_slot_resolution(occurrence_id)
@@ -506,25 +414,14 @@ fn effective_slot_resolution_returns_resolution_when_present() {
 
 #[test]
 fn effective_slot_resolution_returns_none_without_overlay() {
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.allocate_store();
+    let mut store = TemplateIrStore::new();
 
-    let template_id = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
-        build_empty_template(&mut store)
-    };
+    let template_id = { build_empty_template(&mut store) };
 
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
-    let root_ref = TemplateRef::new(store_id, template_id);
-    let view = TirView::new(
-        &registry,
-        root_ref,
-        TemplateTirPhase::Parsed,
-        overlay_set_id,
-    )
-    .expect("view should construct");
+    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet::empty());
+    let root_ref = template_id;
+    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, overlay_set_id)
+        .expect("view should construct");
 
     assert!(
         view.effective_slot_resolution(SlotOccurrenceId::new(0))
@@ -536,15 +433,9 @@ fn effective_slot_resolution_returns_none_without_overlay() {
 
 #[test]
 fn effective_wrapper_context_returns_context_when_present() {
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.allocate_store();
+    let mut store = TemplateIrStore::new();
 
-    let template_id = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
-        build_empty_template(&mut store)
-    };
+    let template_id = { build_empty_template(&mut store) };
 
     let occurrence_id = ChildTemplateOccurrenceId::new(0);
     let context = TirWrapperContext {
@@ -552,23 +443,18 @@ fn effective_wrapper_context_returns_context_when_present() {
         skip_parent_child_wrappers: true,
         application_mode: TirWrapperApplicationMode::IfChildEmits,
     };
-    let wrapper_overlay_id = registry.allocate_wrapper_context_overlay(TirWrapperContextOverlay {
+    let wrapper_overlay_id = store.allocate_wrapper_context_overlay(TirWrapperContextOverlay {
         contexts: vec![(occurrence_id, context.clone())],
     });
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet {
+    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet {
         expression_overrides: None,
         slot_resolution: None,
         wrapper_context: Some(wrapper_overlay_id),
     });
 
-    let root_ref = TemplateRef::new(store_id, template_id);
-    let view = TirView::new(
-        &registry,
-        root_ref,
-        TemplateTirPhase::Parsed,
-        overlay_set_id,
-    )
-    .expect("view should construct");
+    let root_ref = template_id;
+    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, overlay_set_id)
+        .expect("view should construct");
 
     let found = view
         .effective_wrapper_context(occurrence_id)
@@ -579,25 +465,14 @@ fn effective_wrapper_context_returns_context_when_present() {
 
 #[test]
 fn effective_wrapper_context_returns_none_without_overlay() {
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.allocate_store();
+    let mut store = TemplateIrStore::new();
 
-    let template_id = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
-        build_empty_template(&mut store)
-    };
+    let template_id = { build_empty_template(&mut store) };
 
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
-    let root_ref = TemplateRef::new(store_id, template_id);
-    let view = TirView::new(
-        &registry,
-        root_ref,
-        TemplateTirPhase::Parsed,
-        overlay_set_id,
-    )
-    .expect("view should construct");
+    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet::empty());
+    let root_ref = template_id;
+    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, overlay_set_id)
+        .expect("view should construct");
 
     assert!(
         view.effective_wrapper_context(ChildTemplateOccurrenceId::new(0))
@@ -609,36 +484,25 @@ fn effective_wrapper_context_returns_none_without_overlay() {
 
 #[test]
 fn effective_wrapper_context_returns_none_for_uncovered_occurrence() {
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.allocate_store();
+    let mut store = TemplateIrStore::new();
 
-    let template_id = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
-        build_empty_template(&mut store)
-    };
+    let template_id = { build_empty_template(&mut store) };
 
-    let wrapper_overlay_id = registry.allocate_wrapper_context_overlay(TirWrapperContextOverlay {
+    let wrapper_overlay_id = store.allocate_wrapper_context_overlay(TirWrapperContextOverlay {
         contexts: vec![(
             ChildTemplateOccurrenceId::new(1),
             TirWrapperContext::empty(),
         )],
     });
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet {
+    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet {
         expression_overrides: None,
         slot_resolution: None,
         wrapper_context: Some(wrapper_overlay_id),
     });
 
-    let root_ref = TemplateRef::new(store_id, template_id);
-    let view = TirView::new(
-        &registry,
-        root_ref,
-        TemplateTirPhase::Parsed,
-        overlay_set_id,
-    )
-    .expect("view should construct");
+    let root_ref = template_id;
+    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, overlay_set_id)
+        .expect("view should construct");
 
     assert!(
         view.effective_wrapper_context(ChildTemplateOccurrenceId::new(99))
@@ -650,13 +514,13 @@ fn effective_wrapper_context_returns_none_for_uncovered_occurrence() {
 
 #[test]
 fn new_fails_for_missing_overlay_set() {
-    let TestRegistry {
-        registry, root_ref, ..
-    } = build_test_registry();
+    let TestStore {
+        store, root_ref, ..
+    } = build_test_store();
 
     let missing_overlay_set = TemplateOverlaySetId::new(99);
     let error = TirView::new(
-        &registry,
+        &store,
         root_ref,
         TemplateTirPhase::Parsed,
         missing_overlay_set,
@@ -669,15 +533,15 @@ fn new_fails_for_missing_overlay_set() {
 
 #[test]
 fn with_minimum_phase_succeeds_when_phase_satisfies_minimum() {
-    let TestRegistry {
-        registry,
+    let TestStore {
+        store,
         root_ref,
         overlay_set_id,
         ..
-    } = build_test_registry();
+    } = build_test_store();
 
     let view = TirView::with_minimum_phase(
-        &registry,
+        &store,
         root_ref,
         TemplateTirPhase::Formatted,
         TemplateTirPhase::Composed,
@@ -690,15 +554,15 @@ fn with_minimum_phase_succeeds_when_phase_satisfies_minimum() {
 
 #[test]
 fn with_minimum_phase_fails_when_phase_is_below_minimum() {
-    let TestRegistry {
-        registry,
+    let TestStore {
+        store,
         root_ref,
         overlay_set_id,
         ..
-    } = build_test_registry();
+    } = build_test_store();
 
     let error = TirView::with_minimum_phase(
-        &registry,
+        &store,
         root_ref,
         TemplateTirPhase::Parsed,
         TemplateTirPhase::Composed,
@@ -715,80 +579,60 @@ fn with_minimum_phase_fails_when_phase_is_below_minimum() {
 
 #[test]
 fn root_ref_returns_the_constructor_root() {
-    let TestRegistry {
-        registry,
+    let TestStore {
+        store,
         root_ref,
         overlay_set_id,
         ..
-    } = build_test_registry();
+    } = build_test_store();
 
-    let view = TirView::new(
-        &registry,
-        root_ref,
-        TemplateTirPhase::Parsed,
-        overlay_set_id,
-    )
-    .expect("view should construct");
+    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, overlay_set_id)
+        .expect("view should construct");
 
     assert_eq!(view.root_ref(), root_ref);
 }
 
 #[test]
 fn phase_returns_the_constructor_phase() {
-    let TestRegistry {
-        registry,
+    let TestStore {
+        store,
         root_ref,
         overlay_set_id,
         ..
-    } = build_test_registry();
+    } = build_test_store();
 
-    let view = TirView::new(
-        &registry,
-        root_ref,
-        TemplateTirPhase::Composed,
-        overlay_set_id,
-    )
-    .expect("view should construct");
+    let view = TirView::new(&store, root_ref, TemplateTirPhase::Composed, overlay_set_id)
+        .expect("view should construct");
 
     assert_eq!(view.phase(), TemplateTirPhase::Composed);
 }
 
 #[test]
 fn overlay_set_id_returns_the_constructor_overlay_set_id() {
-    let TestRegistry {
-        registry,
+    let TestStore {
+        store,
         root_ref,
         overlay_set_id,
         ..
-    } = build_test_registry();
+    } = build_test_store();
 
-    let view = TirView::new(
-        &registry,
-        root_ref,
-        TemplateTirPhase::Parsed,
-        overlay_set_id,
-    )
-    .expect("view should construct");
+    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, overlay_set_id)
+        .expect("view should construct");
 
     assert_eq!(view.overlay_set_id(), overlay_set_id);
 }
 
 #[test]
 fn root_template_resolves_the_root_template_entry() {
-    let TestRegistry {
-        registry,
+    let TestStore {
+        store,
         root_ref,
         overlay_set_id,
         ..
-    } = build_test_registry();
+    } = build_test_store();
 
-    let view = TirView::new(
-        &registry,
-        root_ref,
-        TemplateTirPhase::Parsed,
-        overlay_set_id,
-    )
-    .expect("view should construct");
+    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, overlay_set_id)
+        .expect("view should construct");
 
     let template = view.root_template().expect("root template should resolve");
     assert_eq!(template.kind, TemplateType::String);
@@ -796,20 +640,15 @@ fn root_template_resolves_the_root_template_entry() {
 
 #[test]
 fn root_node_resolves_the_root_body_node() {
-    let TestRegistry {
-        registry,
+    let TestStore {
+        store,
         root_ref,
         overlay_set_id,
         ..
-    } = build_test_registry();
+    } = build_test_store();
 
-    let view = TirView::new(
-        &registry,
-        root_ref,
-        TemplateTirPhase::Parsed,
-        overlay_set_id,
-    )
-    .expect("view should construct");
+    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, overlay_set_id)
+        .expect("view should construct");
 
     let node = view.root_node().expect("root node should resolve");
     assert!(matches!(node.kind, TemplateIrNodeKind::Sequence { .. }));
@@ -819,16 +658,12 @@ fn root_node_resolves_the_root_body_node() {
 fn effective_node_resolves_a_non_root_node() {
     use crate::compiler_frontend::symbols::string_interning::StringTable;
 
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.allocate_store();
+    let mut store = TemplateIrStore::new();
 
     let mut string_table = StringTable::new();
     let text_id = string_table.intern("hello");
 
     let (template_id, child_node_id) = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
         let template_id = build_template_with_text_child(&mut store, text_id);
 
         // Recover the text child node ID from the root sequence.
@@ -844,18 +679,13 @@ fn effective_node_resolves_a_non_root_node() {
         (template_id, child_node_id)
     };
 
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
-    let root_ref = TemplateRef::new(store_id, template_id);
+    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet::empty());
+    let root_ref = template_id;
 
-    let view = TirView::new(
-        &registry,
-        root_ref,
-        TemplateTirPhase::Parsed,
-        overlay_set_id,
-    )
-    .expect("view should construct");
+    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, overlay_set_id)
+        .expect("view should construct");
 
-    let node_ref = TemplateNodeRef::new(store_id, child_node_id);
+    let node_ref = child_node_id;
     let node = view
         .effective_node(node_ref)
         .expect("effective node should resolve");
@@ -865,24 +695,17 @@ fn effective_node_resolves_a_non_root_node() {
 
 #[test]
 fn effective_node_errors_for_invalid_node_ref() {
-    let TestRegistry {
-        registry,
-        store_id,
+    let TestStore {
+        store,
         root_ref,
         overlay_set_id,
         ..
-    } = build_test_registry();
+    } = build_test_store();
 
-    let view = TirView::new(
-        &registry,
-        root_ref,
-        TemplateTirPhase::Parsed,
-        overlay_set_id,
-    )
-    .expect("view should construct");
+    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, overlay_set_id)
+        .expect("view should construct");
 
-    let invalid_node_ref =
-        TemplateNodeRef::new(store_id, super::super::ids::TemplateIrNodeId::new(99));
+    let invalid_node_ref = TemplateIrNodeId::new(99);
     let error = view
         .effective_node(invalid_node_ref)
         .expect_err("invalid node ref should be rejected");
@@ -896,33 +719,17 @@ fn effective_node_errors_for_invalid_node_ref() {
 
 #[test]
 fn child_view_constructs_a_valid_view_for_a_child_template() {
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.allocate_store();
+    let mut store = TemplateIrStore::new();
 
-    let parent_id = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
-        build_empty_template(&mut store)
-    };
-    let child_id = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
-        build_empty_template(&mut store)
-    };
+    let parent_id = { build_empty_template(&mut store) };
+    let child_id = { build_empty_template(&mut store) };
 
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
-    let parent_ref = TemplateRef::new(store_id, parent_id);
-    let child_ref = TemplateRef::new(store_id, child_id);
+    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet::empty());
+    let parent_ref = parent_id;
+    let child_ref = child_id;
 
-    let parent_view = TirView::new(
-        &registry,
-        parent_ref,
-        TemplateTirPhase::Parsed,
-        overlay_set_id,
-    )
-    .expect("parent view should construct");
+    let parent_view = TirView::new(&store, parent_ref, TemplateTirPhase::Parsed, overlay_set_id)
+        .expect("parent view should construct");
 
     let child_view = parent_view
         .child_view(child_ref, TemplateTirPhase::Parsed, overlay_set_id)
@@ -934,29 +741,23 @@ fn child_view_constructs_a_valid_view_for_a_child_template() {
 
 #[test]
 fn child_view_rejects_a_missing_overlay_set() {
-    let TestRegistry {
-        registry,
-        store_id,
+    let TestStore {
+        store,
         root_ref,
         overlay_set_id,
         ..
-    } = build_test_registry();
+    } = build_test_store();
 
-    let view = TirView::new(
-        &registry,
-        root_ref,
-        TemplateTirPhase::Parsed,
-        overlay_set_id,
-    )
-    .expect("view should construct");
+    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, overlay_set_id)
+        .expect("view should construct");
 
-    // child_view no longer validates template existence through the registry
+    // child_view no longer validates template existence through the store
     // (that would borrow the store's RefCell, which panics when the caller holds
     // a mutable store borrow). It validates the overlay set only.
     let missing_overlay = TemplateOverlaySetId::new(999);
     let error = view
         .child_view(
-            TemplateRef::new(store_id, TemplateIrId::new(0)),
+            TemplateIrId::new(0),
             TemplateTirPhase::Parsed,
             missing_overlay,
         )
@@ -971,20 +772,15 @@ fn child_view_rejects_a_missing_overlay_set() {
 
 #[test]
 fn overlay_dimension_accessors_return_none_for_empty_overlay_set() {
-    let TestRegistry {
-        registry,
+    let TestStore {
+        store,
         root_ref,
         overlay_set_id,
         ..
-    } = build_test_registry();
+    } = build_test_store();
 
-    let view = TirView::new(
-        &registry,
-        root_ref,
-        TemplateTirPhase::Parsed,
-        overlay_set_id,
-    )
-    .expect("view should construct");
+    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, overlay_set_id)
+        .expect("view should construct");
 
     assert!(
         view.expression_overlay()
@@ -1005,32 +801,20 @@ fn overlay_dimension_accessors_return_none_for_empty_overlay_set() {
 
 #[test]
 fn expression_overlay_accessor_returns_the_entry_when_set() {
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.allocate_store();
+    let mut store = TemplateIrStore::new();
 
-    let template_id = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
-        build_empty_template(&mut store)
-    };
+    let template_id = { build_empty_template(&mut store) };
 
-    let expression_overlay_id =
-        registry.allocate_expression_overlay(TirExpressionOverlay::default());
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet {
+    let expression_overlay_id = store.allocate_expression_overlay(TirExpressionOverlay::default());
+    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet {
         expression_overrides: Some(expression_overlay_id),
         slot_resolution: None,
         wrapper_context: None,
     });
 
-    let root_ref = TemplateRef::new(store_id, template_id);
-    let view = TirView::new(
-        &registry,
-        root_ref,
-        TemplateTirPhase::Parsed,
-        overlay_set_id,
-    )
-    .expect("view should construct");
+    let root_ref = template_id;
+    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, overlay_set_id)
+        .expect("view should construct");
 
     assert!(
         view.expression_overlay()
@@ -1051,32 +835,21 @@ fn expression_overlay_accessor_returns_the_entry_when_set() {
 
 #[test]
 fn slot_resolution_overlay_accessor_returns_the_entry_when_set() {
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.allocate_store();
+    let mut store = TemplateIrStore::new();
 
-    let template_id = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
-        build_empty_template(&mut store)
-    };
+    let template_id = { build_empty_template(&mut store) };
 
     let slot_overlay_id =
-        registry.allocate_slot_resolution_overlay(TirSlotResolutionOverlay::default());
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet {
+        store.allocate_slot_resolution_overlay(TirSlotResolutionOverlay::default());
+    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet {
         expression_overrides: None,
         slot_resolution: Some(slot_overlay_id),
         wrapper_context: None,
     });
 
-    let root_ref = TemplateRef::new(store_id, template_id);
-    let view = TirView::new(
-        &registry,
-        root_ref,
-        TemplateTirPhase::Parsed,
-        overlay_set_id,
-    )
-    .expect("view should construct");
+    let root_ref = template_id;
+    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, overlay_set_id)
+        .expect("view should construct");
 
     assert!(
         view.expression_overlay()
@@ -1097,32 +870,21 @@ fn slot_resolution_overlay_accessor_returns_the_entry_when_set() {
 
 #[test]
 fn wrapper_context_overlay_accessor_returns_the_entry_when_set() {
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.allocate_store();
+    let mut store = TemplateIrStore::new();
 
-    let template_id = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
-        build_empty_template(&mut store)
-    };
+    let template_id = { build_empty_template(&mut store) };
 
     let wrapper_overlay_id =
-        registry.allocate_wrapper_context_overlay(TirWrapperContextOverlay::default());
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet {
+        store.allocate_wrapper_context_overlay(TirWrapperContextOverlay::default());
+    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet {
         expression_overrides: None,
         slot_resolution: None,
         wrapper_context: Some(wrapper_overlay_id),
     });
 
-    let root_ref = TemplateRef::new(store_id, template_id);
-    let view = TirView::new(
-        &registry,
-        root_ref,
-        TemplateTirPhase::Parsed,
-        overlay_set_id,
-    )
-    .expect("view should construct");
+    let root_ref = template_id;
+    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, overlay_set_id)
+        .expect("view should construct");
 
     assert!(
         view.expression_overlay()
@@ -1143,30 +905,19 @@ fn wrapper_context_overlay_accessor_returns_the_entry_when_set() {
 
 #[test]
 fn expression_overlay_accessor_rejects_missing_overlay_entry() {
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.allocate_store();
+    let mut store = TemplateIrStore::new();
 
-    let template_id = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
-        build_empty_template(&mut store)
-    };
+    let template_id = { build_empty_template(&mut store) };
 
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet {
+    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet {
         expression_overrides: Some(TirExpressionOverlayId::new(99)),
         slot_resolution: None,
         wrapper_context: None,
     });
 
-    let root_ref = TemplateRef::new(store_id, template_id);
-    let view = TirView::new(
-        &registry,
-        root_ref,
-        TemplateTirPhase::Parsed,
-        overlay_set_id,
-    )
-    .expect("view should construct");
+    let root_ref = template_id;
+    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, overlay_set_id)
+        .expect("view should construct");
 
     let error = view
         .expression_overlay()
@@ -1438,25 +1189,14 @@ fn build_template_with_conditional_loop(
 
 #[test]
 fn source_location_for_slot_occurrence_returns_node_location() {
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.allocate_store();
+    let mut store = TemplateIrStore::new();
 
-    let (template_id, occurrence_id) = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
-        build_template_with_slot(&mut store, location_at(7, 12))
-    };
+    let (template_id, occurrence_id) = { build_template_with_slot(&mut store, location_at(7, 12)) };
 
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
-    let root_ref = TemplateRef::new(store_id, template_id);
-    let view = TirView::new(
-        &registry,
-        root_ref,
-        TemplateTirPhase::Parsed,
-        overlay_set_id,
-    )
-    .expect("view should construct");
+    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet::empty());
+    let root_ref = template_id;
+    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, overlay_set_id)
+        .expect("view should construct");
 
     assert_location(
         view.source_location_for_slot_occurrence(occurrence_id),
@@ -1467,25 +1207,14 @@ fn source_location_for_slot_occurrence_returns_node_location() {
 
 #[test]
 fn source_location_for_slot_occurrence_returns_none_for_missing_id() {
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.allocate_store();
+    let mut store = TemplateIrStore::new();
 
-    let (template_id, _) = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
-        build_template_with_slot(&mut store, location_at(7, 12))
-    };
+    let (template_id, _) = { build_template_with_slot(&mut store, location_at(7, 12)) };
 
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
-    let root_ref = TemplateRef::new(store_id, template_id);
-    let view = TirView::new(
-        &registry,
-        root_ref,
-        TemplateTirPhase::Parsed,
-        overlay_set_id,
-    )
-    .expect("view should construct");
+    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet::empty());
+    let root_ref = template_id;
+    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, overlay_set_id)
+        .expect("view should construct");
 
     let missing = super::super::ids::SlotOccurrenceId::new(99);
     assert!(
@@ -1498,25 +1227,15 @@ fn source_location_for_slot_occurrence_returns_none_for_missing_id() {
 
 #[test]
 fn source_location_for_child_template_occurrence_returns_node_location() {
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.allocate_store();
+    let mut store = TemplateIrStore::new();
 
-    let (parent_template_id, _child_template_id, occurrence_id) = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
-        build_template_with_child_template(&mut store, location_at(1, 1), location_at(9, 20))
-    };
+    let (parent_template_id, _child_template_id, occurrence_id) =
+        { build_template_with_child_template(&mut store, location_at(1, 1), location_at(9, 20)) };
 
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
-    let root_ref = TemplateRef::new(store_id, parent_template_id);
-    let view = TirView::new(
-        &registry,
-        root_ref,
-        TemplateTirPhase::Parsed,
-        overlay_set_id,
-    )
-    .expect("view should construct");
+    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet::empty());
+    let root_ref = parent_template_id;
+    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, overlay_set_id)
+        .expect("view should construct");
 
     assert_location(
         view.source_location_for_child_template_occurrence(occurrence_id),
@@ -1527,25 +1246,15 @@ fn source_location_for_child_template_occurrence_returns_node_location() {
 
 #[test]
 fn source_location_for_child_template_occurrence_returns_none_for_missing_id() {
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.allocate_store();
+    let mut store = TemplateIrStore::new();
 
-    let (parent_template_id, _, _) = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
-        build_template_with_child_template(&mut store, location_at(1, 1), location_at(9, 20))
-    };
+    let (parent_template_id, _, _) =
+        { build_template_with_child_template(&mut store, location_at(1, 1), location_at(9, 20)) };
 
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
-    let root_ref = TemplateRef::new(store_id, parent_template_id);
-    let view = TirView::new(
-        &registry,
-        root_ref,
-        TemplateTirPhase::Parsed,
-        overlay_set_id,
-    )
-    .expect("view should construct");
+    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet::empty());
+    let root_ref = parent_template_id;
+    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, overlay_set_id)
+        .expect("view should construct");
 
     let missing = super::super::ids::ChildTemplateOccurrenceId::new(99);
     assert!(
@@ -1558,100 +1267,60 @@ fn source_location_for_child_template_occurrence_returns_none_for_missing_id() {
 
 #[test]
 fn source_location_for_expression_site_returns_dynamic_expression_location() {
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.allocate_store();
+    let mut store = TemplateIrStore::new();
 
-    let (template_id, site_id) = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
-        build_template_with_dynamic_expression_at(&mut store, location_at(11, 30))
-    };
+    let (template_id, site_id) =
+        { build_template_with_dynamic_expression_at(&mut store, location_at(11, 30)) };
 
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
-    let root_ref = TemplateRef::new(store_id, template_id);
-    let view = TirView::new(
-        &registry,
-        root_ref,
-        TemplateTirPhase::Parsed,
-        overlay_set_id,
-    )
-    .expect("view should construct");
+    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet::empty());
+    let root_ref = template_id;
+    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, overlay_set_id)
+        .expect("view should construct");
 
     assert_location(view.source_location_for_expression_site(site_id), 11, 30);
 }
 
 #[test]
 fn source_location_for_expression_site_returns_branch_selector_location() {
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.allocate_store();
+    let mut store = TemplateIrStore::new();
 
-    let (template_id, site_id) = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
-        build_template_with_branch_chain(&mut store, location_at(15, 8))
-    };
+    let (template_id, site_id) =
+        { build_template_with_branch_chain(&mut store, location_at(15, 8)) };
 
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
-    let root_ref = TemplateRef::new(store_id, template_id);
-    let view = TirView::new(
-        &registry,
-        root_ref,
-        TemplateTirPhase::Parsed,
-        overlay_set_id,
-    )
-    .expect("view should construct");
+    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet::empty());
+    let root_ref = template_id;
+    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, overlay_set_id)
+        .expect("view should construct");
 
     assert_location(view.source_location_for_expression_site(site_id), 15, 8);
 }
 
 #[test]
 fn source_location_for_expression_site_returns_loop_header_location() {
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.allocate_store();
+    let mut store = TemplateIrStore::new();
 
-    let (template_id, site_id) = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
-        build_template_with_conditional_loop(&mut store, location_at(21, 4))
-    };
+    let (template_id, site_id) =
+        { build_template_with_conditional_loop(&mut store, location_at(21, 4)) };
 
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
-    let root_ref = TemplateRef::new(store_id, template_id);
-    let view = TirView::new(
-        &registry,
-        root_ref,
-        TemplateTirPhase::Parsed,
-        overlay_set_id,
-    )
-    .expect("view should construct");
+    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet::empty());
+    let root_ref = template_id;
+    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, overlay_set_id)
+        .expect("view should construct");
 
     assert_location(view.source_location_for_expression_site(site_id), 21, 4);
 }
 
 #[test]
 fn source_location_for_expression_site_returns_none_for_missing_site() {
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.allocate_store();
+    let mut store = TemplateIrStore::new();
 
-    let (template_id, _) = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
-        build_template_with_dynamic_expression_at(&mut store, location_at(11, 30))
-    };
+    let (template_id, _) =
+        { build_template_with_dynamic_expression_at(&mut store, location_at(11, 30)) };
 
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
-    let root_ref = TemplateRef::new(store_id, template_id);
-    let view = TirView::new(
-        &registry,
-        root_ref,
-        TemplateTirPhase::Parsed,
-        overlay_set_id,
-    )
-    .expect("view should construct");
+    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet::empty());
+    let root_ref = template_id;
+    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, overlay_set_id)
+        .expect("view should construct");
 
     let missing = ExpressionSiteId::new(99);
     assert!(
@@ -1664,16 +1333,11 @@ fn source_location_for_expression_site_returns_none_for_missing_site() {
 
 #[test]
 fn source_location_lookup_does_not_cross_into_child_template() {
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.allocate_store();
+    let mut store = TemplateIrStore::new();
 
     // Build a parent template that references a child template. The child has
     // its own slot with occurrence ID 0, while the parent has no slot of its own.
     let (parent_template_id, child_template_id, child_slot_occurrence_id) = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
-
         let (parent_template_id, child_template_id, child_slot_node) = {
             let mut builder = TemplateIrBuilder::new(&mut store);
 
@@ -1723,15 +1387,10 @@ fn source_location_lookup_does_not_cross_into_child_template() {
 
     // Look up the child's slot occurrence ID from the parent view: it must
     // not cross into the child root, so it should return Ok(None).
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
-    let parent_ref = TemplateRef::new(store_id, parent_template_id);
-    let parent_view = TirView::new(
-        &registry,
-        parent_ref,
-        TemplateTirPhase::Parsed,
-        overlay_set_id,
-    )
-    .expect("parent view should construct");
+    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet::empty());
+    let parent_ref = parent_template_id;
+    let parent_view = TirView::new(&store, parent_ref, TemplateTirPhase::Parsed, overlay_set_id)
+        .expect("parent view should construct");
 
     // The child-owned slot exists, but the parent view must not traverse into it.
     assert!(
@@ -1745,8 +1404,8 @@ fn source_location_lookup_does_not_cross_into_child_template() {
     // A child view over the child template root should find the child's own
     // slot occurrence, proving the lookup works when the correct root is used.
     let child_view = TirView::new(
-        &registry,
-        TemplateRef::new(store_id, child_template_id),
+        &store,
+        child_template_id,
         TemplateTirPhase::Parsed,
         overlay_set_id,
     )

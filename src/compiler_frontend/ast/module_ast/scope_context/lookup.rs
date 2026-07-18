@@ -171,12 +171,11 @@ impl ScopeContext {
     ///
     /// WHAT: falls back to expression classification for body-local declarations that are
     ///       not in the precomputed semantic table. Template constness is classified through
-    ///       the module registry so composed views retain their exact store and overlay identity.
+    ///       the module store so composed views retain their exact root and overlay identity.
     pub(crate) fn semantic_kind_for_declaration(
         &self,
         declaration: &Declaration,
         type_environment: &TypeEnvironment,
-        string_table: &StringTable,
     ) -> Result<DeclarationSemanticKind, TemplateError> {
         if let Some(kind) = self
             .lookups
@@ -197,11 +196,7 @@ impl ScopeContext {
                 let value_is_compile_time_constant = declaration
                     .value
                     .const_value_kind_with_template_classifier(&mut |template| {
-                        classify_template_from_effective_tir(
-                            template,
-                            self.registered_template_ir_store.registry(),
-                            string_table,
-                        )
+                        classify_template_from_effective_tir(template, &self.template_ir_store)
                     })?
                     .is_compile_time_value();
 
@@ -243,9 +238,8 @@ impl ScopeContext {
         &'a self,
         declaration: &'a Declaration,
         type_environment: &TypeEnvironment,
-        string_table: &StringTable,
     ) -> Result<Option<SourceStructConstructor<'a>>, TemplateError> {
-        if self.semantic_kind_for_declaration(declaration, type_environment, string_table)?
+        if self.semantic_kind_for_declaration(declaration, type_environment)?
             != DeclarationSemanticKind::Struct
         {
             return Ok(None);
@@ -283,10 +277,9 @@ impl ScopeContext {
         &self,
         declaration: &Declaration,
         type_environment: &TypeEnvironment,
-        string_table: &StringTable,
     ) -> Result<bool, TemplateError> {
         Ok(
-            self.semantic_kind_for_declaration(declaration, type_environment, string_table)?
+            self.semantic_kind_for_declaration(declaration, type_environment)?
                 == DeclarationSemanticKind::Choice,
         )
     }

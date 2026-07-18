@@ -13,8 +13,8 @@ use crate::compiler_frontend::ast::templates::formatter_contract::{
 };
 use crate::compiler_frontend::ast::templates::styles::whitespace::TemplateWhitespacePassProfile;
 use crate::compiler_frontend::ast::templates::tir::{
-    TemplateIrRegistry, TemplateIrStore, TemplateTirReference, TemplateWrapperReference,
-    TirTemplateClassification, refresh_kind_from_classification,
+    TemplateIrStore, TemplateTirReference, TemplateWrapperReference, TirTemplateClassification,
+    refresh_kind_from_classification,
 };
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
@@ -288,35 +288,27 @@ impl Style {
 ///   alongside `TemplateIr.kind`. Post-construction refresh goes through
 ///   [`Template::synchronize_kind_from_classification`], the single owner that
 ///   writes both copies so they cannot drift. The cache is read at parser
-///   boundaries where a template value may cross from a foreign TIR store whose
-///   registry is not available to the receiving context. Callers that already
-///   hold the owning store, registry, or `TirView` read the authoritative
-///   `TemplateIr.kind` instead.
-/// - **`style`** is owned by `TemplateIr` and read through the registry-backed
+///   boundaries before the shared module store is borrowed. Callers that already
+///   hold the module store or `TirView` read the authoritative `TemplateIr.kind`
+///   instead.
+/// - **`style`** is owned by `TemplateIr` and read through the module-store
 ///   TIR view after construction.
 #[derive(Debug)]
 pub struct Template {
     /// Cached template-kind boundary marker.
     ///
-    /// WHAT: a durable copy of `TemplateIr.kind` that survives crossing into a
-    ///      parser context whose registry does not include the template's
-    ///      originating TIR store.
-    /// WHY: cross-store template-valued head expressions and children-directive
-    ///      values reach parser routing before the foreign store can be
-    ///      resolved. The cache lets those paths route correctly without
-    ///      silently skipping validation. It is not structural authority:
-    ///      classification, folding, finalization, and render-unit work read
-    ///      `TemplateIr.kind` from the store, registry, or view they already
-    ///      hold.
+    /// WHAT: a durable copy of `TemplateIr.kind` available to parser routing
+    ///      before the shared module store is borrowed.
+    /// WHY: the cache supplies an early kind marker without becoming structural
+    ///      authority. Classification, folding, finalization, and render-unit
+    ///      work read `TemplateIr.kind` from the module store or exact view.
     pub(crate) kind: TemplateType,
 
     /// Authoritative TIR reference.
     ///
-    /// WHAT: holds the store-qualified root, logical store-owner token, pipeline
-    ///       phase, and overlay-set ID.
-    /// WHY: this is the long-lived reference. The `TemplateRef` makes the owning
-    ///      store explicit for registry/view consumers, while the owner token
-    ///      distinguishes equal registry-local store IDs from different registries.
+    /// WHAT: holds the module-local root, pipeline phase, and overlay-set ID.
+    /// WHY: this long-lived reference carries the exact view and overlay identity
+    ///      needed by consumers of the shared module store.
     pub(crate) tir_reference: TemplateTirReference,
 
     pub location: SourceLocation,
@@ -326,8 +318,8 @@ impl Clone for Template {
     fn clone(&self) -> Self {
         Self {
             kind: self.kind.to_owned(),
-            // `tir_reference` contains an `Arc`-backed store owner, so a normal
-            // `clone()` is the explicit, cheap reference-count increment.
+            // `tir_reference` is a compact module-local identity; cloning it
+            // preserves the exact root, phase, and overlay context.
             tir_reference: self.tir_reference.clone(),
             location: self.location.to_owned(),
         }
@@ -364,7 +356,7 @@ impl Template {
 
         refresh_kind_from_classification(&mut kind, classification);
 
-        if !store.set_template_kind(self.tir_reference.root.template_id, kind.clone()) {
+        if !store.set_template_kind(self.tir_reference.root, kind.clone()) {
             return Err(CompilerError::compiler_error(
                 "Template TIR entry was missing during kind synchronization write-back.",
             ));
@@ -377,40 +369,12 @@ impl Template {
 
     /// Returns the authoritative template kind from the owning TIR store entry.
     ///
-    /// WHAT: reads `TemplateIr.kind` from the store after verifying the store
-    ///       owner matches this template's TIR reference.
-    /// WHY: `TemplateIr.kind` is the authoritative post-construction owner.
-    ///      Callers that hold the owning store read it here instead of the
-    ///      durable cache.
+    /// WHAT: reads `TemplateIr.kind` from the module-local store.
+    /// WHY: all template references are local to the store supplied by the
+    ///      active AST phase, so no separate identity qualification is needed.
     pub(crate) fn tir_kind_from_store(&self, store: &TemplateIrStore) -> Option<TemplateType> {
-        if self.tir_reference.root.store_id != store.store_id()
-            || !Arc::ptr_eq(&self.tir_reference.store_owner, &store.owner())
-        {
-            return None;
-        }
         store
-            .get_template(self.tir_reference.root.template_id)
-            .map(|template_ir| template_ir.kind.clone())
-    }
-
-    /// Returns the authoritative template kind by resolving the TIR reference
-    /// through the module registry.
-    ///
-    /// WHAT: borrows the registry, finds the owning store, and reads
-    ///       `TemplateIr.kind` after verifying the store owner matches.
-    /// WHY: callers that hold the module registry but not a direct store borrow
-    ///      use this to read the authoritative kind without a second cache.
-    pub(crate) fn tir_kind_via_registry(
-        &self,
-        registry: &TemplateIrRegistry,
-    ) -> Option<TemplateType> {
-        let store_handle = registry.store_handle(self.tir_reference.root.store_id)?;
-        let store = store_handle.borrow();
-        if !Arc::ptr_eq(&self.tir_reference.store_owner, &store.owner()) {
-            return None;
-        }
-        store
-            .get_template(self.tir_reference.root.template_id)
+            .get_template(self.tir_reference.root)
             .map(|template_ir| template_ir.kind.clone())
     }
 }

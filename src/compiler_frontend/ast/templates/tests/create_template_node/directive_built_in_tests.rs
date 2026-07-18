@@ -182,7 +182,7 @@ fn runtime_templates_format_static_body_strings_only() {
         .expect("template should parse");
 
     assert!(matches!(template.kind, TemplateType::StringFunction));
-    let store = context.registered_template_ir_store.store().borrow();
+    let store = context.template_ir_store.borrow();
     assert!(tir_root_has_head_dynamic_expression(
         &template,
         &store,

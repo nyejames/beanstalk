@@ -73,11 +73,7 @@ pub(super) fn parse_children_style_directive(
     // cannot determine how children are composed.
     let argument_is_compile_time_constant = directive_argument
         .const_value_kind_with_template_classifier(&mut |template| {
-            classify_template_from_effective_tir(
-                template,
-                context.registered_template_ir_store.registry(),
-                string_table,
-            )
+            classify_template_from_effective_tir(template, &context.template_ir_store)
         })
         .map_err(TemplateError::into_diagnostic)?
         .is_compile_time_value();
@@ -92,14 +88,23 @@ pub(super) fn parse_children_style_directive(
 
     // Normalize the argument at the directive boundary. Accepted wrappers
     // already have durable TIR authority, so later template construction
-    // carries only the exact store-qualified wrapper reference.
+    // carries only the module-local wrapper reference.
     let wrapper_reference = match directive_argument.kind {
         ExpressionKind::Template(child_template) => {
-            // The durable kind cache is the only kind source at this parser
-            // boundary: the child template may cross from a foreign TIR store
-            // whose registry is not resolvable from the receiving context.
+            let current_store = context.template_ir_store.borrow();
+            let child_kind = child_template
+                .tir_kind_from_store(&current_store)
+                .ok_or_else(|| {
+                    TemplateError::from(
+                        crate::compiler_frontend::compiler_errors::CompilerError::compiler_error(
+                            "`$children` referenced a template missing from the module TIR store.",
+                        ),
+                    )
+                    .into_diagnostic()
+                })
+                .map_err(Box::new)?;
             if matches!(
-                child_template.kind,
+                child_kind,
                 TemplateType::StringFunction
                     | TemplateType::SlotDefinition(_)
                     | TemplateType::SlotInsert(_)
@@ -112,13 +117,11 @@ pub(super) fn parse_children_style_directive(
                 )));
             }
 
-            let current_store = context.registered_template_ir_store.store().borrow();
-            let registry = context.registered_template_ir_store.registry().borrow();
             // The wrapper-reference helper reports internal authority failures
             // as `CompilerError`; carry them through `TemplateError` so the
             // diagnostic lane stays the infrastructure lane rather than a
             // fabricated user-facing directive diagnostic.
-            wrapper_reference_for_template(&child_template, &current_store, &registry)
+            wrapper_reference_for_template(&child_template, &current_store)
                 .map_err(TemplateError::from)
                 .map_err(TemplateError::into_diagnostic)
                 .map_err(Box::new)?
@@ -148,7 +151,7 @@ pub(super) fn parse_children_style_directive(
 /// Builds a TIR wrapper reference around a literal string id.
 ///
 /// The resulting wrapper records its literal body directly in the module-scoped
-/// parser TIR store and returns the durable store-qualified reference.
+/// parser TIR store and returns the durable module-local reference.
 fn normalize_string_child_wrapper_reference(
     value: StringId,
     argument_location: SourceLocation,
@@ -156,7 +159,7 @@ fn normalize_string_child_wrapper_reference(
     string_table: &StringTable,
 ) -> Result<TemplateWrapperReference, TemplateError> {
     let mut construction_context = TemplateConstructionContext::new(
-        context.registered_template_ir_store.clone(),
+        context.template_ir_store.clone(),
         argument_location.clone(),
     );
     construction_context.record_text(

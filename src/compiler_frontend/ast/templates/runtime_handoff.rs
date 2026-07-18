@@ -7,7 +7,7 @@
 //! WHAT: owns the data shapes and structural walkers that form the AST/HIR boundary for
 //! runtime templates and runtime slot applications.
 //! WHY: the data shape is the AST/HIR boundary contract. Defining it outside the TIR module
-//! keeps HIR independent of TIR-internal stores, views, overlays, and registry values while
+//! keeps HIR independent of TIR-internal stores, views, and overlays while
 //! keeping the handoff walkers co-located with the data they traverse.
 
 use crate::compiler_frontend::ast::expressions::expression::Expression;
@@ -60,8 +60,8 @@ pub(crate) enum OwnedRuntimeTemplateBody {
 /// Owned runtime-template node prepared for the AST/HIR boundary.
 ///
 /// WHAT: a self-contained, recursive tree representing one runtime template
-/// fragment. No field carries a TIR store ID, node ID, view, overlay, or
-/// registry value.
+/// fragment. No field carries a TIR store, node ID, view, overlay, or other
+/// TIR-internal value.
 /// WHY: HIR lowering consumes this shape directly; keeping it free of
 /// AST-stage identifiers lets the AST finalize and drop its TIR data before
 /// HIR runs.

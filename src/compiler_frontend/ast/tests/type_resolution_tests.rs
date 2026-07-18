@@ -10,8 +10,8 @@ use crate::compiler_frontend::ast::module_ast::scope_context::{ContextKind, Scop
 use crate::compiler_frontend::ast::templates::template::Template;
 use crate::compiler_frontend::ast::templates::template::{SlotKey, Style, TemplateType};
 use crate::compiler_frontend::ast::templates::tir::{
-    TemplateIrBuilder, TemplateIrRegistry, TemplateIrStore, TemplateIrSummary, TemplateOverlaySet,
-    TemplateOverlaySetId, TemplateRef, TemplateTirPhase, TemplateTirReference,
+    TemplateIrBuilder, TemplateIrStore, TemplateIrSummary, TemplateOverlaySetId, TemplateTirPhase,
+    TemplateTirReference,
 };
 use crate::compiler_frontend::ast::type_resolution::{
     TypeResolutionContext, resolve_diagnostic_type_to_type_id_checked,
@@ -503,8 +503,7 @@ Buffer = |
 /// Builds a slot-bearing template registered directly in a TIR store.
 ///
 /// WHAT: the Composed TIR root contains only a slot.
-/// WHY: struct-field const inlining must resolve the store-qualified root through the supplied
-///      module registry so defaults owned by another registered store remain valid.
+/// WHY: struct-field const inlining must resolve the root through the supplied module store.
 fn slot_field_default_template(template_ir_store: &mut TemplateIrStore) -> Template {
     let location = SourceLocation::default();
     let mut builder = TemplateIrBuilder::new(template_ir_store);
@@ -520,8 +519,7 @@ fn slot_field_default_template(template_ir_store: &mut TemplateIrStore) -> Templ
     Template {
         kind: TemplateType::String,
         tir_reference: TemplateTirReference {
-            root: TemplateRef::new(template_ir_store.store_id(), template_id),
-            store_owner: template_ir_store.owner(),
+            root: template_id,
             phase: TemplateTirPhase::Composed,
             overlay_set_id: TemplateOverlaySetId::empty_for_test(),
         },
@@ -530,13 +528,9 @@ fn slot_field_default_template(template_ir_store: &mut TemplateIrStore) -> Templ
 }
 
 #[test]
-fn struct_field_default_inlines_slot_template_through_module_registry() {
+fn struct_field_default_inlines_slot_template_through_module_store() {
     let mut string_table = StringTable::new();
     let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-    let mut template_ir_registry = TemplateIrRegistry::new();
-    template_ir_registry.allocate_overlay_set(TemplateOverlaySet::empty());
-    template_ir_registry.adopt_store(Rc::clone(&template_ir_store));
-    let template_ir_registry = Rc::new(RefCell::new(template_ir_registry));
     let mut type_environment = TypeEnvironment::new();
     let location = SourceLocation::default();
     let wrapper_path = InternedPath::from_single_str("wrapper", &mut string_table);
@@ -564,62 +558,11 @@ fn struct_field_default_inlines_slot_template_through_module_registry() {
         &struct_path,
         &[field],
         &mut resolution_context,
-        &template_ir_registry,
         &template_ir_store,
         &mut string_table,
     )
     .unwrap_or_else(|_| {
         panic!("slot-bearing const template should inline as a valid field default")
-    });
-
-    assert!(matches!(
-        resolved_fields[0].value.kind,
-        ExpressionKind::Template(_)
-    ));
-}
-
-#[test]
-fn struct_field_default_classifies_foreign_template_through_registry() {
-    let mut string_table = StringTable::new();
-    let primary_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-    let foreign_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-    let mut template_ir_registry = TemplateIrRegistry::new();
-    template_ir_registry.allocate_overlay_set(TemplateOverlaySet::empty());
-    template_ir_registry.adopt_store(Rc::clone(&primary_store));
-    template_ir_registry.adopt_store(Rc::clone(&foreign_store));
-    let template_ir_registry = Rc::new(RefCell::new(template_ir_registry));
-
-    let foreign_template = slot_field_default_template(&mut foreign_store.borrow_mut());
-    let wrapper_path = InternedPath::from_single_str("wrapper", &mut string_table);
-    let wrapper_declaration = Declaration {
-        id: wrapper_path.clone(),
-        value: Expression::template(foreign_template, ValueMode::ImmutableOwned),
-    };
-    let mut type_environment = TypeEnvironment::new();
-    let declaration_table = Rc::new(TopLevelDeclarationTable::new(vec![wrapper_declaration]));
-    let mut resolution_context =
-        TypeResolutionContext::from_declaration_table(&declaration_table, &mut type_environment);
-    let struct_path = InternedPath::from_single_str("Card", &mut string_table);
-    let field = Declaration {
-        id: struct_path.clone().append(string_table.intern("content")),
-        value: Expression::reference(
-            wrapper_path,
-            DataType::Template,
-            SourceLocation::default(),
-            ValueMode::ImmutableReference,
-        ),
-    };
-
-    let resolved_fields = resolve_struct_field_types(
-        &struct_path,
-        &[field],
-        &mut resolution_context,
-        &template_ir_registry,
-        &primary_store,
-        &mut string_table,
-    )
-    .unwrap_or_else(|_| {
-        panic!("foreign slot-bearing template constant should inline as a valid field default")
     });
 
     assert!(matches!(

@@ -11,9 +11,8 @@ use crate::compiler_frontend::ast::templates::template::{
     CommentDirectiveKind, Style, TemplateSegmentOrigin, TemplateType,
 };
 use crate::compiler_frontend::ast::templates::tir::{
-    TemplateIr, TemplateIrBuilder, TemplateIrRegistry, TemplateIrStore, TemplateIrSummary,
-    TemplateOverlaySet, TemplateRef, TemplateTirPhase, TemplateTirReference, TirView,
-    format_tir_template,
+    TemplateIr, TemplateIrBuilder, TemplateIrStore, TemplateIrSummary, TemplateOverlaySet,
+    TemplateTirPhase, TemplateTirReference, format_tir_template,
 };
 use crate::compiler_frontend::ast::templates::top_level_templates::FoldedConstTemplateResult;
 use crate::compiler_frontend::compiler_messages::{
@@ -34,7 +33,6 @@ use crate::projects::settings::{DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS, IMPLICIT
 use rustc_hash::FxHashMap;
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::sync::Arc;
 
 fn test_location(line: i32) -> SourceLocation {
     SourceLocation {
@@ -98,10 +96,10 @@ fn test_project_path_resolver() -> ProjectPathResolver {
     .expect("test path resolver should be valid")
 }
 
-fn collect_and_strip_comment_templates_for_tests_with_registry(
+fn collect_and_strip_comment_templates_for_tests_with_store(
     ast_nodes: &mut [AstNode],
     string_table: &mut StringTable,
-    template_ir_registry: Rc<RefCell<TemplateIrRegistry>>,
+    template_ir_store: Rc<RefCell<TemplateIrStore>>,
 ) -> Result<Vec<AstDocFragment>, TemplateError> {
     let resolver = test_project_path_resolver();
     collect_and_strip_comment_templates(
@@ -110,7 +108,7 @@ fn collect_and_strip_comment_templates_for_tests_with_registry(
         &PathStringFormatConfig::default(),
         string_table,
         DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
-        Some(template_ir_registry),
+        template_ir_store,
     )
 }
 
@@ -220,7 +218,7 @@ fn collects_top_level_doc_fragments_in_source_order() {
 fn formatted_doc_template_with_direct_tir(
     text: &str,
     string_table: &mut StringTable,
-) -> (Template, Rc<RefCell<TemplateIrRegistry>>) {
+) -> (Template, Rc<RefCell<TemplateIrStore>>) {
     let location = test_location(2);
     let text_id = string_table.intern(text);
     let byte_len = text.len() as u32;
@@ -259,21 +257,19 @@ fn formatted_doc_template_with_direct_tir(
     };
 
     let store_handle = Rc::new(RefCell::new(store));
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.adopt_store(Rc::clone(&store_handle));
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let overlay_set_id = store_handle
+        .borrow_mut()
+        .allocate_overlay_set(TemplateOverlaySet::empty());
 
-    let root_ref = TemplateRef::new(store_id, parsed_template_id);
-    let view = TirView::new(
-        &registry,
-        root_ref,
+    let formatter_result = format_tir_template(
+        &mut store_handle.borrow_mut(),
+        parsed_template_id,
         TemplateTirPhase::Parsed,
         overlay_set_id,
+        &style,
+        string_table,
     )
-    .expect("TIR view should be valid");
-
-    let formatter_result =
-        format_tir_template(&view, &style, string_table).expect("TIR formatter should succeed");
+    .expect("TIR formatter should succeed");
 
     let formatted_template_id = store_handle.borrow_mut().push_template(TemplateIr::new(
         formatter_result.root,
@@ -286,16 +282,14 @@ fn formatted_doc_template_with_direct_tir(
     let template = Template {
         kind: TemplateType::Comment(CommentDirectiveKind::Doc),
         tir_reference: TemplateTirReference {
-            root: TemplateRef::new(store_id, formatted_template_id),
-            store_owner: Arc::clone(&store_handle.borrow().owner()),
+            root: formatted_template_id,
             phase: TemplateTirPhase::Formatted,
             overlay_set_id,
         },
         location,
     };
 
-    let registry = Rc::new(RefCell::new(registry));
-    (template, registry)
+    (template, store_handle)
 }
 
 #[test]
@@ -318,7 +312,7 @@ fn doc_fragment_folding_reads_directly_constructed_formatted_tir_root() {
         &mut string_table,
     )];
 
-    let doc_fragments = collect_and_strip_comment_templates_for_tests_with_registry(
+    let doc_fragments = collect_and_strip_comment_templates_for_tests_with_store(
         &mut ast_nodes,
         &mut string_table,
         registry,

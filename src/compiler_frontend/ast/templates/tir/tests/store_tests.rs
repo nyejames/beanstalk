@@ -2,7 +2,7 @@ use super::super::builder::TemplateIrBuilder;
 use super::super::ids::TemplateIrId;
 use super::super::node::{TemplateIr, TemplateIrNode, TemplateIrNodeKind};
 use super::super::overlays::TemplateOverlaySetId;
-use super::super::refs::{TemplateStoreId, TemplateWrapperReference};
+use super::super::refs::TemplateWrapperReference;
 use super::super::slot_plan::{TemplateSlotPlan, TemplateSlotSitePlan, TemplateSlotSiteRenderPlan};
 use super::super::store::TemplateIrStore;
 use super::super::summary::TemplateIrSummary;
@@ -180,10 +180,9 @@ fn get_wrapper_set_returns_stored_entry() {
     let mut store = TemplateIrStore::new();
 
     let wrapper_id = build_finalized_tir_template(&mut store);
-    let wrapper_ref = store.qualify_template_ref(wrapper_id);
     let id = store.push_wrapper_set(super::super::store::TemplateWrapperSet {
         wrappers: vec![TemplateWrapperReference::new(
-            wrapper_ref,
+            wrapper_id,
             TemplateTirPhase::Finalized,
             TemplateOverlaySetId::empty(),
         )],
@@ -191,7 +190,7 @@ fn get_wrapper_set_returns_stored_entry() {
 
     let retrieved = store.get_wrapper_set(id).expect("wrapper set should exist");
     assert_eq!(retrieved.wrappers.len(), 1);
-    assert_eq!(retrieved.wrappers[0].root, wrapper_ref);
+    assert_eq!(retrieved.wrappers[0].root, wrapper_id);
 }
 
 #[test]
@@ -224,7 +223,7 @@ fn push_or_reuse_wrapper_set_creates_new_for_different_lengths() {
 
     let id_a = store.push_or_reuse_wrapper_set(vec![]);
     let id_b = store.push_or_reuse_wrapper_set(vec![TemplateWrapperReference::new(
-        store.qualify_template_ref(wrapper_id),
+        wrapper_id,
         TemplateTirPhase::Finalized,
         TemplateOverlaySetId::empty(),
     )]);
@@ -242,12 +241,12 @@ fn push_or_reuse_wrapper_set_reuses_same_template_id() {
     let template_id = build_finalized_tir_template(&mut store);
 
     let id_a = store.push_or_reuse_wrapper_set(vec![TemplateWrapperReference::new(
-        store.qualify_template_ref(template_id),
+        template_id,
         TemplateTirPhase::Finalized,
         TemplateOverlaySetId::empty(),
     )]);
     let id_b = store.push_or_reuse_wrapper_set(vec![TemplateWrapperReference::new(
-        store.qualify_template_ref(template_id),
+        template_id,
         TemplateTirPhase::Finalized,
         TemplateOverlaySetId::empty(),
     )]);
@@ -267,12 +266,12 @@ fn push_or_reuse_wrapper_set_does_not_reuse_different_template_ids() {
     let wrapper_b = build_finalized_tir_template(&mut store);
 
     let id_a = store.push_or_reuse_wrapper_set(vec![TemplateWrapperReference::new(
-        store.qualify_template_ref(wrapper_a),
+        wrapper_a,
         TemplateTirPhase::Finalized,
         TemplateOverlaySetId::empty(),
     )]);
     let id_b = store.push_or_reuse_wrapper_set(vec![TemplateWrapperReference::new(
-        store.qualify_template_ref(wrapper_b),
+        wrapper_b,
         TemplateTirPhase::Finalized,
         TemplateOverlaySetId::empty(),
     )]);
@@ -282,60 +281,4 @@ fn push_or_reuse_wrapper_set_does_not_reuse_different_template_ids() {
         "wrapper sets referencing different TemplateIrIds should not reuse"
     );
     assert_eq!(store.wrapper_sets.len(), 2);
-}
-
-// -------------------------
-//  Store-Qualified Wrapper Ref Tests
-// -------------------------
-
-#[test]
-fn push_or_reuse_wrapper_set_stores_store_qualified_refs() {
-    let mut store = TemplateIrStore::new();
-
-    let wrapper_id = build_finalized_tir_template(&mut store);
-    let set_id = store.push_or_reuse_wrapper_set(vec![TemplateWrapperReference::new(
-        store.qualify_template_ref(wrapper_id),
-        TemplateTirPhase::Finalized,
-        TemplateOverlaySetId::empty(),
-    )]);
-
-    let wrapper_set = store
-        .get_wrapper_set(set_id)
-        .expect("wrapper set should exist");
-
-    // Each entry must be a store-qualified TemplateRef, not a bare TemplateIrId.
-    assert_eq!(wrapper_set.wrappers.len(), 1);
-    let reference = &wrapper_set.wrappers[0];
-    assert_eq!(reference.root.store_id, store.store_id());
-    assert_eq!(reference.root.template_id, wrapper_id);
-}
-
-#[test]
-fn qualify_template_ref_pairs_store_id_with_template_id() {
-    let store = TemplateIrStore::new();
-
-    let template_id = TemplateIrId::new(3);
-    let reference = store.qualify_template_ref(template_id);
-
-    assert_eq!(reference.store_id, store.store_id());
-    assert_eq!(reference.template_id, template_id);
-}
-
-#[test]
-fn store_id_defaults_to_zero_for_directly_constructed_stores() {
-    let store = TemplateIrStore::new();
-    assert_eq!(store.store_id(), TemplateStoreId::new(0));
-}
-
-#[test]
-fn set_store_id_stamps_registry_assigned_id() {
-    let mut store = TemplateIrStore::new();
-    let new_id = TemplateStoreId::new(7);
-    store.set_store_id(new_id);
-
-    assert_eq!(store.store_id(), new_id);
-
-    // Qualifying a template ref should use the new store ID.
-    let reference = store.qualify_template_ref(TemplateIrId::new(0));
-    assert_eq!(reference.store_id, new_id);
 }

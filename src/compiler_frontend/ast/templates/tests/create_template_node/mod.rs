@@ -156,7 +156,7 @@ fn fold_template_in_context(
     context: &ScopeContext,
     string_table: &mut StringTable,
 ) -> StringId {
-    // Every caller supplies a parser-emitted or direct-registry-qualified TIR
+    // Every caller supplies a parser-emitted or direct module-local TIR
     // reference, so folding never needs a content-finalizer fallback here.
 
     let mut fold_context = context
@@ -169,7 +169,7 @@ fn fold_template_in_context(
 
 fn effective_tir_style(template: &Template, context: &ScopeContext) -> Style {
     let reference = &template.tir_reference;
-    let registry = context.registered_template_ir_store.registry().borrow();
+    let registry = context.template_ir_store.borrow();
     let view = TirView::new(
         &registry,
         reference.root,
@@ -377,7 +377,7 @@ fn collect_body_text_from_tir(
     string_table: &StringTable,
 ) -> Vec<String> {
     let reference = &template.tir_reference;
-    let template_ir = match store.get_template(reference.root.template_id) {
+    let template_ir = match store.get_template(reference.root) {
         Some(t) => t,
         None => return Vec::new(),
     };
@@ -414,7 +414,7 @@ fn tir_root_has_head_dynamic_expression(
     predicate: impl Fn(&Expression) -> bool,
 ) -> bool {
     let reference = &template.tir_reference;
-    let Some(template_ir) = store.get_template(reference.root.template_id) else {
+    let Some(template_ir) = store.get_template(reference.root) else {
         return false;
     };
     let Some(root) = store.get_node(template_ir.root) else {

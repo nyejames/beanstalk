@@ -208,12 +208,12 @@ pub(crate) enum TemplateIrNodeKind {
 
     /// Opaque child template reference.
     ChildTemplate {
-        /// Store-qualified view identity for the referenced child template.
+        /// Module-local view identity for the referenced child template.
         ///
         /// WHAT: carries the root, phase, and overlay set needed to build a
         /// precise [`TirView`](super::view::TirView) when this child is folded.
-        /// WHY: a bare `TemplateIrId` is not enough for cross-store folding or
-        /// for cache keys that include phase and overlay context.
+        /// WHY: a bare `TemplateIrId` is not enough for precise folding or for
+        /// cache keys that include phase and overlay context.
         reference: TemplateTirChildReference,
 
         /// Document-order occurrence ID assigned when this node is emitted.

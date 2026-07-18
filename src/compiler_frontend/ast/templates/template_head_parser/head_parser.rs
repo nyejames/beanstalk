@@ -133,11 +133,11 @@ fn expression_contains_runtime_slot_handoff(
     expression: &Expression,
     context: &ScopeContext,
 ) -> bool {
-    let registry = context.registered_template_ir_store.registry().borrow();
+    let store = context.template_ir_store.borrow();
 
     let mut contains_runtime_slot_handoff = false;
     let walk_result =
-        walk_expression_payloads_with_nested_tir_views(expression, &registry, &mut |payload| {
+        walk_expression_payloads_with_nested_tir_views(expression, &store, &mut |payload| {
             if matches!(
                 payload.kind,
                 ExpressionKind::RuntimeSlotApplicationHandoff(_)

@@ -7,9 +7,7 @@ use crate::compiler_frontend::ast::expressions::eval_expression::evaluate_expres
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::expressions::expression_rpn::ExpressionRpnItem;
 use crate::compiler_frontend::ast::templates::error::TemplateError;
-use crate::compiler_frontend::ast::templates::tir::{
-    RegisteredTemplateIrStore, TemplateIrRegistry, TemplateIrStore,
-};
+use crate::compiler_frontend::ast::templates::tir::TemplateIrStore;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::ast::type_resolution::{
     TypeResolutionContext, resolve_diagnostic_type_to_type_id_checked,
@@ -96,7 +94,6 @@ pub(crate) fn resolve_struct_field_types(
     struct_path: &InternedPath,
     fields: &[Declaration],
     type_resolution_context: &mut TypeResolutionContext<'_>,
-    template_ir_registry: &Rc<RefCell<TemplateIrRegistry>>,
     template_ir_store: &Rc<RefCell<TemplateIrStore>>,
     string_table: &mut StringTable,
 ) -> Result<Vec<Declaration>, StructFieldResolutionError> {
@@ -105,7 +102,6 @@ pub(crate) fn resolve_struct_field_types(
     resolve_struct_field_defaults(
         &mut resolved_fields,
         type_resolution_context,
-        template_ir_registry,
         template_ir_store,
         string_table,
     )?;
@@ -196,7 +192,7 @@ fn resolve_struct_field_type_shells(
     Ok(resolved_fields)
 }
 
-/// Inline visible constants, then validate each final field default through the module registry.
+/// Inline visible constants, then validate each final field default through the module TIR store.
 ///
 /// WHAT: final struct definitions resolve default values after all constant headers are available.
 /// WHY: constructor shells need only field types, so keeping default classification here avoids
@@ -204,7 +200,6 @@ fn resolve_struct_field_type_shells(
 fn resolve_struct_field_defaults(
     resolved_fields: &mut [Declaration],
     type_resolution_context: &mut TypeResolutionContext<'_>,
-    template_ir_registry: &Rc<RefCell<TemplateIrRegistry>>,
     template_ir_store: &Rc<RefCell<TemplateIrStore>>,
     string_table: &mut StringTable,
 ) -> Result<(), StructFieldResolutionError> {
@@ -215,17 +210,16 @@ fn resolve_struct_field_defaults(
             type_resolution_context.declaration_table,
             type_resolution_context.visible_declaration_ids,
             type_environment,
-            template_ir_registry,
             template_ir_store,
             string_table,
         )?;
 
-        // Reference eligibility and final validation use the same registry authority. Runtime
-        // expression rebuilding still evaluates through the active primary store.
+        // Reference eligibility and final validation use the same module-store view authority.
+        // Runtime expression rebuilding still evaluates through the active module store.
         let default_value_is_constant = resolved_field
             .value
             .const_value_kind_with_template_classifier(&mut |template| {
-                classify_template_from_effective_tir(template, template_ir_registry, string_table)
+                classify_template_from_effective_tir(template, template_ir_store)
             })?
             .is_compile_time_value();
 
@@ -251,7 +245,6 @@ fn inline_visible_constant_references(
     declaration_table: &Rc<TopLevelDeclarationTable>,
     visible_declaration_ids: Option<&FxHashSet<InternedPath>>,
     type_environment: &mut TypeEnvironment,
-    template_ir_registry: &Rc<RefCell<TemplateIrRegistry>>,
     template_ir_store: &Rc<RefCell<TemplateIrStore>>,
     string_table: &mut StringTable,
 ) -> Result<Expression, StructFieldResolutionError> {
@@ -260,7 +253,6 @@ fn inline_visible_constant_references(
         declaration_table,
         visible_declaration_ids,
         type_environment,
-        template_ir_registry,
         template_ir_store,
         string_table,
     )
@@ -271,7 +263,6 @@ fn inline_visible_constant_references_impl(
     declaration_table: &Rc<TopLevelDeclarationTable>,
     visible_declaration_ids: Option<&FxHashSet<InternedPath>>,
     type_environment: &mut TypeEnvironment,
-    template_ir_registry: &Rc<RefCell<TemplateIrRegistry>>,
     template_ir_store: &Rc<RefCell<TemplateIrStore>>,
     string_table: &mut StringTable,
 ) -> Result<Expression, StructFieldResolutionError> {
@@ -282,8 +273,7 @@ fn inline_visible_constant_references_impl(
                 path,
                 declaration_table,
                 visible_declaration_ids,
-                template_ir_registry,
-                string_table,
+                template_ir_store,
             )?;
 
             Ok(inlinable_declaration
@@ -305,18 +295,12 @@ fn inline_visible_constant_references_impl(
                     declaration_table,
                     visible_declaration_ids,
                     type_environment,
-                    template_ir_registry,
                     template_ir_store,
                     string_table,
                 )?);
             }
 
             let mut current_type = ExpectedType::Known(expression.type_id);
-
-            let registered_template_ir_store = RegisteredTemplateIrStore::from_registry_and_store(
-                Rc::clone(template_ir_registry),
-                Rc::clone(template_ir_store),
-            )?;
 
             let mut evaluation_context = ScopeContext::new(
                 ContextKind::ConstantHeader,
@@ -325,7 +309,7 @@ fn inline_visible_constant_references_impl(
                 Arc::new(ExternalPackageRegistry::new()),
                 Vec::new(),
                 0,
-                registered_template_ir_store,
+                Rc::clone(template_ir_store),
             );
 
             if let Some(visible) = visible_declaration_ids {
@@ -363,7 +347,6 @@ fn inline_visible_constant_references_impl(
                     declaration_table,
                     visible_declaration_ids,
                     type_environment,
-                    template_ir_registry,
                     template_ir_store,
                     string_table,
                 )?);
@@ -387,7 +370,6 @@ fn inline_visible_constant_references_impl(
                         declaration_table,
                         visible_declaration_ids,
                         type_environment,
-                        template_ir_registry,
                         template_ir_store,
                         string_table,
                     )?,
@@ -409,7 +391,6 @@ fn inline_visible_constant_references_impl(
                     declaration_table,
                     visible_declaration_ids,
                     type_environment,
-                    template_ir_registry,
                     template_ir_store,
                     string_table,
                 )?),
@@ -418,7 +399,6 @@ fn inline_visible_constant_references_impl(
                     declaration_table,
                     visible_declaration_ids,
                     type_environment,
-                    template_ir_registry,
                     template_ir_store,
                     string_table,
                 )?),
@@ -437,7 +417,6 @@ fn inline_visible_constant_references_impl(
                         declaration_table,
                         visible_declaration_ids,
                         type_environment,
-                        template_ir_registry,
                         template_ir_store,
                         string_table,
                     )?),
@@ -454,7 +433,6 @@ fn inline_visible_constant_references_impl(
                     declaration_table,
                     visible_declaration_ids,
                     type_environment,
-                    template_ir_registry,
                     template_ir_store,
                     string_table,
                 )?),
@@ -471,16 +449,14 @@ fn visible_compile_time_constant_reference<'a>(
     path: &InternedPath,
     declaration_table: &'a Rc<TopLevelDeclarationTable>,
     visible_declaration_ids: Option<&FxHashSet<InternedPath>>,
-    template_ir_registry: &Rc<RefCell<TemplateIrRegistry>>,
-    string_table: &StringTable,
+    template_ir_store: &Rc<RefCell<TemplateIrStore>>,
 ) -> Result<Option<&'a Declaration>, StructFieldResolutionError> {
     if let Some(declaration) =
         declaration_table.get_visible_resolved_by_path(path, visible_declaration_ids)
     {
         let declaration_is_constant = expression_is_compile_time_constant_from_effective_tir(
             &declaration.value,
-            template_ir_registry,
-            string_table,
+            template_ir_store,
         )?;
 
         if declaration_is_constant {
@@ -500,8 +476,7 @@ fn visible_compile_time_constant_reference<'a>(
 
     if expression_is_compile_time_constant_from_effective_tir(
         &declaration.value,
-        template_ir_registry,
-        string_table,
+        template_ir_store,
     )? {
         return Ok(Some(declaration));
     }
@@ -511,12 +486,11 @@ fn visible_compile_time_constant_reference<'a>(
 
 fn expression_is_compile_time_constant_from_effective_tir(
     expression: &Expression,
-    template_ir_registry: &Rc<RefCell<TemplateIrRegistry>>,
-    string_table: &StringTable,
+    template_ir_store: &Rc<RefCell<TemplateIrStore>>,
 ) -> Result<bool, StructFieldResolutionError> {
     Ok(expression
         .const_value_kind_with_template_classifier(&mut |template| {
-            classify_template_from_effective_tir(template, template_ir_registry, string_table)
+            classify_template_from_effective_tir(template, template_ir_store)
         })?
         .is_compile_time_value())
 }
@@ -546,7 +520,6 @@ fn inline_visible_constant_references_in_rpn_item(
     declaration_table: &Rc<TopLevelDeclarationTable>,
     visible_declaration_ids: Option<&FxHashSet<InternedPath>>,
     type_environment: &mut TypeEnvironment,
-    template_ir_registry: &Rc<RefCell<TemplateIrRegistry>>,
     template_ir_store: &Rc<RefCell<TemplateIrStore>>,
     string_table: &mut StringTable,
 ) -> Result<ExpressionRpnItem, StructFieldResolutionError> {
@@ -557,7 +530,6 @@ fn inline_visible_constant_references_in_rpn_item(
                 declaration_table,
                 visible_declaration_ids,
                 type_environment,
-                template_ir_registry,
                 template_ir_store,
                 string_table,
             )?,

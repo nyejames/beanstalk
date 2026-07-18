@@ -235,7 +235,7 @@ fn push_child_template_node_stores_child_id() {
         .expect("child template node should exist");
     match &node.kind {
         TemplateIrNodeKind::ChildTemplate { reference, .. } => {
-            assert_eq!(reference.root.template_id, child_template_id);
+            assert_eq!(reference.root, child_template_id);
         }
         other => panic!("expected ChildTemplate node, got {other:?}"),
     }

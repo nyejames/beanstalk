@@ -29,8 +29,6 @@ use crate::compiler_frontend::paths::rendered_path_usage::resolve_compile_time_p
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation};
-use crate::compiler_frontend::value_mode::ValueMode;
-use std::sync::Arc;
 
 pub(super) struct TemplateHeadExpressionContext<'a> {
     pub(super) context: &'a ScopeContext,
@@ -101,61 +99,54 @@ pub(super) fn handle_template_value_in_template_head(
     construction_context: &mut TemplateConstructionContext,
     location: &SourceLocation,
 ) -> HeadExpressionResult<()> {
-    // The durable kind cache is the only kind source available at this parser
-    // boundary: the template value may cross from a foreign TIR store whose
-    // registry is not resolvable from the receiving context.
-    let template_kind = &value.kind;
+    let template_kind = {
+        let store = context.template_ir_store.borrow();
+        value
+            .tir_kind_from_store(&store)
+            .ok_or_else(|| {
+                TemplateError::from(
+                    crate::compiler_frontend::compiler_errors::CompilerError::compiler_error(
+                        "Template head value was missing from the module TIR store.",
+                    ),
+                )
+                .into_diagnostic()
+            })
+            .map_err(Box::new)?
+    };
 
-    if context.kind.is_constant_context() && matches!(template_kind, TemplateType::StringFunction) {
+    if context.kind.is_constant_context() && matches!(&template_kind, TemplateType::StringFunction)
+    {
         return Err(Box::new(CompilerDiagnostic::invalid_template_structure(
             InvalidTemplateStructureReason::RuntimeTemplateInConst,
             location.to_owned(),
         )));
     }
 
-    if matches!(template_kind, TemplateType::Comment(_)) {
+    if matches!(&template_kind, TemplateType::Comment(_)) {
         return Ok(());
     }
 
-    if matches!(template_kind, TemplateType::SlotDefinition(_)) {
+    if matches!(&template_kind, TemplateType::SlotDefinition(_)) {
         return Err(Box::new(CompilerDiagnostic::invalid_template_structure(
             InvalidTemplateStructureReason::SlotInHead,
             location.to_owned(),
         )));
     }
 
-    let head_expression = Expression::template(value.to_owned(), ValueMode::ImmutableOwned);
-
-    // Record parser TIR child-template references only when the referenced
-    // template was parsed into the same module-scoped store. Imported or
-    // cross-context template values must not have their raw `TemplateIrId` reused
-    // here because IDs are only valid inside their originating store.
-    let store_owner = construction_context.store_owner();
-    let same_store = Arc::ptr_eq(&value.tir_reference.store_owner, &store_owner);
-
-    if same_store {
-        let child_reference = &value.tir_reference;
-        // `$insert("name")` helpers are slot contributions, not ordinary child
-        // template output. Recording them as `InsertContribution` nodes lets
-        // TIR-native slot routing bucket them by the helper's target slot key
-        // rather than treating them as loose fill content.
-        if matches!(template_kind, TemplateType::SlotInsert(_)) {
-            construction_context
-                .record_insert_contribution(child_reference.root.template_id, location.to_owned());
-        } else {
-            construction_context.record_child_template(
-                child_reference,
-                TemplateSegmentOrigin::Head,
-                location.to_owned(),
-            );
-        }
-        return Ok(());
+    let child_reference = &value.tir_reference;
+    // `$insert("name")` helpers are slot contributions, not ordinary child
+    // template output. Recording them as `InsertContribution` nodes lets
+    // TIR-native slot routing bucket them by the helper's target slot key
+    // rather than treating them as loose fill content.
+    if matches!(&template_kind, TemplateType::SlotInsert(_)) {
+        construction_context.record_insert_contribution(child_reference.root, location.to_owned());
+    } else {
+        construction_context.record_child_template(
+            child_reference,
+            TemplateSegmentOrigin::Head,
+            location.to_owned(),
+        );
     }
-
-    // Cross-store child templates cannot be referenced by ID. Represent the
-    // head template as an opaque dynamic expression so parser TIR still
-    // records head output in source order without an unsafe child reference.
-    construction_context.record_head_dynamic_expression(head_expression, None, location.to_owned());
 
     Ok(())
 }
@@ -188,11 +179,7 @@ pub(super) fn push_template_head_expression(
     let expression_is_compile_time_constant = if expression_needs_constness {
         expression
             .const_value_kind_with_template_classifier(&mut |template| {
-                classify_template_from_effective_tir(
-                    template,
-                    target.context.registered_template_ir_store.registry(),
-                    string_table,
-                )
+                classify_template_from_effective_tir(template, &target.context.template_ir_store)
             })
             .map_err(TemplateError::into_diagnostic)?
             .is_compile_time_value()

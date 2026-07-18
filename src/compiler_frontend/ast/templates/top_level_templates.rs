@@ -9,7 +9,7 @@
 use crate::compiler_frontend::ast::ast_nodes::AstNode;
 use crate::compiler_frontend::ast::templates::doc_fragments;
 use crate::compiler_frontend::ast::templates::error::TemplateError;
-use crate::compiler_frontend::ast::templates::tir::TemplateIrRegistry;
+use crate::compiler_frontend::ast::templates::tir::TemplateIrStore;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::headers::parse_file_headers::TopLevelConstFragment;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
@@ -42,7 +42,7 @@ pub struct AstConstTopLevelFragment {
 /// Folded value for a top-level const template.
 ///
 /// WHAT: carries the already-folded string value produced from the template's
-///       registry-backed TIR authority.
+///       shared TIR authority.
 /// WHY: top-level fragment collection is keyed by source file and consumes the
 ///      folded value after AST emission has already validated and folded the
 ///      template.
@@ -117,7 +117,7 @@ pub(crate) fn collect_and_strip_comment_templates(
     path_format_config: &PathStringFormatConfig,
     string_table: &mut StringTable,
     template_const_loop_iteration_limit: usize,
-    template_ir_registry: Option<Rc<RefCell<TemplateIrRegistry>>>,
+    template_ir_store: Rc<RefCell<TemplateIrStore>>,
 ) -> Result<Vec<AstDocFragment>, TemplateError> {
     doc_fragments::collect_and_strip_comment_templates(
         ast_nodes,
@@ -125,7 +125,7 @@ pub(crate) fn collect_and_strip_comment_templates(
         path_format_config,
         string_table,
         template_const_loop_iteration_limit,
-        template_ir_registry,
+        template_ir_store,
     )
 }
 

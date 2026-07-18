@@ -46,17 +46,11 @@ use super::schema::expand_tir_slot_placeholders_into;
 type ChildWrapperResult<T> = Result<T, Box<CompilerDiagnostic>>;
 
 #[cfg(test)]
-use super::helpers::ComposedTirRoot;
 #[cfg(test)]
 use super::helpers::rebuild_root_sequence;
 #[cfg(test)]
-use super::overlays::allocate_slot_resolution_overlay_set;
 #[cfg(test)]
 use super::schema::tir_template_has_unresolved_slots;
-#[cfg(test)]
-use crate::compiler_frontend::ast::templates::tir::TemplateStoreId;
-#[cfg(test)]
-use crate::compiler_frontend::ast::templates::tir::registry::TemplateIrRegistry;
 #[cfg(test)]
 use crate::compiler_frontend::instrumentation::{
     AstCounter, add_ast_counter, increment_ast_counter,
@@ -91,7 +85,7 @@ pub(crate) fn apply_tir_child_wrappers(
 /// Internal child-wrapper application that also collects slot-bearing
 /// wrapper/fill pairs into `slot_compositions` for later overlay allocation.
 ///
-/// WHY: the registry-level entry point (`apply_tir_child_wrappers_with_overlays`)
+/// WHY: the slot-composition entry point (`wrap_tir_node_in_wrappers_into`)
 ///      needs the pairs to allocate slot-resolution overlays after the store
 ///      borrow is released. The public `apply_tir_child_wrappers` discards them.
 #[cfg(test)]
@@ -146,13 +140,7 @@ fn apply_tir_child_wrappers_into(
         if index >= body_start_index
             && let TemplateIrNodeKind::ChildTemplate { reference, .. } = &child_node.kind
         {
-            let child_template_id = reference
-                .template_id_in_store(store.store_id())
-                .ok_or_else(|| {
-                    internal_compiler_error(
-                        "TIR child wrapper application: child template reference is not in the current store.",
-                    )
-                })?;
+            let child_template_id = reference.root;
 
             // Direct children are templates that produce output, not wrappers
             // that still need to receive content. A child with unresolved slots
@@ -189,53 +177,6 @@ fn apply_tir_child_wrappers_into(
     rebuild_root_sequence(store, root_node_id, new_children)
 }
 
-/// Applies `$children(..)` wrappers on a registry-owned store and threads a
-/// non-empty slot-resolution overlay-set ID onto the result when the
-/// composition resolved one or more slot-bearing wrappers.
-///
-/// WHAT: runs the existing store-local child-wrapper application (unchanged
-///       behavior), collects slot-bearing wrapper/fill pairs, then releases
-///       the store borrow and allocates the overlay set through the registry.
-///       See `compose_tir_head_chain_with_overlays` for the borrow strategy.
-/// WHY: production composition call sites need both the wrapped root for
-///      structural expansion and the overlay-set ID for `TemplateTirReference`
-///      threading.
-#[cfg(test)]
-pub(crate) fn apply_tir_child_wrappers_with_overlays(
-    registry: &mut TemplateIrRegistry,
-    store_id: TemplateStoreId,
-    template_id: TemplateIrId,
-    wrapper_template_ids: &[TemplateIrId],
-    string_table: &StringTable,
-) -> ChildWrapperResult<ComposedTirRoot> {
-    let (wrapped_root, slot_compositions) = {
-        let store_handle = registry.store_handle(store_id).ok_or_else(|| {
-            internal_compiler_error(
-                "TIR child-wrapper overlay composition: store ID was not present in the registry.",
-            )
-        })?;
-
-        let mut store = store_handle.borrow_mut();
-        let mut slot_compositions = Vec::new();
-        let wrapped_root = apply_tir_child_wrappers_into(
-            &mut store,
-            template_id,
-            wrapper_template_ids,
-            string_table,
-            &mut slot_compositions,
-        )?;
-        (wrapped_root, slot_compositions)
-    };
-
-    let slot_overlay_set_id =
-        allocate_slot_resolution_overlay_set(registry, store_id, &slot_compositions, string_table)?;
-
-    Ok(ComposedTirRoot {
-        root: wrapped_root,
-        slot_overlay_set_id,
-    })
-}
-
 /// Wraps a single direct child `ChildTemplate` node in all inherited wrappers.
 ///
 /// WHAT: iterates the wrapper list in reverse (outermost-first), composing each
@@ -262,7 +203,7 @@ pub(crate) fn wrap_tir_node_in_wrappers(
 /// Internal wrapper application that also collects slot-bearing wrapper/fill
 /// pairs into `slot_compositions` for later overlay allocation.
 ///
-/// WHY: the registry-level child-wrapper entry point needs the pairs to
+/// WHY: the slot-composition child-wrapper entry point needs the pairs to
 ///      allocate slot-resolution overlays. The public
 ///      `wrap_tir_node_in_wrappers` discards them so callers outside
 ///      `slot_composition.rs` (fold, render-unit preparation) keep the same
@@ -331,26 +272,24 @@ pub(super) fn wrap_tir_node_in_wrappers_into(
             let composed_template_id =
                 build_composed_wrapper_template(store, copied_wrapper_template_id, expanded_root)?;
 
-            // Record the wrapper/fill pair so the registry-level entry point can
-            // allocate a slot-resolution overlay after the store borrow is
+            // Record the wrapper/fill pair so the slot-composition entry point
+            // can allocate a slot-resolution overlay after the store borrow is
             // released. The fill template persists in the store, so the overlay
             // path can re-route against it without re-discovering the wrappers.
-            let wrapper_reference = TemplateTirChildReference::same_store(
+            let wrapper_reference = TemplateTirChildReference::new(
                 copied_wrapper_template_id,
-                store.store_id(),
                 TemplateTirPhase::Parsed,
                 TemplateOverlaySetId::empty(),
             );
-            let fill_reference = store.qualify_template_ref(fill_template_id);
+            let fill_reference = fill_template_id;
             slot_compositions.push(SlotResolutionComposition::new(
                 wrapper_reference,
                 fill_reference,
             ));
 
             let occurrence_id = store.next_child_template_occurrence_id();
-            let reference = TemplateTirChildReference::same_store(
+            let reference = TemplateTirChildReference::new(
                 composed_template_id,
-                store.store_id(),
                 TemplateTirPhase::Parsed,
                 TemplateOverlaySetId::empty(),
             );
@@ -373,9 +312,8 @@ pub(super) fn wrap_tir_node_in_wrappers_into(
             )?;
 
             let occurrence_id = store.next_child_template_occurrence_id();
-            let reference = TemplateTirChildReference::same_store(
+            let reference = TemplateTirChildReference::new(
                 combined_template_id,
-                store.store_id(),
                 TemplateTirPhase::Parsed,
                 TemplateOverlaySetId::empty(),
             );
@@ -415,9 +353,8 @@ fn build_tir_prepended_wrapper_template(
         })?;
 
     let occurrence_id = store.next_child_template_occurrence_id();
-    let wrapper_reference = TemplateTirChildReference::same_store(
+    let wrapper_reference = TemplateTirChildReference::new(
         wrapper_template_id,
-        store.store_id(),
         TemplateTirPhase::Parsed,
         TemplateOverlaySetId::empty(),
     );

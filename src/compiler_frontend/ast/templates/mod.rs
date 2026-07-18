@@ -51,7 +51,7 @@
 //! A `Template` value holds a `tir_reference` into the module-scoped
 //! `TemplateIrStore`. TIR is local to AST construction/finalization for one
 //! module and is dropped before the `Ast` is returned. HIR and backends never
-//! see TIR IDs, stores, views, overlays, or registry values; they receive only
+//! see TIR IDs, stores, views, overlays, or other TIR-internal values; they receive only
 //! folded string constants or neutral owned runtime-handoff payloads from
 //! `runtime_handoff.rs`.
 //!
@@ -60,9 +60,8 @@
 //! | File | Role |
 //! |---|---|
 //! | `tir/mod.rs` | Module entry, narrow re-exports, ownership contract |
-//! | `tir/ids.rs` | Typed store IDs (`TemplateIrId`, `TemplateIrNodeId`, …) |
-//! | `tir/refs.rs` | Store-qualified final TIR references |
-//! | `tir/registry.rs` | Module-local registry for stores, refs, and overlays |
+//! | `tir/ids.rs` | Typed module-local IDs (`TemplateIrId`, `TemplateIrNodeId`, …) |
+//! | `tir/refs.rs` | Module-local final TIR references |
 //! | `tir/overlays.rs` | Final overlay set and overlay dimension handles |
 //! | `tir/store.rs` | `TemplateIrStore` — central contiguous storage |
 //! | `tir/node.rs` | `TemplateIr`, `TemplateIrNode`, `TemplateIrNodeKind` |
@@ -101,9 +100,8 @@
 //! | `template_folding.rs` | Compile-time folding entry point; TIR-native for finalized templates |
 //! | `top_level_templates.rs` | Entry-file const fragment collection and doc fragment extraction |
 //! | `tir/mod.rs` | TIR module entry, re-exports, ownership contract |
-//! | `tir/ids.rs` | Typed store IDs |
-//! | `tir/refs.rs` | Store-qualified final TIR references |
-//! | `tir/registry.rs` | Module-local registry for stores, refs, and overlays |
+//! | `tir/ids.rs` | Typed module-local IDs |
+//! | `tir/refs.rs` | Module-local final TIR references |
 //! | `tir/overlays.rs` | Final overlay set and overlay dimension handles |
 //! | `tir/store.rs` | `TemplateIrStore` — central contiguous storage |
 //! | `tir/node.rs` | `TemplateIr`, `TemplateIrNode`, `TemplateIrNodeKind` |
@@ -123,7 +121,6 @@
 //! | `tir/slot_composition/` | TIR-native slot schema and contribution routing |
 //! | `tir/wrapper_sets.rs` | Wrapper set equivalence and reuse |
 //! | `runtime_handoff.rs` | Neutral AST/HIR owner of owned runtime-template handoff shapes |
-//! | `runtime_template_expression.rs` | Unwrap coerced/runtime wrappers to reach a `Template` expression |
 //! | `reactive_template_metadata.rs` | Structural traversal merging reactive `$(source)` metadata |
 //! | `template_renderability.rs` | Template-head value renderability classification by `TypeId` |
 //! | `doc_fragments.rs` | Extract `$doc` comment templates into `AstDocFragment` metadata |
@@ -154,7 +151,7 @@ pub(crate) mod top_level_templates;
 // -------------------------
 //
 // TIR is the authoritative internal representation for templates during AST
-// processing. The `tir/` submodule owns the store, registry, views, overlays,
+// processing. The `tir/` submodule owns the module store, views, overlays,
 // folding, formatting, and HIR handoff construction.
 
 pub(crate) mod tir;
@@ -168,13 +165,6 @@ pub(crate) use runtime_handoff::{
     OwnedRuntimeSlotSiteRenderPiece, OwnedRuntimeTemplateBody, OwnedRuntimeTemplateBranch,
     OwnedRuntimeTemplateHandoff, OwnedRuntimeTemplateNode,
 };
-
-// -------------------------
-//  Runtime template expression helpers
-// -------------------------
-
-mod runtime_template_expression;
-pub(crate) use runtime_template_expression::runtime_template_expression;
 
 // -------------------------
 //  Reactive metadata traversal

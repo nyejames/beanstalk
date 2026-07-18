@@ -56,21 +56,12 @@ pub(crate) fn classify_tir_contribution_node(
 
     let shape = match &node.kind {
         TemplateIrNodeKind::ChildTemplate { reference, .. } => {
-            let skips_parent_child_wrappers = match reference.template_id_in_store(store.store_id())
-            {
-                Some(template_id) => {
-                    let template = store.get_template(template_id).ok_or_else(|| {
-                        CompilerError::compiler_error(
-                            "TIR contribution classification: same-store child template ID was not present in the store.",
-                        )
-                    })?;
-                    template.style.skip_parent_child_wrappers
-                }
-
-                // Foreign references remain child output for wrapper routing,
-                // but their `$fresh` style is owned by another TIR store.
-                None => false,
-            };
+            let template = store.get_template(reference.root).ok_or_else(|| {
+                CompilerError::compiler_error(
+                    "TIR contribution classification: child template ID was not present in the store.",
+                )
+            })?;
+            let skips_parent_child_wrappers = template.style.skip_parent_child_wrappers;
 
             ContributionShape {
                 is_child_template_contribution: true,

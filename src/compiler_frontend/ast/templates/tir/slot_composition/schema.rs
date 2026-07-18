@@ -346,11 +346,7 @@ fn collect_tir_slot_schema_from_node(
         }
 
         TemplateIrNodeKind::ChildTemplate { reference, .. } => {
-            // Foreign child references are opaque to this store-local schema.
-            // Their owning store supplies its own schema when needed.
-            let Some(template_id) = reference.template_id_in_store(store.store_id()) else {
-                return Ok(());
-            };
+            let template_id = reference.root;
             let Some(child_template) = store.get_template(template_id) else {
                 return Err(schema_infrastructure_error(
                     "TIR slot schema extraction: child template ID was not present in the store.",
@@ -475,11 +471,7 @@ fn collect_tir_slot_placeholders_from_node(
         TemplateIrNodeKind::ChildTemplate { reference, .. } => {
             // Nested child templates may declare their own slots. Walking their
             // root naturally collects those placeholders in document order.
-            let Some(template_id) = reference.template_id_in_store(store.store_id()) else {
-                return Err(Box::new(internal_compiler_error(
-                    "TIR slot placeholder collection: child template reference is not in the current store.",
-                )));
-            };
+            let template_id = reference.root;
             let Some(child_template) = store.get_template(template_id) else {
                 return Err(Box::new(internal_compiler_error(
                     "TIR slot placeholder collection: child template ID was not present in the store.",
@@ -710,11 +702,7 @@ fn expand_tir_slot_placeholders_from_node(
         }
 
         TemplateIrNodeKind::ChildTemplate { reference, .. } => {
-            let Some(child_template_id) = reference.template_id_in_store(store.store_id()) else {
-                return Err(Box::new(internal_compiler_error(
-                    "TIR slot expansion: child template reference is not in the current store.",
-                )));
-            };
+            let child_template_id = reference.root;
             let Some(child_template) = store.get_template(child_template_id).cloned() else {
                 return Err(Box::new(internal_compiler_error(
                     "TIR slot expansion: child template ID was not present in the store.",
@@ -749,9 +737,8 @@ fn expand_tir_slot_placeholders_from_node(
             let expanded_child_template_id = store.push_template(expanded_child_template);
 
             let occurrence_id = store.next_child_template_occurrence_id();
-            let expanded_reference = TemplateTirChildReference::same_store(
+            let expanded_reference = TemplateTirChildReference::new(
                 expanded_child_template_id,
-                store.store_id(),
                 TemplateTirPhase::Parsed,
                 TemplateOverlaySetId::empty(),
             );
@@ -913,22 +900,10 @@ fn apply_tir_wrapper_set_to_node(
         ))
     })?;
 
-    let store_id = store.store_id();
-    if wrapper_set
-        .wrappers
-        .iter()
-        .any(|template_ref| template_ref.root.store_id != store_id)
-    {
-        return Err(Box::new(internal_compiler_error(
-            "TIR slot expansion: wrapper set contains a cross-store wrapper reference; \
-             only same-store wrappers are supported in structural expansion.",
-        )));
-    }
-
     let wrapper_template_ids: Vec<TemplateIrId> = wrapper_set
         .wrappers
         .iter()
-        .map(|template_ref| template_ref.root.template_id)
+        .map(|template_ref| template_ref.root)
         .collect();
 
     wrap_tir_node_in_wrappers_into(
@@ -1013,9 +988,7 @@ fn tir_node_is_control_flow_root(
     let is_control_flow_root = match &node.kind {
         TemplateIrNodeKind::BranchChain { .. } | TemplateIrNodeKind::Loop { .. } => true,
         TemplateIrNodeKind::ChildTemplate { reference, .. } => {
-            let Some(template_id) = reference.template_id_in_store(store.store_id()) else {
-                return Ok(false);
-            };
+            let template_id = reference.root;
             let template = store.get_template(template_id).ok_or_else(|| {
                 Box::new(internal_compiler_error(
                     "TIR slot expansion: same-store child template ID was not present in the store while checking control flow.",
@@ -1102,11 +1075,7 @@ fn attach_conditional_wrapper_set(
 
     let (reference, location) = match &node.kind {
         TemplateIrNodeKind::ChildTemplate { reference, .. } => {
-            let Some(template_id) = reference.template_id_in_store(store.store_id()) else {
-                return Err(Box::new(internal_compiler_error(
-                    "TIR slot expansion: control-flow child reference is not in the current store.",
-                )));
-            };
+            let template_id = reference.root;
             let Some(template) = store.get_template(template_id).cloned() else {
                 return Err(Box::new(internal_compiler_error(
                     "TIR slot expansion: control-flow child template was not present in the store.",
@@ -1125,9 +1094,8 @@ fn attach_conditional_wrapper_set(
                 required_wrapper_set_count(store, merged_wrapper_set_id)?;
             let copied_id = store.push_template(copied);
 
-            let new_reference = TemplateTirChildReference::same_store(
+            let new_reference = TemplateTirChildReference::new(
                 copied_id,
-                store.store_id(),
                 reference.phase,
                 reference.overlay_set_id,
             );
@@ -1148,9 +1116,8 @@ fn attach_conditional_wrapper_set(
             template.conditional_child_wrapper_set = Some(wrapper_set_id);
             let template_id = store.push_template(template);
 
-            let new_reference = TemplateTirChildReference::same_store(
+            let new_reference = TemplateTirChildReference::new(
                 template_id,
-                store.store_id(),
                 TemplateTirPhase::Parsed,
                 TemplateOverlaySetId::empty(),
             );

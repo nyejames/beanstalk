@@ -22,8 +22,6 @@ pub(in crate::compiler_frontend::ast::templates) fn tir_contributions_need_runti
     string_table: &StringTable,
     store: &TemplateIrStore,
 ) -> bool {
-    let mut query_store = store.clone();
-
     for target in schema.ordered_slot_keys(string_table) {
         let nodes = contributions.nodes_for_slot(&target);
 
@@ -32,7 +30,7 @@ pub(in crate::compiler_frontend::ast::templates) fn tir_contributions_need_runti
         }
 
         for node_id in nodes {
-            if !tir_node_is_const_evaluable_value(&mut query_store, *node_id, string_table) {
+            if !tir_node_is_const_evaluable_value(store, *node_id, string_table) {
                 return true;
             }
         }
