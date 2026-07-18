@@ -29,10 +29,25 @@ TIR remains AST-local. No TIR store, ID, view, overlay or preparation type may c
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/final-tir-completion-plan.md
 STATUS: active
-CURRENT_PHASE: R0 - lock the single-store ownership boundary
+CURRENT_SLICE: R1A - require the shared store handle in ScopeContext construction
 LAST_ACCEPTED_COMMIT: c1ecc2c58
-IMPLEMENTATION_BASE_COMMIT: 069a29acb
-BRANCH: main
+WORKTREE: main at 3b17bad3f; only this plan is modified for the accepted R0 checkpoint
+REQUIRED_RELOADS: startup files, this plan, and current TIR source/diff
+RELEVANT_CONTEXT_NOW:
+- docs: compiler-design-overview.md one-store TIR contract and this plan's R1A constructor requirement
+- code: module_ast/build_context.rs owns the module store; scope_context.rs and production constructors must receive it explicitly
+ACCEPTANCE_CRITERIA:
+- ScopeContext construction requires the module RegisteredTemplateIrStore
+- every production constant, type, trait, signature, and body context passes the same handle
+- replacement-style production store injection is removed; isolated test setup stays test-local
+VALIDATION_STATE:
+- R0 read-only inventory: passed; exact paths and historical counts reviewed by parent
+DOCS_IMPACT: none beyond this plan checkpoint
+BLOCKERS_OR_OPEN_DECISIONS: none
+DELEGATION_DECISION: undecided - resolve the R1A implementation worker after committing R0
+NEXT_WORKER_ORDER: ollama, codex-cli, parent-direct
+STOP_REASON: none
+NEXT_RESUME_ACTION: commit the accepted R0 inventory checkpoint, then launch R1A
 ```
 
 Use `069a29acb` as the implementation and regression base. Do not continue extending `FoldAuthorityWalk`, foreign-store traversal, external expression-overlay stacks or prepared foreign-wrapper proofs.
@@ -485,6 +500,14 @@ Record scoped production and test line counts for `src/compiler_frontend/ast/tem
 - No required production second-store owner exists.
 - Any contradiction identifies an exact production path and stops R1 before code changes.
 - The current state block records the accepted ownership decision and next slice.
+
+R0 accepted on the current `3b17bad3f` worktree. `AstPhaseContext` allocates the one module
+store and all parsed constant headers use that handle. `ScopeContext::new` still allocates and
+then replaces a scratch store, while registry adoption, foreign proxying and overlay stacks are
+obsolete migration architecture owned by later phases. No raw TIR identity crosses completed AST,
+HIR or backend boundaries. Under the same tracked-file classification (`*/tests/*`, `*_tests.rs`
+and `*tests.rs` are tests), `c1ecc2c58` contains 22,084 production and 24,180 test lines in the
+TIR directory; `069a29acb` contains 24,274 production and 27,231 test lines.
 
 ### Phase R1 - Collapse ownership and references
 
