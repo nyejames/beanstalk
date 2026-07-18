@@ -25,7 +25,7 @@ use crate::compiler_frontend::ast::templates::template::{
 use crate::compiler_frontend::ast::templates::template_control_flow::{
     TemplateLoopControlKind, TemplateLoopHeader,
 };
-use crate::compiler_frontend::ast::templates::tir::overlays::TemplateOverlaySet;
+use crate::compiler_frontend::ast::templates::tir::overlays::TemplateViewContext;
 use crate::compiler_frontend::ast::templates::tir::parser_builder_state::TemplateParserIrBuilderState;
 use crate::compiler_frontend::ast::templates::tir::refs::TemplateTirReference;
 use crate::compiler_frontend::ast::templates::tir::store::TemplateIrStore;
@@ -298,16 +298,7 @@ impl TemplateConstructionContext {
             self.builder.finish(&mut store, style, kind, location)
         };
 
-        // Allocate the canonical empty overlay set through the store so the
-        // reference carries a real store-backed ID. In this carrier-only phase
-        // every parser-emitted reference defaults to "no overlays"; later
-        // phases will thread non-empty overlay sets through the same path.
-        let overlay_set_id = self
-            .store
-            .borrow_mut()
-            .allocate_overlay_set(TemplateOverlaySet::empty());
-
         self.builder
-            .finalized_reference(template_id, overlay_set_id, phase)
+            .finalized_reference(template_id, TemplateViewContext::default(), phase)
     }
 }

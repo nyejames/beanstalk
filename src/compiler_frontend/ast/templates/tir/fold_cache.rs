@@ -21,7 +21,7 @@
 //! The key includes only dimensions that are stable and identity-bearing today:
 //! - module-local root `TemplateIrId`;
 //! - pipeline `TemplateTirPhase`;
-//! - canonical `TemplateOverlaySetId`;
+//! - value-carried `TemplateViewContext`;
 //! - const-loop iteration limit;
 //! - whether the active fold-binding stack is empty.
 //!
@@ -34,7 +34,7 @@
 use std::collections::HashMap;
 
 use crate::compiler_frontend::ast::templates::template_folding::TemplateEmission;
-use crate::compiler_frontend::ast::templates::tir::overlays::TemplateOverlaySetId;
+use crate::compiler_frontend::ast::templates::tir::overlays::TemplateViewContext;
 use crate::compiler_frontend::ast::templates::tir::refs::TemplateIrId;
 use crate::compiler_frontend::ast::templates::tir::view::TemplateTirPhase;
 
@@ -48,7 +48,7 @@ use crate::compiler_frontend::ast::templates::tir::view::TemplateTirPhase;
 ///       cached fold result. Two folds with equal keys must produce equal output.
 ///
 /// WHY: the cache must not return stale results when the input view or context
-///      changes. Including phase and overlay set alongside the root makes the
+///      changes. Including phase and view context alongside the root makes the
 ///      key precise; recording loop-limit and empty-bindings guards makes the
 ///      remaining context dimensions explicit.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -59,8 +59,8 @@ pub(crate) struct TirFoldCacheKey {
     /// Pipeline phase of the root.
     pub(crate) phase: TemplateTirPhase,
 
-    /// Overlay set applied to the root.
-    pub(crate) overlay_set_id: TemplateOverlaySetId,
+    /// view context applied to the root.
+    pub(crate) context: TemplateViewContext,
 
     /// Const-loop iteration limit active during folding.
     pub(crate) loop_iteration_limit: usize,

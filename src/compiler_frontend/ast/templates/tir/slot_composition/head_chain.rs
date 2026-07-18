@@ -16,7 +16,7 @@ use crate::compiler_frontend::ast::templates::template::{TemplateSegmentOrigin, 
 use crate::compiler_frontend::ast::templates::template_slots::{
     materialize_tir_native_runtime_slot_plan, tir_contributions_need_runtime,
 };
-use crate::compiler_frontend::ast::templates::tir::overlays::TemplateOverlaySetId;
+use crate::compiler_frontend::ast::templates::tir::overlays::TemplateViewContext;
 use crate::compiler_frontend::ast::templates::tir::refs::TemplateTirChildReference;
 use crate::compiler_frontend::ast::templates::tir::view::TemplateTirPhase;
 use crate::compiler_frontend::ast::templates::tir::{
@@ -32,7 +32,7 @@ use super::helpers::{
     ComposedTirRoot, SlotResolutionComposition, build_composed_wrapper_template,
     build_tir_fill_template, children_of_node, internal_compiler_error, rebuild_root_sequence,
 };
-use super::overlays::allocate_slot_resolution_overlay_set;
+use super::overlays::allocate_slot_resolution_context;
 use super::schema::{collect_tir_slot_schema, expand_tir_slot_placeholders_into};
 
 /// Boxed diagnostic result for the TIR head-chain composition family.
@@ -178,15 +178,15 @@ fn compose_tir_head_chain_into(
 }
 
 /// Composes the TIR head chain on the shared module-local store and threads a
-/// non-empty slot-resolution overlay-set ID onto the result when the
+/// slot-resolution view context onto the result when the
 /// composition resolved one or more slot-bearing wrappers.
 ///
 /// WHAT: runs the existing store-local structural head-chain composition
 ///       (unchanged behavior), collects slot-bearing wrapper/fill pairs, then
-///       releases the mutable store borrow before allocating the overlay set
-///       through the same shared store handle.
+///       releases the mutable store borrow before constructing the value
+///       context after overlay payload materialization.
 /// WHY: production composition call sites need both the composed root for
-///      structural expansion and the overlay-set ID for `TemplateTirReference`
+///      structural expansion and the value context for `TemplateTirReference`
 ///      threading. Keeping the orchestration in the slot-composition owner
 ///      avoids ad hoc overlay construction at call sites.
 pub(crate) fn compose_tir_head_chain_with_overlays(
@@ -207,7 +207,7 @@ pub(crate) fn compose_tir_head_chain_with_overlays(
         (composed_root, slot_compositions)
     };
 
-    let slot_overlay_set_id = allocate_slot_resolution_overlay_set(
+    let slot_context = allocate_slot_resolution_context(
         &mut store_handle.borrow_mut(),
         &slot_compositions,
         string_table,
@@ -215,7 +215,7 @@ pub(crate) fn compose_tir_head_chain_with_overlays(
 
     Ok(ComposedTirRoot {
         root: composed_root,
-        slot_overlay_set_id,
+        slot_context,
     })
 }
 
@@ -607,7 +607,7 @@ fn resolve_tir_chain_layer(
     let reference = TemplateTirChildReference::new(
         composed_template_id,
         TemplateTirPhase::Parsed,
-        TemplateOverlaySetId::empty(),
+        TemplateViewContext::default(),
     );
     Ok(store.push_node(TemplateIrNode::new(
         TemplateIrNodeKind::ChildTemplate {

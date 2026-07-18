@@ -14,7 +14,7 @@ use crate::compiler_frontend::ast::templates::tir::ids::{
 };
 use crate::compiler_frontend::ast::templates::tir::node::{TemplateIrNodeKind, TirSlotPlaceholder};
 use crate::compiler_frontend::ast::templates::tir::overlays::{
-    TemplateOverlaySet, TemplateOverlaySetId, TirSlotResolutionKind, TirWrapperContext,
+    TemplateViewContext, TirSlotResolutionKind, TirWrapperContext,
 };
 use crate::compiler_frontend::ast::templates::tir::refs::{
     TemplateTirChildReference, TemplateWrapperReference,
@@ -44,22 +44,22 @@ pub(crate) fn tir_view_is_empty_overlay_linear_fold_safe(
     let root = view.root_ref();
 
     let _authority = validate_view_fold_authority(view, store)?;
-    let overlay_set = view.overlay_set()?;
+    let view_context = view.context();
 
-    if overlay_set.is_empty() {
+    if view_context.is_empty() {
         let mut visiting = HashSet::new();
         return template_root_is_linear_fold_safe(view, store, root, &mut visiting);
     }
 
-    if overlay_set.expression_overrides.is_none()
-        && overlay_set.slot_resolution.is_none()
-        && overlay_set.wrapper_context.is_some()
+    if view_context.expression_overlay.is_none()
+        && view_context.slot_resolution.is_none()
+        && view_context.wrapper_context.is_some()
     {
         let string_table = StringTable::new();
         let mut walk = ViewNativeWalkContext {
             visiting_templates: HashSet::new(),
             slot_resolution_active: false,
-            expression_overlay_stack: vec![view.overlay_set_id()],
+            expression_overlay_stack: vec![view.context()],
         };
         return Ok(check_template_root_view_native_overlay_fold_safety(
             store,
@@ -91,7 +91,7 @@ pub(crate) fn tir_view_is_empty_overlay_linear_fold_safe(
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub(crate) enum TirFoldFallbackReason {
     // --- Overlay-level reasons ---
-    /// The overlay set carries a wrapper-context overlay with an unsupported
+    /// The view context carries a wrapper-context overlay with an unsupported
     /// shape such as a non-virtual wrapper set, so the view-native
     /// fold walker cannot expand it.
     WrapperContextOverlay,
@@ -150,7 +150,7 @@ pub(crate) enum TirFoldFallbackReason {
 struct ViewNativeWalkContext {
     visiting_templates: HashSet<TemplateIrId>,
     slot_resolution_active: bool,
-    expression_overlay_stack: Vec<TemplateOverlaySetId>,
+    expression_overlay_stack: Vec<TemplateViewContext>,
 }
 
 impl ViewNativeWalkContext {
@@ -163,11 +163,11 @@ impl ViewNativeWalkContext {
     fn expression_stack_for_boundary(
         &self,
         phase: TemplateTirPhase,
-        overlay_set_id: TemplateOverlaySetId,
-    ) -> Vec<TemplateOverlaySetId> {
+        context: TemplateViewContext,
+    ) -> Vec<TemplateViewContext> {
         if phase.is_at_least(TemplateTirPhase::Composed) {
             let mut stack = self.expression_overlay_stack.clone();
-            stack.push(overlay_set_id);
+            stack.push(context);
             stack
         } else {
             self.expression_overlay_stack.clone()
@@ -225,7 +225,7 @@ pub(crate) struct FoldAuthorityToken {}
 pub(crate) struct PreparedTirViewFold {
     root: TemplateIrId,
     phase: TemplateTirPhase,
-    overlay_set_id: TemplateOverlaySetId,
+    context: TemplateViewContext,
     authority: FoldAuthorityResult,
     decision: PreparedTirFoldDecision,
 }
@@ -265,11 +265,11 @@ impl PreparedTirViewFold {
                 view.phase()
             )));
         }
-        if self.overlay_set_id != view.overlay_set_id() {
+        if self.context != view.context() {
             return Err(CompilerError::compiler_error(format!(
-                "TIR fold preparation overlay set {} does not match supplied view overlay set {}.",
-                self.overlay_set_id,
-                view.overlay_set_id()
+                "TIR fold preparation context {:?} does not match supplied view context {:?}.",
+                self.context,
+                view.context()
             )));
         }
         let _ = store;
@@ -298,7 +298,7 @@ pub(crate) fn prepare_tir_view_fold(
     let authority = validate_view_fold_authority(view, store)?;
     let view_native_fallback =
         classify_view_native_fold_safety_after_authority(view, store, string_table)?;
-    let read_only_safe = if view.overlay_set()?.is_empty() {
+    let read_only_safe = if view.context().is_empty() {
         let mut visiting = HashSet::new();
         template_root_is_read_only_fold_safe(
             store,
@@ -322,7 +322,7 @@ pub(crate) fn prepare_tir_view_fold(
     Ok(PreparedTirViewFold {
         root: view.root_ref(),
         phase: view.phase(),
-        overlay_set_id: view.overlay_set_id(),
+        context: view.context(),
         authority,
         decision,
     })
@@ -434,8 +434,7 @@ impl FoldAuthorityWalk {
                 )));
             }
 
-            let overlay_set = view.overlay_set()?;
-            validate_overlay_set_dimensions(view.store(), view.overlay_set_id(), overlay_set)?;
+            validate_view_context_dimensions(view.store(), view.context())?;
             return Ok(());
         }
 
@@ -502,7 +501,7 @@ impl FoldAuthorityWalk {
                     let child_template_id = reference.root;
 
                     let child_view = if reference.phase.is_at_least(TemplateTirPhase::Composed) {
-                        self.validate_overlay_reference(store, reference.overlay_set_id)?;
+                        self.validate_overlay_reference(store, reference.context)?;
                         self.child_view_for_reference(store, view, reference)?
                     } else {
                         None
@@ -531,7 +530,7 @@ impl FoldAuthorityWalk {
                             let source_view = view.child_view(
                                 *source,
                                 TemplateTirPhase::Composed,
-                                TemplateOverlaySetId::empty(),
+                                TemplateViewContext::default(),
                             )?;
                             self.validate_template(store, *source, Some(&source_view))?;
                         }
@@ -629,7 +628,7 @@ impl FoldAuthorityWalk {
 
         for wrapper in &wrapper_set.wrappers {
             let wrapper_view = if wrapper.phase.is_at_least(TemplateTirPhase::Composed) {
-                self.validate_overlay_reference(store, wrapper.overlay_set_id)?;
+                self.validate_overlay_reference(store, wrapper.context)?;
                 self.wrapper_view_for_reference(store, view, wrapper)?
             } else {
                 None
@@ -643,9 +642,9 @@ impl FoldAuthorityWalk {
     fn validate_overlay_reference(
         &self,
         store: &TemplateIrStore,
-        overlay_set_id: TemplateOverlaySetId,
+        context: TemplateViewContext,
     ) -> Result<(), CompilerError> {
-        validate_overlay_set_authority(store, overlay_set_id)
+        validate_view_context_authority(store, context)
     }
 
     fn child_view_for_reference<'store>(
@@ -657,17 +656,12 @@ impl FoldAuthorityWalk {
         if reference.phase.is_at_least(TemplateTirPhase::Composed) {
             if let Some(view) = view {
                 return view
-                    .child_view(reference.root, reference.phase, reference.overlay_set_id)
+                    .child_view(reference.root, reference.phase, reference.context)
                     .map(Some);
             }
 
-            return TirView::new(
-                store,
-                reference.root,
-                reference.phase,
-                reference.overlay_set_id,
-            )
-            .map(Some);
+            return TirView::new(store, reference.root, reference.phase, reference.context)
+                .map(Some);
         }
 
         Ok(None)
@@ -685,17 +679,11 @@ impl FoldAuthorityWalk {
 
         if let Some(view) = view {
             return view
-                .child_view(reference.root, reference.phase, reference.overlay_set_id)
+                .child_view(reference.root, reference.phase, reference.context)
                 .map(Some);
         }
 
-        TirView::new(
-            store,
-            reference.root,
-            reference.phase,
-            reference.overlay_set_id,
-        )
-        .map(Some)
+        TirView::new(store, reference.root, reference.phase, reference.context).map(Some)
     }
 }
 
@@ -705,10 +693,10 @@ fn classify_view_native_fold_safety_after_authority(
     string_table: &StringTable,
 ) -> Result<Option<TirFoldFallbackReason>, CompilerError> {
     let root = view.root_ref();
-    let overlay_set = view.overlay_set()?;
+    let view_context = view.context();
 
-    let has_expression_overlay = overlay_set.expression_overrides.is_some();
-    let has_slot_overlay = overlay_set.slot_resolution.is_some();
+    let has_expression_overlay = view_context.expression_overlay.is_some();
+    let has_slot_overlay = view_context.slot_resolution.is_some();
 
     // Expression overrides require at least Finalized so the normalized
     // expression payload is stable before folding reads it. Keep the result
@@ -728,7 +716,7 @@ fn classify_view_native_fold_safety_after_authority(
     let mut walk = ViewNativeWalkContext {
         visiting_templates: HashSet::new(),
         slot_resolution_active,
-        expression_overlay_stack: vec![view.overlay_set_id()],
+        expression_overlay_stack: vec![view.context()],
     };
 
     let reason = check_template_root_view_native_overlay_fold_safety(
@@ -1103,20 +1091,18 @@ fn check_tir_node_view_native_overlay_fold_safety(
             // the child's subtree are visible during the safety walk.
             let child_view = match view {
                 Some(view) => {
-                    view.child_view(reference.root, reference.phase, reference.overlay_set_id)?
+                    view.child_view(reference.root, reference.phase, reference.context)?
                 }
-                None => module_view.child_view(
-                    reference.root,
-                    reference.phase,
-                    reference.overlay_set_id,
-                )?,
+                None => {
+                    module_view.child_view(reference.root, reference.phase, reference.context)?
+                }
             };
             let child_has_slot_resolution = child_view.slot_resolution_overlay()?.is_some();
             // Update slot-resolution activity for the exact child view so slots
             // do not inherit the parent's overlay dimensions.
             let saved_slot_resolution_active = walk.slot_resolution_active;
             let child_expression_overlay_stack =
-                walk.expression_stack_for_boundary(reference.phase, reference.overlay_set_id);
+                walk.expression_stack_for_boundary(reference.phase, reference.context);
             let saved_expression_overlay_stack = std::mem::replace(
                 &mut walk.expression_overlay_stack,
                 child_expression_overlay_stack,
@@ -1169,36 +1155,35 @@ fn slot_placeholder_has_wrapper_context(placeholder: &TirSlotPlaceholder) -> boo
         || placeholder.skip_parent_child_wrappers
 }
 
-fn validate_overlay_set_dimensions(
+fn validate_view_context_dimensions(
     store: &TemplateIrStore,
-    overlay_set_id: TemplateOverlaySetId,
-    overlay_set: &TemplateOverlaySet,
+    context: TemplateViewContext,
 ) -> Result<(), CompilerError> {
-    if let Some(overlay_id) = overlay_set.expression_overrides
+    if let Some(overlay_id) = context.expression_overlay
         && store.expression_overlay(overlay_id).is_none()
     {
         return Err(missing_overlay_dimension_error(
-            overlay_set_id,
+            context,
             "expression",
             overlay_id,
         ));
     }
 
-    if let Some(overlay_id) = overlay_set.slot_resolution
+    if let Some(overlay_id) = context.slot_resolution
         && store.slot_resolution_overlay(overlay_id).is_none()
     {
         return Err(missing_overlay_dimension_error(
-            overlay_set_id,
+            context,
             "slot-resolution",
             overlay_id,
         ));
     }
 
-    if let Some(overlay_id) = overlay_set.wrapper_context
+    if let Some(overlay_id) = context.wrapper_context
         && store.wrapper_context_overlay(overlay_id).is_none()
     {
         return Err(missing_overlay_dimension_error(
-            overlay_set_id,
+            context,
             "wrapper-context",
             overlay_id,
         ));
@@ -1207,14 +1192,11 @@ fn validate_overlay_set_dimensions(
     Ok(())
 }
 
-fn validate_overlay_set_authority(
+fn validate_view_context_authority(
     store: &TemplateIrStore,
-    overlay_set_id: TemplateOverlaySetId,
+    context: TemplateViewContext,
 ) -> Result<(), CompilerError> {
-    let overlay_set = store
-        .overlay_set(overlay_set_id)
-        .ok_or_else(|| missing_overlay_set_error(overlay_set_id))?;
-    validate_overlay_set_dimensions(store, overlay_set_id, overlay_set)
+    validate_view_context_dimensions(store, context)
 }
 
 fn missing_template_error(template_id: TemplateIrId) -> CompilerError {
@@ -1245,21 +1227,14 @@ fn missing_slot_plan_error(slot_plan_id: TemplateSlotPlanId) -> CompilerError {
     ))
 }
 
-fn missing_overlay_set_error(overlay_set_id: TemplateOverlaySetId) -> CompilerError {
-    CompilerError::compiler_error(format!(
-        "TIR fold safety: overlay set {} is not present in the module store.",
-        overlay_set_id
-    ))
-}
-
 fn missing_overlay_dimension_error(
-    overlay_set_id: TemplateOverlaySetId,
+    context: TemplateViewContext,
     dimension: &str,
     overlay_id: impl std::fmt::Display,
 ) -> CompilerError {
     CompilerError::compiler_error(format!(
-        "TIR fold safety: overlay set {} references missing {} overlay {}.",
-        overlay_set_id, dimension, overlay_id
+        "TIR fold safety: context {:?} references missing {} overlay {}.",
+        context, dimension, overlay_id
     ))
 }
 
@@ -1300,9 +1275,7 @@ fn template_root_is_read_only_fold_safe(
         let mut wrapper_walk = ViewNativeWalkContext {
             visiting_templates: visiting.iter().copied().collect(),
             slot_resolution_active: false,
-            expression_overlay_stack: view
-                .map(|view| vec![view.overlay_set_id()])
-                .unwrap_or_default(),
+            expression_overlay_stack: view.map(|view| vec![view.context()]).unwrap_or_default(),
         };
         let string_table = StringTable::new();
         if !wrapper_set_is_virtual_fold_safe(
@@ -1369,7 +1342,7 @@ fn tir_node_is_read_only_fold_safe(
         TemplateIrNodeKind::ChildTemplate { reference, .. } => {
             // Only same-store child references can be folded read-only.
             let child_template_id = reference.root;
-            // The child's overlay set must also be empty. Look it up through
+            // The child's view context must also be empty. Look it up through
             // the store that backs the parent view.
             if !reference.phase.is_at_least(TemplateTirPhase::Composed) {
                 return template_root_is_read_only_fold_safe(
@@ -1384,13 +1357,11 @@ fn tir_node_is_read_only_fold_safe(
 
             let child_view = match view {
                 Some(view) => {
-                    view.child_view(reference.root, reference.phase, reference.overlay_set_id)?
+                    view.child_view(reference.root, reference.phase, reference.context)?
                 }
-                None => module_view.child_view(
-                    reference.root,
-                    reference.phase,
-                    reference.overlay_set_id,
-                )?,
+                None => {
+                    module_view.child_view(reference.root, reference.phase, reference.context)?
+                }
             };
             // Even when a child overlay would make this template ineligible
             // for the read-only shortcut, a missing child remains an authority
@@ -1398,7 +1369,7 @@ fn tir_node_is_read_only_fold_safe(
             if store.get_template(child_template_id).is_none() {
                 return Err(missing_template_error(child_template_id));
             }
-            let child_overlay_safe = child_view.overlay_set()?;
+            let child_overlay_safe = child_view.context();
             if !child_overlay_safe.is_empty() {
                 return Ok(false);
             }
@@ -1550,18 +1521,14 @@ fn wrapper_set_is_virtual_fold_safe(
         // walking its root; Parsed wrappers deliberately keep structural reads.
         let wrapper_view = if wrapper.phase.is_at_least(TemplateTirPhase::Composed) {
             Some(match view {
-                Some(view) => {
-                    view.child_view(wrapper.root, wrapper.phase, wrapper.overlay_set_id)?
-                }
-                None => {
-                    module_view.child_view(wrapper.root, wrapper.phase, wrapper.overlay_set_id)?
-                }
+                Some(view) => view.child_view(wrapper.root, wrapper.phase, wrapper.context)?,
+                None => module_view.child_view(wrapper.root, wrapper.phase, wrapper.context)?,
             })
         } else {
             None
         };
         let wrapper_expression_overlay_stack =
-            walk.expression_stack_for_boundary(wrapper.phase, wrapper.overlay_set_id);
+            walk.expression_stack_for_boundary(wrapper.phase, wrapper.context);
         let saved_expression_overlay_stack = std::mem::replace(
             &mut walk.expression_overlay_stack,
             wrapper_expression_overlay_stack,
@@ -1657,7 +1624,7 @@ fn wrapper_expression_tree_is_const_evaluable(
     module_view: &TirView<'_>,
     template_id: TemplateIrId,
     root_node_id: TemplateIrNodeId,
-    expression_overlay_stack: &[TemplateOverlaySetId],
+    expression_overlay_stack: &[TemplateViewContext],
 ) -> Result<bool, CompilerError> {
     let structural_view;
     let expression_view = match view {
@@ -1666,7 +1633,7 @@ fn wrapper_expression_tree_is_const_evaluable(
             structural_view = module_view.child_view(
                 template_id,
                 TemplateTirPhase::Parsed,
-                TemplateOverlaySetId::empty(),
+                TemplateViewContext::default(),
             )?;
             &structural_view
         }
@@ -1688,7 +1655,7 @@ fn wrapper_expression_tree_is_const_evaluable(
 }
 
 /// Checks one non-injected resolved slot source through the exact source view
-/// used by folding (`Composed` plus the canonical empty overlay).
+/// used by folding (`Composed` plus the default empty view context).
 fn resolved_slot_source_is_virtual_fold_safe(
     module_view: &TirView<'_>,
     source: TemplateIrId,
@@ -1710,10 +1677,10 @@ fn resolved_slot_source_is_virtual_fold_safe(
     let source_view = module_view.child_view(
         source,
         TemplateTirPhase::Composed,
-        TemplateOverlaySetId::empty(),
+        TemplateViewContext::default(),
     )?;
     let source_expression_overlay_stack = walk
-        .expression_stack_for_boundary(TemplateTirPhase::Composed, TemplateOverlaySetId::empty());
+        .expression_stack_for_boundary(TemplateTirPhase::Composed, TemplateViewContext::default());
     let saved_expression_overlay_stack = std::mem::replace(
         &mut walk.expression_overlay_stack,
         source_expression_overlay_stack,
@@ -1836,12 +1803,12 @@ fn wrapper_node_is_virtual_fold_safe(
             let child_view = if reference.phase.is_at_least(TemplateTirPhase::Composed) {
                 Some(match view {
                     Some(view) => {
-                        view.child_view(reference.root, reference.phase, reference.overlay_set_id)?
+                        view.child_view(reference.root, reference.phase, reference.context)?
                     }
                     None => module_view.child_view(
                         reference.root,
                         reference.phase,
-                        reference.overlay_set_id,
+                        reference.context,
                     )?,
                 })
             } else {
@@ -1857,7 +1824,7 @@ fn wrapper_node_is_virtual_fold_safe(
             let saved_slot_resolution_active = context.walk.slot_resolution_active;
             let child_expression_overlay_stack = context
                 .walk
-                .expression_stack_for_boundary(reference.phase, reference.overlay_set_id);
+                .expression_stack_for_boundary(reference.phase, reference.context);
             let saved_expression_overlay_stack = std::mem::replace(
                 &mut context.walk.expression_overlay_stack,
                 child_expression_overlay_stack,

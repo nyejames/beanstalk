@@ -32,7 +32,7 @@ use crate::compiler_frontend::ast::templates::tir::node::{
     TemplateIr, TemplateIrNode, TemplateIrNodeKind, TemplateLoopHeaderExpressionSites,
 };
 use crate::compiler_frontend::ast::templates::tir::overlays::{
-    TemplateOverlaySetId, TirSlotResolutionKind, TirWrapperApplicationMode, TirWrapperContext,
+    TemplateViewContext, TirSlotResolutionKind, TirWrapperApplicationMode, TirWrapperContext,
 };
 use crate::compiler_frontend::ast::templates::tir::refs::{
     TemplateTirChildReference, TemplateWrapperReference,
@@ -64,8 +64,7 @@ impl TemplateIrStore {
         view: &TirView<'_>,
     ) -> Result<Option<OwnedRuntimeSlotApplicationHandoff>, CompilerError> {
         let template_id = self.template_id_for_view(view)?;
-        let mut materializer =
-            RuntimeHandoffMaterializer::new_with_overlay(self, view.overlay_set_id());
+        let mut materializer = RuntimeHandoffMaterializer::new_with_overlay(self, view.context());
         materializer.owned_runtime_slot_handoff_for_template(template_id)
     }
 
@@ -79,7 +78,7 @@ impl TemplateIrStore {
         let template_id = self.template_id_for_view(view)?;
         let mut materializer =
             RuntimeHandoffMaterializer::new_with_fold_context(self, fold_context);
-        materializer.overlay_set_stack.push(view.overlay_set_id());
+        materializer.context_stack.push(view.context());
         materializer.owned_runtime_template_handoff_for_template(template_id)
     }
 
@@ -97,15 +96,15 @@ impl TemplateIrStore {
 struct RuntimeHandoffMaterializer<'store, 'context, 'fold> {
     store: &'store TemplateIrStore,
     fold_context: Option<&'context mut TemplateFoldContext<'fold>>,
-    /// Stack of overlay-set IDs for the templates currently being materialized.
+    /// Stack of value-carried contexts for the templates currently being materialized.
     ///
-    /// WHAT: the top entry is the overlay set that applies to the current
-    ///       subtree. The top-level template view pushes its overlay set first;
-    ///       each nested child template temporarily pushes its own overlay set.
+    /// WHAT: the top entry is the context that applies to the current subtree.
+    ///       The top-level view pushes its context first and each nested child
+    ///       temporarily pushes its own context.
     /// WHY: one finalized root overlay covers every expression site reachable
     ///      within a template, while child templates retain separate effective
     ///      identities.
-    overlay_set_stack: Vec<TemplateOverlaySetId>,
+    context_stack: Vec<TemplateViewContext>,
     template_stack: Vec<TemplateIrId>,
     node_stack: Vec<TemplateIrNodeId>,
 }
@@ -118,57 +117,63 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
         Self {
             store,
             fold_context: Some(fold_context),
-            overlay_set_stack: Vec::new(),
+            context_stack: Vec::new(),
             template_stack: Vec::new(),
             node_stack: Vec::new(),
         }
     }
 
-    fn new_with_overlay(
-        store: &'store TemplateIrStore,
-        overlay_set_id: TemplateOverlaySetId,
-    ) -> Self {
+    fn new_with_overlay(store: &'store TemplateIrStore, context: TemplateViewContext) -> Self {
         Self {
             store,
             fold_context: None,
-            overlay_set_stack: vec![overlay_set_id],
+            context_stack: vec![context],
             template_stack: Vec::new(),
             node_stack: Vec::new(),
         }
     }
 
-    /// Validates one store-owned overlay set before it becomes active.
-    ///
-    /// WHAT: uses the store's canonical overlay-set lookup.
-    /// WHY: wrapper and child references carry exact overlay identity. A
-    ///      missing set must fail before traversal rather than being mistaken
-    ///      for an empty context.
-    fn validate_overlay_set(
-        &self,
-        overlay_set_id: TemplateOverlaySetId,
-    ) -> Result<(), CompilerError> {
-        if self.store.overlay_set(overlay_set_id).is_none() {
+    /// Validates every named overlay payload before a context becomes active.
+    fn validate_context(&self, context: TemplateViewContext) -> Result<(), CompilerError> {
+        if let Some(id) = context.expression_overlay
+            && self.store.expression_overlay(id).is_none()
+        {
             return Err(CompilerError::compiler_error(format!(
-                "TIR HIR handoff materialization referenced missing overlay set {}",
-                overlay_set_id
+                "TIR HIR handoff materialization referenced missing expression overlay {id}"
+            )));
+        }
+
+        if let Some(id) = context.slot_resolution
+            && self.store.slot_resolution_overlay(id).is_none()
+        {
+            return Err(CompilerError::compiler_error(format!(
+                "TIR HIR handoff materialization referenced missing slot-resolution overlay {id}"
+            )));
+        }
+
+        if let Some(id) = context.wrapper_context
+            && self.store.wrapper_context_overlay(id).is_none()
+        {
+            return Err(CompilerError::compiler_error(format!(
+                "TIR HIR handoff materialization referenced missing wrapper-context overlay {id}"
             )));
         }
 
         Ok(())
     }
 
-    /// Temporarily activates one exact overlay set while materializing a
+    /// Temporarily activates one exact context while materializing a
     /// nested root, restoring the parent stack even when traversal fails.
-    fn with_overlay_set<T>(
+    fn with_context<T>(
         &mut self,
-        overlay_set_id: TemplateOverlaySetId,
+        context: TemplateViewContext,
         build: impl FnOnce(&mut Self) -> Result<T, CompilerError>,
     ) -> Result<T, CompilerError> {
-        self.validate_overlay_set(overlay_set_id)?;
-        self.overlay_set_stack.push(overlay_set_id);
+        self.validate_context(context)?;
+        self.context_stack.push(context);
         let result = build(self);
-        let popped_overlay_set = self.overlay_set_stack.pop();
-        debug_assert_eq!(popped_overlay_set, Some(overlay_set_id));
+        let popped_context = self.context_stack.pop();
+        debug_assert_eq!(popped_context, Some(context));
         result
     }
 
@@ -581,7 +586,7 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
     /// Resolves the effective expression for a site from the active root-first
     /// template overlay stack.
     ///
-    /// WHAT: searches active overlay sets from the finalized outer root toward
+    /// WHAT: searches active view contexts from the finalized outer root toward
     ///       nested child-template references and returns the first expression
     ///       override for `site_id`. Falls back to the structural expression
     ///       when no active overlay owns the site.
@@ -602,23 +607,23 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
         &self,
         site_id: ExpressionSiteId,
     ) -> Result<Option<Expression>, CompilerError> {
-        if self.overlay_set_stack.is_empty() {
+        if self.context_stack.is_empty() {
             return Ok(None);
         }
         Ok(self
             .store
-            .expression_for_overlay_stack(&self.overlay_set_stack, site_id)?
+            .expression_for_context_stack(&self.context_stack, site_id)?
             .cloned())
     }
 
     /// Resolves the effective wrapper context for a child-template occurrence,
     /// preferring the override at the top of the body-root overlay stack.
     ///
-    /// WHAT: looks up the current body-root overlay set in the module store and
-    ///       returns a clone of the wrapper context for `occurrence_id` if one
-    ///       exists. Returns `None` when there is no overlay set or no
-    ///       wrapper-context overlay. A missing active overlay is an internal
-    ///       error.
+    /// WHAT: reads the active value-carried view context and resolves its
+    ///       wrapper-context overlay ID through the module store, returning a
+    ///       clone of the wrapper context for `occurrence_id` if one exists.
+    ///       Returns `None` when there is no view context or no wrapper-context
+    ///       overlay. A missing active overlay is an internal error.
     /// WHY: this mirrors `effective_expression_for_site` for the wrapper-context
     ///      dimension so child-template handoff can apply inherited `$children(..)`
     ///      wrappers and `$fresh` suppression without mutating the structural root.
@@ -626,16 +631,10 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
         &self,
         occurrence_id: ChildTemplateOccurrenceId,
     ) -> Result<Option<TirWrapperContext>, CompilerError> {
-        let Some(overlay_set_id) = self.overlay_set_stack.last().copied() else {
+        let Some(context) = self.context_stack.last().copied() else {
             return Ok(None);
         };
-        let overlay_set = self.store.overlay_set(overlay_set_id).ok_or_else(|| {
-            CompilerError::compiler_error(format!(
-                "HIR handoff materialization referenced missing overlay set {}",
-                overlay_set_id
-            ))
-        })?;
-        let Some(wrapper_context_overlay_id) = overlay_set.wrapper_context else {
+        let Some(wrapper_context_overlay_id) = context.wrapper_context else {
             return Ok(None);
         };
         let wrapper_context_overlay = self
@@ -655,11 +654,11 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
     /// Resolves the effective slot resolution for a slot occurrence,
     /// preferring the resolution at the top of the body-root overlay stack.
     ///
-    /// WHAT: looks up the current body-root overlay set in the module store and
-    ///       returns a clone of the `TirSlotResolution` for `occurrence_id` if one
-    ///       exists. Returns `None` when there is no overlay set or no
-    ///       slot-resolution overlay. A missing active overlay is an internal
-    ///       error.
+    /// WHAT: reads the active value-carried view context and resolves its
+    ///       slot-resolution overlay ID through the module store, returning a
+    ///       clone of the `TirSlotResolution` for `occurrence_id` if one exists.
+    ///       Returns `None` when there is no view context or no slot-resolution
+    ///       overlay. A missing active overlay is an internal error.
     /// WHY: this mirrors `effective_expression_for_site` and
     ///      `effective_wrapper_context_for_occurrence` for the slot-resolution
     ///      dimension so handoff materialization can render resolved slot fills
@@ -669,16 +668,10 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
         &self,
         occurrence_id: SlotOccurrenceId,
     ) -> Result<Option<super::overlays::TirSlotResolution>, CompilerError> {
-        let Some(overlay_set_id) = self.overlay_set_stack.last().copied() else {
+        let Some(context) = self.context_stack.last().copied() else {
             return Ok(None);
         };
-        let overlay_set = self.store.overlay_set(overlay_set_id).ok_or_else(|| {
-            CompilerError::compiler_error(format!(
-                "HIR handoff materialization referenced missing overlay set {}",
-                overlay_set_id
-            ))
-        })?;
-        let Some(slot_resolution_overlay_id) = overlay_set.slot_resolution else {
+        let Some(slot_resolution_overlay_id) = context.slot_resolution else {
             return Ok(None);
         };
         let slot_resolution_overlay = self
@@ -798,14 +791,14 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
         // slot-site validation.
         let template_id = reference.root;
 
-        // Push the child's overlay set so effective expression, slot
+        // Push the child's view context so effective expression, slot
         // resolution, and wrapper context lookups during materialization
         // read through the child's overlay context rather than the parent's.
         // Without this, child templates with expression or slot overlays
         // would materialize from stale structural payloads. The scoped helper
         // validates overlay authority and restores the stack on errors.
         let handoff = if reference.phase.is_at_least(TemplateTirPhase::Composed) {
-            self.with_overlay_set(reference.overlay_set_id, |materializer| {
+            self.with_context(reference.context, |materializer| {
                 materializer.materialize_template(template_id, active_slot_plan, injection)
             })
         } else {
@@ -872,7 +865,7 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
         let child_reference = TemplateTirChildReference::new(
             *source,
             TemplateTirPhase::Composed,
-            TemplateOverlaySetId::empty(),
+            TemplateViewContext::default(),
         );
         self.materialize_child_template_node(&child_reference, location, active_slot_plan, None)
     }
@@ -1041,7 +1034,7 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
             .phase
             .is_at_least(TemplateTirPhase::Composed)
         {
-            self.with_overlay_set(wrapper_reference.overlay_set_id, |materializer| {
+            self.with_context(wrapper_reference.context, |materializer| {
                 Self::materialize_wrapper_with_child(
                     materializer,
                     wrapper_root,
@@ -1085,34 +1078,25 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
             return Ok(None);
         }
 
-        // The shortcut builds a view for the child's own overlay set, while
+        // The shortcut builds a view for the child's own view context, while
         // structural handoff resolves the full root-first overlay stack. An
         // outer expression or slot overlay must stay on the structural path
         // so a valid root-level override is not lost. Wrapper-context-only
         // overlays remain safe because the caller applies them after the
         // folded child emission is produced.
-        for active_overlay_set_id in self.overlay_set_stack.iter().copied() {
-            if active_overlay_set_id == reference.overlay_set_id {
+        for active_context in self.context_stack.iter().copied() {
+            if active_context == reference.context {
                 continue;
             }
 
-            let active_overlay_set =
-                self.store
-                    .overlay_set(active_overlay_set_id)
-                    .ok_or_else(|| {
-                        CompilerError::compiler_error(format!(
-                            "TIR HIR handoff materialization referenced missing overlay set {}",
-                            active_overlay_set_id
-                        ))
-                    })?;
-            if active_overlay_set.expression_overrides.is_some()
-                || active_overlay_set.slot_resolution.is_some()
+            if active_context.expression_overlay.is_some()
+                || active_context.slot_resolution.is_some()
             {
                 return Ok(None);
             }
         }
 
-        // Propagate child root, phase and overlay-set authority failures.
+        // Propagate child root, phase and view context authority failures.
         // A malformed child overlay must not silently fall through to
         // structural materialization.
         let child_view = TirView::with_minimum_phase(
@@ -1120,7 +1104,7 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
             reference.root,
             reference.phase,
             TemplateTirPhase::Composed,
-            reference.overlay_set_id,
+            reference.context,
         )?;
 
         // Unsafe fold shape: non-linear or overlay-bearing shapes that the

@@ -17,8 +17,8 @@ use crate::compiler_frontend::ast::templates::template_head_parser::{
 };
 use crate::compiler_frontend::ast::templates::template_render_units::install_formatted_tir_reference_for_linear_template;
 use crate::compiler_frontend::ast::templates::tir::{
-    TemplateIrBuilder, TemplateIrNodeId, TemplateIrNodeKind, TemplateIrSummary, TemplateOverlaySet,
-    TemplateTirPhase, TemplateTirReference, TirTemplateClassification,
+    TemplateIrBuilder, TemplateIrNodeId, TemplateIrNodeKind, TemplateIrSummary, TemplateTirPhase,
+    TemplateTirReference, TemplateViewContext, TirTemplateClassification,
 };
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationTable};
@@ -1180,17 +1180,14 @@ fn build_template_with_direct_tir_root(
         let mut builder = TemplateIrBuilder::new(&mut store);
         builder.finish_template(root, style.clone(), kind.clone(), summary, location.clone())
     };
-    let overlay_set_id = context
-        .template_ir_store
-        .borrow_mut()
-        .allocate_overlay_set(TemplateOverlaySet::empty());
+    let context = TemplateViewContext::default();
     Template {
         kind,
         location,
         tir_reference: TemplateTirReference {
             root: template_id,
             phase: TemplateTirPhase::Parsed,
-            overlay_set_id,
+            context,
         },
     }
 }
@@ -2403,10 +2400,7 @@ fn parser_records_template_valued_head_as_structural_child_before_body_parse() {
         TemplateIrNodeKind::ChildTemplate { reference, .. } => {
             assert_eq!(reference.root, wrapper.tir_reference.root);
             assert_eq!(reference.phase, wrapper.tir_reference.phase);
-            assert_eq!(
-                reference.overlay_set_id,
-                wrapper.tir_reference.overlay_set_id
-            );
+            assert_eq!(reference.context, wrapper.tir_reference.context);
         }
         other => panic!(
             "template-valued head must be structural before render-unit preparation, found {other:?}"

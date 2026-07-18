@@ -14,7 +14,7 @@
 use crate::compiler_frontend::ast::templates::template::{SlotKey, Style, TemplateType};
 use crate::compiler_frontend::ast::templates::tir::copy_state::TirCopyState;
 use crate::compiler_frontend::ast::templates::tir::node::TemplateIrNodeKind;
-use crate::compiler_frontend::ast::templates::tir::overlays::TemplateOverlaySetId;
+use crate::compiler_frontend::ast::templates::tir::overlays::TemplateViewContext;
 use crate::compiler_frontend::ast::templates::tir::refs::TemplateTirChildReference;
 use crate::compiler_frontend::ast::templates::tir::summary::summarize_existing_nodes;
 use crate::compiler_frontend::ast::templates::tir::{
@@ -33,7 +33,7 @@ type SlotCompositionResult<T> = Result<T, Box<CompilerDiagnostic>>;
 ///
 /// WHAT: records the effective wrapper view identity and the temporary fill
 ///       template created while resolving its slots. The wrapper keeps its
-///       phase and overlay set while both roots remain module-local.
+///       phase and view context while both roots remain module-local.
 /// WHY: overlay allocation runs after the structural store borrow is released.
 ///      Carrying the wrapper/fill pair across that boundary preserves the
 ///      wrapper context needed by later store-local composition work.
@@ -55,14 +55,14 @@ impl SlotResolutionComposition {
 }
 
 /// Result of TIR composition carrying both the structurally composed root and
-/// an optional non-empty slot-resolution overlay-set ID.
+/// an optional slot-resolution view context.
 ///
 /// WHAT: `root` is the structurally composed node (or the original root when no
-///       composition applied). `slot_overlay_set_id` is `Some` when the
+///       composition applied). `slot_context` is `Some` when the
 ///       composition resolved at least one slot-bearing wrapper/fill pair, and
 ///       `None` when no slots were resolved.
 /// WHY: production composition call sites need both the composed root for
-///      structural expansion and the overlay-set ID for `TemplateTirReference`
+///      structural expansion and the value context for `TemplateTirReference`
 ///      threading. A named struct avoids vague tuple returns and keeps the
 ///      overlay context explicit at the stage boundary.
 #[derive(Debug)]
@@ -70,9 +70,9 @@ pub(crate) struct ComposedTirRoot {
     /// The structurally composed root node, or the original root when no
     /// composition applied.
     pub(crate) root: TemplateIrNodeId,
-    /// Non-empty slot-resolution overlay set when the composition resolved at
+    /// Non-empty slot-resolution view context when the composition resolved at
     /// least one slot-bearing wrapper, or `None` when no slots were resolved.
-    pub(crate) slot_overlay_set_id: Option<TemplateOverlaySetId>,
+    pub(crate) slot_context: Option<TemplateViewContext>,
 }
 
 /// Wraps an internal compiler error message as a `CompilerDiagnostic`.
@@ -359,7 +359,7 @@ pub(super) fn build_composed_wrapper_template(
 /// WHY: `SlotOccurrenceId`s are store-global identities. Reusing the same wrapper
 ///      template for many body children (for example, a `<td>` wrapper around
 ///      every table cell) would otherwise place identical occurrence IDs into the
-///      parent's overlay set, making the overlay merge fail.
+///      parent's view context, making the overlay merge fail.
 pub(super) fn copy_tir_wrapper_template_with_fresh_slot_occurrence_ids(
     store: &mut TemplateIrStore,
     wrapper_template_id: TemplateIrId,

@@ -9,8 +9,8 @@ use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::templates::template::Template;
 use crate::compiler_frontend::ast::templates::template::{Style, TemplateType};
 use crate::compiler_frontend::ast::templates::tir::{
-    TemplateIrBuilder, TemplateIrStore, TemplateIrSummary, TemplateOverlaySet, TemplateTirPhase,
-    TemplateTirReference,
+    TemplateIrBuilder, TemplateIrStore, TemplateIrSummary, TemplateTirPhase, TemplateTirReference,
+    TemplateViewContext,
 };
 use crate::compiler_frontend::hir::hir_builder::lower_module;
 use crate::compiler_frontend::hir::module::HirModule;
@@ -49,9 +49,7 @@ pub(crate) fn raw_template_expression_for_hir_invariant(
     value_mode: ValueMode,
 ) -> (Expression, Rc<RefCell<TemplateIrStore>>) {
     let store_handle = Rc::new(RefCell::new(TemplateIrStore::new()));
-    let overlay_set_id = store_handle
-        .borrow_mut()
-        .allocate_overlay_set(TemplateOverlaySet::empty());
+    let context = TemplateViewContext::default();
     let template_id = {
         let mut store = store_handle.borrow_mut();
         let mut builder = TemplateIrBuilder::new(&mut store);
@@ -69,7 +67,7 @@ pub(crate) fn raw_template_expression_for_hir_invariant(
         tir_reference: TemplateTirReference {
             root: template_id,
             phase: TemplateTirPhase::Parsed,
-            overlay_set_id,
+            context,
         },
         location,
     };

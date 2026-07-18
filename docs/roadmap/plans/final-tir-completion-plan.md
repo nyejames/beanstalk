@@ -29,29 +29,28 @@ TIR remains AST-local. No TIR store, ID, view, overlay or preparation type may c
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/final-tir-completion-plan.md
 STATUS: active
-CURRENT_SLICE: R2A replace overlay-set identity with value-carried TemplateViewContext
+CURRENT_SLICE: R2A accepted; checkpoint ready to commit before R2B
 LAST_ACCEPTED_COMMIT: 0d42188ca (R1 ownership and reference collapse)
-WORKTREE: main at 0d42188ca with concurrent user documentation changes that must be ignored, preserved, and excluded from staging
+WORKTREE: main at 5fa9bb32f with accepted uncommitted R2A source and plan changes; the concurrent user documentation work is committed separately at 5fa9bb32f
 REQUIRED_RELOADS: startup files, this plan, and current TIR source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: compiler-design-overview.md one-store TIR contract and this plan's R2 exact-view contract
-- code: overlays.rs, refs.rs, store.rs, view.rs and AST template callers still carry TemplateOverlaySetId; overlay-set storage and composition remain; direct overlay payload arenas already belong to TemplateIrStore
+- code: TemplateViewContext is carried by value; optional overlay IDs use NonZeroU32 index-plus-one encoding; overlay-set storage and APIs are deleted; R2B descendant expression completeness and R2C transition centralization remain
 ACCEPTANCE_CRITERIA:
-- add copyable TemplateViewContext with three optional compact overlay IDs
-- replace durable, child, wrapper, view and caller overlay-set identity without a context table or compatibility shim
-- delete TemplateOverlaySet, TemplateOverlaySetId, overlay-set allocation, lookup, canonicalization and composition
-- add focused size invariants and preserve current behavior; do not begin R2B, R2C or preparation
+- commit the accepted R2A source and this plan only
+- preserve the value-carried context and compact reference layout invariants
+- begin R2B with the existing normalization collector; do not begin R2C or preparation
 VALIDATION_STATE:
-- cargo fmt and git diff --check: passed
-- hard deleted-symbol, stale ownership-comment, render-unit conversion, and HIR/backend TIR-boundary greps: passed
-- TIR line inventory: 20,368 production and 17,224 test lines (069a29acb: 24,274 and 27,231)
-- just validate: passed from a clean target; cross-target Clippy, 3441 unit tests, 1784 integration cases, docs check, and 28 benchmark sanity cases; 22 faster and 0 slower
+- cargo fmt --check and git diff --check: passed
+- deleted overlay-set, stale ownership, compatibility-parameter, and HIR/backend TIR-boundary greps: passed
+- TIR line inventory: 20,048 production and 16,727 test lines (R1: 20,368 and 17,224; 069a29acb: 24,274 and 27,231)
+- just validate: passed; cross-target Clippy, 3413 unit tests, 1784 integration cases, docs check, and 28 benchmark sanity cases; -7ms average, 22 faster and 0 slower
 DOCS_IMPACT: none beyond this parent-managed plan checkpoint; R2A is an internal refactor
 BLOCKERS_OR_OPEN_DECISIONS: none
-DELEGATION_DECISION: codex-cli for R2A - user requires Codex CLI for subsequent worker slices
+DELEGATION_DECISION: codex-cli for R2B - user requires Codex CLI for subsequent worker slices
 NEXT_WORKER_ORDER: codex-cli (user-required provider)
 STOP_REASON: none
-NEXT_RESUME_ACTION: launch the bounded R2A Codex CLI implementation slice
+NEXT_RESUME_ACTION: commit R2A with explicit staging, reload the plan, then launch the smallest R2B Codex CLI slice
 ```
 
 Use `069a29acb` as the implementation and regression base. Do not continue extending `FoldAuthorityWalk`, foreign-store traversal, external expression-overlay stacks or prepared foreign-wrapper proofs.
@@ -588,6 +587,13 @@ target with 3,441 unit tests, 1,784 integration cases, docs checking and 28 benc
 - Replace `TemplateOverlaySetId` fields on durable, child and wrapper references.
 - Delete overlay-set storage, canonicalization and composition.
 - Make the empty context `TemplateViewContext::default()`.
+
+R2A accepted on the pre-commit `5fa9bb32f` worktree. References and `TirView` now carry a
+12-byte `TemplateViewContext` directly, each optional overlay ID remains one 32-bit word and the
+three reference shapes are pinned at 20 bytes. Overlay-set storage, identity, allocation,
+canonicalization and composition are deleted without a forwarding API. The final tracked-file
+inventory is 20,048 production and 16,727 test lines. `just validate` passed with 3,413 unit tests,
+1,784 integration cases, docs checking and all 28 benchmark sanity cases.
 
 #### R2B - Build complete expression overlays
 

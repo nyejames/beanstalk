@@ -169,14 +169,9 @@ fn fold_template_in_context(
 
 fn effective_tir_style(template: &Template, context: &ScopeContext) -> Style {
     let reference = &template.tir_reference;
-    let registry = context.template_ir_store.borrow();
-    let view = TirView::new(
-        &registry,
-        reference.root,
-        reference.phase,
-        reference.overlay_set_id,
-    )
-    .expect("template reference should resolve through its TIR registry");
+    let store = context.template_ir_store.borrow();
+    let view = TirView::new(&store, reference.root, reference.phase, reference.context)
+        .expect("template reference should resolve through its module TIR store");
     let template_ir = view
         .root_template()
         .expect("template TIR entry should remain available");

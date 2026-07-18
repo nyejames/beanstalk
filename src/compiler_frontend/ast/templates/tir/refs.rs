@@ -1,6 +1,6 @@
 //! Durable module-local TIR references.
 //!
-//! WHAT: stores the root, phase, and overlay-set identity needed to resolve a
+//! WHAT: stores the root, phase, and value-carried context needed to resolve a
 //! template value inside one module-scoped [`TemplateIrStore`].
 //! WHY: every TIR reference is local to the AST module that owns its store, so
 //! no store qualification is needed to resolve it.
@@ -8,15 +8,15 @@
 use std::fmt;
 
 pub(crate) use super::ids::TemplateIrId;
-use super::overlays::TemplateOverlaySetId;
+use super::overlays::TemplateViewContext;
 use super::view::TemplateTirPhase;
 
 /// Durable reference to a finalized parser-emitted TIR root.
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct TemplateTirReference {
     pub(crate) root: TemplateIrId,
     pub(crate) phase: TemplateTirPhase,
-    pub(crate) overlay_set_id: TemplateOverlaySetId,
+    pub(crate) context: TemplateViewContext,
 }
 
 impl TemplateTirReference {
@@ -31,19 +31,19 @@ impl TemplateTirReference {
 pub(crate) struct TemplateTirChildReference {
     pub(crate) root: TemplateIrId,
     pub(crate) phase: TemplateTirPhase,
-    pub(crate) overlay_set_id: TemplateOverlaySetId,
+    pub(crate) context: TemplateViewContext,
 }
 
 impl TemplateTirChildReference {
     pub(crate) fn new(
         root: TemplateIrId,
         phase: TemplateTirPhase,
-        overlay_set_id: TemplateOverlaySetId,
+        context: TemplateViewContext,
     ) -> Self {
         Self {
             root,
             phase,
-            overlay_set_id,
+            context,
         }
     }
 }
@@ -53,19 +53,19 @@ impl TemplateTirChildReference {
 pub(crate) struct TemplateWrapperReference {
     pub(crate) root: TemplateIrId,
     pub(crate) phase: TemplateTirPhase,
-    pub(crate) overlay_set_id: TemplateOverlaySetId,
+    pub(crate) context: TemplateViewContext,
 }
 
 impl TemplateWrapperReference {
     pub(crate) fn new(
         root: TemplateIrId,
         phase: TemplateTirPhase,
-        overlay_set_id: TemplateOverlaySetId,
+        context: TemplateViewContext,
     ) -> Self {
         Self {
             root,
             phase,
-            overlay_set_id,
+            context,
         }
     }
 }
@@ -74,8 +74,8 @@ impl fmt::Display for TemplateWrapperReference {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "TemplateWrapperReference({}, phase={:?}, overlay_set_id={:?})",
-            self.root, self.phase, self.overlay_set_id
+            "TemplateWrapperReference({}, phase={:?}, context={:?})",
+            self.root, self.phase, self.context
         )
     }
 }

@@ -18,9 +18,7 @@ use crate::compiler_frontend::ast::templates::tir::ids::{TemplateIrId, TemplateI
 use crate::compiler_frontend::ast::templates::tir::node::{
     TemplateIr, TemplateIrNode, TemplateIrNodeKind,
 };
-use crate::compiler_frontend::ast::templates::tir::overlays::{
-    TemplateOverlaySet, TemplateOverlaySetId,
-};
+use crate::compiler_frontend::ast::templates::tir::overlays::TemplateViewContext;
 use crate::compiler_frontend::ast::templates::tir::refs::{
     TemplateTirChildReference, TemplateWrapperReference,
 };
@@ -230,16 +228,16 @@ pub(in crate::compiler_frontend::ast::templates) fn run_tir_formatter_with_warni
     store: &mut TemplateIrStore,
     root: TemplateIrId,
     phase: TemplateTirPhase,
-    overlay_set_id: TemplateOverlaySetId,
+    context: TemplateViewContext,
     style: &Style,
-    context: &ScopeContext,
+    scope_context: &ScopeContext,
     string_table: &mut StringTable,
 ) -> Result<TirFormatterResult, TemplateError> {
-    let result = format_tir_template(store, root, phase, overlay_set_id, style, string_table)
+    let result = format_tir_template(store, root, phase, context, style, string_table)
         .map_err(tir_formatter_messages_to_template_error)?;
 
     for warning in &result.warnings {
-        context.emit_warning(warning.clone());
+        scope_context.emit_warning(warning.clone());
     }
 
     Ok(result)
@@ -282,12 +280,12 @@ pub(in crate::compiler_frontend::ast::templates) fn format_tir_body_root(
     };
 
     let mut store = context.template_ir_store.borrow_mut();
-    let empty_overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet::empty());
+    let empty_context = TemplateViewContext::default();
     let result = run_tir_formatter_with_warnings(
         &mut store,
         temp_template_id,
         TemplateTirPhase::Parsed,
-        empty_overlay_set_id,
+        empty_context,
         style,
         context,
         string_table,
@@ -577,7 +575,7 @@ pub(in crate::compiler_frontend::ast::templates) fn apply_inherited_child_wrappe
 ///       child template.
 /// WHY: control-flow output is conditional, so inherited wrappers must apply
 ///      around the emission rather than being baked into the child structure.
-///      Threading the effective child reference (root, phase, overlay set)
+///      Threading the effective child reference (root, phase, view context)
 ///      preserves the exact identity inside the derived node.
 fn wrap_control_flow_child_in_inherited_wrappers(
     store: &mut TemplateIrStore,
@@ -617,7 +615,7 @@ fn wrap_control_flow_child_in_inherited_wrappers(
     let wrapper_reference = TemplateTirChildReference::new(
         wrapper_template_id,
         TemplateTirPhase::Parsed,
-        TemplateOverlaySetId::empty(),
+        TemplateViewContext::default(),
     );
 
     Ok(store.push_node(TemplateIrNode::new(

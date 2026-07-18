@@ -15,7 +15,7 @@ use super::super::node::{
     TemplateIr, TemplateIrBranch, TemplateIrNode, TemplateIrNodeKind,
     TemplateLoopHeaderExpressionSites,
 };
-use super::super::overlays::{TemplateOverlaySet, TemplateOverlaySetId, TirExpressionOverlay};
+use super::super::overlays::{TemplateViewContext, TirExpressionOverlay};
 use super::super::refs::{TemplateTirChildReference, TemplateTirReference};
 use super::super::slot_plan::{
     TemplateSlotContributionSourcePlan, TemplateSlotPlan, TemplateSlotSitePlan,
@@ -164,7 +164,7 @@ fn mutates_nested_same_store_child_expression() {
             reference: TemplateTirChildReference::new(
                 child_template,
                 TemplateTirPhase::Parsed,
-                TemplateOverlaySetId::empty(),
+                TemplateViewContext::default(),
             ),
             occurrence_id,
         },
@@ -210,30 +210,30 @@ fn effective_collection_reads_same_store_child_overlay() {
     let child_expression_overlay = store.allocate_expression_overlay(TirExpressionOverlay {
         overrides: vec![(child_site_id, Box::new(expression(9)))],
     });
-    let child_overlay_set = store.allocate_overlay_set(TemplateOverlaySet {
-        expression_overrides: Some(child_expression_overlay),
+    let child_view_context = TemplateViewContext {
+        expression_overlay: Some(child_expression_overlay),
         slot_resolution: None,
         wrapper_context: None,
-    });
+    };
     let occurrence_id = store.next_child_template_occurrence_id();
     let child_node = store.push_node(TemplateIrNode::new(
         TemplateIrNodeKind::ChildTemplate {
             reference: TemplateTirChildReference::new(
                 child_template,
                 TemplateTirPhase::Composed,
-                child_overlay_set,
+                child_view_context,
             ),
             occurrence_id,
         },
         empty_location(),
     ));
     let parent_template = push_template(&mut store, child_node, TemplateType::StringFunction);
-    let root_overlay_set = store.allocate_overlay_set(TemplateOverlaySet::empty());
+    let root_view_context = TemplateViewContext::default();
 
     let payloads = collect_effective_tir_expression_overlay_payloads(
         &store,
         parent_template,
-        root_overlay_set,
+        root_view_context,
     )
     .expect("effective collection should succeed");
     assert!(payloads.iter().any(|(site_id, value)| {
@@ -250,17 +250,17 @@ fn view_walker_reads_expression_overlay() {
     let expression_overlay = store.allocate_expression_overlay(TirExpressionOverlay {
         overrides: vec![(site_id, Box::new(expression(42)))],
     });
-    let overlay_set = store.allocate_overlay_set(TemplateOverlaySet {
-        expression_overrides: Some(expression_overlay),
+    let view_context = TemplateViewContext {
+        expression_overlay: Some(expression_overlay),
         slot_resolution: None,
         wrapper_context: None,
-    });
+    };
     let view = TirView::with_minimum_phase(
         &store,
         template,
         TemplateTirPhase::Finalized,
         TemplateTirPhase::Finalized,
-        overlay_set,
+        view_context,
     )
     .expect("view should construct");
 
@@ -279,7 +279,7 @@ fn nested_expression_walker_enters_same_store_template_view() {
             tir_reference: TemplateTirReference {
                 root: template_id,
                 phase: TemplateTirPhase::Finalized,
-                overlay_set_id: TemplateOverlaySetId::empty(),
+                context: TemplateViewContext::default(),
             },
             location: empty_location(),
         },
@@ -309,7 +309,7 @@ fn missing_child_template_is_reported() {
             reference: TemplateTirChildReference::new(
                 TemplateIrId::new(99),
                 TemplateTirPhase::Parsed,
-                TemplateOverlaySetId::empty(),
+                TemplateViewContext::default(),
             ),
             occurrence_id,
         },
@@ -351,12 +351,12 @@ fn branch_selector_site_id(store: &TemplateIrStore, node_id: TemplateIrNodeId) -
 
 fn finalized_tir_reference(
     template_id: TemplateIrId,
-    overlay_set_id: TemplateOverlaySetId,
+    context: TemplateViewContext,
 ) -> TemplateTirReference {
     TemplateTirReference {
         root: template_id,
         phase: TemplateTirPhase::Finalized,
-        overlay_set_id,
+        context,
     }
 }
 
@@ -512,7 +512,7 @@ fn mutates_child_template_and_nested_child_template_expression() {
     let nested_child_reference = TemplateTirChildReference::new(
         grandchild_template,
         TemplateTirPhase::Parsed,
-        TemplateOverlaySetId::empty(),
+        TemplateViewContext::default(),
     );
     let nested_child = store.push_node(TemplateIrNode::new(
         TemplateIrNodeKind::ChildTemplate {
@@ -527,7 +527,7 @@ fn mutates_child_template_and_nested_child_template_expression() {
     let root_reference = TemplateTirChildReference::new(
         child_template,
         TemplateTirPhase::Parsed,
-        TemplateOverlaySetId::empty(),
+        TemplateViewContext::default(),
     );
     let root = store.push_node(TemplateIrNode::new(
         TemplateIrNodeKind::ChildTemplate {
@@ -580,7 +580,7 @@ fn mutates_runtime_slot_plan_wrapper_source_and_site_render_piece() {
     let runtime_reference = TemplateTirChildReference::new(
         runtime_template_id,
         TemplateTirPhase::Parsed,
-        TemplateOverlaySetId::empty(),
+        TemplateViewContext::default(),
     );
     let root = store.push_node(TemplateIrNode::new(
         TemplateIrNodeKind::ChildTemplate {
@@ -808,18 +808,18 @@ fn view_walker_reads_branch_selector_overlay() {
     let overlay_id = store.allocate_expression_overlay(TirExpressionOverlay {
         overrides: vec![(selector_site_id, Box::new(bool_expression(true)))],
     });
-    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet {
-        expression_overrides: Some(overlay_id),
+    let context = TemplateViewContext {
+        expression_overlay: Some(overlay_id),
         slot_resolution: None,
         wrapper_context: None,
-    });
+    };
 
     let view = TirView::with_minimum_phase(
         &store,
         template_id,
         TemplateTirPhase::Finalized,
         TemplateTirPhase::Finalized,
-        overlay_set_id,
+        context,
     )
     .expect("view should construct");
 
@@ -894,18 +894,18 @@ fn view_walker_reads_loop_header_overlay() {
             (step_site_id, Box::new(expression(50))),
         ],
     });
-    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet {
-        expression_overrides: Some(overlay_id),
+    let context = TemplateViewContext {
+        expression_overlay: Some(overlay_id),
         slot_resolution: None,
         wrapper_context: None,
-    });
+    };
 
     let view = TirView::with_minimum_phase(
         &store,
         template_id,
         TemplateTirPhase::Finalized,
         TemplateTirPhase::Finalized,
-        overlay_set_id,
+        context,
     )
     .expect("view should construct");
 
@@ -947,7 +947,7 @@ fn view_walker_reads_loop_header_overlay() {
 #[test]
 fn view_walker_distinguishes_overlay_contexts_for_the_same_child_root() {
     let mut store = TemplateIrStore::new();
-    let empty_overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet::empty());
+    let empty_context = TemplateViewContext::default();
 
     let (child_template_id, child_site_id) = {
         let child_root = dynamic_node(&mut store, 1);
@@ -956,15 +956,15 @@ fn view_walker_distinguishes_overlay_contexts_for_the_same_child_root() {
         (child_template_id, child_site_id)
     };
 
-    let override_overlay_set_id = {
+    let override_context = {
         let expression_overlay_id = store.allocate_expression_overlay(TirExpressionOverlay {
             overrides: vec![(child_site_id, Box::new(expression(42)))],
         });
-        store.allocate_overlay_set(TemplateOverlaySet {
-            expression_overrides: Some(expression_overlay_id),
+        TemplateViewContext {
+            expression_overlay: Some(expression_overlay_id),
             slot_resolution: None,
             wrapper_context: None,
-        })
+        }
     };
 
     let parent_template_id = {
@@ -974,7 +974,7 @@ fn view_walker_distinguishes_overlay_contexts_for_the_same_child_root() {
                 reference: TemplateTirChildReference::new(
                     child_template_id,
                     TemplateTirPhase::Finalized,
-                    empty_overlay_set_id,
+                    empty_context,
                 ),
                 occurrence_id: structural_occurrence_id,
             },
@@ -986,7 +986,7 @@ fn view_walker_distinguishes_overlay_contexts_for_the_same_child_root() {
                 reference: TemplateTirChildReference::new(
                     child_template_id,
                     TemplateTirPhase::Finalized,
-                    override_overlay_set_id,
+                    override_context,
                 ),
                 occurrence_id: overlaid_occurrence_id,
             },
@@ -1005,7 +1005,7 @@ fn view_walker_distinguishes_overlay_contexts_for_the_same_child_root() {
         &store,
         parent_template_id,
         TemplateTirPhase::Finalized,
-        empty_overlay_set_id,
+        empty_context,
     )
     .expect("parent view should construct");
 
@@ -1045,18 +1045,18 @@ fn view_walker_reads_insert_contribution_effective_overlay() {
     let overlay_id = store.allocate_expression_overlay(TirExpressionOverlay {
         overrides: vec![(insert_site_id, Box::new(expression(42)))],
     });
-    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet {
-        expression_overrides: Some(overlay_id),
+    let context = TemplateViewContext {
+        expression_overlay: Some(overlay_id),
         slot_resolution: None,
         wrapper_context: None,
-    });
+    };
 
     let view = TirView::with_minimum_phase(
         &store,
         parent_template_id,
         TemplateTirPhase::Finalized,
         TemplateTirPhase::Finalized,
-        overlay_set_id,
+        context,
     )
     .expect("parent view should construct");
 
@@ -1080,13 +1080,13 @@ fn view_walker_reports_missing_insert_contribution_template() {
         push_template(&mut store, parent_root, TemplateType::StringFunction)
     };
 
-    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet::empty());
+    let context = TemplateViewContext::default();
 
     let view = TirView::new(
         &store,
         parent_template_id,
         TemplateTirPhase::Finalized,
-        overlay_set_id,
+        context,
     )
     .expect("parent view should construct");
 
@@ -1112,15 +1112,14 @@ fn view_walker_reports_missing_insert_contribution_template() {
 #[test]
 fn nested_walker_inspects_runtime_and_coerced_operands() {
     let mut store = TemplateIrStore::new();
-    let empty_overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet::empty());
+    let empty_context = TemplateViewContext::default();
 
     let template_id = {
         let root = dynamic_node(&mut store, 99);
         push_template(&mut store, root, TemplateType::StringFunction)
     };
 
-    let template =
-        template_with_reference(finalized_tir_reference(template_id, empty_overlay_set_id));
+    let template = template_with_reference(finalized_tir_reference(template_id, empty_context));
     let template_expr = template_expression(template);
     let coerced = coerced_expression(template_expr);
     let expression = runtime_expression(coerced);
@@ -1138,24 +1137,22 @@ fn nested_walker_inspects_runtime_and_coerced_operands() {
 #[test]
 fn nested_walker_shares_visited_set_between_tir_child_and_expression_template() {
     let mut store = TemplateIrStore::new();
-    let empty_overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet::empty());
+    let empty_context = TemplateViewContext::default();
 
     let child_template_id = {
         let child_root = dynamic_node(&mut store, 42);
         push_template(&mut store, child_root, TemplateType::StringFunction)
     };
 
-    let child_template_for_expr = template_with_reference(finalized_tir_reference(
-        child_template_id,
-        empty_overlay_set_id,
-    ));
+    let child_template_for_expr =
+        template_with_reference(finalized_tir_reference(child_template_id, empty_context));
 
     let parent_template_id = {
         let occurrence_id = store.next_child_template_occurrence_id();
         let child_ref = TemplateTirChildReference::new(
             child_template_id,
             TemplateTirPhase::Finalized,
-            empty_overlay_set_id,
+            empty_context,
         );
         let child_node = store.push_node(TemplateIrNode::new(
             TemplateIrNodeKind::ChildTemplate {
@@ -1185,10 +1182,8 @@ fn nested_walker_shares_visited_set_between_tir_child_and_expression_template() 
         push_template(&mut store, parent_root, TemplateType::StringFunction)
     };
 
-    let parent_template = template_with_reference(finalized_tir_reference(
-        parent_template_id,
-        empty_overlay_set_id,
-    ));
+    let parent_template =
+        template_with_reference(finalized_tir_reference(parent_template_id, empty_context));
     let expression = template_expression(parent_template);
 
     let payloads =

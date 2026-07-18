@@ -27,7 +27,7 @@ use crate::compiler_frontend::ast::templates::tir::node::{
     TemplateIr, TemplateIrBranch, TemplateIrNode, TemplateIrNodeKind,
 };
 use crate::compiler_frontend::ast::templates::tir::overlays::{
-    TemplateOverlaySet, TemplateOverlaySetId, TirExpressionOverlay, TirSlotResolution,
+    TemplateViewContext, TirExpressionOverlay, TirExpressionOverlayId, TirSlotResolution,
     TirSlotResolutionOverlay,
 };
 use crate::compiler_frontend::ast::templates::tir::refs::{
@@ -52,7 +52,7 @@ fn sample_key() -> TirFoldCacheKey {
     TirFoldCacheKey {
         root: TemplateIrId::new(0),
         phase: TemplateTirPhase::Parsed,
-        overlay_set_id: TemplateOverlaySetId::empty_for_test(),
+        context: TemplateViewContext::default(),
         loop_iteration_limit: 1024,
         bindings_empty: true,
     }
@@ -74,7 +74,10 @@ fn cache_key_inequality_for_each_identity_dimension() {
     assert_ne!(sample_key(), phase);
 
     let mut overlay = sample_key();
-    overlay.overlay_set_id = TemplateOverlaySetId::new(7);
+    overlay.context = TemplateViewContext {
+        expression_overlay: Some(TirExpressionOverlayId::new(7)),
+        ..TemplateViewContext::default()
+    };
     assert_ne!(sample_key(), overlay);
 
     let mut loop_limit = sample_key();
@@ -105,7 +108,7 @@ fn cache_lookup_miss_then_hit_and_overwrite() {
 struct TextFixture {
     store: TemplateIrStore,
     template_id: TemplateIrId,
-    overlay_set_id: TemplateOverlaySetId,
+    context: TemplateViewContext,
 }
 
 fn build_text_fixture(string_table: &mut StringTable, text: &str) -> TextFixture {
@@ -126,12 +129,12 @@ fn build_text_fixture(string_table: &mut StringTable, text: &str) -> TextFixture
         TemplateIrSummary::default(),
         empty_location(),
     );
-    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet::empty());
+    let context = TemplateViewContext::default();
 
     TextFixture {
         store,
         template_id,
-        overlay_set_id,
+        context,
     }
 }
 
@@ -168,7 +171,7 @@ fn fold_view_matches_direct_template_fold_for_simple_text() {
         &fixture.store,
         fixture.template_id,
         TemplateTirPhase::Composed,
-        fixture.overlay_set_id,
+        fixture.context,
     )
     .expect("view should construct");
 
@@ -190,7 +193,7 @@ fn fold_view_caches_empty_binding_result() {
         &fixture.store,
         fixture.template_id,
         TemplateTirPhase::Composed,
-        fixture.overlay_set_id,
+        fixture.context,
     )
     .expect("view should construct");
 
@@ -200,7 +203,7 @@ fn fold_view_caches_empty_binding_result() {
     let key = TirFoldCacheKey {
         root: fixture.template_id,
         phase: TemplateTirPhase::Composed,
-        overlay_set_id: fixture.overlay_set_id,
+        context: fixture.context,
         loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
         bindings_empty: true,
     };
@@ -220,7 +223,7 @@ fn fold_view_does_not_cache_active_bindings() {
         &fixture.store,
         fixture.template_id,
         TemplateTirPhase::Composed,
-        fixture.overlay_set_id,
+        fixture.context,
     )
     .expect("view should construct");
 
@@ -253,7 +256,7 @@ fn fold_view_does_not_cache_active_bindings() {
     let active_binding_key = TirFoldCacheKey {
         root: fixture.template_id,
         phase: TemplateTirPhase::Composed,
-        overlay_set_id: fixture.overlay_set_id,
+        context: fixture.context,
         loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
         bindings_empty: false,
     };
@@ -282,14 +285,14 @@ fn prepared_view_rejects_identity_mismatch() {
         &fixture.store,
         fixture.template_id,
         TemplateTirPhase::Composed,
-        fixture.overlay_set_id,
+        fixture.context,
     )
     .expect("original view should construct");
     let alternate_view = TirView::new(
         &fixture.store,
         alternate_id,
         TemplateTirPhase::Composed,
-        fixture.overlay_set_id,
+        fixture.context,
     )
     .expect("alternate view should construct");
     let preparation = prepare_tir_view_fold(&original_view, &fixture.store, &string_table)
@@ -333,7 +336,7 @@ fn read_only_preparation_accepts_simple_text() {
         &fixture.store,
         fixture.template_id,
         TemplateTirPhase::Composed,
-        fixture.overlay_set_id,
+        fixture.context,
     )
     .expect("view should construct");
     let preparation = prepare_tir_view_fold(&view, &fixture.store, &string_table)
@@ -375,16 +378,16 @@ fn fold_view_with_resolved_slot_overlay_produces_filled_output() {
             TirSlotResolution::resolved(SlotKey::Default, vec![fill_template_id]),
         )],
     });
-    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet {
-        expression_overrides: None,
+    let context = TemplateViewContext {
+        expression_overlay: None,
         slot_resolution: Some(slot_overlay_id),
         wrapper_context: None,
-    });
+    };
     let view = TirView::new(
         &store,
         wrapper_template_id,
         TemplateTirPhase::Finalized,
-        overlay_set_id,
+        context,
     )
     .expect("view should construct");
     let mut context = fold_context(&mut string_table);
@@ -412,16 +415,16 @@ fn fold_view_with_missing_slot_overlay_produces_empty_output() {
     );
     let slot_overlay_id =
         store.allocate_slot_resolution_overlay(TirSlotResolutionOverlay::default());
-    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet {
-        expression_overrides: None,
+    let context = TemplateViewContext {
+        expression_overlay: None,
         slot_resolution: Some(slot_overlay_id),
         wrapper_context: None,
-    });
+    };
     let view = TirView::new(
         &store,
         wrapper_template_id,
         TemplateTirPhase::Finalized,
-        overlay_set_id,
+        context,
     )
     .expect("view should construct");
     let mut context = fold_context(&mut string_table);
@@ -438,7 +441,7 @@ fn same_store_child_cycle_is_rejected() {
     let child_reference = TemplateTirChildReference::new(
         template_id,
         TemplateTirPhase::Composed,
-        TemplateOverlaySetId::empty(),
+        TemplateViewContext::default(),
     );
     let mut builder = TemplateIrBuilder::new(&mut store);
     let child_node =
@@ -457,7 +460,7 @@ fn same_store_child_cycle_is_rejected() {
         &store,
         template_id,
         TemplateTirPhase::Composed,
-        TemplateOverlaySetId::empty(),
+        TemplateViewContext::default(),
     )
     .expect("view should construct");
     let mut context = fold_context(&mut string_table);
@@ -526,14 +529,9 @@ fn fold_tir_view_rejects_parsed_phase_without_caching() {
     let mut string_table = StringTable::new();
     let mut store = TemplateIrStore::new();
     let template_id = text_template(&mut store, &mut string_table, "parsed");
-    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet::empty());
-    let view = TirView::new(
-        &store,
-        template_id,
-        TemplateTirPhase::Parsed,
-        overlay_set_id,
-    )
-    .expect("view should construct");
+    let context = TemplateViewContext::default();
+    let view = TirView::new(&store, template_id, TemplateTirPhase::Parsed, context)
+        .expect("view should construct");
     let mut context = fold_context(&mut string_table);
 
     let error = fold_tir_view(&view, &store, &mut context)
@@ -590,14 +588,9 @@ fn fold_tir_view_rejects_missing_node_in_untaken_branch() {
         TemplateIrSummary::default(),
         empty_location(),
     ));
-    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet::empty());
-    let view = TirView::new(
-        &store,
-        template_id,
-        TemplateTirPhase::Composed,
-        overlay_set_id,
-    )
-    .expect("view should construct");
+    let context = TemplateViewContext::default();
+    let view = TirView::new(&store, template_id, TemplateTirPhase::Composed, context)
+        .expect("view should construct");
     let mut context = fold_context(&mut string_table);
 
     let error = fold_tir_view(&view, &store, &mut context)
@@ -627,12 +620,12 @@ fn fold_tir_view_repeated_child_template_folding_hits_cache() {
             empty_location(),
         )
     };
-    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet::empty());
+    let view_context = TemplateViewContext::default();
     let view = TirView::new(
         &store,
         child_template_id,
         TemplateTirPhase::Composed,
-        overlay_set_id,
+        view_context,
     )
     .expect("child view should construct");
 
@@ -642,7 +635,7 @@ fn fold_tir_view_repeated_child_template_folding_hits_cache() {
     let cache_key = TirFoldCacheKey {
         root: child_template_id,
         phase: TemplateTirPhase::Composed,
-        overlay_set_id,
+        context: view_context,
         loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
         bindings_empty: true,
     };
@@ -666,7 +659,7 @@ fn fold_tir_view_repeated_child_template_folding_hits_cache() {
 fn fold_tir_view_preserves_root_expression_overlay_through_nested_children() {
     let mut string_table = StringTable::new();
     let mut store = TemplateIrStore::new();
-    let empty_overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet::empty());
+    let empty_context = TemplateViewContext::default();
 
     let structural_text = string_table.intern("structural-leaf");
     let leaf_template_id = {
@@ -688,18 +681,14 @@ fn fold_tir_view_preserves_root_expression_overlay_through_nested_children() {
     };
     let middle_template_id = finish_single_child_template(
         &mut store,
-        TemplateTirChildReference::new(
-            leaf_template_id,
-            TemplateTirPhase::Composed,
-            empty_overlay_set_id,
-        ),
+        TemplateTirChildReference::new(leaf_template_id, TemplateTirPhase::Composed, empty_context),
     );
     let root_template_id = finish_single_child_template(
         &mut store,
         TemplateTirChildReference::new(
             middle_template_id,
             TemplateTirPhase::Composed,
-            empty_overlay_set_id,
+            empty_context,
         ),
     );
 
@@ -724,7 +713,7 @@ fn fold_tir_view_preserves_root_expression_overlay_through_nested_children() {
 
     let first_text = string_table.intern("first-root-overlay");
     let second_text = string_table.intern("second-root-overlay");
-    let first_overlay_set_id = {
+    let first_context = {
         let overlay_id = store.allocate_expression_overlay(TirExpressionOverlay {
             overrides: vec![(
                 leaf_site_id,
@@ -735,13 +724,13 @@ fn fold_tir_view_preserves_root_expression_overlay_through_nested_children() {
                 )),
             )],
         });
-        store.allocate_overlay_set(TemplateOverlaySet {
-            expression_overrides: Some(overlay_id),
+        TemplateViewContext {
+            expression_overlay: Some(overlay_id),
             slot_resolution: None,
             wrapper_context: None,
-        })
+        }
     };
-    let second_overlay_set_id = {
+    let second_context = {
         let overlay_id = store.allocate_expression_overlay(TirExpressionOverlay {
             overrides: vec![(
                 leaf_site_id,
@@ -752,25 +741,25 @@ fn fold_tir_view_preserves_root_expression_overlay_through_nested_children() {
                 )),
             )],
         });
-        store.allocate_overlay_set(TemplateOverlaySet {
-            expression_overrides: Some(overlay_id),
+        TemplateViewContext {
+            expression_overlay: Some(overlay_id),
             slot_resolution: None,
             wrapper_context: None,
-        })
+        }
     };
 
     let first_view = TirView::new(
         &store,
         root_template_id,
         TemplateTirPhase::Composed,
-        first_overlay_set_id,
+        first_context,
     )
     .expect("first view should construct");
     let second_view = TirView::new(
         &store,
         root_template_id,
         TemplateTirPhase::Composed,
-        second_overlay_set_id,
+        second_context,
     )
     .expect("second view should construct");
 
@@ -793,8 +782,11 @@ fn fold_tir_view_preserves_root_expression_overlay_through_nested_children() {
 fn fold_tir_view_below_composed_child_ignores_unconsumed_overlay_identity() {
     let mut string_table = StringTable::new();
     let mut store = TemplateIrStore::new();
-    let parent_overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet::empty());
-    let missing_overlay_set_id = TemplateOverlaySetId::new(999);
+    let parent_context = TemplateViewContext::default();
+    let missing_context = TemplateViewContext {
+        expression_overlay: Some(TirExpressionOverlayId::new(999)),
+        ..TemplateViewContext::default()
+    };
     let child_text = string_table.intern("parsed child");
 
     let parent_template_id = {
@@ -819,7 +811,7 @@ fn fold_tir_view_below_composed_child_ignores_unconsumed_overlay_identity() {
                 reference: TemplateTirChildReference::new(
                     child_template_id,
                     TemplateTirPhase::Parsed,
-                    missing_overlay_set_id,
+                    missing_context,
                 ),
                 occurrence_id,
             },
@@ -844,7 +836,7 @@ fn fold_tir_view_below_composed_child_ignores_unconsumed_overlay_identity() {
         &store,
         parent_template_id,
         TemplateTirPhase::Composed,
-        parent_overlay_set_id,
+        parent_context,
     )
     .expect("parent view should construct");
     let mut context = fold_context(&mut string_table);
@@ -874,7 +866,7 @@ fn fold_tir_view_cache_hit_still_validates_malformed_authority() {
             &fixture.store,
             fixture.template_id,
             TemplateTirPhase::Composed,
-            fixture.overlay_set_id,
+            fixture.context,
         )
         .expect("view should construct");
         fold_tir_view(&view, &fixture.store, &mut fold_context)
@@ -890,7 +882,7 @@ fn fold_tir_view_cache_hit_still_validates_malformed_authority() {
         &fixture.store,
         fixture.template_id,
         TemplateTirPhase::Composed,
-        fixture.overlay_set_id,
+        fixture.context,
     )
     .expect("view should still construct after clearing nodes");
     let error = fold_tir_view(&view, &fixture.store, &mut fold_context)
@@ -917,7 +909,7 @@ fn fold_tir_view_runtime_plan_early_return_validates_plan_authority() {
         &fixture.store,
         fixture.template_id,
         TemplateTirPhase::Composed,
-        fixture.overlay_set_id,
+        fixture.context,
     )
     .expect("view should construct");
     let mut fold_context = fold_context(&mut string_table);
@@ -939,9 +931,7 @@ fn fold_tir_view_runtime_plan_early_return_validates_plan_authority() {
 fn fold_dynamic_ast_template_with_missing_root_authority() -> TemplateError {
     let mut string_table = StringTable::new();
     let store = Rc::new(RefCell::new(TemplateIrStore::new()));
-    let overlay_set_id = store
-        .borrow_mut()
-        .allocate_overlay_set(TemplateOverlaySet::empty());
+    let context = TemplateViewContext::default();
 
     let outer_template_id = {
         let mut tir = store.borrow_mut();
@@ -958,7 +948,7 @@ fn fold_dynamic_ast_template_with_missing_root_authority() -> TemplateError {
             tir_reference: TemplateTirReference {
                 root: nested_template_id,
                 phase: TemplateTirPhase::Composed,
-                overlay_set_id,
+                context,
             },
             location: empty_location(),
         };
@@ -985,7 +975,7 @@ fn fold_dynamic_ast_template_with_missing_root_authority() -> TemplateError {
         &store_ref,
         outer_template_id,
         TemplateTirPhase::Composed,
-        overlay_set_id,
+        context,
     )
     .expect("outer view should construct");
     let mut fold_context = TemplateFoldContext {
@@ -1030,7 +1020,7 @@ fn fold_tir_view_dynamic_ast_template_validates_malformed_root_authority() {
 #[test]
 fn fold_tir_view_rejects_direct_sequence_node_cycle_as_infrastructure() {
     let mut store = TemplateIrStore::new();
-    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet::empty());
+    let context = TemplateViewContext::default();
     // The first pushed node gets index 0, so a Sequence root whose only child
     // is `TemplateIrNodeId::new(0)` is a malformed self-cycle.
     let root = store.push_node(TemplateIrNode::new(
@@ -1047,13 +1037,8 @@ fn fold_tir_view_rejects_direct_sequence_node_cycle_as_infrastructure() {
         empty_location(),
     ));
 
-    let view = TirView::new(
-        &store,
-        template_id,
-        TemplateTirPhase::Composed,
-        overlay_set_id,
-    )
-    .expect("cyclic view should construct");
+    let view = TirView::new(&store, template_id, TemplateTirPhase::Composed, context)
+        .expect("cyclic view should construct");
     let mut string_table = StringTable::new();
     let mut fold_context = fold_context(&mut string_table);
     let TemplateError::Infrastructure(error) =
@@ -1083,7 +1068,7 @@ fn fold_tir_view_increments_phase1_attribution_counters() {
         &fixture.store,
         fixture.template_id,
         TemplateTirPhase::Composed,
-        fixture.overlay_set_id,
+        fixture.context,
     )
     .expect("view should construct");
     let mut fold_context = fold_context(&mut string_table);

@@ -68,18 +68,18 @@ fn fold_template_view_to_string(
 
     increment_ast_counter(AstCounter::TirFinalizationFoldAttempts);
 
-    let registry_borrow = store_handle.borrow();
+    let store_borrow = store_handle.borrow();
     let view = TirView::with_minimum_phase(
-        &registry_borrow,
+        &store_borrow,
         reference.root,
         reference.phase,
         TemplateTirPhase::Composed,
-        reference.overlay_set_id,
+        reference.context,
     )?;
 
     // Complete authority validation and view-native preparation before making
     // any semantic fallback decision. The preparation proof is tied to this
-    // exact root, phase, overlay set, and module store.
+    // exact root, phase, view context, and module store.
     increment_ast_counter(AstCounter::TirReadOnlyFoldAttempts);
     let fold_preparation: PreparedTirViewFold = {
         let store_borrow = fold_inputs.template_ir_store.borrow();

@@ -18,13 +18,13 @@ use crate::compiler_frontend::ast::templates::template_control_flow::{
 use crate::compiler_frontend::ast::templates::template_head_parser::{
     TemplateHeadParseRequest, parse_template_head,
 };
+use crate::compiler_frontend::ast::templates::tir::TirExpressionOverlayId;
 use crate::compiler_frontend::ast::templates::tir::refs::TemplateTirChildReference;
 use crate::compiler_frontend::ast::templates::tir::{
     ExpressionSiteId, SlotOccurrenceId, TemplateConstructionContext, TemplateIrBranch,
     TemplateIrBuilder, TemplateIrId, TemplateIrNodeId, TemplateIrNodeKind, TemplateIrStore,
-    TemplateIrSummary, TemplateLoopHeaderExpressionSites, TemplateOverlaySet, TemplateOverlaySetId,
-    TemplateTirPhase, TemplateTirReference, TirExpressionOverlay, TirSlotResolution,
-    TirSlotResolutionOverlay,
+    TemplateIrSummary, TemplateLoopHeaderExpressionSites, TemplateTirPhase, TemplateTirReference,
+    TemplateViewContext, TirExpressionOverlay, TirSlotResolution, TirSlotResolutionOverlay,
 };
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_messages::{
@@ -113,7 +113,7 @@ fn single_item_template_head_with_close_is_foldable() {
 }
 
 #[test]
-fn parsed_template_tir_reference_carries_registry_empty_overlay_set() {
+fn parsed_template_tir_reference_carries_empty_view_context() {
     let mut string_table = StringTable::new();
     let mut token_stream = template_tokens_from_source("[: body]", &mut string_table);
     let context = new_constant_context(token_stream.src_path.clone());
@@ -122,12 +122,7 @@ fn parsed_template_tir_reference_carries_registry_empty_overlay_set() {
         .expect("template source should parse");
     let reference = &template.tir_reference;
 
-    let registry = context.template_ir_store.borrow();
-    let overlay_set = registry
-        .overlay_set(reference.overlay_set_id)
-        .expect("parsed reference overlay set should resolve in the registry");
-
-    assert_eq!(overlay_set, &TemplateOverlaySet::empty());
+    assert_eq!(reference.context, TemplateViewContext::default());
 }
 
 #[test]
@@ -1902,8 +1897,8 @@ fn const_required_template_if_validates_from_body_tir_roots() {
         ]",
     );
 
-    let registry = context.template_ir_store.borrow();
-    validate_const_required_template_control_flow(&template, &registry, &string_table)
+    let store = context.template_ir_store.borrow();
+    validate_const_required_template_control_flow(&template, &store, &string_table)
         .expect("const-required branch validation should use same-store TIR body roots");
 }
 
@@ -1915,8 +1910,8 @@ fn const_required_template_loop_validates_from_body_tir_root() {
         ]",
     );
 
-    let registry = context.template_ir_store.borrow();
-    validate_const_required_template_control_flow(&template, &registry, &string_table)
+    let store = context.template_ir_store.borrow();
+    validate_const_required_template_control_flow(&template, &store, &string_table)
         .expect("const-required loop validation should use same-store TIR body roots");
 }
 
@@ -1994,8 +1989,8 @@ fn const_required_template_option_capture_present_folds_then_branch() {
     );
 
     {
-        let registry = context.template_ir_store.borrow();
-        validate_const_required_template_control_flow(&template, &registry, &string_table)
+        let store = context.template_ir_store.borrow();
+        validate_const_required_template_control_flow(&template, &store, &string_table)
             .expect("present const option capture should validate");
     }
 
@@ -2032,8 +2027,8 @@ fn const_required_template_option_capture_absent_folds_else_branch() {
     );
 
     {
-        let registry = context.template_ir_store.borrow();
-        validate_const_required_template_control_flow(&template, &registry, &string_table)
+        let store = context.template_ir_store.borrow();
+        validate_const_required_template_control_flow(&template, &store, &string_table)
             .expect("absent const option capture should validate");
     }
 
@@ -2301,17 +2296,14 @@ fn const_required_option_capture_template_with_direct_tir(
         )
     };
 
-    let overlay_set_id = context
-        .template_ir_store
-        .borrow_mut()
-        .allocate_overlay_set(TemplateOverlaySet::empty());
+    let context = TemplateViewContext::default();
 
     Template {
         kind: TemplateType::String,
         tir_reference: TemplateTirReference {
             root: template_id,
             phase: TemplateTirPhase::Composed,
-            overlay_set_id,
+            context,
         },
         location: SourceLocation::default(),
     }
@@ -2546,8 +2538,8 @@ fn const_required_template_if_validates_branch_condition_through_tir_view_overla
         ]",
     );
 
-    let mut registry = context.template_ir_store.borrow_mut();
-    let site_id = find_first_branch_selector_site_id(&template, &registry)
+    let mut store = context.template_ir_store.borrow_mut();
+    let site_id = find_first_branch_selector_site_id(&template, &store)
         .expect("parsed const-required branch should have a selector site");
 
     let override_location = SourceLocation::new(
@@ -2570,16 +2562,11 @@ fn const_required_template_if_validates_branch_condition_through_tir_view_overla
         ConstRecordState::RuntimeValue,
     );
 
-    install_expression_overlay_on_template(
-        &mut template,
-        &mut registry,
-        site_id,
-        runtime_condition,
-    );
+    install_expression_overlay_on_template(&mut template, &mut store, site_id, runtime_condition);
 
-    drop(registry);
-    let registry = context.template_ir_store.borrow();
-    let error = validate_const_required_template_control_flow(&template, &registry, &string_table)
+    drop(store);
+    let store = context.template_ir_store.borrow();
+    let error = validate_const_required_template_control_flow(&template, &store, &string_table)
         .expect_err("TirView overlay should make the branch condition non-const");
 
     assert_invalid_template_structure(
@@ -2597,8 +2584,8 @@ fn const_required_template_loop_validates_header_through_tir_view_overlay() {
         ]",
     );
 
-    let mut registry = context.template_ir_store.borrow_mut();
-    let site_id = find_first_loop_header_site_id(&template, &registry)
+    let mut store = context.template_ir_store.borrow_mut();
+    let site_id = find_first_loop_header_site_id(&template, &store)
         .expect("parsed const-required conditional loop should have a header site");
 
     let override_location = SourceLocation::new(
@@ -2617,14 +2604,14 @@ fn const_required_template_loop_validates_header_through_tir_view_overlay() {
 
     install_expression_overlay_on_template(
         &mut template,
-        &mut registry,
+        &mut store,
         site_id,
         const_true_condition,
     );
 
-    drop(registry);
-    let registry = context.template_ir_store.borrow();
-    let error = validate_const_required_template_control_flow(&template, &registry, &string_table)
+    drop(store);
+    let store = context.template_ir_store.borrow();
+    let error = validate_const_required_template_control_flow(&template, &store, &string_table)
         .expect_err("TirView overlay should turn the conditional loop into const true");
 
     assert_invalid_template_structure(
@@ -2654,8 +2641,8 @@ fn const_required_validation_reports_missing_effective_node_as_internal_error() 
     };
     template.tir_reference.root = malformed_template_id;
 
-    let registry = context.template_ir_store.borrow();
-    let error = validate_const_required_template_control_flow(&template, &registry, &string_table)
+    let store = context.template_ir_store.borrow();
+    let error = validate_const_required_template_control_flow(&template, &store, &string_table)
         .expect_err("missing root node should be an internal error, not a silent success");
 
     let DiagnosticPayload::InfrastructureError { msg, .. } = &error.payload else {
@@ -2691,11 +2678,11 @@ fn const_required_validation_uses_exact_child_overlay_identity() {
             .expect("parsed const template should exist")
             .root
     };
-    let const_overlay_set_id = valid_template.tir_reference.overlay_set_id;
+    let const_context = valid_template.tir_reference.context;
 
-    let non_const_overlay_set_id = {
-        let mut registry = context.template_ir_store.borrow_mut();
-        let site_id = find_first_branch_selector_site_id(&valid_template, &registry)
+    let non_const_context = {
+        let mut store = context.template_ir_store.borrow_mut();
+        let site_id = find_first_branch_selector_site_id(&valid_template, &store)
             .expect("child branch should have a selector site");
 
         let non_const_condition = Expression::reference_with_type_id(
@@ -2707,14 +2694,14 @@ fn const_required_validation_uses_exact_child_overlay_identity() {
             ConstRecordState::RuntimeValue,
         );
 
-        let overlay_id = registry.allocate_expression_overlay(TirExpressionOverlay {
+        let overlay_id = store.allocate_expression_overlay(TirExpressionOverlay {
             overrides: vec![(site_id, Box::new(non_const_condition))],
         });
-        registry.allocate_overlay_set(TemplateOverlaySet {
-            expression_overrides: Some(overlay_id),
+        TemplateViewContext {
+            expression_overlay: Some(overlay_id),
             slot_resolution: None,
             wrapper_context: None,
-        })
+        }
     };
 
     let location = SourceLocation::default();
@@ -2727,7 +2714,7 @@ fn const_required_validation_uses_exact_child_overlay_identity() {
         let recursive_child_reference = TemplateTirChildReference::new(
             recursive_root,
             TemplateTirPhase::Finalized,
-            non_const_overlay_set_id,
+            non_const_context,
         );
 
         let mut builder = TemplateIrBuilder::new(&mut store);
@@ -2755,15 +2742,15 @@ fn const_required_validation_uses_exact_child_overlay_identity() {
         tir_reference: TemplateTirReference {
             root: recursive_template_id,
             phase: TemplateTirPhase::Finalized,
-            overlay_set_id: const_overlay_set_id,
+            context: const_context,
         },
         location,
     };
 
-    let registry = context.template_ir_store.borrow();
+    let store = context.template_ir_store.borrow();
     let error = validate_const_required_template_control_flow(
         &recursive_template,
-        &registry,
+        &store,
         &string_table,
     )
     .expect_err(
@@ -2781,11 +2768,11 @@ fn runtime_template_if_rejects_unresolved_slot_through_tir_view() {
     let (template, context, _string_table) =
         parse_runtime_template_without_validation("[if true:\n            [$slot]\n        ]");
 
-    let registry = context.template_ir_store.borrow();
-    let expected_location = find_first_branch_location(&template, &registry)
+    let store = context.template_ir_store.borrow();
+    let expected_location = find_first_branch_location(&template, &store)
         .expect("runtime branch should have a stable source location");
 
-    let error = validate_runtime_template_control_flow_slot_artifacts(&template, &registry)
+    let error = validate_runtime_template_control_flow_slot_artifacts(&template, &store)
         .expect_err("TirView path should report the unresolved slot in the branch body");
 
     let diagnostic = error.into_diagnostic();
@@ -2802,11 +2789,11 @@ fn runtime_template_if_rejects_unresolved_insert_through_tir_view() {
         "[if true:\n            [$insert(\"style\"): color: red;]\n        ]",
     );
 
-    let registry = context.template_ir_store.borrow();
-    let expected_location = find_first_branch_location(&template, &registry)
+    let store = context.template_ir_store.borrow();
+    let expected_location = find_first_branch_location(&template, &store)
         .expect("runtime branch should have a stable source location");
 
-    let error = validate_runtime_template_control_flow_slot_artifacts(&template, &registry)
+    let error = validate_runtime_template_control_flow_slot_artifacts(&template, &store)
         .expect_err("TirView path should report the escaped insert in the branch body");
 
     let diagnostic = error.into_diagnostic();
@@ -2822,20 +2809,20 @@ fn runtime_template_if_allows_resolved_slot_through_tir_view_overlay() {
     let (mut template, context, _string_table) =
         parse_runtime_template_without_validation("[if true:\n            [$slot]\n        ]");
 
-    let mut registry = context.template_ir_store.borrow_mut();
-    let (occurrence_id, key) = find_first_slot_occurrence_id(&template, &registry)
+    let mut store = context.template_ir_store.borrow_mut();
+    let (occurrence_id, key) = find_first_slot_occurrence_id(&template, &store)
         .expect("parsed runtime branch body should contain a slot occurrence");
 
     install_slot_resolution_overlay_on_template(
         &mut template,
-        &mut registry,
+        &mut store,
         occurrence_id,
         TirSlotResolution::missing(key.clone()),
     );
 
-    drop(registry);
-    let registry = context.template_ir_store.borrow();
-    validate_runtime_template_control_flow_slot_artifacts(&template, &registry)
+    drop(store);
+    let store = context.template_ir_store.borrow();
+    validate_runtime_template_control_flow_slot_artifacts(&template, &store)
         .expect("resolved slot overlay should suppress the unresolved-slot artifact");
 }
 
@@ -2845,12 +2832,12 @@ fn runtime_validation_uses_nested_child_overlay_identity() {
         parse_runtime_template_without_validation("[if true:\n            [$slot]\n        ]");
 
     {
-        let mut registry = context.template_ir_store.borrow_mut();
-        let (occurrence_id, key) = find_first_slot_occurrence_id(&child_template, &registry)
+        let mut store = context.template_ir_store.borrow_mut();
+        let (occurrence_id, key) = find_first_slot_occurrence_id(&child_template, &store)
             .expect("nested runtime child should contain a slot occurrence");
         install_slot_resolution_overlay_on_template(
             &mut child_template,
-            &mut registry,
+            &mut store,
             occurrence_id,
             TirSlotResolution::missing(key),
         );
@@ -2860,7 +2847,7 @@ fn runtime_validation_uses_nested_child_overlay_identity() {
     let child_reference = TemplateTirChildReference::new(
         child_template.tir_reference.root,
         child_template.tir_reference.phase,
-        child_template.tir_reference.overlay_set_id,
+        child_template.tir_reference.context,
     );
     let parent_template_id = {
         let store_handle = context.template_ir_store();
@@ -2877,22 +2864,19 @@ fn runtime_validation_uses_nested_child_overlay_identity() {
             location.clone(),
         )
     };
-    let parent_overlay_set_id = context
-        .template_ir_store
-        .borrow_mut()
-        .allocate_overlay_set(TemplateOverlaySet::empty());
+    let parent_context = TemplateViewContext::default();
     let parent_template = Template {
         kind: TemplateType::String,
         tir_reference: TemplateTirReference {
             root: parent_template_id,
             phase: TemplateTirPhase::Finalized,
-            overlay_set_id: parent_overlay_set_id,
+            context: parent_context,
         },
         location,
     };
 
-    let registry = context.template_ir_store.borrow();
-    validate_runtime_template_control_flow_slot_artifacts(&parent_template, &registry)
+    let store = context.template_ir_store.borrow();
+    validate_runtime_template_control_flow_slot_artifacts(&parent_template, &store)
         .expect("nested child validation should use the child's resolved-slot overlay");
 }
 
@@ -2914,24 +2898,27 @@ fn runtime_validation_reports_missing_root_node_as_internal_error() {
     };
     template.tir_reference.root = malformed_template_id;
 
-    let registry = context.template_ir_store.borrow();
-    let error = validate_runtime_template_control_flow_slot_artifacts(&template, &registry)
+    let store = context.template_ir_store.borrow();
+    let error = validate_runtime_template_control_flow_slot_artifacts(&template, &store)
         .expect_err("missing root node should be an internal error");
 
     assert_internal_template_error_contains(error, "does not exist in the store");
 }
 
 #[test]
-fn runtime_validation_reports_missing_overlay_set_as_internal_error() {
+fn runtime_validation_reports_missing_view_context_as_internal_error() {
     let (mut template, context, _string_table) =
         parse_runtime_template_without_validation("[if true: body]");
-    template.tir_reference.overlay_set_id = TemplateOverlaySetId::new(999);
+    template.tir_reference.context = TemplateViewContext {
+        expression_overlay: Some(TirExpressionOverlayId::new(999)),
+        ..TemplateViewContext::default()
+    };
 
-    let registry = context.template_ir_store.borrow();
-    let error = validate_runtime_template_control_flow_slot_artifacts(&template, &registry)
-        .expect_err("missing overlay set should be an internal error");
+    let store = context.template_ir_store.borrow();
+    let error = validate_runtime_template_control_flow_slot_artifacts(&template, &store)
+        .expect_err("missing view context should be an internal error");
 
-    assert_internal_template_error_contains(error, "overlay set");
+    assert_internal_template_error_contains(error, "expression overlay");
 }
 
 fn assert_internal_template_error_contains(error: TemplateError, expected_message: &str) {
@@ -3030,23 +3017,23 @@ fn find_loop_header_site_id_in_subtree(
 
 fn install_expression_overlay_on_template(
     template: &mut Template,
-    registry: &mut TemplateIrStore,
+    store: &mut TemplateIrStore,
     site_id: ExpressionSiteId,
     expression: Expression,
 ) {
-    let overlay_id = registry.allocate_expression_overlay(TirExpressionOverlay {
+    let overlay_id = store.allocate_expression_overlay(TirExpressionOverlay {
         overrides: vec![(site_id, Box::new(expression))],
     });
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet {
-        expression_overrides: Some(overlay_id),
+    let context = TemplateViewContext {
+        expression_overlay: Some(overlay_id),
         slot_resolution: None,
         wrapper_context: None,
-    });
+    };
 
     {
         let reference = &mut template.tir_reference;
         reference.phase = TemplateTirPhase::Finalized;
-        reference.overlay_set_id = overlay_set_id;
+        reference.context = context;
     }
 }
 
@@ -3099,23 +3086,23 @@ fn find_slot_occurrence_id_in_subtree(
 
 fn install_slot_resolution_overlay_on_template(
     template: &mut Template,
-    registry: &mut TemplateIrStore,
+    store: &mut TemplateIrStore,
     occurrence_id: SlotOccurrenceId,
     resolution: TirSlotResolution,
 ) {
-    let overlay_id = registry.allocate_slot_resolution_overlay(TirSlotResolutionOverlay {
+    let overlay_id = store.allocate_slot_resolution_overlay(TirSlotResolutionOverlay {
         resolutions: vec![(occurrence_id, resolution)],
     });
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet {
-        expression_overrides: None,
+    let context = TemplateViewContext {
+        expression_overlay: None,
         slot_resolution: Some(overlay_id),
         wrapper_context: None,
-    });
+    };
 
     {
         let reference = &mut template.tir_reference;
         reference.phase = TemplateTirPhase::Finalized;
-        reference.overlay_set_id = overlay_set_id;
+        reference.context = context;
     }
 }
 

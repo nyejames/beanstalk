@@ -61,7 +61,7 @@ use crate::compiler_frontend::ast::templates::runtime_handoff::{
 use crate::compiler_frontend::ast::templates::template::Template;
 use crate::compiler_frontend::ast::templates::template::{TemplateConstValueKind, TemplateType};
 use crate::compiler_frontend::ast::templates::tir::{
-    ExpressionSiteId, TemplateIrStore, TemplateOverlaySet, TemplateTirPhase, TemplateTirReference,
+    ExpressionSiteId, TemplateIrStore, TemplateTirPhase, TemplateTirReference, TemplateViewContext,
     TirExpressionOverlay, TirTemplateClassification, TirView, classify_effective_tir_view_template,
     collect_effective_tir_expression_overlay_payloads, finalized_tir_view_for_template,
 };
@@ -817,7 +817,7 @@ fn classify_final_effective_template_view(
     template: &mut Template,
     context: &TemplateNormalizationContext<'_, '_>,
 ) -> Result<TirTemplateClassification, TemplateNormalizationError> {
-    let reference = template.tir_reference.clone();
+    let reference = template.tir_reference;
 
     if !reference.phase.is_at_least(TemplateTirPhase::Finalized) {
         return Err(CompilerError::compiler_error(format!(
@@ -834,7 +834,7 @@ fn classify_final_effective_template_view(
             reference.root,
             reference.phase,
             TemplateTirPhase::Finalized,
-            reference.overlay_set_id,
+            reference.context,
         )?;
         classify_effective_tir_view_template(&view, &store)?
     };
@@ -856,7 +856,7 @@ fn classify_final_effective_template_view(
         reference.root,
         reference.phase,
         TemplateTirPhase::Finalized,
-        reference.overlay_set_id,
+        reference.context,
     )?;
     classify_effective_tir_view_template(&view, &store).map_err(Into::into)
 }
@@ -903,11 +903,11 @@ fn normalize_expression_overlays_for_template_reference(
     template: &mut Template,
     context: &mut TemplateNormalizationContext<'_, '_>,
 ) -> Result<(), TemplateNormalizationError> {
-    // Keep normalized payloads in the shared overlay set consumed
+    // Keep normalized payloads in the shared view context consumed
     // by the finalized effective view and runtime handoff materializer. This
     // preserves shared TIR nodes while covering dynamic expressions, selectors,
     // loop headers, and every reachable control-flow body from one root pass.
-    let reference = template.tir_reference.clone();
+    let reference = template.tir_reference;
     // Same-store is now the only path: every TIR reference is local to this
     // module store, so expression-overlay payloads are always collected. Phase
     // promotion to Finalized is gated separately below, so parsed references
@@ -932,22 +932,12 @@ fn normalize_expression_overlays_for_template_reference(
     }
 
     let mut store = context.template_ir_store.borrow_mut();
-    let existing_overlay_set = store
-        .overlay_set(reference.overlay_set_id)
-        .cloned()
-        .ok_or_else(|| {
-            CompilerError::compiler_error(format!(
-                "expression overlay normalization referenced missing overlay set {}",
-                reference.overlay_set_id
-            ))
-        })?;
     let normalized_site_ids = normalized_overrides
         .iter()
         .map(|(site_id, _)| *site_id)
         .collect::<HashSet<_>>();
 
-    let mut overrides = if let Some(existing_overlay_id) = existing_overlay_set.expression_overrides
-    {
+    let mut overrides = if let Some(existing_overlay_id) = reference.context.expression_overlay {
         let existing_overlay = store
             .expression_overlay(existing_overlay_id)
             .ok_or_else(|| {
@@ -969,15 +959,13 @@ fn normalize_expression_overlays_for_template_reference(
 
     let expression_overlay_id =
         store.allocate_expression_overlay(TirExpressionOverlay { overrides });
-    let expression_overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet {
-        expression_overrides: Some(expression_overlay_id),
+    let expression_context = TemplateViewContext {
+        expression_overlay: Some(expression_overlay_id),
         slot_resolution: None,
         wrapper_context: None,
-    });
-    let overlay_set_id =
-        store.compose_overlay_sets(&[reference.overlay_set_id, expression_overlay_set_id])?;
+    };
 
-    template.tir_reference.overlay_set_id = overlay_set_id;
+    template.tir_reference.context = reference.context.merge(expression_context);
     if should_mark_finalized {
         template.tir_reference.phase = TemplateTirPhase::Finalized;
     }
@@ -993,7 +981,7 @@ fn collect_expression_overlay_payloads(
     let expression_payloads = collect_effective_tir_expression_overlay_payloads(
         &store,
         reference.root,
-        reference.overlay_set_id,
+        reference.context,
     )?;
 
     Ok(expression_payloads)

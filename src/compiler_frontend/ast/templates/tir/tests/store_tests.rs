@@ -1,7 +1,7 @@
 use super::super::builder::TemplateIrBuilder;
 use super::super::ids::TemplateIrId;
 use super::super::node::{TemplateIr, TemplateIrNode, TemplateIrNodeKind};
-use super::super::overlays::TemplateOverlaySetId;
+use super::super::overlays::TemplateViewContext;
 use super::super::refs::TemplateWrapperReference;
 use super::super::slot_plan::{TemplateSlotPlan, TemplateSlotSitePlan, TemplateSlotSiteRenderPlan};
 use super::super::store::TemplateIrStore;
@@ -184,7 +184,7 @@ fn get_wrapper_set_returns_stored_entry() {
         wrappers: vec![TemplateWrapperReference::new(
             wrapper_id,
             TemplateTirPhase::Finalized,
-            TemplateOverlaySetId::empty(),
+            TemplateViewContext::default(),
         )],
     });
 
@@ -225,7 +225,7 @@ fn push_or_reuse_wrapper_set_creates_new_for_different_lengths() {
     let id_b = store.push_or_reuse_wrapper_set(vec![TemplateWrapperReference::new(
         wrapper_id,
         TemplateTirPhase::Finalized,
-        TemplateOverlaySetId::empty(),
+        TemplateViewContext::default(),
     )]);
 
     assert_ne!(
@@ -243,12 +243,12 @@ fn push_or_reuse_wrapper_set_reuses_same_template_id() {
     let id_a = store.push_or_reuse_wrapper_set(vec![TemplateWrapperReference::new(
         template_id,
         TemplateTirPhase::Finalized,
-        TemplateOverlaySetId::empty(),
+        TemplateViewContext::default(),
     )]);
     let id_b = store.push_or_reuse_wrapper_set(vec![TemplateWrapperReference::new(
         template_id,
         TemplateTirPhase::Finalized,
-        TemplateOverlaySetId::empty(),
+        TemplateViewContext::default(),
     )]);
 
     assert_eq!(
@@ -268,12 +268,12 @@ fn push_or_reuse_wrapper_set_does_not_reuse_different_template_ids() {
     let id_a = store.push_or_reuse_wrapper_set(vec![TemplateWrapperReference::new(
         wrapper_a,
         TemplateTirPhase::Finalized,
-        TemplateOverlaySetId::empty(),
+        TemplateViewContext::default(),
     )]);
     let id_b = store.push_or_reuse_wrapper_set(vec![TemplateWrapperReference::new(
         wrapper_b,
         TemplateTirPhase::Finalized,
-        TemplateOverlaySetId::empty(),
+        TemplateViewContext::default(),
     )]);
 
     assert_ne!(

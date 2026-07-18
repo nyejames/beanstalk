@@ -221,7 +221,7 @@ fn fold_to_emission_from_view(
         reference.root,
         reference.phase,
         TemplateTirPhase::Composed,
-        reference.overlay_set_id,
+        reference.context,
     )?;
 
     fold_tir_view(&view, &store, fold_context)

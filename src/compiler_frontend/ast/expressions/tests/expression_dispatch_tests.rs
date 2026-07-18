@@ -16,8 +16,8 @@ use crate::compiler_frontend::ast::expressions::parse_expression_dispatch::{
 use crate::compiler_frontend::ast::templates::template::Template;
 use crate::compiler_frontend::ast::templates::template::{SlotKey, Style, TemplateType};
 use crate::compiler_frontend::ast::templates::tir::{
-    TemplateIrBuilder, TemplateIrStore, TemplateIrSummary, TemplateOverlaySetId, TemplateTirPhase,
-    TemplateTirReference,
+    TemplateIrBuilder, TemplateIrStore, TemplateIrSummary, TemplateTirPhase, TemplateTirReference,
+    TemplateViewContext,
 };
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationTable};
@@ -318,7 +318,7 @@ fn constant_identifier_uses_module_store_tir() {
         tir_reference: TemplateTirReference {
             root: template_id,
             phase: TemplateTirPhase::Composed,
-            overlay_set_id: TemplateOverlaySetId::empty_for_test(),
+            context: TemplateViewContext::default(),
         },
         location: location.clone(),
     };

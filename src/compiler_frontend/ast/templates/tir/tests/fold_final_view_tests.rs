@@ -28,7 +28,7 @@ use crate::compiler_frontend::ast::templates::tir::fold_cache::TirFoldCache;
 use crate::compiler_frontend::ast::templates::tir::node::{
     TemplateIrBranch, TemplateIrNode, TemplateIrNodeKind,
 };
-use crate::compiler_frontend::ast::templates::tir::overlays::TemplateOverlaySet;
+use crate::compiler_frontend::ast::templates::tir::overlays::TemplateViewContext;
 use crate::compiler_frontend::ast::templates::tir::store::TemplateIrStore;
 use crate::compiler_frontend::ast::templates::tir::summary::TemplateIrSummary;
 use crate::compiler_frontend::ast::templates::tir::view::{TemplateTirPhase, TirView};
@@ -104,7 +104,7 @@ fn emission_to_string(emission: TemplateEmission, string_table: &StringTable) ->
 struct FinalViewFoldFixture {
     store: Rc<RefCell<TemplateIrStore>>,
     template_id: crate::compiler_frontend::ast::templates::tir::ids::TemplateIrId,
-    overlay_set_id: crate::compiler_frontend::ast::templates::tir::overlays::TemplateOverlaySetId,
+    context: crate::compiler_frontend::ast::templates::tir::overlays::TemplateViewContext,
 }
 
 fn build_final_view_fixture<F>(
@@ -118,9 +118,7 @@ where
     ) -> crate::compiler_frontend::ast::templates::tir::ids::TemplateIrId,
 {
     let store = Rc::new(RefCell::new(TemplateIrStore::new()));
-    let overlay_set_id = store
-        .borrow_mut()
-        .allocate_overlay_set(TemplateOverlaySet::empty());
+    let context = TemplateViewContext::default();
 
     let template_id = {
         let mut store_borrow = store.borrow_mut();
@@ -130,7 +128,7 @@ where
     FinalViewFoldFixture {
         store,
         template_id,
-        overlay_set_id,
+        context,
     }
 }
 
@@ -144,7 +142,7 @@ fn fold_final_view_fixture(
     let source_scope = InternedPath::new();
 
     let store = fixture.store.borrow();
-    let view = TirView::new(&store, fixture.template_id, phase, fixture.overlay_set_id)
+    let view = TirView::new(&store, fixture.template_id, phase, fixture.context)
         .expect("test view should construct");
 
     let mut fold_context = build_test_fold_context(
@@ -533,9 +531,7 @@ fn final_view_fold_aggregate_output_outside_wrapper_is_error() {
 
 fn build_formatted_markdown_fixture(string_table: &mut StringTable) -> FinalViewFoldFixture {
     let store = Rc::new(RefCell::new(TemplateIrStore::new()));
-    let overlay_set_id = store
-        .borrow_mut()
-        .allocate_overlay_set(TemplateOverlaySet::empty());
+    let context = TemplateViewContext::default();
     let style = Style {
         formatter: Some(markdown_formatter()),
         ..Style::default()
@@ -566,7 +562,7 @@ fn build_formatted_markdown_fixture(string_table: &mut StringTable) -> FinalView
             &mut store_borrow,
             template_id,
             TemplateTirPhase::Parsed,
-            overlay_set_id,
+            context,
             &style,
             string_table,
         )
@@ -586,7 +582,7 @@ fn build_formatted_markdown_fixture(string_table: &mut StringTable) -> FinalView
     FinalViewFoldFixture {
         store,
         template_id,
-        overlay_set_id,
+        context,
     }
 }
 

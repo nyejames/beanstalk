@@ -30,7 +30,7 @@ use crate::compiler_frontend::ast::templates::tir::node::{
     TemplateIr, TemplateIrBranch, TemplateIrNode, TemplateIrNodeKind, TirSlotPlaceholder,
 };
 #[cfg(test)]
-use crate::compiler_frontend::ast::templates::tir::overlays::TemplateOverlaySetId;
+use crate::compiler_frontend::ast::templates::tir::overlays::TemplateViewContext;
 use crate::compiler_frontend::ast::templates::tir::refs::TemplateTirChildReference;
 use crate::compiler_frontend::ast::templates::tir::store::TemplateIrStore;
 use crate::compiler_frontend::ast::templates::tir::summary::TemplateIrSummary;
@@ -122,7 +122,7 @@ impl<'store> TemplateIrBuilder<'store> {
     ///
     /// WHAT: convenience for tests and early construction paths that do not yet
     ///       know the child's phase or overlay context. The emitted node carries
-    ///       [`TemplateTirPhase::Parsed`] and the canonical empty overlay set.
+    ///       [`TemplateTirPhase::Parsed`] and the default empty view context.
     /// WHY: keeps fixture code readable while the production paths that *do* know
     ///      the phase/overlay use [`Self::push_child_template_node_with_reference`].
     #[cfg(test)]
@@ -134,7 +134,7 @@ impl<'store> TemplateIrBuilder<'store> {
         let reference = TemplateTirChildReference::new(
             template,
             TemplateTirPhase::Parsed,
-            TemplateOverlaySetId::empty(),
+            TemplateViewContext::default(),
         );
         self.push_child_template_node_with_reference(reference, location)
     }
@@ -142,7 +142,7 @@ impl<'store> TemplateIrBuilder<'store> {
     /// Pushes a child-template reference node with an explicit view identity.
     ///
     /// WHAT: production paths use this so the node carries the precise root,
-    ///       phase, and overlay set needed to build a [`TirView`](super::view::TirView)
+    ///       phase, and view context needed to build a [`TirView`](super::view::TirView)
     ///       when the child is folded.
     /// WHY: the convenience [`Self::push_child_template_node`] defaults to
     ///      `Parsed`/empty, which is correct for parser-emitted fixtures but not

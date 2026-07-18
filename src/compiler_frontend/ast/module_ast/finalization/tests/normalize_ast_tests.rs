@@ -11,6 +11,7 @@ use crate::compiler_frontend::ast::templates::template::{
 use crate::compiler_frontend::ast::templates::template_control_flow::{
     TemplateBranchSelector, TemplateLoopHeader,
 };
+use crate::compiler_frontend::ast::templates::tir::TirExpressionOverlayId;
 use crate::compiler_frontend::ast::templates::tir::refs::TemplateTirChildReference;
 use crate::compiler_frontend::ast::templates::tir::{
     TemplateIr, TemplateIrBranch, TemplateIrBuilder, TemplateIrNode, TemplateIrNodeKind,
@@ -18,8 +19,8 @@ use crate::compiler_frontend::ast::templates::tir::{
     TemplateTirPhase, TemplateTirReference, TemplateWrapperReference, TemplateWrapperSet, TirView,
 };
 use crate::compiler_frontend::ast::templates::tir::{
-    TemplateOverlaySet, TemplateOverlaySetId, TirExpressionOverlay, TirSlotResolution,
-    TirSlotResolutionOverlay, TirWrapperContext, TirWrapperContextOverlay,
+    TemplateViewContext, TirExpressionOverlay, TirSlotResolution, TirSlotResolutionOverlay,
+    TirWrapperContext, TirWrapperContextOverlay,
 };
 use crate::compiler_frontend::ast::templates::{
     OwnedRuntimeSlotSiteRenderPiece, OwnedRuntimeTemplateBody, OwnedRuntimeTemplateHandoff,
@@ -71,7 +72,7 @@ fn template_with_reference(
 /// before finalization normalizes their enclosing payload.
 fn registered_text_template(
     text: crate::compiler_frontend::symbols::string_interning::StringId,
-    overlay_set_id: TemplateOverlaySetId,
+    context: TemplateViewContext,
     template_ir_store: &Rc<RefCell<TemplateIrStore>>,
     string_table: &StringTable,
 ) -> Template {
@@ -98,7 +99,7 @@ fn registered_text_template(
         TemplateTirReference {
             root: template_id,
             phase: TemplateTirPhase::Composed,
-            overlay_set_id,
+            context,
         },
         TemplateType::String,
         SourceLocation::default(),
@@ -113,9 +114,7 @@ fn nested_wrapper_finalization_fixture(
     unsafe_nested_wrapper: bool,
 ) -> (Template, Rc<RefCell<TemplateIrStore>>) {
     let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-    let empty_overlay_set_id = template_ir_store
-        .borrow_mut()
-        .allocate_overlay_set(TemplateOverlaySet::empty());
+    let empty_context = TemplateViewContext::default();
 
     let (
         parent_template_id,
@@ -208,7 +207,7 @@ fn nested_wrapper_finalization_fixture(
         let inner_wrapper_reference = TemplateWrapperReference::new(
             inner_wrapper_template_id,
             TemplateTirPhase::Finalized,
-            empty_overlay_set_id,
+            empty_context,
         );
         let inner_wrapper_set_id = store.push_wrapper_set(TemplateWrapperSet {
             wrappers: vec![inner_wrapper_reference],
@@ -231,7 +230,7 @@ fn nested_wrapper_finalization_fixture(
                 TemplateTirChildReference::new(
                     nested_child_template_id,
                     TemplateTirPhase::Composed,
-                    empty_overlay_set_id,
+                    empty_context,
                 ),
                 SourceLocation::default(),
             );
@@ -275,7 +274,7 @@ fn nested_wrapper_finalization_fixture(
         let outer_wrapper_reference = TemplateWrapperReference::new(
             outer_wrapper_template_id,
             TemplateTirPhase::Finalized,
-            empty_overlay_set_id,
+            empty_context,
         );
         let outer_wrapper_set_id = store.push_wrapper_set(TemplateWrapperSet {
             wrappers: vec![outer_wrapper_reference],
@@ -287,7 +286,7 @@ fn nested_wrapper_finalization_fixture(
                 TemplateTirChildReference::new(
                     child_template_id,
                     TemplateTirPhase::Composed,
-                    empty_overlay_set_id,
+                    empty_context,
                 ),
                 SourceLocation::default(),
             )
@@ -347,16 +346,13 @@ fn nested_wrapper_finalization_fixture(
                     )),
                 )],
             });
-    let outer_overlay_set_id =
-        template_ir_store
-            .borrow_mut()
-            .allocate_overlay_set(TemplateOverlaySet {
-                expression_overrides: Some(outer_expression_overlay_id),
-                slot_resolution: None,
-                wrapper_context: Some(nested_context_overlay_id),
-            });
-    template_ir_store.borrow_mut().wrapper_sets[outer_wrapper_set_id.index()].wrappers[0]
-        .overlay_set_id = outer_overlay_set_id;
+    let outer_context = TemplateViewContext {
+        expression_overlay: Some(outer_expression_overlay_id),
+        slot_resolution: None,
+        wrapper_context: Some(nested_context_overlay_id),
+    };
+    template_ir_store.borrow_mut().wrapper_sets[outer_wrapper_set_id.index()].wrappers[0].context =
+        outer_context;
 
     let parent_context_overlay_id = template_ir_store
         .borrow_mut()
@@ -369,19 +365,16 @@ fn nested_wrapper_finalization_fixture(
                 },
             )],
         });
-    let parent_overlay_set_id =
-        template_ir_store
-            .borrow_mut()
-            .allocate_overlay_set(TemplateOverlaySet {
-                expression_overrides: None,
-                slot_resolution: None,
-                wrapper_context: Some(parent_context_overlay_id),
-            });
+    let parent_context = TemplateViewContext {
+        expression_overlay: None,
+        slot_resolution: None,
+        wrapper_context: Some(parent_context_overlay_id),
+    };
     let template = template_with_reference(
         TemplateTirReference {
             root: parent_template_id,
             phase: TemplateTirPhase::Finalized,
-            overlay_set_id: parent_overlay_set_id,
+            context: parent_context,
         },
         TemplateType::String,
         SourceLocation::default(),
@@ -430,12 +423,9 @@ fn finalization_fold_composed_tir_root_folds_view_text() {
     let path_format_config = PathStringFormatConfig::default();
     let source_file_scope = InternedPath::new();
     let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-    let overlay_set_id = template_ir_store
-        .borrow_mut()
-        .allocate_overlay_set(TemplateOverlaySet::empty());
+    let context = TemplateViewContext::default();
 
-    let template =
-        registered_text_template(view_text, overlay_set_id, &template_ir_store, &string_table);
+    let template = registered_text_template(view_text, context, &template_ir_store, &string_table);
 
     let folded = try_fold_template_to_string(
         &template,
@@ -467,17 +457,10 @@ fn finalization_normalizes_dynamic_expression_payloads_into_expression_overlay()
     let path_format_config = PathStringFormatConfig::default();
     let source_file_scope = InternedPath::new();
     let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-    let overlay_set_id = template_ir_store
-        .borrow_mut()
-        .allocate_overlay_set(TemplateOverlaySet::empty());
+    let context = TemplateViewContext::default();
 
     let dynamic_expression = Expression::template(
-        registered_text_template(
-            normalized_text,
-            overlay_set_id,
-            &template_ir_store,
-            &string_table,
-        ),
+        registered_text_template(normalized_text, context, &template_ir_store, &string_table),
         ValueMode::ImmutableOwned,
     );
     let expression_location = location_at(31, 7);
@@ -517,7 +500,7 @@ fn finalization_normalizes_dynamic_expression_payloads_into_expression_overlay()
         TemplateTirReference {
             root: template_id,
             phase: TemplateTirPhase::Composed,
-            overlay_set_id,
+            context,
         },
         TemplateType::StringFunction,
         SourceLocation::default(),
@@ -537,8 +520,9 @@ fn finalization_normalizes_dynamic_expression_payloads_into_expression_overlay()
 
     let reference = &template.tir_reference;
     assert_ne!(
-        reference.overlay_set_id, overlay_set_id,
-        "normalization should update the template reference to the expression-overlay set"
+        reference.context,
+        TemplateViewContext::default(),
+        "normalization should update the template reference with an expression overlay"
     );
     assert_eq!(
         reference.phase,
@@ -552,7 +536,7 @@ fn finalization_normalizes_dynamic_expression_payloads_into_expression_overlay()
         reference.root,
         reference.phase,
         TemplateTirPhase::Finalized,
-        reference.overlay_set_id,
+        reference.context,
     )
     .expect("updated template reference should build a finalized TirView");
 
@@ -599,17 +583,10 @@ fn finalization_does_not_mark_parsed_expression_overlay_reference_finalized() {
     let path_format_config = PathStringFormatConfig::default();
     let source_file_scope = InternedPath::new();
     let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-    let overlay_set_id = template_ir_store
-        .borrow_mut()
-        .allocate_overlay_set(TemplateOverlaySet::empty());
+    let context = TemplateViewContext::default();
 
     let dynamic_expression = Expression::template(
-        registered_text_template(
-            normalized_text,
-            overlay_set_id,
-            &template_ir_store,
-            &string_table,
-        ),
+        registered_text_template(normalized_text, context, &template_ir_store, &string_table),
         ValueMode::ImmutableOwned,
     );
     let template_id = {
@@ -634,7 +611,7 @@ fn finalization_does_not_mark_parsed_expression_overlay_reference_finalized() {
         TemplateTirReference {
             root: template_id,
             phase: TemplateTirPhase::Parsed,
-            overlay_set_id,
+            context,
         },
         TemplateType::StringFunction,
         SourceLocation::default(),
@@ -654,7 +631,8 @@ fn finalization_does_not_mark_parsed_expression_overlay_reference_finalized() {
 
     let reference = &template.tir_reference;
     assert_ne!(
-        reference.overlay_set_id, overlay_set_id,
+        reference.context,
+        TemplateViewContext::default(),
         "parsed references may receive expression overlays without becoming finalized views"
     );
     assert_eq!(
@@ -673,17 +651,10 @@ fn finalization_normalizes_branch_selector_payloads_into_expression_overlay() {
     let path_format_config = PathStringFormatConfig::default();
     let source_file_scope = InternedPath::new();
     let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-    let overlay_set_id = template_ir_store
-        .borrow_mut()
-        .allocate_overlay_set(TemplateOverlaySet::empty());
+    let context = TemplateViewContext::default();
 
     let selector_expression = Expression::template(
-        registered_text_template(
-            normalized_text,
-            overlay_set_id,
-            &template_ir_store,
-            &string_table,
-        ),
+        registered_text_template(normalized_text, context, &template_ir_store, &string_table),
         ValueMode::ImmutableOwned,
     );
     let selector_location = location_at(41, 9);
@@ -722,7 +693,7 @@ fn finalization_normalizes_branch_selector_payloads_into_expression_overlay() {
         TemplateTirReference {
             root: template_id,
             phase: TemplateTirPhase::Composed,
-            overlay_set_id,
+            context,
         },
         TemplateType::StringFunction,
         SourceLocation::default(),
@@ -742,8 +713,9 @@ fn finalization_normalizes_branch_selector_payloads_into_expression_overlay() {
 
     let reference = &template.tir_reference;
     assert_ne!(
-        reference.overlay_set_id, overlay_set_id,
-        "normalization should update the template reference to the expression-overlay set"
+        reference.context,
+        TemplateViewContext::default(),
+        "normalization should update the template reference with an expression overlay"
     );
     assert_eq!(
         reference.phase,
@@ -757,7 +729,7 @@ fn finalization_normalizes_branch_selector_payloads_into_expression_overlay() {
         reference.root,
         reference.phase,
         TemplateTirPhase::Finalized,
-        reference.overlay_set_id,
+        reference.context,
     )
     .expect("updated template reference should build a finalized TirView");
 
@@ -796,17 +768,10 @@ fn finalization_normalizes_loop_header_payloads_into_expression_overlay() {
     let path_format_config = PathStringFormatConfig::default();
     let source_file_scope = InternedPath::new();
     let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-    let overlay_set_id = template_ir_store
-        .borrow_mut()
-        .allocate_overlay_set(TemplateOverlaySet::empty());
+    let context = TemplateViewContext::default();
 
     let header_expression = Expression::template(
-        registered_text_template(
-            normalized_text,
-            overlay_set_id,
-            &template_ir_store,
-            &string_table,
-        ),
+        registered_text_template(normalized_text, context, &template_ir_store, &string_table),
         ValueMode::ImmutableOwned,
     );
     let loop_location = location_at(51, 11);
@@ -848,7 +813,7 @@ fn finalization_normalizes_loop_header_payloads_into_expression_overlay() {
         TemplateTirReference {
             root: template_id,
             phase: TemplateTirPhase::Composed,
-            overlay_set_id,
+            context,
         },
         TemplateType::StringFunction,
         SourceLocation::default(),
@@ -868,8 +833,9 @@ fn finalization_normalizes_loop_header_payloads_into_expression_overlay() {
 
     let reference = &template.tir_reference;
     assert_ne!(
-        reference.overlay_set_id, overlay_set_id,
-        "normalization should update the template reference to the expression-overlay set"
+        reference.context,
+        TemplateViewContext::default(),
+        "normalization should update the template reference with an expression overlay"
     );
     assert_eq!(
         reference.phase,
@@ -883,7 +849,7 @@ fn finalization_normalizes_loop_header_payloads_into_expression_overlay() {
         reference.root,
         reference.phase,
         TemplateTirPhase::Finalized,
-        reference.overlay_set_id,
+        reference.context,
     )
     .expect("updated template reference should build a finalized TirView");
 
@@ -928,9 +894,7 @@ fn finalization_fold_uses_finalized_expression_overlay_view() {
     let path_format_config = PathStringFormatConfig::default();
     let source_file_scope = InternedPath::new();
     let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-    let empty_overlay_set_id = template_ir_store
-        .borrow_mut()
-        .allocate_overlay_set(TemplateOverlaySet::empty());
+    let empty_context = TemplateViewContext::default();
 
     let (template_id, dynamic_node) = {
         let mut store = template_ir_store.borrow_mut();
@@ -982,24 +946,18 @@ fn finalization_fold_uses_finalized_expression_overlay_view() {
                     )),
                 )],
             });
-    let expression_overlay_set_id =
-        template_ir_store
-            .borrow_mut()
-            .allocate_overlay_set(TemplateOverlaySet {
-                expression_overrides: Some(expression_overlay_id),
-                slot_resolution: None,
-                wrapper_context: None,
-            });
-    let overlay_set_id = template_ir_store
-        .borrow_mut()
-        .compose_overlay_sets(&[empty_overlay_set_id, expression_overlay_set_id])
-        .expect("expression overlay set should compose");
+    let expression_context = TemplateViewContext {
+        expression_overlay: Some(expression_overlay_id),
+        slot_resolution: None,
+        wrapper_context: None,
+    };
+    let context = empty_context.merge(expression_context);
 
     let template = template_with_reference(
         TemplateTirReference {
             root: template_id,
             phase: TemplateTirPhase::Finalized,
-            overlay_set_id,
+            context,
         },
         TemplateType::String,
         SourceLocation::default(),
@@ -1047,9 +1005,7 @@ fn finalization_classifies_root_expression_overlay_through_nested_same_store_chi
     let path_format_config = PathStringFormatConfig::default();
     let source_file_scope = InternedPath::new();
     let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-    let empty_overlay_set_id = template_ir_store
-        .borrow_mut()
-        .allocate_overlay_set(TemplateOverlaySet::empty());
+    let empty_context = TemplateViewContext::default();
 
     let (root_template_id, dynamic_site_id, selector_site_id, loop_site_id) = {
         let mut store = template_ir_store.borrow_mut();
@@ -1163,7 +1119,7 @@ fn finalization_classifies_root_expression_overlay_through_nested_same_store_chi
             let child_reference = TemplateTirChildReference::new(
                 descendant_template_id,
                 TemplateTirPhase::Composed,
-                empty_overlay_set_id,
+                empty_context,
             );
             let child_node = builder.push_child_template_node_with_reference(
                 child_reference,
@@ -1218,20 +1174,17 @@ fn finalization_classifies_root_expression_overlay_through_nested_same_store_chi
                     ),
                 ],
             });
-    let root_overlay_set_id =
-        template_ir_store
-            .borrow_mut()
-            .allocate_overlay_set(TemplateOverlaySet {
-                expression_overrides: Some(expression_overlay_id),
-                slot_resolution: None,
-                wrapper_context: None,
-            });
+    let root_context = TemplateViewContext {
+        expression_overlay: Some(expression_overlay_id),
+        slot_resolution: None,
+        wrapper_context: None,
+    };
 
     let template = template_with_reference(
         TemplateTirReference {
             root: root_template_id,
             phase: TemplateTirPhase::Finalized,
-            overlay_set_id: root_overlay_set_id,
+            context: root_context,
         },
         TemplateType::String,
         SourceLocation::default(),
@@ -1269,10 +1222,11 @@ fn finalization_ignores_parsed_child_overlay_before_later_composed_descendant() 
     let path_format_config = PathStringFormatConfig::default();
     let source_file_scope = InternedPath::new();
     let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-    let empty_overlay_set_id = template_ir_store
-        .borrow_mut()
-        .allocate_overlay_set(TemplateOverlaySet::empty());
-    let missing_overlay_set_id = TemplateOverlaySetId::new(999);
+    let empty_context = TemplateViewContext::default();
+    let missing_context = TemplateViewContext {
+        expression_overlay: Some(TirExpressionOverlayId::new(999)),
+        ..TemplateViewContext::default()
+    };
 
     let (root_template_id, descendant_site_id) = {
         let mut store = template_ir_store.borrow_mut();
@@ -1313,7 +1267,7 @@ fn finalization_ignores_parsed_child_overlay_before_later_composed_descendant() 
                 TemplateTirChildReference::new(
                     descendant_template_id,
                     TemplateTirPhase::Composed,
-                    empty_overlay_set_id,
+                    empty_context,
                 ),
                 SourceLocation::default(),
             );
@@ -1332,7 +1286,7 @@ fn finalization_ignores_parsed_child_overlay_before_later_composed_descendant() 
             TemplateTirChildReference::new(
                 parsed_child_template_id,
                 TemplateTirPhase::Parsed,
-                missing_overlay_set_id,
+                missing_context,
             ),
             SourceLocation::default(),
         );
@@ -1361,19 +1315,16 @@ fn finalization_ignores_parsed_child_overlay_before_later_composed_descendant() 
                     )),
                 )],
             });
-    let root_overlay_set_id =
-        template_ir_store
-            .borrow_mut()
-            .allocate_overlay_set(TemplateOverlaySet {
-                expression_overrides: Some(expression_overlay_id),
-                slot_resolution: None,
-                wrapper_context: None,
-            });
+    let root_context = TemplateViewContext {
+        expression_overlay: Some(expression_overlay_id),
+        slot_resolution: None,
+        wrapper_context: None,
+    };
     let template = template_with_reference(
         TemplateTirReference {
             root: root_template_id,
             phase: TemplateTirPhase::Finalized,
-            overlay_set_id: root_overlay_set_id,
+            context: root_context,
         },
         TemplateType::String,
         SourceLocation::default(),
@@ -1432,12 +1383,9 @@ fn finalization_rejects_nested_runtime_wrapper_in_exact_wrapper_overlay() {
 fn finalization_keeps_valid_runtime_slot_plan_out_of_folded_string() {
     let mut string_table = StringTable::new();
     let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-    let overlay_set_id = template_ir_store
-        .borrow_mut()
-        .allocate_overlay_set(TemplateOverlaySet::empty());
+    let context = TemplateViewContext::default();
     let text = string_table.intern("runtime root");
-    let template =
-        registered_text_template(text, overlay_set_id, &template_ir_store, &string_table);
+    let template = registered_text_template(text, context, &template_ir_store, &string_table);
     let template_id = template.tir_reference.root;
 
     {
@@ -1482,12 +1430,9 @@ fn finalization_keeps_valid_runtime_slot_plan_out_of_folded_string() {
 fn finalization_replaces_renderable_runtime_slot_plan_with_owned_handoff() {
     let mut string_table = StringTable::new();
     let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-    let overlay_set_id = template_ir_store
-        .borrow_mut()
-        .allocate_overlay_set(TemplateOverlaySet::empty());
+    let context = TemplateViewContext::default();
     let text = string_table.intern("runtime handoff");
-    let template =
-        registered_text_template(text, overlay_set_id, &template_ir_store, &string_table);
+    let template = registered_text_template(text, context, &template_ir_store, &string_table);
     let template_id = template.tir_reference.root;
 
     {
@@ -1535,12 +1480,9 @@ fn finalization_replaces_renderable_runtime_slot_plan_with_owned_handoff() {
 fn module_constant_normalization_rejects_runtime_slot_plan_with_structured_diagnostic() {
     let mut string_table = StringTable::new();
     let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-    let overlay_set_id = template_ir_store
-        .borrow_mut()
-        .allocate_overlay_set(TemplateOverlaySet::empty());
+    let context = TemplateViewContext::default();
     let text = string_table.intern("module constant runtime plan");
-    let template =
-        registered_text_template(text, overlay_set_id, &template_ir_store, &string_table);
+    let template = registered_text_template(text, context, &template_ir_store, &string_table);
     let template_id = template.tir_reference.root;
 
     {
@@ -1624,7 +1566,7 @@ fn finalization_accepts_supported_nested_wrapper_exact_view() {
 }
 
 #[test]
-fn finalization_fold_uses_resolved_slot_overlay_set() {
+fn finalization_fold_uses_resolved_slot_view_context() {
     let mut string_table = StringTable::new();
     let before_text = string_table.intern("before");
     let after_text = string_table.intern("after");
@@ -1694,23 +1636,20 @@ fn finalization_fold_uses_resolved_slot_overlay_set() {
                 TirSlotResolution::resolved(SlotKey::Default, vec![fill_template_id]),
             )],
         });
-        let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet {
-            expression_overrides: None,
+        let context = TemplateViewContext {
+            expression_overlay: None,
             slot_resolution: Some(slot_overlay_id),
             wrapper_context: None,
-        });
+        };
         assert!(
-            !store
-                .overlay_set(overlay_set_id)
-                .expect("overlay set should exist")
-                .is_empty(),
-            "test must exercise a real non-empty slot overlay set"
+            context.slot_resolution.is_some(),
+            "test must exercise a real slot-resolution overlay"
         );
 
         TemplateTirReference {
             root: wrapper_template_id,
             phase: TemplateTirPhase::Composed,
-            overlay_set_id,
+            context,
         }
     };
 
@@ -1748,9 +1687,7 @@ fn finalization_fold_composed_root_with_unfilled_slot_emits_no_slot_output() {
     let path_format_config = PathStringFormatConfig::default();
     let source_file_scope = InternedPath::new();
     let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-    let overlay_set_id = template_ir_store
-        .borrow_mut()
-        .allocate_overlay_set(TemplateOverlaySet::empty());
+    let context = TemplateViewContext::default();
 
     // An unfilled slot contributes no output. Finalization folds that rule
     // directly from the composed TIR root.
@@ -1777,7 +1714,7 @@ fn finalization_fold_composed_root_with_unfilled_slot_emits_no_slot_output() {
         TemplateTirReference {
             root: template_id,
             phase: TemplateTirPhase::Composed,
-            overlay_set_id,
+            context,
         }
     };
 
@@ -1817,9 +1754,7 @@ fn finalization_fold_formatted_root_with_unfilled_slot_emits_no_slot_output() {
     let path_format_config = PathStringFormatConfig::default();
     let source_file_scope = InternedPath::new();
     let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-    let overlay_set_id = template_ir_store
-        .borrow_mut()
-        .allocate_overlay_set(TemplateOverlaySet::empty());
+    let context = TemplateViewContext::default();
 
     let reference = {
         let location = SourceLocation::default();
@@ -1848,7 +1783,7 @@ fn finalization_fold_formatted_root_with_unfilled_slot_emits_no_slot_output() {
         TemplateTirReference {
             root: template_id,
             phase: TemplateTirPhase::Formatted,
-            overlay_set_id,
+            context,
         }
     };
 
@@ -1918,9 +1853,7 @@ fn branch_tir_root_normalizes_into_owned_runtime_handoff() {
     let branch_text = string_table.intern("branch body");
     let fallback_text = string_table.intern("fallback body");
     let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-    let overlay_set_id = template_ir_store
-        .borrow_mut()
-        .allocate_overlay_set(TemplateOverlaySet::empty());
+    let context = TemplateViewContext::default();
     let template_id = {
         let mut store = template_ir_store.borrow_mut();
         let mut builder = TemplateIrBuilder::new(&mut store);
@@ -1963,7 +1896,7 @@ fn branch_tir_root_normalizes_into_owned_runtime_handoff() {
         TemplateTirReference {
             root: template_id,
             phase: TemplateTirPhase::Composed,
-            overlay_set_id,
+            context,
         },
         TemplateType::StringFunction,
         SourceLocation::default(),
@@ -2020,9 +1953,7 @@ fn loop_tir_root_normalizes_into_owned_runtime_handoff() {
     let open_text = string_table.intern("[");
     let close_text = string_table.intern("]");
     let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-    let overlay_set_id = template_ir_store
-        .borrow_mut()
-        .allocate_overlay_set(TemplateOverlaySet::empty());
+    let context = TemplateViewContext::default();
     let template_id = {
         let mut store = template_ir_store.borrow_mut();
         let aggregate_output = store.push_node(TemplateIrNode::new(
@@ -2066,7 +1997,7 @@ fn loop_tir_root_normalizes_into_owned_runtime_handoff() {
         TemplateTirReference {
             root: template_id,
             phase: TemplateTirPhase::Composed,
-            overlay_set_id,
+            context,
         },
         TemplateType::StringFunction,
         SourceLocation::default(),
@@ -2211,7 +2142,7 @@ fn collect_owned_node_string_slice_expressions(
 fn registered_runtime_template(
     text: crate::compiler_frontend::symbols::string_interning::StringId,
     reference_name: &str,
-    overlay_set_id: TemplateOverlaySetId,
+    context: TemplateViewContext,
     template_ir_store: &Rc<RefCell<TemplateIrStore>>,
     string_table: &mut StringTable,
 ) -> Template {
@@ -2254,7 +2185,7 @@ fn registered_runtime_template(
         TemplateTirReference {
             root: template_id,
             phase: TemplateTirPhase::Composed,
-            overlay_set_id,
+            context,
         },
         TemplateType::StringFunction,
         SourceLocation::default(),
@@ -2270,17 +2201,10 @@ fn ordinary_runtime_template_handoff_uses_module_tir_store() {
     let path_format_config = PathStringFormatConfig::default();
     let source_file_scope = InternedPath::new();
     let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-    let overlay_set_id = template_ir_store
-        .borrow_mut()
-        .allocate_overlay_set(TemplateOverlaySet::empty());
+    let context = TemplateViewContext::default();
 
-    let template = registered_runtime_template(
-        text,
-        "name",
-        overlay_set_id,
-        &template_ir_store,
-        &mut string_table,
-    );
+    let template =
+        registered_runtime_template(text, "name", context, &template_ir_store, &mut string_table);
 
     let mut expression = Expression::template(template, ValueMode::ImmutableOwned);
 
@@ -2312,17 +2236,10 @@ fn runtime_template_expression_normalization_replaces_template_with_owned_handof
     let path_format_config = PathStringFormatConfig::default();
     let source_file_scope = InternedPath::new();
     let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-    let overlay_set_id = template_ir_store
-        .borrow_mut()
-        .allocate_overlay_set(TemplateOverlaySet::empty());
+    let context = TemplateViewContext::default();
 
-    let template = registered_runtime_template(
-        text,
-        "name",
-        overlay_set_id,
-        &template_ir_store,
-        &mut string_table,
-    );
+    let template =
+        registered_runtime_template(text, "name", context, &template_ir_store, &mut string_table);
 
     let mut expression = Expression::template(template, ValueMode::ImmutableOwned);
 
@@ -2366,13 +2283,11 @@ fn runtime_template_expression_handoff_uses_finalized_expression_overlay_view() 
     let path_format_config = PathStringFormatConfig::default();
     let source_file_scope = InternedPath::new();
     let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-    let empty_overlay_set_id = template_ir_store
-        .borrow_mut()
-        .allocate_overlay_set(TemplateOverlaySet::empty());
+    let empty_context = TemplateViewContext::default();
     let nested_template_expression = Expression::template(
         registered_text_template(
             overlay_text,
-            empty_overlay_set_id,
+            empty_context,
             &template_ir_store,
             &string_table,
         ),
@@ -2418,7 +2333,7 @@ fn runtime_template_expression_handoff_uses_finalized_expression_overlay_view() 
         TemplateTirReference {
             root: template_id,
             phase: TemplateTirPhase::Composed,
-            overlay_set_id: empty_overlay_set_id,
+            context: empty_context,
         },
         TemplateType::StringFunction,
         SourceLocation::default(),
@@ -2464,16 +2379,14 @@ fn nested_runtime_template_normalizes_through_final_view() {
     let path_format_config = PathStringFormatConfig::default();
     let source_file_scope = InternedPath::new();
     let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-    let overlay_set_id = template_ir_store
-        .borrow_mut()
-        .allocate_overlay_set(TemplateOverlaySet::empty());
+    let context = TemplateViewContext::default();
 
     // Build a TIR whose sole dynamic expression holds a nested runtime
     // template (text plus a runtime reference, so it is not const-foldable).
     let nested_template = registered_runtime_template(
         nested_text,
         "runtime_ref",
-        overlay_set_id,
+        context,
         &template_ir_store,
         &mut string_table,
     );
@@ -2502,7 +2415,7 @@ fn nested_runtime_template_normalizes_through_final_view() {
         TemplateTirReference {
             root: template_id,
             phase: TemplateTirPhase::Composed,
-            overlay_set_id,
+            context,
         },
         TemplateType::StringFunction,
         SourceLocation::default(),
@@ -2595,9 +2508,7 @@ fn nested_const_template_folds_through_final_view() {
     let path_format_config = PathStringFormatConfig::default();
     let source_file_scope = InternedPath::new();
     let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-    let overlay_set_id = template_ir_store
-        .borrow_mut()
-        .allocate_overlay_set(TemplateOverlaySet::empty());
+    let context = TemplateViewContext::default();
 
     // Build a child template (const text) and an outer template whose TIR
     // root is a sequence containing a child-template ref to it.
@@ -2635,7 +2546,7 @@ fn nested_const_template_folds_through_final_view() {
         TemplateTirReference {
             root: outer_template_id,
             phase: TemplateTirPhase::Composed,
-            overlay_set_id,
+            context,
         },
         TemplateType::String,
         SourceLocation::default(),
@@ -2674,9 +2585,7 @@ fn reactive_metadata_derived_from_nested_final_view() {
     let path_format_config = PathStringFormatConfig::default();
     let source_file_scope = InternedPath::new();
     let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-    let overlay_set_id = template_ir_store
-        .borrow_mut()
-        .allocate_overlay_set(TemplateOverlaySet::empty());
+    let context = TemplateViewContext::default();
 
     // Build a TIR with a dynamic expression carrying a reactive subscription.
     let template_id = {
@@ -2719,7 +2628,7 @@ fn reactive_metadata_derived_from_nested_final_view() {
         TemplateTirReference {
             root: template_id,
             phase: TemplateTirPhase::Composed,
-            overlay_set_id,
+            context,
         },
         TemplateType::StringFunction,
         SourceLocation::default(),
@@ -2767,9 +2676,7 @@ fn helper_artifact_rejected_after_final_view_traversal() {
     let path_format_config = PathStringFormatConfig::default();
     let source_file_scope = InternedPath::new();
     let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-    let overlay_set_id = template_ir_store
-        .borrow_mut()
-        .allocate_overlay_set(TemplateOverlaySet::empty());
+    let context = TemplateViewContext::default();
 
     // Build a TIR root with simple text. The template kind is SlotInsert,
     // which finalization must reject as a helper artifact.
@@ -2796,7 +2703,7 @@ fn helper_artifact_rejected_after_final_view_traversal() {
         TemplateTirReference {
             root: template_id,
             phase: TemplateTirPhase::Composed,
-            overlay_set_id,
+            context,
         },
         TemplateType::SlotInsert(SlotKey::Default),
         SourceLocation::default(),

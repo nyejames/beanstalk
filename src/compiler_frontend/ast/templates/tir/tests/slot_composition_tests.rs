@@ -17,16 +17,16 @@ use super::super::node::{
     TemplateIr, TemplateIrBranch, TemplateIrNode, TemplateIrNodeKind, TirSlotPlaceholder,
 };
 use super::super::overlays::{
-    TemplateOverlaySet, TemplateOverlaySetId, TirExpressionOverlay, TirSlotResolutionKind,
-    TirSlotResolutionOverlay, TirSlotResolutionOverlayId,
+    TemplateViewContext, TirExpressionOverlay, TirSlotResolutionKind, TirSlotResolutionOverlay,
+    TirSlotResolutionOverlayId,
 };
 use super::super::refs::TemplateTirChildReference;
 use super::super::slot_composition::{
     RoutedTirSlotContributions, TirSlotContributions, TirSlotSchema, apply_tir_child_wrappers,
-    attach_tir_slot_resolution_overlay, collect_tir_slot_schema, compose_tir_head_chain,
-    compose_tir_head_chain_with_overlays, compose_tir_slot_resolution_overlay_set,
-    expand_tir_slot_placeholders, materialize_tir_slot_resolution_overlay,
-    route_tir_slot_contributions,
+    collect_tir_slot_schema, compose_tir_head_chain, compose_tir_head_chain_with_overlays,
+    compose_tir_slot_resolution_context, expand_tir_slot_placeholders,
+    materialize_tir_slot_resolution_overlay, route_tir_slot_contributions,
+    view_context_from_slot_resolution_overlay,
 };
 use super::super::store::TemplateIrStore;
 use super::super::summary::TemplateIrSummary;
@@ -2822,7 +2822,7 @@ fn materialize_default_slot_overlay(
     let wrapper_reference = TemplateTirChildReference::new(
         wrapper,
         TemplateTirPhase::Composed,
-        TemplateOverlaySetId::empty(),
+        TemplateViewContext::default(),
     );
     let overlay_id = materialize_tir_slot_resolution_overlay(store, wrapper_reference, &routed)
         .expect("slot resolution overlay should materialize");
@@ -2879,7 +2879,7 @@ fn missing_slot_resolution_is_explicit() {
         TemplateTirChildReference::new(
             wrapper,
             TemplateTirPhase::Composed,
-            TemplateOverlaySetId::empty(),
+            TemplateViewContext::default(),
         ),
         &routed,
     )
@@ -2894,8 +2894,8 @@ fn attached_slot_resolution_is_visible_through_tir_view() {
     let mut store = TemplateIrStore::new();
     let mut string_table = StringTable::new();
     let (wrapper, overlay_id) = materialize_default_slot_overlay(&mut store, &mut string_table, 1);
-    let overlay_set_id = attach_tir_slot_resolution_overlay(&mut store, overlay_id);
-    let view = TirView::new(&store, wrapper, TemplateTirPhase::Composed, overlay_set_id)
+    let context = view_context_from_slot_resolution_overlay(overlay_id);
+    let view = TirView::new(&store, wrapper, TemplateTirPhase::Composed, context)
         .expect("attached overlay should construct a view");
 
     let resolution = view
@@ -2909,26 +2909,26 @@ fn attached_slot_resolution_is_visible_through_tir_view() {
 }
 
 #[test]
-fn composed_overlay_set_uses_the_same_store() {
+fn composed_view_context_uses_the_same_store() {
     let mut store = TemplateIrStore::new();
     let mut string_table = StringTable::new();
     let wrapper = build_wrapper_with_slot_sequence(&mut store, vec![SlotKey::Default]);
     let contribution = build_single_text_template(&mut store, &mut string_table, "filled");
     let fill_node = template_root_node_id(contribution, &store);
     let fill = build_fill_template(&mut store, vec![fill_node]);
-    let overlay_set_id = compose_tir_slot_resolution_overlay_set(
+    let context = compose_tir_slot_resolution_context(
         &mut store,
         TemplateTirChildReference::new(
             wrapper,
             TemplateTirPhase::Composed,
-            TemplateOverlaySetId::empty(),
+            TemplateViewContext::default(),
         ),
         fill,
         &string_table,
     )
     .expect("same-store overlay composition should succeed");
-    let view = TirView::new(&store, wrapper, TemplateTirPhase::Composed, overlay_set_id)
-        .expect("composed overlay set should construct a view");
+    let view = TirView::new(&store, wrapper, TemplateTirPhase::Composed, context)
+        .expect("composed view context should construct a view");
 
     assert!(
         view.effective_slot_resolution(SlotOccurrenceId::new(0))
@@ -2960,7 +2960,7 @@ fn materialize_slot_resolution_overlay(
     let wrapper_reference = TemplateTirChildReference::new(
         wrapper,
         TemplateTirPhase::Composed,
-        TemplateOverlaySetId::empty(),
+        TemplateViewContext::default(),
     );
     let overlay_id = materialize_tir_slot_resolution_overlay(store, wrapper_reference, &routed)
         .expect("slot resolution overlay should materialize");
@@ -3082,7 +3082,7 @@ fn overlay_materialization_preserves_structural_expansion() {
     let wrapper_reference = TemplateTirChildReference::new(
         wrapper,
         TemplateTirPhase::Composed,
-        TemplateOverlaySetId::empty(),
+        TemplateViewContext::default(),
     );
 
     // Materialize the overlay (exercising the overlay path) before expansion.
@@ -3103,14 +3103,14 @@ fn overlay_materialization_preserves_structural_expansion() {
 }
 
 #[test]
-fn attach_overlay_set_carries_slot_resolution() {
+fn attach_view_context_carries_slot_resolution() {
     let mut string_table = StringTable::new();
     let mut store = TemplateIrStore::new();
 
     let (wrapper, overlay_id) = materialize_default_slot_overlay(&mut store, &mut string_table, 1);
-    let overlay_set_id = attach_tir_slot_resolution_overlay(&mut store, overlay_id);
-    let view = TirView::new(&store, wrapper, TemplateTirPhase::Composed, overlay_set_id)
-        .expect("view should construct with the attached overlay set");
+    let context = view_context_from_slot_resolution_overlay(overlay_id);
+    let view = TirView::new(&store, wrapper, TemplateTirPhase::Composed, context)
+        .expect("view should construct with the attached view context");
 
     let occurrence_id = SlotOccurrenceId::new(0);
     let resolution = view
@@ -3138,7 +3138,7 @@ fn attach_overlay_set_carries_slot_resolution() {
 }
 
 #[test]
-fn overlay_set_attachment_preserves_structural_expansion() {
+fn view_context_attachment_preserves_structural_expansion() {
     let mut string_table = StringTable::new();
     let mut store = TemplateIrStore::new();
 
@@ -3151,15 +3151,15 @@ fn overlay_set_attachment_preserves_structural_expansion() {
     let wrapper_reference = TemplateTirChildReference::new(
         wrapper,
         TemplateTirPhase::Composed,
-        TemplateOverlaySetId::empty(),
+        TemplateViewContext::default(),
     );
     let overlay_id =
         materialize_tir_slot_resolution_overlay(&mut store, wrapper_reference, &routed)
             .expect("overlay materialization should succeed");
 
-    // Attach the overlay set before structural expansion to confirm the overlay
+    // Attach the view context before structural expansion to confirm the overlay
     // path does not alter production slot expansion.
-    let _overlay_set_id = attach_tir_slot_resolution_overlay(&mut store, overlay_id);
+    let _context = view_context_from_slot_resolution_overlay(overlay_id);
 
     let expanded_root = expand_tir_slot_placeholders(&mut store, wrapper, &routed, &string_table)
         .expect("structural expansion should still succeed after attachment");
@@ -3176,14 +3176,14 @@ fn overlay_set_attachment_preserves_structural_expansion() {
 //  Store-Owned Slot-Overlay Composition API
 // -------------------------
 //
-// These tests exercise `compose_tir_slot_resolution_overlay_set`, the
+// These tests exercise `compose_tir_slot_resolution_context`, the
 // store-owned entry point that bundles route, materialize, and attach for a
 // single wrapper/fill pair. They confirm the bundled API produces the same
 // overlay shape as the manual primitive sequence, works for named slots, and
 // leaves structural expansion unchanged.
 
 #[test]
-fn compose_tir_slot_resolution_overlay_set_default_slot_matches_manual_sequence() {
+fn compose_tir_slot_resolution_context_default_slot_matches_manual_sequence() {
     let mut string_table = StringTable::new();
     let mut store = TemplateIrStore::new();
 
@@ -3198,44 +3198,37 @@ fn compose_tir_slot_resolution_overlay_set_default_slot_matches_manual_sequence(
     let wrapper_reference = TemplateTirChildReference::new(
         wrapper,
         TemplateTirPhase::Composed,
-        TemplateOverlaySetId::empty(),
+        TemplateViewContext::default(),
     );
     let manual_overlay_id =
         materialize_tir_slot_resolution_overlay(&mut store, wrapper_reference, &routed)
             .expect("manual materialization should succeed");
-    let manual_set_id = attach_tir_slot_resolution_overlay(&mut store, manual_overlay_id);
+    let manual_context = view_context_from_slot_resolution_overlay(manual_overlay_id);
 
     // Bundled API: one call with store identity. Each materialization allocates
-    // its own store-local source template, so the two overlay sets carry
-    // different source `TemplateIrId`s and are not canonicalized to one ID; the
+    // its own store-local source template, so the two view contexts carry
+    // different source `TemplateIrId`s and are not combined to one ID; the
     // assertion compares overlay shape, not ID.
-    let bundled_set_id =
-        compose_tir_slot_resolution_overlay_set(&mut store, wrapper_reference, fill, &string_table)
+    let bundled_context =
+        compose_tir_slot_resolution_context(&mut store, wrapper_reference, fill, &string_table)
             .expect("bundled overlay composition should succeed");
-
-    let manual_set = store
-        .overlay_set(manual_set_id)
-        .expect("manual overlay set should be store-owned");
-    let bundled_set = store
-        .overlay_set(bundled_set_id)
-        .expect("bundled overlay set should be store-owned");
 
     // Both sets carry only the slot-resolution dimension.
     assert!(
-        bundled_set.slot_resolution.is_some(),
-        "bundled overlay set should carry a slot-resolution overlay"
+        bundled_context.slot_resolution.is_some(),
+        "bundled context should carry a slot-resolution overlay"
     );
     assert!(
-        bundled_set.expression_overrides.is_none(),
+        bundled_context.expression_overlay.is_none(),
         "no expression overlay dimension should be set"
     );
     assert!(
-        bundled_set.wrapper_context.is_none(),
+        bundled_context.wrapper_context.is_none(),
         "no wrapper-context overlay dimension should be set"
     );
 
-    let manual_overlay = slot_resolution_overlay(&store, manual_set.slot_resolution.unwrap());
-    let bundled_overlay = slot_resolution_overlay(&store, bundled_set.slot_resolution.unwrap());
+    let manual_overlay = slot_resolution_overlay(&store, manual_context.slot_resolution.unwrap());
+    let bundled_overlay = slot_resolution_overlay(&store, bundled_context.slot_resolution.unwrap());
 
     assert_eq!(
         manual_overlay.resolutions.len(),
@@ -3262,7 +3255,7 @@ fn compose_tir_slot_resolution_overlay_set_default_slot_matches_manual_sequence(
 }
 
 #[test]
-fn compose_tir_slot_resolution_overlay_set_named_slot_attaches_resolution() {
+fn compose_tir_slot_resolution_context_named_slot_attaches_resolution() {
     let mut string_table = StringTable::new();
     let title = string_table.intern("title");
     let mut store = TemplateIrStore::new();
@@ -3274,24 +3267,21 @@ fn compose_tir_slot_resolution_overlay_set_named_slot_attaches_resolution() {
     let insert_node = builder.push_insert_contribution_node(insert_template, empty_location());
     let fill = build_fill_template(&mut store, vec![insert_node]);
 
-    let overlay_set_id = compose_tir_slot_resolution_overlay_set(
+    let context = compose_tir_slot_resolution_context(
         &mut store,
         TemplateTirChildReference::new(
             wrapper,
             TemplateTirPhase::Composed,
-            TemplateOverlaySetId::empty(),
+            TemplateViewContext::default(),
         ),
         fill,
         &string_table,
     )
     .expect("bundled overlay composition should succeed for a named slot");
 
-    let overlay_set = store
-        .overlay_set(overlay_set_id)
-        .expect("overlay set should be store-owned");
-    let overlay_id = overlay_set
+    let overlay_id = context
         .slot_resolution
-        .expect("overlay set should carry a slot-resolution overlay");
+        .expect("context should carry a slot-resolution overlay");
     let overlay = slot_resolution_overlay(&store, overlay_id);
 
     assert_eq!(overlay.resolutions.len(), 1, "one named slot occurrence");
@@ -3304,7 +3294,7 @@ fn compose_tir_slot_resolution_overlay_set_named_slot_attaches_resolution() {
 }
 
 #[test]
-fn compose_tir_slot_resolution_overlay_set_preserves_structural_expansion() {
+fn compose_tir_slot_resolution_context_preserves_structural_expansion() {
     let mut string_table = StringTable::new();
     let mut store = TemplateIrStore::new();
 
@@ -3315,15 +3305,15 @@ fn compose_tir_slot_resolution_overlay_set_preserves_structural_expansion() {
     let routed = route_tir_slot_contributions(&store, wrapper, fill, &string_table)
         .expect("routing should succeed");
 
-    // Allocate the overlay set through the bundled store-owned API. This must
+    // Build the value context through the bundled API. This must
     // not alter the structural expansion produced by the existing store-local
     // path.
-    let _overlay_set_id = compose_tir_slot_resolution_overlay_set(
+    let _context = compose_tir_slot_resolution_context(
         &mut store,
         TemplateTirChildReference::new(
             wrapper,
             TemplateTirPhase::Composed,
-            TemplateOverlaySetId::empty(),
+            TemplateViewContext::default(),
         ),
         fill,
         &string_table,
@@ -3347,9 +3337,9 @@ fn compose_tir_slot_resolution_overlay_set_preserves_structural_expansion() {
 //
 // These tests exercise `compose_tir_head_chain_with_overlays`, the store-owned
 // entry point that runs the store-local structural composition and then
-// allocates a non-empty slot-resolution overlay set from the collected
+// constructs a non-empty slot-resolution view context from the collected
 // wrapper/fill pairs. They confirm that a single slot-bearing wrapper produces
-// a non-empty overlay set, that the overlay set carries only the
+// a non-empty view context, that the view context carries only the
 // slot-resolution dimension, that composition preserves the wrapper's effective
 // view identity, that no overlay is allocated when no slots are resolved, and
 // that structural expansion output matches the store-local path.
@@ -3382,24 +3372,20 @@ fn head_chain_with_overlays_threads_slot_overlay_for_single_receiver() {
         "composition should produce a new root"
     );
 
-    let overlay_set_id = composed
-        .slot_overlay_set_id
-        .expect("one slot-bearing wrapper should produce a non-empty overlay set");
+    let context = composed
+        .slot_context
+        .expect("one slot-bearing wrapper should produce a non-empty view context");
 
-    let store_binding = store.borrow();
-    let overlay_set = store_binding
-        .overlay_set(overlay_set_id)
-        .expect("overlay set should be store-owned");
     assert!(
-        overlay_set.slot_resolution.is_some(),
-        "overlay set should carry a slot-resolution overlay"
+        context.slot_resolution.is_some(),
+        "context should carry a slot-resolution overlay"
     );
     assert!(
-        overlay_set.expression_overrides.is_none(),
+        context.expression_overlay.is_none(),
         "no expression overlay dimension should be set"
     );
     assert!(
-        overlay_set.wrapper_context.is_none(),
+        context.wrapper_context.is_none(),
         "no wrapper-context overlay dimension should be set"
     );
 }
@@ -3415,23 +3401,19 @@ fn head_chain_preserves_the_effective_wrapper_view_identity() {
             overrides: Vec::new(),
         })
     };
-    let wrapper_overlay_set_id = {
-        let mut store = store.borrow_mut();
-        store.allocate_overlay_set(TemplateOverlaySet {
-            expression_overrides: Some(expression_overlay_id),
+    let wrapper_context = {
+        TemplateViewContext {
+            expression_overlay: Some(expression_overlay_id),
             slot_resolution: None,
             wrapper_context: None,
-        })
+        }
     };
 
     let (template_id, wrapper_node_id, wrapper_reference) = {
         let mut store = store.borrow_mut();
         let wrapper = build_wrapper_with_slot_sequence(&mut store, vec![SlotKey::Default]);
-        let wrapper_reference = TemplateTirChildReference::new(
-            wrapper,
-            TemplateTirPhase::Formatted,
-            wrapper_overlay_set_id,
-        );
+        let wrapper_reference =
+            TemplateTirChildReference::new(wrapper, TemplateTirPhase::Formatted, wrapper_context);
         let wrapper_node_id =
             build_child_template_node_with_reference(&mut store, wrapper_reference);
         let body_fill = build_text_node(
@@ -3448,7 +3430,7 @@ fn head_chain_preserves_the_effective_wrapper_view_identity() {
     let composed = compose_tir_head_chain_with_overlays(&store, template_id, &string_table, false)
         .expect("same-store effective wrapper identity should compose");
     assert!(
-        composed.slot_overlay_set_id.is_some(),
+        composed.slot_context.is_some(),
         "slot-bearing effective wrapper should reach overlay allocation"
     );
 
@@ -3493,8 +3475,8 @@ fn head_chain_with_overlays_returns_none_when_no_slots_resolved() {
         "template with no receivers should return the original root"
     );
     assert!(
-        composed.slot_overlay_set_id.is_none(),
-        "no slot-bearing wrapper should produce no overlay set"
+        composed.slot_context.is_none(),
+        "no slot-bearing wrapper should produce no view context"
     );
 }
 

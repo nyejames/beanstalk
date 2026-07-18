@@ -11,8 +11,8 @@ use crate::compiler_frontend::ast::templates::template::{
     CommentDirectiveKind, Style, TemplateSegmentOrigin, TemplateType,
 };
 use crate::compiler_frontend::ast::templates::tir::{
-    TemplateIr, TemplateIrBuilder, TemplateIrStore, TemplateIrSummary, TemplateOverlaySet,
-    TemplateTirPhase, TemplateTirReference, format_tir_template,
+    TemplateIr, TemplateIrBuilder, TemplateIrStore, TemplateIrSummary, TemplateTirPhase,
+    TemplateTirReference, TemplateViewContext, format_tir_template,
 };
 use crate::compiler_frontend::ast::templates::top_level_templates::FoldedConstTemplateResult;
 use crate::compiler_frontend::compiler_messages::{
@@ -257,15 +257,13 @@ fn formatted_doc_template_with_direct_tir(
     };
 
     let store_handle = Rc::new(RefCell::new(store));
-    let overlay_set_id = store_handle
-        .borrow_mut()
-        .allocate_overlay_set(TemplateOverlaySet::empty());
+    let context = TemplateViewContext::default();
 
     let formatter_result = format_tir_template(
         &mut store_handle.borrow_mut(),
         parsed_template_id,
         TemplateTirPhase::Parsed,
-        overlay_set_id,
+        context,
         &style,
         string_table,
     )
@@ -284,7 +282,7 @@ fn formatted_doc_template_with_direct_tir(
         tir_reference: TemplateTirReference {
             root: formatted_template_id,
             phase: TemplateTirPhase::Formatted,
-            overlay_set_id,
+            context,
         },
         location,
     };
@@ -298,7 +296,7 @@ fn doc_fragment_folding_reads_directly_constructed_formatted_tir_root() {
     let entry_dir = InternedPath::from_single_str("main.bst", &mut string_table);
     let entry_scope = entry_dir.to_owned();
 
-    let (doc_template, registry) =
+    let (doc_template, store) =
         formatted_doc_template_with_direct_tir("doc body", &mut string_table);
 
     let mut ast_nodes = vec![start_function_node(
@@ -315,7 +313,7 @@ fn doc_fragment_folding_reads_directly_constructed_formatted_tir_root() {
     let doc_fragments = collect_and_strip_comment_templates_for_tests_with_store(
         &mut ast_nodes,
         &mut string_table,
-        registry,
+        store,
     )
     .expect("doc fragment collection should succeed");
 

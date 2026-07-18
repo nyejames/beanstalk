@@ -31,9 +31,8 @@ use crate::compiler_frontend::ast::templates::tir::node::{
     TirSlotPlaceholder,
 };
 use crate::compiler_frontend::ast::templates::tir::overlays::{
-    TemplateOverlaySet, TemplateOverlaySetId, TirExpressionOverlay, TirExpressionOverlayId,
-    TirSlotResolutionOverlay, TirSlotResolutionOverlayId, TirWrapperContextOverlay,
-    TirWrapperContextOverlayId,
+    TemplateViewContext, TirExpressionOverlay, TirExpressionOverlayId, TirSlotResolutionOverlay,
+    TirSlotResolutionOverlayId, TirWrapperContextOverlay, TirWrapperContextOverlayId,
 };
 use crate::compiler_frontend::ast::templates::tir::refs::TemplateWrapperReference;
 use crate::compiler_frontend::ast::templates::tir::slot_plan::TemplateSlotPlan;
@@ -64,7 +63,7 @@ use std::collections::HashSet;
 /// combinations.
 ///
 /// Design constraint: wrapper sets store effective wrapper references (root,
-/// phase, and overlay-set ID). A wrapper's effective identity is not only its
+/// phase, and value-carried context). A wrapper's effective identity is not only its
 /// structural root — it also has a phase and overlay context.
 #[derive(Clone, Debug)]
 pub(crate) struct TemplateWrapperSet {
@@ -150,8 +149,7 @@ pub(crate) struct TemplateIrStore {
     /// Slot routing plans.
     pub(crate) slot_plans: Vec<TemplateSlotPlan>,
 
-    /// Overlay sets and payloads for effective template views.
-    pub(crate) overlay_sets: Vec<TemplateOverlaySet>,
+    /// Overlay payloads for effective template views.
     pub(crate) expression_overlays: Vec<TirExpressionOverlay>,
     pub(crate) slot_resolution_overlays: Vec<TirSlotResolutionOverlay>,
     pub(crate) wrapper_context_overlays: Vec<TirWrapperContextOverlay>,
@@ -185,7 +183,6 @@ impl TemplateIrStore {
             nodes: Vec::new(),
             wrapper_sets: Vec::new(),
             slot_plans: Vec::new(),
-            overlay_sets: vec![TemplateOverlaySet::empty()],
             expression_overlays: Vec::new(),
             slot_resolution_overlays: Vec::new(),
             wrapper_context_overlays: Vec::new(),
@@ -219,7 +216,6 @@ impl TemplateIrStore {
             nodes: Vec::with_capacity(node_capacity),
             wrapper_sets: Vec::with_capacity(side_capacity),
             slot_plans: Vec::with_capacity(side_capacity),
-            overlay_sets: vec![TemplateOverlaySet::empty()],
             expression_overlays: Vec::with_capacity(side_capacity),
             slot_resolution_overlays: Vec::with_capacity(side_capacity),
             wrapper_context_overlays: Vec::with_capacity(side_capacity),
@@ -380,7 +376,7 @@ impl TemplateIrStore {
     ///
     /// WHAT: searches the existing wrapper-set side table for a set that is
     /// equivalent to `wrappers`. Callers pass pre-qualified
-    /// `TemplateWrapperReference` values (root + phase + overlay_set_id). Empty
+    /// `TemplateWrapperReference` values (root + phase + context). Empty
     /// wrapper vectors always reuse. Non-empty sets reuse only when every
     /// `TemplateWrapperReference` matches an existing set in the same order. If a
     /// match is found, its ID is returned and `TirWrapperSetReuseHits` is
@@ -633,24 +629,6 @@ impl TemplateIrStore {
     //  Overlay storage
     // -------------------------
 
-    /// Allocates an overlay set, reusing an equivalent set when possible.
-    pub(crate) fn allocate_overlay_set(&mut self, set: TemplateOverlaySet) -> TemplateOverlaySetId {
-        for (index, existing) in self.overlay_sets.iter().enumerate() {
-            if *existing == set {
-                return TemplateOverlaySetId::new(index);
-            }
-        }
-
-        let id = TemplateOverlaySetId::new(self.overlay_sets.len());
-        self.overlay_sets.push(set);
-        id
-    }
-
-    /// Returns an overlay set by its module-local ID.
-    pub(crate) fn overlay_set(&self, id: TemplateOverlaySetId) -> Option<&TemplateOverlaySet> {
-        self.overlay_sets.get(id.index())
-    }
-
     /// Allocates an expression overlay payload.
     pub(crate) fn allocate_expression_overlay(
         &mut self,
@@ -705,74 +683,31 @@ impl TemplateIrStore {
         self.wrapper_context_overlays.get(id.index())
     }
 
-    /// Resolves an expression site through an overlay stack.
-    pub(crate) fn expression_for_overlay_stack(
+    /// Resolves a site through value-carried contexts in outer-to-inner order.
+    /// The first matching context wins, preserving the existing root-first
+    /// expression-stack behavior.
+    pub(crate) fn expression_for_context_stack(
         &self,
-        overlay_set_ids: &[TemplateOverlaySetId],
+        contexts: &[TemplateViewContext],
         site_id: ExpressionSiteId,
     ) -> Result<Option<&Expression>, CompilerError> {
-        for overlay_set_id in overlay_set_ids.iter().copied() {
-            let overlay_set = self.overlay_set(overlay_set_id).ok_or_else(|| {
-                CompilerError::compiler_error(format!(
-                    "TIR expression resolution referenced missing overlay set {}",
-                    overlay_set_id
-                ))
-            })?;
-
-            let Some(expression_overlay_id) = overlay_set.expression_overrides else {
+        for context in contexts.iter().copied() {
+            let Some(overlay_id) = context.expression_overlay else {
                 continue;
             };
 
-            let expression_overlay =
-                self.expression_overlay(expression_overlay_id)
-                    .ok_or_else(|| {
-                        CompilerError::compiler_error(format!(
-                            "TIR expression resolution referenced missing expression overlay {}",
-                            expression_overlay_id
-                        ))
-                    })?;
+            let overlay = self.expression_overlay(overlay_id).ok_or_else(|| {
+                CompilerError::compiler_error(format!(
+                    "TIR expression resolution referenced missing expression overlay {overlay_id}"
+                ))
+            })?;
 
-            if let Some(expression) = expression_overlay.expression_for_site(site_id) {
+            if let Some(expression) = overlay.expression_for_site(site_id) {
                 return Ok(Some(expression));
             }
         }
 
         Ok(None)
-    }
-
-    /// Composes overlay sets in resolution order.
-    pub(crate) fn compose_overlay_sets(
-        &mut self,
-        sets: &[TemplateOverlaySetId],
-    ) -> Result<TemplateOverlaySetId, CompilerError> {
-        let mut expression_overrides = None;
-        let mut slot_resolution = None;
-        let mut wrapper_context = None;
-
-        for set_id in sets {
-            let set = self.overlay_set(*set_id).ok_or_else(|| {
-                CompilerError::compiler_error(format!(
-                    "compose_overlay_sets: {} does not exist",
-                    set_id
-                ))
-            })?;
-
-            if set.wrapper_context.is_some() {
-                wrapper_context = set.wrapper_context;
-            }
-            if set.slot_resolution.is_some() {
-                slot_resolution = set.slot_resolution;
-            }
-            if set.expression_overrides.is_some() {
-                expression_overrides = set.expression_overrides;
-            }
-        }
-
-        Ok(self.allocate_overlay_set(TemplateOverlaySet {
-            expression_overrides,
-            slot_resolution,
-            wrapper_context,
-        }))
     }
 }
 

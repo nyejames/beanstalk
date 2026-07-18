@@ -1,21 +1,20 @@
 //! TIR slot-resolution overlay materialization and merging.
 //!
 //! WHAT: converts routed slot contributions into store-owned
-//!       `TirSlotResolutionOverlay` payloads, attaches them to canonical overlay
-//!       sets, and merges multiple overlay sets without losing slot-resolution
-//!       entries.
+//!       `TirSlotResolutionOverlay` payloads, attaches them to store-owned
+//!       overlays, and merges multiple value-carried view contexts without
+//!       losing slot-resolution entries.
 //!
 //! WHY: the overlay path lets `TirView` resolve slot placeholders by occurrence
 //!      ID rather than by re-running structural composition. Keeping overlay
 //!      allocation, attachment, and merge in one module makes the
-//!      route→materialize→attach→merge lifecycle explicit.
+//!      route→materialize→contextualize→merge lifecycle explicit.
 
 use crate::compiler_frontend::ast::templates::template::SlotKey;
 use crate::compiler_frontend::ast::templates::tir::ids::SlotOccurrenceId;
 use crate::compiler_frontend::ast::templates::tir::node::TirSlotPlaceholder;
 use crate::compiler_frontend::ast::templates::tir::overlays::{
-    TemplateOverlaySet, TemplateOverlaySetId, TirSlotResolution, TirSlotResolutionOverlay,
-    TirSlotResolutionOverlayId,
+    TemplateViewContext, TirSlotResolution, TirSlotResolutionOverlay, TirSlotResolutionOverlayId,
 };
 use crate::compiler_frontend::ast::templates::tir::refs::{
     TemplateIrId, TemplateTirChildReference,
@@ -66,7 +65,7 @@ pub(crate) fn materialize_tir_slot_resolution_overlay(
 ///
 /// WHY: single-pair callers allocate the returned payload directly, while
 ///      multi-pair composition merges several payloads into one store-owned
-///      overlay so a `TemplateOverlaySet` never has to carry competing
+///      overlay so a `TemplateViewContext` never has to carry competing
 ///      slot-resolution dimensions.
 fn build_tir_slot_resolution_overlay_payload(
     store: &mut TemplateIrStore,
@@ -135,60 +134,58 @@ pub(super) fn build_slot_resolution_entries(
     Ok(resolutions)
 }
 
-/// Attaches a materialized slot-resolution overlay to a store-owned
-/// `TemplateOverlaySet` and returns the canonical set ID.
+/// Creates a value-carried `TemplateViewContext` from a materialized
+/// slot-resolution overlay ID.
 ///
-/// WHAT: allocates a minimal one-dimension overlay set whose `slot_resolution`
+/// WHAT: returns a minimal one-dimension view context whose `slot_resolution`
 ///       field carries `slot_resolution_overlay_id`, leaving the expression and
-///       wrapper-context dimensions unset. The store canonicalizes the set so
-///       equivalent attachments share one ID.
+///       wrapper-context dimensions unset.
 /// WHY: this is the second Phase 6 overlay-composition step. After
 ///      `materialize_tir_slot_resolution_overlay` converts routed contributions
 ///      into a store-owned overlay, consumers need a single
-///      `TemplateOverlaySetId` to thread that overlay through `TirView` and
-///      later composition paths. Allocating the set here keeps the join between
+///      `TemplateViewContext` to thread that overlay through `TirView` and
+///      later composition paths. Keeping the join between
 ///      slot routing and the view read API in the slot-composition owner, so
-///      callers never assemble overlay sets ad hoc. Production structural
+///      callers never assemble view contexts ad hoc. Production structural
 ///      expansion remains unchanged until the overlay-backed composition path is
 ///      explicitly wired.
-pub(crate) fn attach_tir_slot_resolution_overlay(
-    store: &mut TemplateIrStore,
+pub(crate) fn view_context_from_slot_resolution_overlay(
     slot_resolution_overlay_id: TirSlotResolutionOverlayId,
-) -> TemplateOverlaySetId {
-    store.allocate_overlay_set(TemplateOverlaySet {
-        expression_overrides: None,
+) -> TemplateViewContext {
+    TemplateViewContext {
+        expression_overlay: None,
         slot_resolution: Some(slot_resolution_overlay_id),
         wrapper_context: None,
-    })
+    }
 }
 
-/// Test-only composition of the slot-resolution overlay set for one
-/// wrapper/fill pair on a store-owned store.
+/// Test-only composition of the slot-resolution view context for one
+/// wrapper/fill pair on one module-local store.
 ///
 /// WHAT: routes fill contributions against the wrapper's slot schema,
-///       materializes a `TirSlotResolutionOverlay`, and attaches it to a
-///       canonical `TemplateOverlaySet`. The caller passes store/store
-///       identity instead of holding a separate store borrow.
-/// WHY: focused tests compare the bundled route/materialize/attach sequence
+///       materializes a `TirSlotResolutionOverlay`, and builds a value-carried
+///       `TemplateViewContext` from its ID. The caller passes store identity
+///       instead of holding a separate store borrow.
+/// WHY: focused tests compare the bundled route/materialize/context sequence
 ///      against manual overlay construction. Production callers use
 ///      `compose_tir_head_chain_with_overlays`, which collects all
 ///      wrapper/fill pairs (via `wrap_tir_node_in_wrappers_into`) and
-///      allocates one merged overlay set.
+///      constructs one merged value context.
 ///
 /// Structural expansion (`expand_tir_slot_placeholders`) is intentionally left
 /// on its existing store-local path. This helper allocates only the overlay
-/// context so tests can inspect that context through `TirView`.
+/// payload so tests can inspect the resulting context through `TirView`.
 #[cfg(test)]
-pub(crate) fn compose_tir_slot_resolution_overlay_set(
+pub(crate) fn compose_tir_slot_resolution_context(
     store: &mut TemplateIrStore,
     wrapper_reference: TemplateTirChildReference,
     fill_reference: TemplateIrId,
     string_table: &StringTable,
-) -> SlotCompositionResult<TemplateOverlaySetId> {
+) -> SlotCompositionResult<TemplateViewContext> {
     let wrapper_template_id = wrapper_reference.root;
     let fill_template_id = fill_reference;
 
-    // Route read-only through the store-owned store borrow. The borrow is
+    // Route read-only through the module-store borrow. The borrow is
     // scoped so it is dropped before `materialize_tir_slot_resolution_overlay`
     // re-borrows the same store mutably through the store.
     let routed = {
@@ -197,24 +194,24 @@ pub(crate) fn compose_tir_slot_resolution_overlay_set(
 
     let overlay_id = materialize_tir_slot_resolution_overlay(store, wrapper_reference, &routed)?;
 
-    Ok(attach_tir_slot_resolution_overlay(store, overlay_id))
+    Ok(view_context_from_slot_resolution_overlay(overlay_id))
 }
 
-/// Allocates one non-empty slot-resolution overlay set from collected
+/// Constructs one non-empty slot-resolution view context from collected
 /// wrapper/fill pairs, returning `None` when no slots were resolved.
 ///
 /// WHAT: routes every collected wrapper/fill pair, materializes each pair into
 ///       a slot-resolution payload, merges those occurrence-keyed entries, and
-///       allocates one overlay set for the merged payload.
-/// WHY: `TemplateOverlaySet` carries one slot-resolution dimension. Combining
-///      multiple wrapper/fill pairs by composing overlay sets would let later
+///       returns one value context for the merged payload.
+/// WHY: `TemplateViewContext` carries one slot-resolution dimension. Combining
+///      multiple wrapper/fill pairs by composing view contexts would let later
 ///      slot overlays overwrite earlier ones, so the slot-composition owner
-///      merges the payloads before allocation instead.
-pub(super) fn allocate_slot_resolution_overlay_set(
+///      merges the payloads before constructing the value context instead.
+pub(super) fn allocate_slot_resolution_context(
     store: &mut TemplateIrStore,
     slot_compositions: &[SlotResolutionComposition],
     string_table: &StringTable,
-) -> SlotCompositionResult<Option<TemplateOverlaySetId>> {
+) -> SlotCompositionResult<Option<TemplateViewContext>> {
     if slot_compositions.is_empty() {
         return Ok(None);
     }
@@ -246,7 +243,7 @@ pub(super) fn allocate_slot_resolution_overlay_set(
     let overlay_id =
         store.allocate_slot_resolution_overlay(TirSlotResolutionOverlay { resolutions });
 
-    Ok(Some(attach_tir_slot_resolution_overlay(store, overlay_id)))
+    Ok(Some(view_context_from_slot_resolution_overlay(overlay_id)))
 }
 
 /// Merges one slot-resolution entry list into `merged`, rejecting duplicate keys.
@@ -273,34 +270,20 @@ fn merge_slot_resolution_entries(
     Ok(())
 }
 
-/// Merges a newly produced slot-resolution overlay set into an existing set.
+/// Merges a newly produced slot-resolution view context into an existing context.
 ///
-/// WHAT: preserves non-slot dimensions from `base_set_id`, merges slot
-///       resolution payloads from both sets when both are present, and returns a
-///       canonical overlay-set ID for the combined context.
+/// WHAT: preserves non-slot dimensions from `base_context`, merges slot
+///       resolution payloads from both contexts when both are present, and
+///       returns the combined value context.
 /// WHY: production composition can apply child wrappers and then head-chain
-///      composition. Both passes may resolve slots, and composing overlay sets
+///      composition. Both passes may resolve slots, and composing view contexts
 ///      directly would overwrite one slot-resolution dimension with the other.
-pub(crate) fn merge_tir_slot_resolution_overlay_sets(
+pub(crate) fn merge_tir_slot_resolution_contexts(
     store: &mut TemplateIrStore,
-    base_set_id: TemplateOverlaySetId,
-    next_set_id: TemplateOverlaySetId,
-) -> SlotCompositionResult<TemplateOverlaySetId> {
-    let base_set = store.overlay_set(base_set_id).cloned().ok_or_else(|| {
-        internal_compiler_error(&format!(
-            "TIR slot-overlay merge: base overlay set {} was not present in the store.",
-            base_set_id
-        ))
-    })?;
-
-    let next_set = store.overlay_set(next_set_id).cloned().ok_or_else(|| {
-        internal_compiler_error(&format!(
-            "TIR slot-overlay merge: next overlay set {} was not present in the store.",
-            next_set_id
-        ))
-    })?;
-
-    let slot_resolution = match (base_set.slot_resolution, next_set.slot_resolution) {
+    base_context: TemplateViewContext,
+    next_context: TemplateViewContext,
+) -> SlotCompositionResult<TemplateViewContext> {
+    let slot_resolution = match (base_context.slot_resolution, next_context.slot_resolution) {
         (None, next) => next,
         (base, None) => base,
         (Some(base_overlay_id), Some(next_overlay_id)) => {
@@ -341,11 +324,13 @@ pub(crate) fn merge_tir_slot_resolution_overlay_sets(
         }
     };
 
-    Ok(store.allocate_overlay_set(TemplateOverlaySet {
-        expression_overrides: next_set
-            .expression_overrides
-            .or(base_set.expression_overrides),
+    Ok(TemplateViewContext {
+        expression_overlay: next_context
+            .expression_overlay
+            .or(base_context.expression_overlay),
         slot_resolution,
-        wrapper_context: next_set.wrapper_context.or(base_set.wrapper_context),
-    }))
+        wrapper_context: next_context
+            .wrapper_context
+            .or(base_context.wrapper_context),
+    })
 }

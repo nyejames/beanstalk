@@ -14,8 +14,8 @@ use crate::compiler_frontend::ast::templates::template::TemplateSegmentOrigin;
 use crate::compiler_frontend::ast::templates::template_slots::TemplateSlotError;
 use crate::compiler_frontend::ast::templates::tir::refs::TemplateTirChildReference;
 use crate::compiler_frontend::ast::templates::tir::{
-    TemplateIrBuilder, TemplateIrId, TemplateIrNodeId, TemplateIrStore, TemplateOverlaySetId,
-    TemplateSlotPlanId, TemplateSlotSiteRenderPiece, TemplateSlotSiteRenderPlan, TemplateTirPhase,
+    TemplateIrBuilder, TemplateIrId, TemplateIrNodeId, TemplateIrStore, TemplateSlotPlanId,
+    TemplateSlotSiteRenderPiece, TemplateSlotSiteRenderPlan, TemplateTirPhase, TemplateViewContext,
     TirCopyState,
 };
 use crate::compiler_frontend::compiler_errors::ErrorType;
@@ -99,7 +99,7 @@ fn missing_same_store_child_template_is_an_authority_error() {
     let same_store_missing_template = TemplateTirChildReference::new(
         TemplateIrId::new(99),
         TemplateTirPhase::Parsed,
-        TemplateOverlaySetId::empty(),
+        TemplateViewContext::default(),
     );
     let mut builder = TemplateIrBuilder::new(&mut store);
     let child_node = builder

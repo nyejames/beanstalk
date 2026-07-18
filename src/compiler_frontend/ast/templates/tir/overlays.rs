@@ -1,37 +1,11 @@
-//! Final TIR overlay sets and overlay ID types.
+//! TIR overlay payloads, compact dimension IDs, and value-carried view context.
 //!
-//! WHAT: `TemplateOverlaySet` groups the three overlay dimensions — expression
-//! overrides, slot resolution, and wrapper context — behind a single
-//! store-owned set ID. Each dimension carries a typed overlay ID that
-//! indexes into a store-owned overlay entry table.
+//! WHAT: stores immutable occurrence-keyed overlay payloads and the exact three
+//! optional overlay dimensions carried by each TIR view.
 //!
-//! WHY: the final TIR system applies contextual changes as overlays rather than
-//! mutating shared structural roots. Overlay sets are immutable once allocated
-//! and canonicalized by the module store so equivalent sets share one ID. This lets
-//! `TemplateTirReference` carry a single overlay-set ID instead of ad hoc maps.
-//!
-//! ## Canonical resolution order
-//!
-//! When overlay sets are composed, dimensions are resolved in canonical order:
-//!
-//! ```text
-//! versioned structural root
-//! -> wrapper context at child-template occurrence boundaries
-//! -> slot resolution at slot occurrence boundaries
-//! -> expression override at dynamic-expression nodes
-//! -> consumer sees effective view
-//! ```
-//!
-//! Within each dimension the last non-`None` value in composition order wins,
-//! so later contextual overlays can replace earlier entries for the same
-//! dimension.
-//! See `TemplateIrStore::compose_overlay_sets`.
-//!
-//! ## Ownership contract
-//!
-//! Overlays are AST-local. They are not exposed to HIR, backends, or the public
-//! API. The module store owns overlay set and overlay entry storage; IDs remain
-//! valid only within the `TemplateIrStore` that created them.
+//! WHY: contextual template state belongs to the reference or view that uses it.
+//! Keeping the dimensions as values avoids indirect context storage while preserving
+//! typed store lookup and last-context precedence at narrow composition sites.
 //!
 //! ## Payload coverage
 //!
@@ -43,6 +17,7 @@
 //! can apply inherited wrappers without mutating shared child-template nodes.
 
 use std::fmt;
+use std::num::NonZeroU32;
 
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::templates::template::SlotKey;
@@ -52,170 +27,74 @@ use crate::compiler_frontend::ast::templates::tir::ids::{
 };
 
 // -------------------------
-//  Overlay set ID
-// -------------------------
-
-/// Stable index for an overlay set in `TemplateIrStore`.
-///
-/// WHAT: identifies one immutable `TemplateOverlaySet` allocated by the
-/// module store. Equivalent overlay sets share one ID after canonicalization.
-/// WHY: `TemplateTirReference` carries a single overlay-set ID so later phases
-/// resolve contextual changes through one stable handle instead of ad hoc maps.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub(crate) struct TemplateOverlaySetId(u32);
-
-impl TemplateOverlaySetId {
-    /// Creates a new ID from a raw index.
-    ///
-    /// Panics if the index exceeds `u32::MAX`. This is an internal invariant —
-    /// no realistic overlay set count will approach this bound.
-    pub(crate) fn new(index: usize) -> Self {
-        Self(
-            u32::try_from(index)
-                .expect("template overlay set index exceeds u32::MAX; this is a compiler bug"),
-        )
-    }
-
-    /// Returns the raw index for store lookups.
-    pub(crate) fn index(self) -> usize {
-        self.0 as usize
-    }
-
-    /// Returns the canonical empty overlay-set ID.
-    ///
-    /// WHAT: the module store always allocates the empty set at index 0, so this is
-    ///       a stable identity for "no overlays" even before the store is
-    ///       available.
-    /// WHY: construction sites that emit `ChildTemplate` nodes before the
-    ///      store finalizes the parent reference (e.g. parser emission,
-    ///      current-state materialization) still need a valid overlay-set ID.
-    ///      Callers that already have a store should prefer
-    ///      `TemplateIrStore::allocate_overlay_set(TemplateOverlaySet::empty())`.
-    pub(crate) fn empty() -> Self {
-        Self(0)
-    }
-
-    /// Returns a zero-valued overlay-set ID for test fixtures without a store.
-    ///
-    /// WHAT: alias for [`Self::empty`] kept for test fixtures that predate the
-    ///       production-safe constructor.
-    /// WHY: avoids churn in focused tests while making the production path
-    ///      explicit.
-    #[cfg(test)]
-    pub(crate) fn empty_for_test() -> Self {
-        Self::empty()
-    }
-}
-
-impl fmt::Display for TemplateOverlaySetId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "TemplateOverlaySetId({})", self.0)
-    }
-}
-
-// -------------------------
 //  Overlay dimension IDs
 // -------------------------
 
-/// Stable index for an expression overlay entry in `TemplateIrStore`.
+/// A compact module-local overlay payload index.
 ///
-/// WHAT: identifies a store-owned expression override applied at
-/// dynamic-expression nodes. The concrete payload carries expression overrides
-/// keyed by `ExpressionSiteId`.
-/// WHY: expression overrides are one of the three overlay dimensions; a typed
-/// ID keeps the reference distinct from slot and wrapper overlays and lets the
-/// store own expression-overlay storage centrally.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub(crate) struct TirExpressionOverlayId(u32);
+/// The stored value is the zero-based vector index plus one. This keeps every
+/// `Option<...Id>` one word without reserving a zero sentinel as a valid ID.
+macro_rules! compact_overlay_id {
+    ($name:ident, $label:literal) => {
+        #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+        pub(crate) struct $name(NonZeroU32);
 
-impl TirExpressionOverlayId {
-    /// Creates a new ID from a raw index.
-    ///
-    /// Panics if the index exceeds `u32::MAX`. This is an internal invariant.
-    pub(crate) fn new(index: usize) -> Self {
-        Self(
-            u32::try_from(index)
-                .expect("expression overlay index exceeds u32::MAX; this is a compiler bug"),
-        )
-    }
+        impl $name {
+            pub(crate) fn new(index: usize) -> Self {
+                let index = u32::try_from(index).expect(concat!(
+                    $label,
+                    " index exceeds u32::MAX; internal compiler invariant violated"
+                ));
+                let encoded = index.checked_add(1).expect(concat!(
+                    $label,
+                    " index-plus-one overflowed; internal compiler invariant violated"
+                ));
+                Self(NonZeroU32::new(encoded).expect(concat!(
+                    $label,
+                    " ID cannot be zero; internal compiler invariant violated"
+                )))
+            }
 
-    /// Returns the raw index for store lookups.
-    pub(crate) fn index(self) -> usize {
-        self.0 as usize
-    }
+            pub(crate) fn index(self) -> usize {
+                self.0.get() as usize - 1
+            }
+        }
+
+        impl fmt::Display for $name {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                write!(f, concat!(stringify!($name), "({})"), self.0.get() - 1)
+            }
+        }
+    };
 }
 
-impl fmt::Display for TirExpressionOverlayId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "TirExpressionOverlayId({})", self.0)
-    }
-}
+// Stable index for an expression overlay entry in `TemplateIrStore`.
+//
+// WHAT: identifies a store-owned expression override applied at
+// dynamic-expression nodes. The concrete payload carries expression overrides
+// keyed by `ExpressionSiteId`.
+// WHY: expression overrides are one of the three overlay dimensions; a typed
+// ID keeps the reference distinct from slot and wrapper overlays and lets the
+// store own expression-overlay storage centrally.
+compact_overlay_id!(TirExpressionOverlayId, "expression overlay");
 
-/// Stable index for a slot resolution overlay entry in `TemplateIrStore`.
-///
-/// WHAT: identifies a store-owned slot resolution applied at slot occurrence
-/// boundaries. The concrete payload carries slot resolutions keyed by
-/// `SlotOccurrenceId`.
-/// WHY: slot resolution is one of the three overlay dimensions; a typed ID keeps
-/// the reference distinct from expression and wrapper overlays.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub(crate) struct TirSlotResolutionOverlayId(u32);
+// Stable index for a slot resolution overlay entry in `TemplateIrStore`.
+//
+// WHAT: identifies a store-owned slot resolution applied at slot occurrence
+// boundaries. The concrete payload carries slot resolutions keyed by
+// `SlotOccurrenceId`.
+// WHY: slot resolution is one of the three overlay dimensions; a typed ID keeps
+// the reference distinct from expression and wrapper overlays.
+compact_overlay_id!(TirSlotResolutionOverlayId, "slot resolution overlay");
 
-impl TirSlotResolutionOverlayId {
-    /// Creates a new ID from a raw index.
-    ///
-    /// Panics if the index exceeds `u32::MAX`. This is an internal invariant.
-    pub(crate) fn new(index: usize) -> Self {
-        Self(
-            u32::try_from(index)
-                .expect("slot resolution overlay index exceeds u32::MAX; this is a compiler bug"),
-        )
-    }
-
-    /// Returns the raw index for store lookups.
-    pub(crate) fn index(self) -> usize {
-        self.0 as usize
-    }
-}
-
-impl fmt::Display for TirSlotResolutionOverlayId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "TirSlotResolutionOverlayId({})", self.0)
-    }
-}
-
-/// Stable index for a wrapper context overlay entry in `TemplateIrStore`.
-///
-/// WHAT: identifies a store-owned wrapper context applied at child-template
-/// occurrence boundaries. The concrete payload carries inherited wrapper,
-/// `$fresh`, and output-guard context keyed by child occurrence.
-/// WHY: wrapper context is one of the three overlay dimensions; a typed ID
-/// keeps the reference distinct from expression and slot overlays.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub(crate) struct TirWrapperContextOverlayId(u32);
-
-impl TirWrapperContextOverlayId {
-    /// Creates a new ID from a raw index.
-    ///
-    /// Panics if the index exceeds `u32::MAX`. This is an internal invariant.
-    pub(crate) fn new(index: usize) -> Self {
-        Self(
-            u32::try_from(index)
-                .expect("wrapper context overlay index exceeds u32::MAX; this is a compiler bug"),
-        )
-    }
-
-    /// Returns the raw index for store lookups.
-    pub(crate) fn index(self) -> usize {
-        self.0 as usize
-    }
-}
-
-impl fmt::Display for TirWrapperContextOverlayId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "TirWrapperContextOverlayId({})", self.0)
-    }
-}
+// Stable index for a wrapper context overlay entry in `TemplateIrStore`.
+//
+// WHAT: identifies a store-owned wrapper context applied at child-template
+// occurrence boundaries. The concrete payload carries inherited wrapper,
+// `$fresh`, and output-guard context keyed by child occurrence.
+// WHY: wrapper context is one of the three overlay dimensions; a typed ID
+// keeps the reference distinct from expression and slot overlays.
+compact_overlay_id!(TirWrapperContextOverlayId, "wrapper context overlay");
 
 // -------------------------
 //  Slot resolution value type
@@ -293,12 +172,6 @@ impl TirSlotResolution {
             TirSlotResolutionKind::Resolved { sources } => sources,
             TirSlotResolutionKind::Missing | TirSlotResolutionKind::Unresolved => &[],
         }
-    }
-
-    /// Returns true when this occurrence intentionally renders no content.
-    #[cfg(test)]
-    pub(crate) fn is_missing(&self) -> bool {
-        matches!(self.kind, TirSlotResolutionKind::Missing)
     }
 
     /// Returns true when this occurrence has not been routed yet.
@@ -459,13 +332,6 @@ impl TirWrapperContext {
             application_mode: TirWrapperApplicationMode::Always,
         }
     }
-
-    /// Returns true when no wrapper or guard context applies.
-    pub(crate) fn is_empty(&self) -> bool {
-        self.inherited_wrapper_set.is_none()
-            && !self.skip_parent_child_wrappers
-            && matches!(self.application_mode, TirWrapperApplicationMode::Always)
-    }
 }
 
 /// Store-owned wrapper context overlay payload.
@@ -494,44 +360,31 @@ impl TirWrapperContextOverlay {
 }
 
 // -------------------------
-//  Overlay set
+//  Value-carried view context
 // -------------------------
 
-/// A store-owned, immutable set of overlay dimension references.
-///
-/// WHAT: groups the three overlay dimensions — expression overrides, slot
-/// resolution, and wrapper context — behind one canonical store ID. Each
-/// field is `None` when that dimension has no overlay for this set.
-/// WHY: `TemplateTirReference` carries one overlay-set ID; the module store
-/// canonicalizes equivalent sets so consumers never combine overlay maps ad hoc.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub(crate) struct TemplateOverlaySet {
-    /// Expression override applied at dynamic-expression nodes.
-    pub(crate) expression_overrides: Option<TirExpressionOverlayId>,
-    /// Slot resolution applied at slot occurrence boundaries.
+/// Exact contextual identity carried by a TIR reference or view.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub(crate) struct TemplateViewContext {
+    pub(crate) expression_overlay: Option<TirExpressionOverlayId>,
     pub(crate) slot_resolution: Option<TirSlotResolutionOverlayId>,
-    /// Wrapper context applied at child-template occurrence boundaries.
     pub(crate) wrapper_context: Option<TirWrapperContextOverlayId>,
 }
 
-impl TemplateOverlaySet {
-    /// Creates an overlay set with no overlays in any dimension.
-    ///
-    /// WHAT: the canonical "no contextual changes" set. The module store
-    /// canonicalizes all empty sets to this single entry.
-    /// WHY: most templates carry no overlays; a named constructor makes the
-    /// intent explicit at call sites instead of relying on `Default` derivation.
-    pub(crate) fn empty() -> Self {
-        Self::default()
-    }
-
-    /// Returns `true` when no overlay dimension is set.
-    ///
-    /// WHAT: a quick emptiness check used by the store to keep the canonical
-    /// empty set unique and by callers that want to short-circuit overlay work.
-    pub(crate) fn is_empty(&self) -> bool {
-        self.expression_overrides.is_none()
+impl TemplateViewContext {
+    pub(crate) fn is_empty(self) -> bool {
+        self.expression_overlay.is_none()
             && self.slot_resolution.is_none()
             && self.wrapper_context.is_none()
+    }
+
+    /// Merges one newer context over this context, preserving last-context
+    /// precedence independently for each overlay dimension.
+    pub(crate) fn merge(self, newer: Self) -> Self {
+        Self {
+            expression_overlay: newer.expression_overlay.or(self.expression_overlay),
+            slot_resolution: newer.slot_resolution.or(self.slot_resolution),
+            wrapper_context: newer.wrapper_context.or(self.wrapper_context),
+        }
     }
 }

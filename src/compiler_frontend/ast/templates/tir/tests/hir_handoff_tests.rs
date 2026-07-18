@@ -22,7 +22,7 @@ use crate::compiler_frontend::ast::templates::tir::node::{
     TemplateIr, TemplateIrBranch, TemplateIrNode, TemplateIrNodeKind, TirSlotPlaceholder,
 };
 use crate::compiler_frontend::ast::templates::tir::overlays::{
-    TemplateOverlaySet, TemplateOverlaySetId, TirExpressionOverlay, TirSlotResolution,
+    TemplateViewContext, TirExpressionOverlay, TirExpressionOverlayId, TirSlotResolution,
     TirSlotResolutionOverlay, TirWrapperContext, TirWrapperContextOverlay,
 };
 use crate::compiler_frontend::ast::templates::tir::refs::{
@@ -132,36 +132,36 @@ fn bool_reference_expression(string_table: &mut StringTable, name: &str) -> Expr
     )
 }
 
-/// Allocates an overlay set that overrides the given expression sites.
-fn expression_overlay_set(
+/// Builds a view context that overrides the given expression sites.
+fn expression_overlay_context(
     store: &mut TemplateIrStore,
     overrides: Vec<(ExpressionSiteId, Expression)>,
-) -> TemplateOverlaySetId {
+) -> TemplateViewContext {
     let overrides = overrides
         .into_iter()
         .map(|(site_id, expression)| (site_id, Box::new(expression)))
         .collect();
     let expression_overlay_id =
         store.allocate_expression_overlay(TirExpressionOverlay { overrides });
-    store.allocate_overlay_set(TemplateOverlaySet {
-        expression_overrides: Some(expression_overlay_id),
+    TemplateViewContext {
+        expression_overlay: Some(expression_overlay_id),
         slot_resolution: None,
         wrapper_context: None,
-    })
+    }
 }
 
-/// Allocates an overlay set that resolves the given slot occurrences.
-fn slot_resolution_overlay_set(
+/// Builds a view context that resolves the given slot occurrences.
+fn slot_resolution_context(
     store: &mut TemplateIrStore,
     resolutions: Vec<(SlotOccurrenceId, TirSlotResolution)>,
-) -> TemplateOverlaySetId {
+) -> TemplateViewContext {
     let slot_resolution_overlay_id =
         store.allocate_slot_resolution_overlay(TirSlotResolutionOverlay { resolutions });
-    store.allocate_overlay_set(TemplateOverlaySet {
-        expression_overrides: None,
+    TemplateViewContext {
+        expression_overlay: None,
         slot_resolution: Some(slot_resolution_overlay_id),
         wrapper_context: None,
-    })
+    }
 }
 
 /// Pushes a child-template reference node and returns its node ID.
@@ -182,22 +182,22 @@ fn child_template_node_id(
 /// Builds a finalized same-store child reference for a template root.
 fn child_reference(
     template_id: TemplateIrId,
-    overlay_set_id: TemplateOverlaySetId,
+    context: TemplateViewContext,
 ) -> TemplateTirChildReference {
-    TemplateTirChildReference::new(template_id, TemplateTirPhase::Finalized, overlay_set_id)
+    TemplateTirChildReference::new(template_id, TemplateTirPhase::Finalized, context)
 }
 
 fn view_for(
     store: &TemplateIrStore,
     root: TemplateIrId,
-    overlay_set_id: TemplateOverlaySetId,
+    context: TemplateViewContext,
 ) -> TirView<'_> {
     TirView::with_minimum_phase(
         store,
         root,
         TemplateTirPhase::Finalized,
         TemplateTirPhase::Finalized,
-        overlay_set_id,
+        context,
     )
     .expect("finalized test view should construct")
 }
@@ -209,13 +209,13 @@ fn materialize_parent_handoff_result(
     store: Rc<RefCell<TemplateIrStore>>,
     parent_template_id: TemplateIrId,
     string_table: &mut StringTable,
-    overlay_set_id: TemplateOverlaySetId,
+    view_context: TemplateViewContext,
 ) -> Result<OwnedRuntimeTemplateBody, CompilerError> {
-    let mut context = fold_context(string_table, &store);
+    let mut fold_context = fold_context(string_table, &store);
     let store_ref = store.borrow();
-    let view = view_for(&store_ref, parent_template_id, overlay_set_id);
+    let view = view_for(&store_ref, parent_template_id, view_context);
     store_ref
-        .owned_runtime_template_handoff_for_tir_view_with_fold_context(&view, &mut context)
+        .owned_runtime_template_handoff_for_tir_view_with_fold_context(&view, &mut fold_context)
         .map(|handoff| handoff.body)
 }
 
@@ -225,9 +225,9 @@ fn materialize_parent_handoff(
     store: Rc<RefCell<TemplateIrStore>>,
     parent_template_id: TemplateIrId,
     string_table: &mut StringTable,
-    overlay_set_id: TemplateOverlaySetId,
+    context: TemplateViewContext,
 ) -> OwnedRuntimeTemplateBody {
-    materialize_parent_handoff_result(store, parent_template_id, string_table, overlay_set_id)
+    materialize_parent_handoff_result(store, parent_template_id, string_table, context)
         .expect("handoff materialization should succeed")
 }
 
@@ -416,19 +416,19 @@ fn build_named_only_wrapper_template(
 
 /// Builds one parent child occurrence with an inherited wrapper and returns the
 /// parent plus the wrapper-context overlay that activates it. The wrapper's own
-/// overlay set is `empty_overlay_set_id` unless a separate wrapper overlay is
+/// view context is `empty_context` unless a separate wrapper overlay is
 /// supplied through `build_parent_with_inherited_wrapper_and_overlay`.
 fn build_parent_with_inherited_wrapper(
     store: &mut TemplateIrStore,
     wrapper_template_id: TemplateIrId,
-    empty_overlay_set_id: TemplateOverlaySetId,
+    empty_context: TemplateViewContext,
     string_table: &mut StringTable,
-) -> (TemplateIrId, TemplateOverlaySetId) {
+) -> (TemplateIrId, TemplateViewContext) {
     build_parent_with_inherited_wrapper_and_overlay(
         store,
         wrapper_template_id,
-        empty_overlay_set_id,
-        empty_overlay_set_id,
+        empty_context,
+        empty_context,
         string_table,
     )
 }
@@ -436,14 +436,14 @@ fn build_parent_with_inherited_wrapper(
 fn build_parent_with_inherited_wrapper_and_overlay(
     store: &mut TemplateIrStore,
     wrapper_template_id: TemplateIrId,
-    empty_overlay_set_id: TemplateOverlaySetId,
-    wrapper_overlay_set_id: TemplateOverlaySetId,
+    empty_context: TemplateViewContext,
+    wrapper_context: TemplateViewContext,
     string_table: &mut StringTable,
-) -> (TemplateIrId, TemplateOverlaySetId) {
+) -> (TemplateIrId, TemplateViewContext) {
     let (parent_template_id, wrapper_set_id, child_occurrence_id) = {
         let child_template_id = text_template(store, string_table, "child");
         let child_occurrence_id = store.next_child_template_occurrence_id();
-        let child_reference = child_reference(child_template_id, empty_overlay_set_id);
+        let child_reference = child_reference(child_template_id, empty_context);
         let child_node = store.push_node(TemplateIrNode::new(
             TemplateIrNodeKind::ChildTemplate {
                 reference: child_reference,
@@ -455,7 +455,7 @@ fn build_parent_with_inherited_wrapper_and_overlay(
         let wrapper_reference = TemplateWrapperReference::new(
             wrapper_template_id,
             TemplateTirPhase::Finalized,
-            wrapper_overlay_set_id,
+            wrapper_context,
         );
         let wrapper_set_id = store.push_or_reuse_wrapper_set(vec![wrapper_reference]);
         (parent_template_id, wrapper_set_id, child_occurrence_id)
@@ -467,13 +467,13 @@ fn build_parent_with_inherited_wrapper_and_overlay(
             TirWrapperContext::inherited(wrapper_set_id),
         )],
     });
-    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet {
-        expression_overrides: None,
+    let context = TemplateViewContext {
+        expression_overlay: None,
         slot_resolution: None,
         wrapper_context: Some(wrapper_overlay_id),
-    });
+    };
 
-    (parent_template_id, overlay_set_id)
+    (parent_template_id, context)
 }
 
 // ---------------------------------------------------------------------------
@@ -488,7 +488,7 @@ fn owned_handoff_materializes_text_from_the_shared_store() {
     let mut context = fold_context(&mut strings, &store);
     let handoff = {
         let store_ref = store.borrow();
-        let view = view_for(&store_ref, template_id, TemplateOverlaySetId::empty());
+        let view = view_for(&store_ref, template_id, TemplateViewContext::default());
         store_ref
             .owned_runtime_template_handoff_for_tir_view_with_fold_context(&view, &mut context)
             .expect("text handoff should succeed")
@@ -506,7 +506,7 @@ fn owned_handoff_materializes_text_from_the_shared_store() {
 fn owned_handoff_resolves_slot_overlay_to_a_child_template() {
     let store = Rc::new(RefCell::new(TemplateIrStore::new()));
     let mut strings = StringTable::new();
-    let (parent_id, source_id, occurrence_id, overlay_set_id) = {
+    let (parent_id, source_id, occurrence_id, view_context) = {
         let mut store_ref = store.borrow_mut();
         let source_id = text_template(&mut store_ref, &mut strings, "filled");
         let occurrence_id = store_ref.next_slot_occurrence_id();
@@ -535,19 +535,19 @@ fn owned_handoff_resolves_slot_overlay_to_a_child_template() {
                     TirSlotResolution::resolved(SlotKey::Default, vec![source_id]),
                 )],
             });
-        let overlay_set_id = store_ref.allocate_overlay_set(TemplateOverlaySet {
-            expression_overrides: None,
+        let context = TemplateViewContext {
+            expression_overlay: None,
             slot_resolution: Some(slot_overlay_id),
             wrapper_context: None,
-        });
-        (parent_id, source_id, occurrence_id, overlay_set_id)
+        };
+        (parent_id, source_id, occurrence_id, context)
     };
-    let mut context = fold_context(&mut strings, &store);
+    let mut fold_context = fold_context(&mut strings, &store);
     let handoff = {
         let store_ref = store.borrow();
-        let view = view_for(&store_ref, parent_id, overlay_set_id);
+        let view = view_for(&store_ref, parent_id, view_context);
         store_ref
-            .owned_runtime_template_handoff_for_tir_view_with_fold_context(&view, &mut context)
+            .owned_runtime_template_handoff_for_tir_view_with_fold_context(&view, &mut fold_context)
             .expect("slot handoff should succeed")
     };
 
@@ -571,7 +571,7 @@ fn owned_handoff_resolves_slot_overlay_to_a_child_template() {
 fn owned_handoff_missing_slot_resolution_renders_slot_placeholder() {
     let store = Rc::new(RefCell::new(TemplateIrStore::new()));
     let mut strings = StringTable::new();
-    let (parent_id, _occurrence_id, overlay_set_id) = {
+    let (parent_id, _occurrence_id, view_context) = {
         let mut store_ref = store.borrow_mut();
         let occurrence_id = store_ref.next_slot_occurrence_id();
         let slot = store_ref.push_node(TemplateIrNode::new(
@@ -585,18 +585,18 @@ fn owned_handoff_missing_slot_resolution_renders_slot_placeholder() {
             empty_location(),
         ));
         let parent_id = finish_text_template(&mut store_ref, slot);
-        let overlay_set_id = slot_resolution_overlay_set(
+        let context = slot_resolution_context(
             &mut store_ref,
             vec![(occurrence_id, TirSlotResolution::missing(SlotKey::Default))],
         );
-        (parent_id, occurrence_id, overlay_set_id)
+        (parent_id, occurrence_id, context)
     };
-    let mut context = fold_context(&mut strings, &store);
+    let mut fold_context = fold_context(&mut strings, &store);
     let handoff = {
         let store_ref = store.borrow();
-        let view = view_for(&store_ref, parent_id, overlay_set_id);
+        let view = view_for(&store_ref, parent_id, view_context);
         store_ref
-            .owned_runtime_template_handoff_for_tir_view_with_fold_context(&view, &mut context)
+            .owned_runtime_template_handoff_for_tir_view_with_fold_context(&view, &mut fold_context)
             .expect("handoff materialization should succeed")
     };
 
@@ -623,7 +623,7 @@ fn owned_handoff_preserves_same_store_child_boundary() {
                 reference: TemplateTirChildReference::new(
                     child_id,
                     TemplateTirPhase::Parsed,
-                    TemplateOverlaySetId::empty(),
+                    TemplateViewContext::default(),
                 ),
                 occurrence_id,
             },
@@ -642,7 +642,7 @@ fn owned_handoff_preserves_same_store_child_boundary() {
     let mut context = fold_context(&mut strings, &store);
     let handoff = {
         let store_ref = store.borrow();
-        let view = view_for(&store_ref, parent_id, TemplateOverlaySetId::empty());
+        let view = view_for(&store_ref, parent_id, TemplateViewContext::default());
         store_ref
             .owned_runtime_template_handoff_for_tir_view_with_fold_context(&view, &mut context)
             .expect("child handoff should succeed")
@@ -666,9 +666,9 @@ fn owned_handoff_preserves_same_store_child_boundary() {
 fn parent_root_expression_overlay_applies_inside_same_store_child() {
     let store = Rc::new(RefCell::new(TemplateIrStore::new()));
     let mut strings = StringTable::new();
-    let (parent_id, _child_site_id, overlay_set_id) = {
+    let (parent_id, _child_site_id, context) = {
         let mut store_ref = store.borrow_mut();
-        let child_overlay_set_id = store_ref.allocate_overlay_set(TemplateOverlaySet::empty());
+        let child_context = TemplateViewContext::default();
         let child_site_id = store_ref.next_expression_site_id();
         let child_expression = bool_reference_expression(&mut strings, "original");
         let child_root = store_ref.push_node(TemplateIrNode::new(
@@ -683,20 +683,20 @@ fn parent_root_expression_overlay_applies_inside_same_store_child() {
         let child_template_id = finish_text_template(&mut store_ref, child_root);
         let child_node = child_template_node_id(
             &mut store_ref,
-            child_reference(child_template_id, child_overlay_set_id),
+            child_reference(child_template_id, child_context),
         );
         let parent_id = finish_text_template(&mut store_ref, child_node);
-        let overlay_set_id = expression_overlay_set(
+        let context = expression_overlay_context(
             &mut store_ref,
             vec![(
                 child_site_id,
                 Expression::bool(true, empty_location(), ValueMode::ImmutableOwned),
             )],
         );
-        (parent_id, child_site_id, overlay_set_id)
+        (parent_id, child_site_id, context)
     };
 
-    let body = materialize_parent_handoff(store, parent_id, &mut strings, overlay_set_id);
+    let body = materialize_parent_handoff(store, parent_id, &mut strings, context);
     let OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::ChildTemplate {
         template, ..
     }) = body
@@ -721,9 +721,9 @@ fn parent_root_expression_overlay_applies_inside_same_store_child() {
 fn folded_child_shortcut_preserves_root_overlay_through_nested_same_store_children() {
     let store = Rc::new(RefCell::new(TemplateIrStore::new()));
     let mut strings = StringTable::new();
-    let (root_id, _leaf_site_id, overlay_set_id) = {
+    let (root_id, _leaf_site_id, context) = {
         let mut store_ref = store.borrow_mut();
-        let empty_overlay_set_id = store_ref.allocate_overlay_set(TemplateOverlaySet::empty());
+        let empty_context = TemplateViewContext::default();
         let leaf_site_id = store_ref.next_expression_site_id();
         let stale_structural_text = strings.intern("stale-structural");
         let leaf_root = store_ref.push_node(TemplateIrNode::new(
@@ -742,16 +742,16 @@ fn folded_child_shortcut_preserves_root_overlay_through_nested_same_store_childr
         let leaf_template_id = finish_text_template(&mut store_ref, leaf_root);
         let middle_child = child_template_node_id(
             &mut store_ref,
-            child_reference(leaf_template_id, empty_overlay_set_id),
+            child_reference(leaf_template_id, empty_context),
         );
         let middle_template_id = finish_text_template(&mut store_ref, middle_child);
         let root_child = child_template_node_id(
             &mut store_ref,
-            child_reference(middle_template_id, empty_overlay_set_id),
+            child_reference(middle_template_id, empty_context),
         );
         let root_id = finish_text_template(&mut store_ref, root_child);
         let effective_root_text = strings.intern("effective-root");
-        let overlay_set_id = expression_overlay_set(
+        let context = expression_overlay_context(
             &mut store_ref,
             vec![(
                 leaf_site_id,
@@ -762,10 +762,10 @@ fn folded_child_shortcut_preserves_root_overlay_through_nested_same_store_childr
                 ),
             )],
         );
-        (root_id, leaf_site_id, overlay_set_id)
+        (root_id, leaf_site_id, context)
     };
 
-    let body = materialize_parent_handoff(store, root_id, &mut strings, overlay_set_id);
+    let body = materialize_parent_handoff(store, root_id, &mut strings, context);
     let OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::ChildTemplate {
         template: middle_template,
     }) = &body
@@ -805,9 +805,9 @@ fn folded_child_shortcut_preserves_root_overlay_through_nested_same_store_childr
 fn folded_child_runtime_reference_falls_back_to_structural_handoff() {
     let store = Rc::new(RefCell::new(TemplateIrStore::new()));
     let mut strings = StringTable::new();
-    let (parent_id, overlay_set_id) = {
+    let (parent_id, context) = {
         let mut store_ref = store.borrow_mut();
-        let empty_overlay_set_id = store_ref.allocate_overlay_set(TemplateOverlaySet::empty());
+        let empty_context = TemplateViewContext::default();
         let child_site_id = store_ref.next_expression_site_id();
         let child_expression = bool_reference_expression(&mut strings, "runtime");
         let child_root = store_ref.push_node(TemplateIrNode::new(
@@ -822,13 +822,13 @@ fn folded_child_runtime_reference_falls_back_to_structural_handoff() {
         let child_template_id = finish_text_template(&mut store_ref, child_root);
         let child_node = child_template_node_id(
             &mut store_ref,
-            child_reference(child_template_id, empty_overlay_set_id),
+            child_reference(child_template_id, empty_context),
         );
         let parent_id = finish_text_template(&mut store_ref, child_node);
-        (parent_id, empty_overlay_set_id)
+        (parent_id, empty_context)
     };
 
-    let body = materialize_parent_handoff_result(store, parent_id, &mut strings, overlay_set_id)
+    let body = materialize_parent_handoff_result(store, parent_id, &mut strings, context)
         .expect("runtime reference should use structural handoff");
 
     let OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::ChildTemplate {
@@ -850,9 +850,9 @@ fn folded_child_runtime_reference_falls_back_to_structural_handoff() {
 fn folded_child_infrastructure_error_propagates_through_hir_handoff() {
     let store = Rc::new(RefCell::new(TemplateIrStore::new()));
     let mut strings = StringTable::new();
-    let (parent_id, overlay_set_id) = {
+    let (parent_id, context) = {
         let mut store_ref = store.borrow_mut();
-        let empty_overlay_set_id = store_ref.allocate_overlay_set(TemplateOverlaySet::empty());
+        let empty_context = TemplateViewContext::default();
         let missing_child_root = TemplateIrNodeId::new(999);
         let child_template_id = store_ref.push_template(TemplateIr::new(
             missing_child_root,
@@ -863,13 +863,13 @@ fn folded_child_infrastructure_error_propagates_through_hir_handoff() {
         ));
         let child_node = child_template_node_id(
             &mut store_ref,
-            child_reference(child_template_id, empty_overlay_set_id),
+            child_reference(child_template_id, empty_context),
         );
         let parent_id = finish_text_template(&mut store_ref, child_node);
-        (parent_id, empty_overlay_set_id)
+        (parent_id, empty_context)
     };
 
-    let error = materialize_parent_handoff_result(store, parent_id, &mut strings, overlay_set_id)
+    let error = materialize_parent_handoff_result(store, parent_id, &mut strings, context)
         .expect_err("malformed child authority must reach the HIR handoff caller");
 
     assert!(
@@ -887,19 +887,19 @@ fn folded_child_infrastructure_error_propagates_through_hir_handoff() {
 fn inherited_wrapper_handoff_injects_through_branch_boundaries() {
     let store = Rc::new(RefCell::new(TemplateIrStore::new()));
     let mut strings = StringTable::new();
-    let (parent_id, overlay_set_id) = {
+    let (parent_id, context) = {
         let mut store_ref = store.borrow_mut();
-        let empty_overlay_set_id = store_ref.allocate_overlay_set(TemplateOverlaySet::empty());
+        let empty_context = TemplateViewContext::default();
         let wrapper_template_id = build_branch_wrapper_template(&mut store_ref);
         build_parent_with_inherited_wrapper(
             &mut store_ref,
             wrapper_template_id,
-            empty_overlay_set_id,
+            empty_context,
             &mut strings,
         )
     };
 
-    let body = materialize_parent_handoff(store, parent_id, &mut strings, overlay_set_id);
+    let body = materialize_parent_handoff(store, parent_id, &mut strings, context);
     let OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::BranchChain {
         branches,
         fallback,
@@ -922,19 +922,19 @@ fn inherited_wrapper_handoff_injects_through_branch_boundaries() {
 fn inherited_wrapper_handoff_injects_through_loop_body_and_aggregate() {
     let store = Rc::new(RefCell::new(TemplateIrStore::new()));
     let mut strings = StringTable::new();
-    let (parent_id, overlay_set_id) = {
+    let (parent_id, context) = {
         let mut store_ref = store.borrow_mut();
-        let empty_overlay_set_id = store_ref.allocate_overlay_set(TemplateOverlaySet::empty());
+        let empty_context = TemplateViewContext::default();
         let wrapper_template_id = build_loop_wrapper_template(&mut store_ref, &mut strings);
         build_parent_with_inherited_wrapper(
             &mut store_ref,
             wrapper_template_id,
-            empty_overlay_set_id,
+            empty_context,
             &mut strings,
         )
     };
 
-    let body = materialize_parent_handoff(store, parent_id, &mut strings, overlay_set_id);
+    let body = materialize_parent_handoff(store, parent_id, &mut strings, context);
     let OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::Loop {
         body,
         aggregate_wrapper,
@@ -964,20 +964,20 @@ fn inherited_wrapper_handoff_injects_through_loop_body_and_aggregate() {
 fn inherited_wrapper_handoff_injects_through_same_store_child_template() {
     let store = Rc::new(RefCell::new(TemplateIrStore::new()));
     let mut strings = StringTable::new();
-    let (parent_id, overlay_set_id) = {
+    let (parent_id, context) = {
         let mut store_ref = store.borrow_mut();
-        let empty_overlay_set_id = store_ref.allocate_overlay_set(TemplateOverlaySet::empty());
+        let empty_context = TemplateViewContext::default();
         let wrapper_template_id =
             build_same_store_child_wrapper_template(&mut store_ref, &mut strings);
         build_parent_with_inherited_wrapper(
             &mut store_ref,
             wrapper_template_id,
-            empty_overlay_set_id,
+            empty_context,
             &mut strings,
         )
     };
 
-    let body = materialize_parent_handoff(store, parent_id, &mut strings, overlay_set_id);
+    let body = materialize_parent_handoff(store, parent_id, &mut strings, context);
     let OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::ChildTemplate { template }) =
         body
     else {
@@ -1002,12 +1002,12 @@ fn inherited_wrapper_handoff_injects_through_same_store_child_template() {
 fn inherited_same_store_wrapper_handoff_applies_wrapper_overlay() {
     let store = Rc::new(RefCell::new(TemplateIrStore::new()));
     let mut strings = StringTable::new();
-    let (parent_id, overlay_set_id) = {
+    let (parent_id, context) = {
         let mut store_ref = store.borrow_mut();
-        let empty_overlay_set_id = store_ref.allocate_overlay_set(TemplateOverlaySet::empty());
+        let empty_context = TemplateViewContext::default();
         let (wrapper_template_id, expression_site_id) =
             build_expression_wrapper_template(&mut store_ref, &mut strings);
-        let wrapper_overlay_set_id = expression_overlay_set(
+        let wrapper_context = expression_overlay_context(
             &mut store_ref,
             vec![(
                 expression_site_id,
@@ -1017,13 +1017,13 @@ fn inherited_same_store_wrapper_handoff_applies_wrapper_overlay() {
         build_parent_with_inherited_wrapper_and_overlay(
             &mut store_ref,
             wrapper_template_id,
-            empty_overlay_set_id,
-            wrapper_overlay_set_id,
+            empty_context,
+            wrapper_context,
             &mut strings,
         )
     };
 
-    let body = materialize_parent_handoff(store, parent_id, &mut strings, overlay_set_id);
+    let body = materialize_parent_handoff(store, parent_id, &mut strings, context);
     let OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::Sequence { children }) = body
     else {
         panic!("expected same-store wrapper sequence, got {:?}", body);
@@ -1043,19 +1043,19 @@ fn inherited_same_store_wrapper_handoff_applies_wrapper_overlay() {
 fn inherited_slotless_wrapper_handoff_appends_child_after_wrapper_content() {
     let store = Rc::new(RefCell::new(TemplateIrStore::new()));
     let mut strings = StringTable::new();
-    let (parent_id, overlay_set_id) = {
+    let (parent_id, context) = {
         let mut store_ref = store.borrow_mut();
-        let empty_overlay_set_id = store_ref.allocate_overlay_set(TemplateOverlaySet::empty());
+        let empty_context = TemplateViewContext::default();
         let wrapper_template_id = build_slotless_wrapper_template(&mut store_ref, &mut strings);
         build_parent_with_inherited_wrapper(
             &mut store_ref,
             wrapper_template_id,
-            empty_overlay_set_id,
+            empty_context,
             &mut strings,
         )
     };
 
-    let body = materialize_parent_handoff(store, parent_id, &mut strings, overlay_set_id);
+    let body = materialize_parent_handoff(store, parent_id, &mut strings, context);
     let OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::Sequence { children }) = body
     else {
         panic!("expected slotless wrapper sequence, got {:?}", body);
@@ -1070,19 +1070,19 @@ fn inherited_slotless_wrapper_handoff_appends_child_after_wrapper_content() {
 fn inherited_named_only_wrapper_handoff_preserves_named_slot_and_appends_child() {
     let store = Rc::new(RefCell::new(TemplateIrStore::new()));
     let mut strings = StringTable::new();
-    let (parent_id, overlay_set_id) = {
+    let (parent_id, context) = {
         let mut store_ref = store.borrow_mut();
-        let empty_overlay_set_id = store_ref.allocate_overlay_set(TemplateOverlaySet::empty());
+        let empty_context = TemplateViewContext::default();
         let wrapper_template_id = build_named_only_wrapper_template(&mut store_ref, &mut strings);
         build_parent_with_inherited_wrapper(
             &mut store_ref,
             wrapper_template_id,
-            empty_overlay_set_id,
+            empty_context,
             &mut strings,
         )
     };
 
-    let body = materialize_parent_handoff(store, parent_id, &mut strings, overlay_set_id);
+    let body = materialize_parent_handoff(store, parent_id, &mut strings, context);
     let OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::Sequence { children }) = body
     else {
         panic!("expected named-only wrapper sequence, got {:?}", body);
@@ -1098,30 +1098,32 @@ fn inherited_named_only_wrapper_handoff_preserves_named_slot_and_appends_child()
 // ---------------------------------------------------------------------------
 
 #[test]
-fn malformed_child_overlay_set_propagates_view_failure() {
+fn malformed_child_view_context_propagates_view_failure() {
     let store = Rc::new(RefCell::new(TemplateIrStore::new()));
     let mut strings = StringTable::new();
-    let (parent_id, valid_overlay_set_id) = {
+    let (parent_id, valid_context) = {
         let mut store_ref = store.borrow_mut();
-        let valid_overlay_set_id = store_ref.allocate_overlay_set(TemplateOverlaySet::empty());
+        let valid_context = TemplateViewContext::default();
         let child_template_id = text_template(&mut store_ref, &mut strings, "child text");
-        // Use an unallocated overlay set ID so child-view construction fails.
-        let invalid_overlay_set_id = TemplateOverlaySetId::new(99);
+        // Use an unallocated expression overlay so child-view construction fails.
+        let invalid_context = TemplateViewContext {
+            expression_overlay: Some(TirExpressionOverlayId::new(99)),
+            ..TemplateViewContext::default()
+        };
         let child_node = child_template_node_id(
             &mut store_ref,
-            child_reference(child_template_id, invalid_overlay_set_id),
+            child_reference(child_template_id, invalid_context),
         );
         let parent_id = finish_text_template(&mut store_ref, child_node);
-        (parent_id, valid_overlay_set_id)
+        (parent_id, valid_context)
     };
 
-    let error =
-        materialize_parent_handoff_result(store, parent_id, &mut strings, valid_overlay_set_id)
-            .expect_err("malformed child overlay should produce a CompilerError");
+    let error = materialize_parent_handoff_result(store, parent_id, &mut strings, valid_context)
+        .expect_err("malformed child overlay should produce a CompilerError");
 
     assert!(
-        error.msg.contains("overlay set"),
-        "expected error about missing overlay set, got: {}",
+        error.msg.contains("expression overlay"),
+        "expected error about missing expression overlay, got: {}",
         error.msg
     );
 }
@@ -1130,9 +1132,9 @@ fn malformed_child_overlay_set_propagates_view_failure() {
 fn missing_wrapper_tree_node_propagates_schema_extraction_error() {
     let store = Rc::new(RefCell::new(TemplateIrStore::new()));
     let mut strings = StringTable::new();
-    let (parent_id, overlay_set_id) = {
+    let (parent_id, context) = {
         let mut store_ref = store.borrow_mut();
-        let empty_overlay_set_id = store_ref.allocate_overlay_set(TemplateOverlaySet::empty());
+        let empty_context = TemplateViewContext::default();
         let slot_occurrence_id = store_ref.next_slot_occurrence_id();
         let slot = store_ref.push_node(TemplateIrNode::new(
             TemplateIrNodeKind::Slot {
@@ -1160,12 +1162,12 @@ fn missing_wrapper_tree_node_propagates_schema_extraction_error() {
         build_parent_with_inherited_wrapper(
             &mut store_ref,
             wrapper_template_id,
-            empty_overlay_set_id,
+            empty_context,
             &mut strings,
         )
     };
 
-    let error = materialize_parent_handoff_result(store, parent_id, &mut strings, overlay_set_id)
+    let error = materialize_parent_handoff_result(store, parent_id, &mut strings, context)
         .expect_err("missing wrapper tree node should produce a CompilerError");
 
     assert!(
@@ -1179,11 +1181,10 @@ fn missing_wrapper_tree_node_propagates_schema_extraction_error() {
 fn missing_same_store_child_in_wrapper_propagates_schema_extraction_error() {
     let store = Rc::new(RefCell::new(TemplateIrStore::new()));
     let mut strings = StringTable::new();
-    let (parent_id, overlay_set_id) = {
+    let (parent_id, context) = {
         let mut store_ref = store.borrow_mut();
-        let empty_overlay_set_id = store_ref.allocate_overlay_set(TemplateOverlaySet::empty());
-        let missing_child_reference =
-            child_reference(TemplateIrId::new(9999), empty_overlay_set_id);
+        let empty_context = TemplateViewContext::default();
+        let missing_child_reference = child_reference(TemplateIrId::new(9999), empty_context);
         let missing_child_occurrence_id = store_ref.next_child_template_occurrence_id();
         let missing_child_node = store_ref.push_node(TemplateIrNode::new(
             TemplateIrNodeKind::ChildTemplate {
@@ -1196,12 +1197,12 @@ fn missing_same_store_child_in_wrapper_propagates_schema_extraction_error() {
         build_parent_with_inherited_wrapper(
             &mut store_ref,
             wrapper_template_id,
-            empty_overlay_set_id,
+            empty_context,
             &mut strings,
         )
     };
 
-    let error = materialize_parent_handoff_result(store, parent_id, &mut strings, overlay_set_id)
+    let error = materialize_parent_handoff_result(store, parent_id, &mut strings, context)
         .expect_err("missing same-store child in wrapper should produce a CompilerError");
 
     assert!(
@@ -1214,14 +1215,14 @@ fn missing_same_store_child_in_wrapper_propagates_schema_extraction_error() {
 }
 
 #[test]
-fn missing_overlay_set_is_rejected_before_handoff() {
+fn missing_view_context_is_rejected_before_handoff() {
     let store = TemplateIrStore::new();
     let missing_template = TemplateIrId::new(99);
     let error = TirView::new(
         &store,
         missing_template,
         TemplateTirPhase::Finalized,
-        TemplateOverlaySetId::empty(),
+        TemplateViewContext::default(),
     )
     .expect_err("missing root should be rejected");
     assert!(error.msg.contains("does not exist"));

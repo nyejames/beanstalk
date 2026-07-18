@@ -40,7 +40,7 @@ use crate::compiler_frontend::ast::templates::tir::node::{
     TemplateIr, TemplateIrBranch, TemplateIrNodeKind, TemplateLoopHeaderExpressionSites,
 };
 use crate::compiler_frontend::ast::templates::tir::overlays::{
-    TemplateOverlaySetId, TirSlotResolutionKind, TirWrapperApplicationMode, TirWrapperContext,
+    TemplateViewContext, TirSlotResolutionKind, TirWrapperApplicationMode, TirWrapperContext,
 };
 use crate::compiler_frontend::ast::templates::tir::refs::TemplateTirReference;
 use crate::compiler_frontend::ast::templates::tir::refs::{
@@ -138,7 +138,7 @@ fn reject_slot_insert_template(kind: &TemplateType) -> Result<(), TemplateError>
 struct FoldTraversalInput<'view, 'store> {
     effective_view: Option<&'view TirView<'store>>,
     store: &'store TemplateIrStore,
-    expression_overlay_stack: Vec<TemplateOverlaySetId>,
+    expression_overlay_stack: Vec<TemplateViewContext>,
     active_roots: Vec<TemplateIrId>,
     authority: Option<FoldAuthorityToken>,
 }
@@ -159,16 +159,16 @@ impl<'view, 'store> FoldTraversalInput<'view, 'store> {
 
         Ok(self
             .store
-            .expression_for_overlay_stack(&self.expression_overlay_stack, site_id)?)
+            .expression_for_context_stack(&self.expression_overlay_stack, site_id)?)
     }
 
     /// Extends the expression context for a composed-or-later same-store root.
     fn expression_stack_with_overlay(
         &self,
-        overlay_set_id: TemplateOverlaySetId,
-    ) -> Vec<TemplateOverlaySetId> {
+        context: TemplateViewContext,
+    ) -> Vec<TemplateViewContext> {
         let mut stack = self.expression_overlay_stack.clone();
-        stack.push(overlay_set_id);
+        stack.push(context);
         stack
     }
 }
@@ -273,7 +273,7 @@ pub(crate) fn fold_tir_view_prepared(
     let fold_input = FoldTraversalInput {
         effective_view: Some(view),
         store: view.store(),
-        expression_overlay_stack: vec![view.overlay_set_id()],
+        expression_overlay_stack: vec![view.context()],
         active_roots,
         authority: Some(authority),
     };
@@ -297,7 +297,7 @@ pub(crate) fn fold_tir_view(
     store: &TemplateIrStore,
     fold_context: &mut TemplateFoldContext<'_>,
 ) -> Result<TemplateEmission, TemplateError> {
-    fold_tir_view_with_expression_stack(view, store, fold_context, vec![view.overlay_set_id()])
+    fold_tir_view_with_expression_stack(view, store, fold_context, vec![view.context()])
 }
 
 /// Folds a view after validating its own authority while carrying an existing
@@ -311,7 +311,7 @@ fn fold_tir_view_with_expression_stack(
     view: &TirView<'_>,
     store: &TemplateIrStore,
     fold_context: &mut TemplateFoldContext<'_>,
-    expression_overlay_stack: Vec<TemplateOverlaySetId>,
+    expression_overlay_stack: Vec<TemplateViewContext>,
 ) -> Result<TemplateEmission, TemplateError> {
     fold_tir_view_with_expression_stack_and_active_roots(
         view,
@@ -326,7 +326,7 @@ fn fold_tir_view_with_expression_stack_and_active_roots(
     view: &TirView<'_>,
     store: &TemplateIrStore,
     fold_context: &mut TemplateFoldContext<'_>,
-    expression_overlay_stack: Vec<TemplateOverlaySetId>,
+    expression_overlay_stack: Vec<TemplateViewContext>,
     active_roots: Vec<TemplateIrId>,
 ) -> Result<TemplateEmission, TemplateError> {
     // Extract identity up front so cache lookup does not repeatedly query the
@@ -398,15 +398,15 @@ fn fold_tir_view_prevalidated(
         .into());
     }
     let phase = view.phase();
-    let overlay_set_id = view.overlay_set_id();
+    let context = view.context();
 
     let bindings_empty = fold_context.bindings.is_empty();
     let cache_identity_matches_expression_stack = fold_input.expression_overlay_stack.len() == 1
-        && fold_input.expression_overlay_stack[0] == overlay_set_id;
+        && fold_input.expression_overlay_stack[0] == context;
     let cache_key = TirFoldCacheKey {
         root,
         phase,
-        overlay_set_id,
+        context,
         loop_iteration_limit: fold_context.template_const_loop_iteration_limit,
         bindings_empty,
     };
@@ -427,7 +427,7 @@ fn fold_tir_view_prevalidated(
 
     let has_expression_overlay = view.expression_overlay()?.is_some();
     let has_slot_overlay = view.slot_resolution_overlay()?.is_some();
-    let has_wrapper_context = view.overlay_set()?.wrapper_context.is_some();
+    let has_wrapper_context = view.context().wrapper_context.is_some();
 
     // Attribute the overlay shape so callers can rank which overlay combinations
     // drive the view-native fold path.
@@ -697,7 +697,7 @@ fn fold_tir_node_into_buffer(
                     let child_reference = TemplateTirChildReference::new(
                         *source,
                         TemplateTirPhase::Composed,
-                        TemplateOverlaySetId::empty(),
+                        TemplateViewContext::default(),
                     );
                     let emission =
                         fold_child_template_reference(
@@ -853,11 +853,8 @@ fn fold_tir_dynamic_expression(
             reject_slot_insert_template(&template_kind)?;
 
             let reference = &template.tir_reference;
-            let child_reference = TemplateTirChildReference::new(
-                reference.root,
-                reference.phase,
-                reference.overlay_set_id,
-            );
+            let child_reference =
+                TemplateTirChildReference::new(reference.root, reference.phase, reference.context);
 
             append_template_emission_to_buffer(
                 fold_template_reference(
@@ -898,7 +895,7 @@ fn nested_template_kind(
 
 /// Folds a module-local child-template reference against the module store.
 ///
-/// WHAT: uses the precise `root`/`phase`/`overlay_set_id` identity stored on the
+/// WHAT: uses the precise `root`/`phase`/`context` identity stored on the
 ///       `ChildTemplate` node to build a `TirView` and fold through
 ///       `fold_tir_view`. Same-store below-Composed references retain the
 ///       structural fallback used by callers without a view. Composed
@@ -948,15 +945,14 @@ fn fold_template_reference(
             reference.root,
             reference.phase,
             TemplateTirPhase::Composed,
-            reference.overlay_set_id,
+            reference.context,
         )?;
         let child_active_roots =
             push_active_fold_root(&fold_input.active_roots, reference.root, store)?;
         let child_fold_input = FoldTraversalInput {
             effective_view: Some(&child_view),
             store: child_store,
-            expression_overlay_stack: fold_input
-                .expression_stack_with_overlay(reference.overlay_set_id),
+            expression_overlay_stack: fold_input.expression_stack_with_overlay(reference.context),
             active_roots: child_active_roots,
             authority: fold_input.authority.clone(),
         };
@@ -967,7 +963,7 @@ fn fold_template_reference(
             &child_view,
             child_store,
             fold_context,
-            fold_input.expression_stack_with_overlay(reference.overlay_set_id),
+            fold_input.expression_stack_with_overlay(reference.context),
             fold_input.active_roots.clone(),
         );
     }
@@ -1216,13 +1212,13 @@ fn fold_tir_wrapper_around_child_output(
             wrapper_reference.root,
             wrapper_reference.phase,
             TemplateTirPhase::Composed,
-            wrapper_reference.overlay_set_id,
+            wrapper_reference.context,
         )?;
         let wrapper_fold_input = FoldTraversalInput {
             effective_view: Some(&wrapper_view),
             store: wrapper_store,
             expression_overlay_stack: fold_input
-                .expression_stack_with_overlay(wrapper_reference.overlay_set_id),
+                .expression_stack_with_overlay(wrapper_reference.context),
             active_roots: wrapper_active_roots.clone(),
             authority: Some(authority.clone()),
         };
@@ -1433,7 +1429,7 @@ fn fold_tir_wrapper_node_with_child_output(
                     reference.root,
                     reference.phase,
                     TemplateTirPhase::Composed,
-                    reference.overlay_set_id,
+                    reference.context,
                 )?;
                 let child_active_roots = push_active_fold_root(
                     &fold_input.active_roots,
@@ -1444,7 +1440,7 @@ fn fold_tir_wrapper_node_with_child_output(
                     effective_view: Some(&child_view),
                     store,
                     expression_overlay_stack: fold_input
-                        .expression_stack_with_overlay(reference.overlay_set_id),
+                        .expression_stack_with_overlay(reference.context),
                     active_roots: child_active_roots,
                     authority: fold_input.authority.clone(),
                 };
@@ -1513,7 +1509,7 @@ fn fold_tir_wrapper_node_with_child_output(
                     let child_reference = TemplateTirChildReference::new(
                         *source,
                         TemplateTirPhase::Composed,
-                        TemplateOverlaySetId::empty(),
+                        TemplateViewContext::default(),
                     );
                     let emission =
                         fold_child_template_reference(store, &child_reference, fold_context, fold_input)?;
@@ -2311,15 +2307,14 @@ fn fold_tir_aggregate_wrapper_child_template(
             reference.root,
             reference.phase,
             TemplateTirPhase::Composed,
-            reference.overlay_set_id,
+            reference.context,
         )?;
         let child_active_roots =
             push_active_fold_root(&fold_input.active_roots, reference.root, store)?;
         let child_fold_input = FoldTraversalInput {
             effective_view: Some(&child_view),
             store,
-            expression_overlay_stack: fold_input
-                .expression_stack_with_overlay(reference.overlay_set_id),
+            expression_overlay_stack: fold_input.expression_stack_with_overlay(reference.context),
             active_roots: child_active_roots,
             authority: fold_input.authority.clone(),
         };

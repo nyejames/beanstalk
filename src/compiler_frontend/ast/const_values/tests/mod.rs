@@ -20,8 +20,8 @@ use crate::compiler_frontend::ast::expressions::expression_types::ConstValueKind
 use crate::compiler_frontend::ast::templates::template::Template;
 use crate::compiler_frontend::ast::templates::template::{SlotKey, Style, TemplateType};
 use crate::compiler_frontend::ast::templates::tir::{
-    SlotOccurrenceId, TemplateIrBuilder, TemplateIrStore, TemplateIrSummary, TemplateOverlaySet,
-    TemplateTirPhase, TemplateTirReference, TirSlotResolution, TirSlotResolutionOverlay,
+    SlotOccurrenceId, TemplateIrBuilder, TemplateIrStore, TemplateIrSummary, TemplateTirPhase,
+    TemplateTirReference, TemplateViewContext, TirSlotResolution, TirSlotResolutionOverlay,
 };
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
@@ -540,20 +540,18 @@ fn build_resolved_slot_template_store() -> (Template, Rc<RefCell<TemplateIrStore
                     TirSlotResolution::resolved(SlotKey::Default, vec![fill_template_id]),
                 )],
             });
-    let overlay_set_id = store_handle
-        .borrow_mut()
-        .allocate_overlay_set(TemplateOverlaySet {
-            expression_overrides: None,
-            slot_resolution: Some(slot_overlay_id),
-            wrapper_context: None,
-        });
+    let context = TemplateViewContext {
+        expression_overlay: None,
+        slot_resolution: Some(slot_overlay_id),
+        wrapper_context: None,
+    };
 
     let template = Template {
         kind: TemplateType::String,
         tir_reference: TemplateTirReference {
             root: template_id,
             phase: TemplateTirPhase::Finalized,
-            overlay_set_id,
+            context,
         },
         location,
     };

@@ -45,7 +45,7 @@ pub(crate) use head_chain::{compose_tir_head_chain, compose_tir_head_chain_with_
 
 pub(crate) use child_wrappers::wrap_tir_node_in_wrappers;
 
-pub(crate) use overlays::merge_tir_slot_resolution_overlay_sets;
+pub(crate) use overlays::merge_tir_slot_resolution_contexts;
 
 // `ComposedTirRoot` was nameable as `slot_composition::ComposedTirRoot`
 // before the split. No caller names it today, but the re-export preserves the
@@ -60,8 +60,8 @@ pub(crate) use contributions::route_tir_slot_contributions;
 pub(crate) use contributions::{RoutedTirSlotContributions, TirSlotContributions};
 #[cfg(test)]
 pub(crate) use overlays::{
-    attach_tir_slot_resolution_overlay, compose_tir_slot_resolution_overlay_set,
-    materialize_tir_slot_resolution_overlay,
+    compose_tir_slot_resolution_context, materialize_tir_slot_resolution_overlay,
+    view_context_from_slot_resolution_overlay,
 };
 #[cfg(test)]
 pub(crate) use schema::expand_tir_slot_placeholders;

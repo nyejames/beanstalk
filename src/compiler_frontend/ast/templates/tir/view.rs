@@ -3,7 +3,7 @@
 //! WHAT: `TirView` is the single borrowed read surface that all future template
 //! consumers use to inspect a structural root plus its overlay context inside a
 //! `TemplateIrStore`. It pairs a module-local root `TemplateIrId`, a
-//! `TemplateTirPhase`, and a `TemplateOverlaySetId` so consumers never reach
+//! `TemplateTirPhase`, and a `TemplateViewContext` so consumers never reach
 //! into raw stores or combine overlay maps ad hoc.
 //!
 //! WHY: the final TIR architecture requires one production read API. Without a
@@ -29,15 +29,15 @@
 //!
 //! ## Overlay resolution
 //!
-//! The view carries one `TemplateOverlaySetId` resolved by the store's
-//! canonical composition path. The overlay-dimension entry accessors
+//! The view carries one `TemplateViewContext` produced by the shared
+//! composition path. The overlay-dimension entry accessors
 //! ([`TirView::expression_overlay`], [`TirView::slot_resolution_overlay`],
 //! [`TirView::wrapper_context_overlay`]) resolve which overlays are in play.
 //! Occurrence-keyed lookups ([`TirView::effective_expression_for_site`],
 //! [`TirView::effective_expression_for_node`],
 //! [`TirView::effective_slot_resolution`], and
 //! [`TirView::effective_wrapper_context`]) resolve an effective value for a
-//! specific site or occurrence by reading the current overlay set. When no
+//! specific site or occurrence by reading the current view context. When no
 //! overlay entry covers the requested key, the caller falls back to the
 //! structural node.
 //!
@@ -63,8 +63,8 @@ use super::node::{TemplateIr, TemplateIrNode};
 use super::node::{TemplateIrNodeKind, TemplateLoopHeaderExpressionSites};
 
 use super::overlays::{
-    TemplateOverlaySet, TemplateOverlaySetId, TirExpressionOverlay, TirSlotResolution,
-    TirSlotResolutionOverlay, TirWrapperContext, TirWrapperContextOverlay,
+    TemplateViewContext, TirExpressionOverlay, TirSlotResolution, TirSlotResolutionOverlay,
+    TirWrapperContext, TirWrapperContextOverlay,
 };
 use super::store::TemplateIrStore;
 
@@ -132,8 +132,8 @@ impl fmt::Display for TemplateTirPhase {
 /// WHAT: the single authority used by AST-to-HIR handoff, final type-boundary
 ///       validation and debug TypeId validation. It requires the template's
 ///       `tir_reference` to be at least `Finalized`, to resolve its root and
-///       overlay set in the exact module store
-///       through `TirView`. Every missing authority condition is an explicit
+///       validate the optional payload IDs carried by its view context against
+///       the exact module store through `TirView`. Every missing authority condition is an explicit
 ///       internal `CompilerError`. No caller may downgrade to a raw same-store
 ///       path.
 /// WHY: after normalization every template that reaches the AST-to-HIR boundary
@@ -159,7 +159,7 @@ pub(crate) fn finalized_tir_view_for_template<'a>(
         reference.root,
         reference.phase,
         TemplateTirPhase::Finalized,
-        reference.overlay_set_id,
+        reference.context,
     )
 }
 
@@ -167,11 +167,12 @@ pub(crate) fn finalized_tir_view_for_template<'a>(
 //  TirView
 // -------------------------
 
-/// Borrowed read view over a store-owned structural root plus overlay set.
+/// Borrowed read view over a structural root owned by the store plus a
+/// value-carried view context.
 ///
 /// WHAT: pairs an immutable borrow of `TemplateIrStore` with a module-local
 ///       root `TemplateIrId`, a pipeline `TemplateTirPhase`, and a
-///       `TemplateOverlaySetId`. All read access goes through narrow methods
+///       `TemplateViewContext`. All read access goes through narrow methods
 ///       that validate root and overlay IDs and return `CompilerError` on failure.
 ///
 /// WHY: this is the single production read API for template consumers. It
@@ -181,7 +182,7 @@ pub(crate) fn finalized_tir_view_for_template<'a>(
 /// ## Construction
 ///
 /// Use [`TirView::new`] for a basic view that validates the root template and
-/// overlay set exist. Use [`TirView::with_minimum_phase`] when the consumer
+/// view context exist. Use [`TirView::with_minimum_phase`] when the consumer
 /// additionally requires the root to have reached a particular pipeline phase.
 /// Use [`TirView::child_view`] to construct a view over a child template
 /// referenced from the current root.
@@ -190,7 +191,7 @@ pub(crate) struct TirView<'a> {
     store: &'a TemplateIrStore,
     root: TemplateIrId,
     phase: TemplateTirPhase,
-    overlay_set_id: TemplateOverlaySetId,
+    context: TemplateViewContext,
 }
 
 impl<'a> fmt::Debug for TirView<'a> {
@@ -198,7 +199,7 @@ impl<'a> fmt::Debug for TirView<'a> {
         f.debug_struct("TirView")
             .field("root", &self.root)
             .field("phase", &self.phase)
-            .field("overlay_set_id", &self.overlay_set_id)
+            .field("context", &self.context)
             .finish()
     }
 }
@@ -208,10 +209,11 @@ impl<'a> TirView<'a> {
     //  Constructors
     // -------------------------
 
-    /// Creates a view over `root` at `phase` with the given overlay set.
+    /// Creates a view over `root` at `phase` with the given view context.
     ///
     /// WHAT: validates that `root` resolves to a template in the store and
-    ///       that `overlay_set_id` resolves to an allocated overlay set.
+    ///       that each optional overlay ID carried by `context` resolves to a
+    ///       payload in the store.
     /// WHY: every consumer should go through a constructor so invalid store
     ///      IDs produce a structured `CompilerError` instead of a silent
     ///      placeholder or a later lookup panic.
@@ -219,7 +221,7 @@ impl<'a> TirView<'a> {
         store: &'a TemplateIrStore,
         root: TemplateIrId,
         phase: TemplateTirPhase,
-        overlay_set_id: TemplateOverlaySetId,
+        context: TemplateViewContext,
     ) -> Result<TirView<'a>, CompilerError> {
         if store.get_template(root).is_none() {
             return Err(CompilerError::compiler_error(format!(
@@ -228,24 +230,19 @@ impl<'a> TirView<'a> {
             )));
         }
 
-        if store.overlay_set(overlay_set_id).is_none() {
-            return Err(CompilerError::compiler_error(format!(
-                "TirView::new: overlay set {} does not exist in the store",
-                overlay_set_id
-            )));
-        }
+        validate_context(store, context, "TirView::new")?;
 
         Ok(TirView {
             store,
             root,
             phase,
-            overlay_set_id,
+            context,
         })
     }
 
     /// Creates a view and validates that `phase` satisfies `minimum_phase`.
     ///
-    /// WHAT: performs the same root and overlay-set validation as [`TirView::new`],
+    /// WHAT: performs the same root and view context validation as [`TirView::new`],
     ///       then additionally rejects views whose `phase` has not yet reached
     ///       `minimum_phase`.
     /// WHY: consumers such as folding (`Composed`) or HIR handoff (`Finalized`)
@@ -256,7 +253,7 @@ impl<'a> TirView<'a> {
         root: TemplateIrId,
         phase: TemplateTirPhase,
         minimum_phase: TemplateTirPhase,
-        overlay_set_id: TemplateOverlaySetId,
+        context: TemplateViewContext,
     ) -> Result<TirView<'a>, CompilerError> {
         if !phase.is_at_least(minimum_phase) {
             return Err(CompilerError::compiler_error(format!(
@@ -265,44 +262,39 @@ impl<'a> TirView<'a> {
             )));
         }
 
-        Self::new(store, root, phase, overlay_set_id)
+        Self::new(store, root, phase, context)
     }
 
     /// Constructs a child view over a module-local child `TemplateIrId`.
     ///
     /// WHAT: creates a new `TirView` for a child template referenced from the
     ///       current root, sharing the same store borrow. The child's
-    ///       `phase` and `overlay_set_id` are provided by the caller because a
+    ///       `phase` and `context` are provided by the caller because a
     ///       child template may carry a different pipeline phase and overlay
     ///       context than its parent.
     /// WHY: child-template composition needs to descend into child roots with
     ///      their own overlay context. Routing this through a constructor
-    ///      ensures the child root and overlay set are validated exactly like
+    ///      ensures the child root and view context are validated exactly like
     ///      the parent, preventing ad hoc store traversal at call sites.
     pub(crate) fn child_view(
         &self,
         child: TemplateIrId,
         phase: TemplateTirPhase,
-        overlay_set_id: TemplateOverlaySetId,
+        context: TemplateViewContext,
     ) -> Result<TirView<'a>, CompilerError> {
         // Skip store.template() validation: the caller already verified the
         // child template exists in the store. Calling store.template() here
         // would borrow the store's RefCell, which panics when the caller holds a
         // mutable store borrow (e.g. during effective-view classification).
-        // Overlay-set validation only touches store-internal Vecs, so it is
+        // view context validation only touches store-internal Vecs, so it is
         // safe under any store borrow state.
-        if self.store.overlay_set(overlay_set_id).is_none() {
-            return Err(CompilerError::compiler_error(format!(
-                "TirView::child_view: overlay set {} does not exist in the store",
-                overlay_set_id
-            )));
-        }
+        validate_context(self.store, context, "TirView::child_view")?;
 
         Ok(TirView {
             store: self.store,
             root: child,
             phase,
-            overlay_set_id,
+            context,
         })
     }
 
@@ -320,9 +312,9 @@ impl<'a> TirView<'a> {
         self.phase
     }
 
-    /// Returns the overlay-set ID carried by this view.
-    pub(crate) fn overlay_set_id(&self) -> TemplateOverlaySetId {
-        self.overlay_set_id
+    /// Returns the exact value context carried by this view.
+    pub(crate) fn context(&self) -> TemplateViewContext {
+        self.context
     }
 
     /// Borrows the module-local store that owns this view's structural root.
@@ -334,22 +326,6 @@ impl<'a> TirView<'a> {
     ///      lookup on `TirView` preserves root and overlay identity at the boundary.
     pub(crate) fn store(&self) -> &'a TemplateIrStore {
         self.store
-    }
-
-    /// Returns the resolved overlay set for this view.
-    ///
-    /// WHAT: borrows the store-owned `TemplateOverlaySet` that was validated
-    ///       at construction.  Because the view holds an immutable store
-    ///       borrow, the set cannot be removed during the view's lifetime.
-    /// WHY: consumers read the resolved overlay set through the view instead of
-    ///      holding their own copy, keeping overlay identity centralized.
-    pub(crate) fn overlay_set(&self) -> Result<&'a TemplateOverlaySet, CompilerError> {
-        self.store.overlay_set(self.overlay_set_id).ok_or_else(|| {
-            CompilerError::compiler_error(format!(
-                "TirView::overlay_set: overlay set {} was valid at construction but is now missing; this is a compiler bug",
-                self.overlay_set_id
-            ))
-        })
     }
 
     /// Returns an immutable borrow of the root template entry.
@@ -409,16 +385,16 @@ impl<'a> TirView<'a> {
     //  Overlay-dimension entry accessors
     // -------------------------
     //
-    // These accessors resolve the overlay-set ID into the concrete per-dimension
+    // These accessors resolve the value context fields into the concrete per-dimension
     // overlay entry stored on the store. Returning `None` means "this overlay
-    // dimension has no entry for this view's overlay set." A set that names a
+    // dimension has no entry for this view's value context." A context that names a
     // missing overlay entry is an internal store invariant error.
     // Occurrence-keyed lookups on top of these entries are provided by the
     // methods in the "Occurrence-keyed overlay lookups" section below.
 
-    /// Returns the expression overlay entry, if the overlay set has one.
+    /// Returns the expression overlay entry, if the view context has one.
     ///
-    /// WHAT: resolves the `expression_overrides` dimension of the overlay set
+    /// WHAT: resolves the `expression_overlay` dimension of the view context
     ///       into the store-owned `TirExpressionOverlay` entry.
     /// WHY: consumers that inspect expression overrides read them through the
     ///      view rather than reaching into the store directly.  The concrete
@@ -426,7 +402,7 @@ impl<'a> TirView<'a> {
     pub(crate) fn expression_overlay(
         &self,
     ) -> Result<Option<&'a TirExpressionOverlay>, CompilerError> {
-        let Some(overlay_id) = self.overlay_set()?.expression_overrides else {
+        let Some(overlay_id) = self.context.expression_overlay else {
             return Ok(None);
         };
 
@@ -440,9 +416,9 @@ impl<'a> TirView<'a> {
         Ok(Some(overlay))
     }
 
-    /// Returns the slot resolution overlay entry, if the overlay set has one.
+    /// Returns the slot resolution overlay entry, if the view context has one.
     ///
-    /// WHAT: resolves the `slot_resolution` dimension of the overlay set into the
+    /// WHAT: resolves the `slot_resolution` dimension of the view context into the
     ///       store-owned `TirSlotResolutionOverlay` entry.
     /// WHY: consumers that inspect slot resolution read it through the view
     ///      rather than reaching into the store directly.  The concrete
@@ -450,7 +426,7 @@ impl<'a> TirView<'a> {
     pub(crate) fn slot_resolution_overlay(
         &self,
     ) -> Result<Option<&'a TirSlotResolutionOverlay>, CompilerError> {
-        let Some(overlay_id) = self.overlay_set()?.slot_resolution else {
+        let Some(overlay_id) = self.context.slot_resolution else {
             return Ok(None);
         };
 
@@ -467,9 +443,9 @@ impl<'a> TirView<'a> {
         Ok(Some(overlay))
     }
 
-    /// Returns the wrapper context overlay entry, if the overlay set has one.
+    /// Returns the wrapper context overlay entry, if the view context has one.
     ///
-    /// WHAT: resolves the `wrapper_context` dimension of the overlay set into the
+    /// WHAT: resolves the `wrapper_context` dimension of the view context into the
     ///       store-owned `TirWrapperContextOverlay` entry.
     /// WHY: view-native folding consults wrapper-context overlays at
     ///      child-template occurrence boundaries instead of mutating the child
@@ -477,7 +453,7 @@ impl<'a> TirView<'a> {
     pub(crate) fn wrapper_context_overlay(
         &self,
     ) -> Result<Option<&'a TirWrapperContextOverlay>, CompilerError> {
-        let Some(overlay_id) = self.overlay_set()?.wrapper_context else {
+        let Some(overlay_id) = self.context.wrapper_context else {
             return Ok(None);
         };
 
@@ -493,10 +469,10 @@ impl<'a> TirView<'a> {
 
         Ok(Some(overlay))
     }
-    /// Returns the override expression for an `ExpressionSiteId`, if the overlay
-    /// set provides one.
+    /// Returns the override expression for an `ExpressionSiteId`, if the view
+    /// context provides one.
     ///
-    /// WHAT: resolves the expression overlay entry for this view's overlay set,
+    /// WHAT: resolves the expression overlay entry for this view's view context,
     ///       then looks up the override expression for `site_id` within that
     ///       entry. Returns `Ok(None)` when no expression overlay exists or the
     ///       overlay has no entry for this site.
@@ -543,10 +519,10 @@ impl<'a> TirView<'a> {
     }
 
     /// Returns the effective slot resolution for a `SlotOccurrenceId`, if the
-    /// overlay set provides one.
+    /// view context provides one.
     ///
-    /// WHAT: resolves the slot-resolution overlay entry for this view's overlay
-    ///       set, then looks up the resolution for `occurrence_id` within that
+    /// WHAT: resolves the slot-resolution overlay entry for this view's value
+    ///       context, then looks up the resolution for `occurrence_id` within that
     ///       entry. Returns `Ok(None)` when no slot-resolution overlay exists or
     ///       the overlay has no entry for this occurrence.
     /// WHY: consumers that need the effective slot content for a slot occurrence
@@ -566,8 +542,8 @@ impl<'a> TirView<'a> {
 
     /// Returns the effective wrapper context for a child-template occurrence.
     ///
-    /// WHAT: resolves the wrapper-context overlay entry for this view's overlay
-    ///       set, then looks up the context for `occurrence_id` within that
+    /// WHAT: resolves the wrapper-context overlay entry for this view's value
+    ///       context, then looks up the context for `occurrence_id` within that
     ///       entry. Returns `Ok(None)` when no wrapper-context overlay exists or
     ///       the overlay has no entry for this child occurrence.
     /// WHY: view-native folding uses this to apply inherited `$children(..)`
@@ -740,6 +716,38 @@ impl<'a> TirView<'a> {
 
         Ok(None)
     }
+}
+
+pub(crate) fn validate_context(
+    store: &TemplateIrStore,
+    context: TemplateViewContext,
+    owner: &str,
+) -> Result<(), CompilerError> {
+    if let Some(id) = context.expression_overlay
+        && store.expression_overlay(id).is_none()
+    {
+        return Err(CompilerError::compiler_error(format!(
+            "{owner}: expression overlay {id} does not exist in the store"
+        )));
+    }
+
+    if let Some(id) = context.slot_resolution
+        && store.slot_resolution_overlay(id).is_none()
+    {
+        return Err(CompilerError::compiler_error(format!(
+            "{owner}: slot resolution overlay {id} does not exist in the store"
+        )));
+    }
+
+    if let Some(id) = context.wrapper_context
+        && store.wrapper_context_overlay(id).is_none()
+    {
+        return Err(CompilerError::compiler_error(format!(
+            "{owner}: wrapper context overlay {id} does not exist in the store"
+        )));
+    }
+
+    Ok(())
 }
 
 // -------------------------

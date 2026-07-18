@@ -17,7 +17,7 @@ use crate::compiler_frontend::ast::templates::tir::contribution_shape::{
     ContributionShape, classify_tir_contribution_node,
 };
 use crate::compiler_frontend::ast::templates::tir::node::TirSlotPlaceholder;
-use crate::compiler_frontend::ast::templates::tir::overlays::TemplateOverlaySetId;
+use crate::compiler_frontend::ast::templates::tir::overlays::TemplateViewContext;
 use crate::compiler_frontend::ast::templates::tir::refs::TemplateTirChildReference;
 use crate::compiler_frontend::ast::templates::tir::summary::summarize_existing_root;
 use crate::compiler_frontend::ast::templates::tir::view::TemplateTirPhase;
@@ -740,7 +740,7 @@ fn expand_tir_slot_placeholders_from_node(
             let expanded_reference = TemplateTirChildReference::new(
                 expanded_child_template_id,
                 TemplateTirPhase::Parsed,
-                TemplateOverlaySetId::empty(),
+                TemplateViewContext::default(),
             );
             Ok(store.push_node(TemplateIrNode::new(
                 TemplateIrNodeKind::ChildTemplate {
@@ -1094,11 +1094,8 @@ fn attach_conditional_wrapper_set(
                 required_wrapper_set_count(store, merged_wrapper_set_id)?;
             let copied_id = store.push_template(copied);
 
-            let new_reference = TemplateTirChildReference::new(
-                copied_id,
-                reference.phase,
-                reference.overlay_set_id,
-            );
+            let new_reference =
+                TemplateTirChildReference::new(copied_id, reference.phase, reference.context);
             (new_reference, node.location.to_owned())
         }
 
@@ -1119,7 +1116,7 @@ fn attach_conditional_wrapper_set(
             let new_reference = TemplateTirChildReference::new(
                 template_id,
                 TemplateTirPhase::Parsed,
-                TemplateOverlaySetId::empty(),
+                TemplateViewContext::default(),
             );
             (new_reference, node.location.to_owned())
         }

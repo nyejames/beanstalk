@@ -16,8 +16,8 @@ use crate::compiler_frontend::ast::expressions::expression::{Expression, Express
 use crate::compiler_frontend::ast::templates::template::Template;
 use crate::compiler_frontend::ast::templates::template::{SlotKey, Style, TemplateType};
 use crate::compiler_frontend::ast::templates::tir::{
-    TemplateIrBuilder, TemplateIrStore, TemplateIrSummary, TemplateOverlaySetId, TemplateTirPhase,
-    TemplateTirReference,
+    TemplateIrBuilder, TemplateIrStore, TemplateIrSummary, TemplateTirPhase, TemplateTirReference,
+    TemplateViewContext,
 };
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, DiagnosticPayload, InvalidFieldAccessReason,
@@ -50,7 +50,7 @@ fn slot_template(store: &mut TemplateIrStore) -> Template {
         tir_reference: TemplateTirReference {
             root: template_id,
             phase: TemplateTirPhase::Composed,
-            overlay_set_id: TemplateOverlaySetId::empty_for_test(),
+            context: TemplateViewContext::default(),
         },
         location,
     }

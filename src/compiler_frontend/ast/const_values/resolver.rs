@@ -397,7 +397,7 @@ pub(crate) fn classify_template_effective_tir(
         reference.root,
         reference.phase,
         TemplateTirPhase::Composed,
-        reference.overlay_set_id,
+        reference.context,
     )?;
     classify_effective_tir_view_template(&view, &store)
 }

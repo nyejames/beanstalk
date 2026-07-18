@@ -41,7 +41,7 @@ use crate::compiler_frontend::ast::templates::tir::{
     TemplateConstructionContext, TemplateIr, TemplateTirPhase, TemplateTirReference,
     TemplateWrapperReference, TirView, attach_wrapper_context_overlay,
     classify_effective_tir_view_template, compose_tir_head_chain_with_overlays,
-    merge_tir_slot_resolution_overlay_sets,
+    merge_tir_slot_resolution_contexts,
 };
 
 use crate::builder_surface::SourceFileKind;
@@ -307,7 +307,7 @@ impl Template {
             // reference directly. There is no content-to-TIR fallback here.
             //
             // Overlay threading: head-chain composition returns a `ComposedTirRoot`
-            // with an optional non-empty slot-resolution overlay-set ID. Wrapper
+            // with an optional slot-resolution view context. Wrapper
             // context is attached after head-chain composition so it uses the
             // final child occurrence IDs. The store borrow is released during
             // shared-store calls so composition can access the same store
@@ -348,22 +348,21 @@ impl Template {
             if composed.root != original_root {
                 add_ast_counter(AstCounter::TemplateTirHeadChainCompositionHits, 1);
 
-                // Thread the non-empty overlay set from head-chain
+                // Thread the non-empty view context from head-chain
                 // composition. When child-wrapper composition already
                 // produced a slot-resolution overlay, merge the two payloads
                 // through the slot-composition owner instead of composing
-                // overlay sets and overwriting one slot-resolution dimension.
-                let previous_overlay_set_id = tir_reference.overlay_set_id;
+                // view contexts and overwriting one slot-resolution dimension.
+                let previous_context = tir_reference.context;
 
-                let overlay_set_id = if let Some(slot_overlay_set_id) = composed.slot_overlay_set_id
-                {
-                    merge_tir_slot_resolution_overlay_sets(
+                let merged_context = if let Some(slot_context) = composed.slot_context {
+                    merge_tir_slot_resolution_contexts(
                         &mut context.template_ir_store.borrow_mut(),
-                        previous_overlay_set_id,
-                        slot_overlay_set_id,
+                        previous_context,
+                        slot_context,
                     )?
                 } else {
-                    previous_overlay_set_id
+                    previous_context
                 };
 
                 let mut template_ir_store = context.template_ir_store.borrow_mut();
@@ -397,7 +396,7 @@ impl Template {
                     // this constructor flow. Otherwise this remains a
                     // Composed root pending formatter preparation.
                     phase,
-                    overlay_set_id,
+                    context: merged_context,
                 };
             }
 
@@ -423,16 +422,16 @@ impl Template {
         //
         // The reference is now either a composed root with slots expanded and
         // inserts consumed, or a formatted linear root. Classification reads
-        // that authoritative view — preserving exact root, phase and overlay-set
+        // that authoritative view — preserving exact root, phase and view context
         // identity — without a separate TIR allocation.
         let template_classification = {
-            let registry = context.template_ir_store.borrow();
+            let store = context.template_ir_store.borrow();
             let view = TirView::with_minimum_phase(
-                &registry,
+                &store,
                 tir_reference.root,
                 tir_reference.phase,
                 TemplateTirPhase::Composed,
-                tir_reference.overlay_set_id,
+                tir_reference.context,
             )
             .map_err(|error| TemplateError::from(error).into_diagnostic())?;
             let template_ir_store = context.template_ir_store.borrow();
@@ -467,9 +466,9 @@ impl Template {
             control_flow_validation,
             TemplateControlFlowValidationMode::RuntimeCapable
         ) {
-            let registry = context.template_ir_store.borrow();
+            let store = context.template_ir_store.borrow();
 
-            validate_runtime_template_control_flow_slot_artifacts(&template, &registry)
+            validate_runtime_template_control_flow_slot_artifacts(&template, &store)
                 .map_err(TemplateError::into_diagnostic)?;
         }
 

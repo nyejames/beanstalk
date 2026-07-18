@@ -13,7 +13,7 @@ use crate::compiler_frontend::ast::templates::tir::node::{
     TemplateIr, TemplateIrNode, TemplateIrNodeKind,
 };
 use crate::compiler_frontend::ast::templates::tir::overlays::{
-    TemplateOverlaySet, TemplateOverlaySetId,
+    TemplateViewContext, TirExpressionOverlayId,
 };
 use crate::compiler_frontend::ast::templates::tir::refs::{
     TemplateTirChildReference, TemplateTirReference,
@@ -88,14 +88,14 @@ fn same_store_wrapper_reference_is_normalized_without_materialization() {
         empty_location(),
     ));
     let template_id = push_template_entry(&mut store, root, TemplateType::String);
-    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet::empty());
+    let context = TemplateViewContext::default();
 
     let template = crate::compiler_frontend::ast::templates::template::Template {
         kind: TemplateType::String,
         tir_reference: TemplateTirReference {
             root: template_id,
             phase: TemplateTirPhase::Parsed,
-            overlay_set_id,
+            context,
         },
         location: empty_location(),
     };
@@ -105,11 +105,11 @@ fn same_store_wrapper_reference_is_normalized_without_materialization() {
 
     assert_eq!(reference.root, template_id);
     assert_eq!(reference.phase, TemplateTirPhase::Parsed);
-    assert_eq!(reference.overlay_set_id, overlay_set_id);
+    assert_eq!(reference.context, context);
 }
 
 #[test]
-fn wrapper_with_missing_overlay_set_returns_error() {
+fn wrapper_with_missing_view_context_returns_error() {
     let mut store = TemplateIrStore::new();
     let root = store.push_node(TemplateIrNode::new(
         TemplateIrNodeKind::Sequence { children: vec![] },
@@ -121,7 +121,10 @@ fn wrapper_with_missing_overlay_set_returns_error() {
         tir_reference: TemplateTirReference {
             root: template_id,
             phase: TemplateTirPhase::Parsed,
-            overlay_set_id: TemplateOverlaySetId::new(999),
+            context: TemplateViewContext {
+                expression_overlay: Some(TirExpressionOverlayId::new(999)),
+                ..TemplateViewContext::default()
+            },
         },
         location: empty_location(),
     };
@@ -137,7 +140,7 @@ fn wrapper_with_missing_template_returns_error() {
         tir_reference: TemplateTirReference {
             root: TemplateIrId::new(99),
             phase: TemplateTirPhase::Parsed,
-            overlay_set_id: TemplateOverlaySetId::empty(),
+            context: TemplateViewContext::default(),
         },
         location: empty_location(),
     };
@@ -149,18 +152,15 @@ fn wrapper_with_missing_template_returns_error() {
 fn wrapper_candidates_reuse_parser_structural_child_template() {
     let mut string_table = StringTable::new();
     let mut store = TemplateIrStore::new();
-    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet::empty());
+    let context = TemplateViewContext::default();
 
     let child_root = store.push_node(TemplateIrNode::new(
         TemplateIrNodeKind::Sequence { children: vec![] },
         empty_location(),
     ));
     let child_template_id = push_template_entry(&mut store, child_root, TemplateType::String);
-    let parser_reference = TemplateTirChildReference::new(
-        child_template_id,
-        TemplateTirPhase::Finalized,
-        overlay_set_id,
-    );
+    let parser_reference =
+        TemplateTirChildReference::new(child_template_id, TemplateTirPhase::Finalized, context);
     let parser_occurrence_id = store.next_child_template_occurrence_id();
     let parser_child_node = store.push_node(TemplateIrNode::new(
         TemplateIrNodeKind::ChildTemplate {

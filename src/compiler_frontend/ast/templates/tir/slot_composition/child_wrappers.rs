@@ -18,7 +18,7 @@
 //! control-flow aggregate wrappers or focused structural tests.
 
 use crate::compiler_frontend::ast::templates::template::{Style, TemplateType};
-use crate::compiler_frontend::ast::templates::tir::overlays::TemplateOverlaySetId;
+use crate::compiler_frontend::ast::templates::tir::overlays::TemplateViewContext;
 use crate::compiler_frontend::ast::templates::tir::refs::TemplateTirChildReference;
 use crate::compiler_frontend::ast::templates::tir::summary::TemplateIrSummary;
 use crate::compiler_frontend::ast::templates::tir::view::TemplateTirPhase;
@@ -279,7 +279,7 @@ pub(super) fn wrap_tir_node_in_wrappers_into(
             let wrapper_reference = TemplateTirChildReference::new(
                 copied_wrapper_template_id,
                 TemplateTirPhase::Parsed,
-                TemplateOverlaySetId::empty(),
+                TemplateViewContext::default(),
             );
             let fill_reference = fill_template_id;
             slot_compositions.push(SlotResolutionComposition::new(
@@ -291,7 +291,7 @@ pub(super) fn wrap_tir_node_in_wrappers_into(
             let reference = TemplateTirChildReference::new(
                 composed_template_id,
                 TemplateTirPhase::Parsed,
-                TemplateOverlaySetId::empty(),
+                TemplateViewContext::default(),
             );
             current_child_node_id = store.push_node(TemplateIrNode::new(
                 TemplateIrNodeKind::ChildTemplate {
@@ -315,7 +315,7 @@ pub(super) fn wrap_tir_node_in_wrappers_into(
             let reference = TemplateTirChildReference::new(
                 combined_template_id,
                 TemplateTirPhase::Parsed,
-                TemplateOverlaySetId::empty(),
+                TemplateViewContext::default(),
             );
             current_child_node_id = store.push_node(TemplateIrNode::new(
                 TemplateIrNodeKind::ChildTemplate {
@@ -356,7 +356,7 @@ fn build_tir_prepended_wrapper_template(
     let wrapper_reference = TemplateTirChildReference::new(
         wrapper_template_id,
         TemplateTirPhase::Parsed,
-        TemplateOverlaySetId::empty(),
+        TemplateViewContext::default(),
     );
     let wrapper_node_id = store.push_node(TemplateIrNode::new(
         TemplateIrNodeKind::ChildTemplate {

@@ -4,7 +4,7 @@
 //! from TIR trees in the module-scoped `TemplateIrStore`.
 //!
 //! Callers classify a stable store-backed `TirView` whose root, phase and
-//! overlay set carry the authoritative reference identity.
+//! view context carry the authoritative reference identity.
 //!
 //! WHY: normalization and folding should classify from the TIR root they
 //! already trust instead of reconstructing template structure through a
@@ -38,7 +38,7 @@ use crate::compiler_frontend::ast::templates::tir::node::{
     TemplateIrNodeKind, TemplateLoopHeaderExpressionSites,
 };
 use crate::compiler_frontend::ast::templates::tir::overlays::{
-    TemplateOverlaySetId, TirSlotResolutionKind,
+    TemplateViewContext, TirSlotResolutionKind,
 };
 use crate::compiler_frontend::ast::templates::tir::refs::TemplateTirChildReference;
 use crate::compiler_frontend::ast::templates::tir::store::TemplateIrStore;
@@ -69,7 +69,7 @@ enum StringFunctionChildConstPolicy {
 struct TirViewConstEvaluationContext<'view, 'store> {
     view: TirView<'view>,
     store: &'store TemplateIrStore,
-    expression_overlay_stack: Vec<TemplateOverlaySetId>,
+    expression_overlay_stack: Vec<TemplateViewContext>,
     visiting_templates: HashSet<TemplateIrId>,
     string_function_child_policy: StringFunctionChildConstPolicy,
 }
@@ -86,15 +86,15 @@ impl<'view, 'store> TirViewConstEvaluationContext<'view, 'store> {
         site_id: ExpressionSiteId,
     ) -> Result<Option<&'view Expression>, TemplateError> {
         let store: &TemplateIrStore = self.view.store();
-        Ok(store.expression_for_overlay_stack(&self.expression_overlay_stack, site_id)?)
+        Ok(store.expression_for_context_stack(&self.expression_overlay_stack, site_id)?)
     }
 
     fn expression_stack_with_overlay(
         &self,
-        overlay_set_id: TemplateOverlaySetId,
-    ) -> Vec<TemplateOverlaySetId> {
+        context: TemplateViewContext,
+    ) -> Vec<TemplateViewContext> {
         let mut stack = self.expression_overlay_stack.clone();
-        stack.push(overlay_set_id);
+        stack.push(context);
         stack
     }
 }
@@ -142,8 +142,8 @@ pub(crate) fn classify_effective_tir_view_template(
         ))));
     }
 
-    let overlay_set = view.overlay_set()?;
-    if overlay_set.expression_overrides.is_some()
+    let view_context = view.context();
+    if view_context.expression_overlay.is_some()
         && !view.phase().is_at_least(TemplateTirPhase::Finalized)
     {
         return Err(TemplateError::from(CompilerError::compiler_error(format!(
@@ -660,7 +660,7 @@ fn tir_view_template_is_const_evaluable_value(
     let mut context = TirViewConstEvaluationContext {
         view: view.clone(),
         store,
-        expression_overlay_stack: vec![view.overlay_set_id()],
+        expression_overlay_stack: vec![view.context()],
         visiting_templates: HashSet::new(),
         string_function_child_policy: StringFunctionChildConstPolicy::Strict,
     };
@@ -683,7 +683,7 @@ pub(crate) fn tir_view_subtree_is_const_evaluable_value(
     node_id: TemplateIrNodeId,
     loop_binding_paths: &[InternedPath],
 ) -> Result<bool, TemplateError> {
-    let expression_overlay_stack = [view.overlay_set_id()];
+    let expression_overlay_stack = [view.context()];
     tir_view_subtree_is_const_evaluable_value_with_expression_stack(
         view,
         store,
@@ -706,7 +706,7 @@ pub(crate) fn tir_view_subtree_is_const_evaluable_value_with_expression_stack(
     store: &TemplateIrStore,
     node_id: TemplateIrNodeId,
     loop_binding_paths: &[InternedPath],
-    expression_overlay_stack: &[TemplateOverlaySetId],
+    expression_overlay_stack: &[TemplateViewContext],
 ) -> Result<bool, TemplateError> {
     let mut context = TirViewConstEvaluationContext {
         view: view.clone(),
@@ -729,7 +729,7 @@ pub(crate) fn tir_view_expression_is_const_evaluable_value_with_bindings(
     let mut context = TirViewConstEvaluationContext {
         view: view.clone(),
         store,
-        expression_overlay_stack: vec![view.overlay_set_id()],
+        expression_overlay_stack: vec![view.context()],
         visiting_templates: HashSet::new(),
         string_function_child_policy: StringFunctionChildConstPolicy::StructuralHeadFunction,
     };
@@ -747,7 +747,7 @@ pub(crate) fn tir_view_option_capture_presence_is_const_decidable(
     let mut context = TirViewConstEvaluationContext {
         view: view.clone(),
         store,
-        expression_overlay_stack: vec![view.overlay_set_id()],
+        expression_overlay_stack: vec![view.context()],
         visiting_templates: HashSet::new(),
         string_function_child_policy: StringFunctionChildConstPolicy::StructuralHeadFunction,
     };
@@ -838,12 +838,10 @@ fn tir_view_qualified_child_is_const_evaluable_value(
         );
     }
 
-    let child_view =
-        context
-            .view
-            .child_view(reference.root, reference.phase, reference.overlay_set_id)?;
-    let child_expression_overlay_stack =
-        context.expression_stack_with_overlay(reference.overlay_set_id);
+    let child_view = context
+        .view
+        .child_view(reference.root, reference.phase, reference.context)?;
+    let child_expression_overlay_stack = context.expression_stack_with_overlay(reference.context);
     let parent_view = std::mem::replace(&mut context.view, child_view);
     let parent_expression_overlay_stack = std::mem::replace(
         &mut context.expression_overlay_stack,
@@ -1549,11 +1547,8 @@ fn tir_view_expression_is_const_evaluable(
 
         ExpressionKind::Template(template) => {
             let reference = &template.tir_reference;
-            let child_reference = TemplateTirChildReference::new(
-                reference.root,
-                reference.phase,
-                reference.overlay_set_id,
-            );
+            let child_reference =
+                TemplateTirChildReference::new(reference.root, reference.phase, reference.context);
 
             tir_view_qualified_child_is_const_evaluable_value(
                 context,
@@ -1959,7 +1954,7 @@ fn tir_embedded_template_is_const_evaluable(
     string_function_child_policy: StringFunctionChildConstPolicy,
 ) -> bool {
     let reference = &template.tir_reference;
-    if reference.overlay_set_id != TemplateOverlaySetId::empty() {
+    if reference.context != TemplateViewContext::default() {
         return false;
     }
     let template_id = reference.root;

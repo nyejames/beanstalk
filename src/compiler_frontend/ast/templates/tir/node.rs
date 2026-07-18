@@ -210,7 +210,7 @@ pub(crate) enum TemplateIrNodeKind {
     ChildTemplate {
         /// Module-local view identity for the referenced child template.
         ///
-        /// WHAT: carries the root, phase, and overlay set needed to build a
+        /// WHAT: carries the root, phase, and view context needed to build a
         /// precise [`TirView`](super::view::TirView) when this child is folded.
         /// WHY: a bare `TemplateIrId` is not enough for precise folding or for
         /// cache keys that include phase and overlay context.

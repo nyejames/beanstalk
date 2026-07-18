@@ -29,7 +29,7 @@ use crate::compiler_frontend::ast::templates::tir::ids::{
     SlotOccurrenceId, TemplateIrId, TemplateIrNodeId,
 };
 use crate::compiler_frontend::ast::templates::tir::overlays::{
-    TemplateOverlaySet, TirExpressionOverlay, TirSlotResolution, TirSlotResolutionOverlay,
+    TemplateViewContext, TirExpressionOverlay, TirSlotResolution, TirSlotResolutionOverlay,
     TirWrapperContextOverlay,
 };
 use crate::compiler_frontend::compiler_errors::ErrorType;
@@ -123,7 +123,7 @@ fn classify_store_view_template_result(
     ) -> super::super::ids::TemplateIrNodeId,
 ) -> Result<TirTemplateClassification, TemplateError> {
     let mut store = TemplateIrStore::new();
-    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet::empty());
+    let context = TemplateViewContext::default();
 
     let template_id = {
         let mut builder = TemplateIrBuilder::new(&mut store);
@@ -143,7 +143,7 @@ fn classify_store_view_template_result(
         template_id,
         TemplateTirPhase::Composed,
         TemplateTirPhase::Composed,
-        overlay_set_id,
+        context,
     )
     .expect("test view should resolve");
 
@@ -400,7 +400,7 @@ fn tir_view_classification_returns_non_const_for_runtime_expression() {
 fn expression_overlay_requires_finalized_view_and_drives_classification() {
     let mut string_table = StringTable::new();
     let mut store = TemplateIrStore::new();
-    let empty_overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet::empty());
+    let empty_context = TemplateViewContext::default();
 
     let (template_id, site_id) = {
         let mut builder = TemplateIrBuilder::new(&mut store);
@@ -437,21 +437,19 @@ fn expression_overlay_requires_finalized_view_and_drives_classification() {
             Box::new(string_expression(&mut string_table, "normalized")),
         )],
     });
-    let expression_overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet {
-        expression_overrides: Some(expression_overlay_id),
+    let expression_context = TemplateViewContext {
+        expression_overlay: Some(expression_overlay_id),
         slot_resolution: None,
         wrapper_context: None,
-    });
-    let overlay_set_id = store
-        .compose_overlay_sets(&[empty_overlay_set_id, expression_overlay_set_id])
-        .expect("expression overlay set should compose");
+    };
+    let context = empty_context.merge(expression_context);
     let store_snapshot = &store;
     let composed_view = TirView::with_minimum_phase(
         &store,
         template_id,
         TemplateTirPhase::Composed,
         TemplateTirPhase::Composed,
-        overlay_set_id,
+        context,
     )
     .expect("composed test view should resolve");
 
@@ -476,7 +474,7 @@ fn expression_overlay_requires_finalized_view_and_drives_classification() {
         template_id,
         TemplateTirPhase::Finalized,
         TemplateTirPhase::Finalized,
-        overlay_set_id,
+        context,
     )
     .expect("test view should resolve");
 
@@ -492,7 +490,7 @@ fn expression_overlay_requires_finalized_view_and_drives_classification() {
 
 /// Finalized view classification with a slot-resolution overlay must succeed.
 ///
-/// WHAT: a template whose overlay set carries a slot-resolution dimension should
+/// WHAT: a template whose view context carries a slot-resolution dimension should
 ///       not be rejected merely because that dimension is present. When the
 ///       structural tree has no unresolved slots (the overlay is empty here),
 ///       classification proceeds normally.
@@ -505,11 +503,11 @@ fn finalized_tir_view_classification_accepts_slot_resolution_overlay() {
     let slot_overlay_id = store.allocate_slot_resolution_overlay(TirSlotResolutionOverlay {
         resolutions: Vec::new(),
     });
-    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet {
-        expression_overrides: None,
+    let context = TemplateViewContext {
+        expression_overlay: None,
         slot_resolution: Some(slot_overlay_id),
         wrapper_context: None,
-    });
+    };
 
     let template_id = {
         let mut builder = TemplateIrBuilder::new(&mut store);
@@ -536,7 +534,7 @@ fn finalized_tir_view_classification_accepts_slot_resolution_overlay() {
         template_id,
         TemplateTirPhase::Finalized,
         TemplateTirPhase::Finalized,
-        overlay_set_id,
+        context,
     )
     .expect("test view should resolve");
 
@@ -564,11 +562,11 @@ fn composed_tir_view_classification_accepts_slot_resolution_overlay() {
     let slot_overlay_id = store.allocate_slot_resolution_overlay(TirSlotResolutionOverlay {
         resolutions: Vec::new(),
     });
-    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet {
-        expression_overrides: None,
+    let context = TemplateViewContext {
+        expression_overlay: None,
         slot_resolution: Some(slot_overlay_id),
         wrapper_context: None,
-    });
+    };
 
     let template_id = {
         let mut builder = TemplateIrBuilder::new(&mut store);
@@ -595,7 +593,7 @@ fn composed_tir_view_classification_accepts_slot_resolution_overlay() {
         template_id,
         TemplateTirPhase::Composed,
         TemplateTirPhase::Composed,
-        overlay_set_id,
+        context,
     )
     .expect("test view should resolve");
 
@@ -683,18 +681,18 @@ fn finalized_tir_view_classification_with_resolved_slot_returns_wrapper_template
             TirSlotResolution::resolved(SlotKey::Default, vec![fill_ref]),
         )],
     });
-    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet {
-        expression_overrides: None,
+    let context = TemplateViewContext {
+        expression_overlay: None,
         slot_resolution: Some(slot_overlay_id),
         wrapper_context: None,
-    });
+    };
     let store_snapshot = &store;
     let view = TirView::with_minimum_phase(
         &store,
         wrapper_template_id,
         TemplateTirPhase::Finalized,
         TemplateTirPhase::Finalized,
-        overlay_set_id,
+        context,
     )
     .expect("test view should resolve");
 
@@ -726,11 +724,11 @@ fn finalized_tir_view_classification_accepts_wrapper_context_overlay() {
 
     let wrapper_overlay_id =
         store.allocate_wrapper_context_overlay(TirWrapperContextOverlay::default());
-    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet {
-        expression_overrides: None,
+    let context = TemplateViewContext {
+        expression_overlay: None,
         slot_resolution: None,
         wrapper_context: Some(wrapper_overlay_id),
-    });
+    };
 
     let template_id = {
         let mut builder = TemplateIrBuilder::new(&mut store);
@@ -757,7 +755,7 @@ fn finalized_tir_view_classification_accepts_wrapper_context_overlay() {
         template_id,
         TemplateTirPhase::Finalized,
         TemplateTirPhase::Finalized,
-        overlay_set_id,
+        context,
     )
     .expect("test view should resolve");
 
@@ -797,14 +795,14 @@ fn effective_view_classification_unresolved_slot_with_no_overlay_returns_rendera
         )
     };
 
-    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet::empty());
+    let context = TemplateViewContext::default();
     let store_snapshot = &store;
     let view = TirView::with_minimum_phase(
         &store,
         template_id,
         TemplateTirPhase::Finalized,
         TemplateTirPhase::Finalized,
-        overlay_set_id,
+        context,
     )
     .expect("test view should resolve");
 
@@ -850,18 +848,18 @@ fn effective_view_classification_unresolved_slot_with_empty_overlay_returns_rend
     let slot_overlay_id = store.allocate_slot_resolution_overlay(TirSlotResolutionOverlay {
         resolutions: Vec::new(),
     });
-    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet {
-        expression_overrides: None,
+    let context = TemplateViewContext {
+        expression_overlay: None,
         slot_resolution: Some(slot_overlay_id),
         wrapper_context: None,
-    });
+    };
     let store_snapshot = &store;
     let view = TirView::with_minimum_phase(
         &store,
         template_id,
         TemplateTirPhase::Finalized,
         TemplateTirPhase::Finalized,
-        overlay_set_id,
+        context,
     )
     .expect("test view should resolve");
 
@@ -942,18 +940,18 @@ fn effective_view_classification_resolved_slot_returns_wrapper_template() {
             TirSlotResolution::resolved(SlotKey::Default, vec![fill_ref]),
         )],
     });
-    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet {
-        expression_overrides: None,
+    let context = TemplateViewContext {
+        expression_overlay: None,
         slot_resolution: Some(slot_overlay_id),
         wrapper_context: None,
-    });
+    };
     let store_snapshot = &store;
     let view = TirView::with_minimum_phase(
         &store,
         wrapper_template_id,
         TemplateTirPhase::Finalized,
         TemplateTirPhase::Finalized,
-        overlay_set_id,
+        context,
     )
     .expect("test view should resolve");
 
@@ -1023,18 +1021,18 @@ fn effective_view_classification_partially_resolved_slots_returns_wrapper_templa
             TirSlotResolution::resolved(SlotKey::Default, vec![fill_ref]),
         )],
     });
-    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet {
-        expression_overrides: None,
+    let context = TemplateViewContext {
+        expression_overlay: None,
         slot_resolution: Some(slot_overlay_id),
         wrapper_context: None,
-    });
+    };
     let store_snapshot = &store;
     let view = TirView::with_minimum_phase(
         &store,
         wrapper_template_id,
         TemplateTirPhase::Finalized,
         TemplateTirPhase::Finalized,
-        overlay_set_id,
+        context,
     )
     .expect("test view should resolve");
 
@@ -1076,18 +1074,18 @@ fn effective_view_classification_two_unresolved_slots_returns_renderable_string(
     let slot_overlay_id = store.allocate_slot_resolution_overlay(TirSlotResolutionOverlay {
         resolutions: Vec::new(),
     });
-    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet {
-        expression_overrides: None,
+    let context = TemplateViewContext {
+        expression_overlay: None,
         slot_resolution: Some(slot_overlay_id),
         wrapper_context: None,
-    });
+    };
     let store_snapshot = &store;
     let view = TirView::with_minimum_phase(
         &store,
         template_id,
         TemplateTirPhase::Finalized,
         TemplateTirPhase::Finalized,
-        overlay_set_id,
+        context,
     )
     .expect("test view should resolve");
 

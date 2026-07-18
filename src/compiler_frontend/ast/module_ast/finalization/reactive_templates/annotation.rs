@@ -34,8 +34,8 @@ use crate::compiler_frontend::ast::templates::template_control_flow::{
 };
 use crate::compiler_frontend::ast::templates::tir::{
     ExpressionSiteId, TemplateIrId, TemplateIrNodeId, TemplateIrNodeKind, TemplateIrStore,
-    TemplateLoopHeaderExpressionSites, TemplateOverlaySet, TemplateOverlaySetId,
-    TemplateSlotPlanId, TemplateSlotSiteRenderPiece, TemplateTirPhase, TirExpressionOverlay,
+    TemplateLoopHeaderExpressionSites, TemplateSlotPlanId, TemplateSlotSiteRenderPiece,
+    TemplateTirPhase, TemplateViewContext, TirExpressionOverlay,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
@@ -85,57 +85,47 @@ struct EnvironmentAwarePayload {
 fn collect_environment_aware_tir_expression_payloads(
     store: &TemplateIrStore,
     root: TemplateIrNodeId,
-    root_overlay_set_id: TemplateOverlaySetId,
+    root_context: TemplateViewContext,
     base_environment: &ReactiveTemplateValueEnvironment,
     flows: &FxHashMap<InternedPath, FunctionTemplateFlow>,
 ) -> Result<Vec<EnvironmentAwarePayload>, CompilerError> {
-    let mut collector = EnvironmentAwarePayloadCollector::new(store, flows, root_overlay_set_id)?;
+    let mut collector = EnvironmentAwarePayloadCollector::new(store, flows, root_context)?;
     collector.collect_node(root, base_environment)?;
     Ok(collector.into_payloads())
 }
 
-/// Composes annotated expression overrides with the existing overlay set,
+/// Composes annotated expression overrides with the existing view context,
 /// preserving pre-existing overrides for sites that annotation did not visit.
 ///
 /// WHAT: filters the existing expression overlay to remove only the sites that
 ///       received fresh annotated overrides, then merges and allocates one new
-///       composed overlay set.
+///       composed view context.
 /// WHY: later finalization passes and the effective TIR view must observe the
 ///      result of earlier overlay layers rather than replacing them silently.
 fn compose_expression_overlays(
     store: &mut TemplateIrStore,
-    current_overlay_set_id: TemplateOverlaySetId,
+    current_context: TemplateViewContext,
     annotated_overrides: Vec<(ExpressionSiteId, Box<Expression>)>,
-) -> Result<TemplateOverlaySetId, CompilerError> {
-    let existing_overlay_set = store
-        .overlay_set(current_overlay_set_id)
-        .cloned()
-        .ok_or_else(|| {
-            CompilerError::compiler_error(format!(
-                "TIR reactive annotation referenced missing current overlay set {}",
-                current_overlay_set_id
-            ))
-        })?;
-    let existing_overrides =
-        if let Some(existing_overlay_id) = existing_overlay_set.expression_overrides {
-            store
-                .expression_overlay(existing_overlay_id)
-                .ok_or_else(|| {
-                    CompilerError::compiler_error(format!(
-                        "TIR reactive annotation referenced missing expression overlay {}",
-                        existing_overlay_id
-                    ))
-                })?
-                .overrides
-                .iter()
-                .map(|(site_id, expression)| (*site_id, expression.clone()))
-                .collect::<Vec<_>>()
-        } else {
-            Vec::new()
-        };
+) -> Result<TemplateViewContext, CompilerError> {
+    let existing_overrides = if let Some(existing_overlay_id) = current_context.expression_overlay {
+        store
+            .expression_overlay(existing_overlay_id)
+            .ok_or_else(|| {
+                CompilerError::compiler_error(format!(
+                    "TIR reactive annotation referenced missing expression overlay {}",
+                    existing_overlay_id
+                ))
+            })?
+            .overrides
+            .iter()
+            .map(|(site_id, expression)| (*site_id, expression.clone()))
+            .collect::<Vec<_>>()
+    } else {
+        Vec::new()
+    };
 
     if annotated_overrides.is_empty() {
-        return Ok(current_overlay_set_id);
+        return Ok(current_context);
     }
 
     let annotated_site_ids = annotated_overrides
@@ -151,26 +141,19 @@ fn compose_expression_overlays(
 
     let expression_overlay_id =
         store.allocate_expression_overlay(TirExpressionOverlay { overrides });
-    let expression_overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet {
-        expression_overrides: Some(expression_overlay_id),
+    let expression_context = TemplateViewContext {
+        expression_overlay: Some(expression_overlay_id),
         slot_resolution: None,
         wrapper_context: None,
-    });
-    store.compose_overlay_sets(&[current_overlay_set_id, expression_overlay_set_id])
+    };
+    Ok(current_context.merge(expression_context))
 }
 
 fn validate_expression_overlay_authority(
     store: &TemplateIrStore,
-    overlay_set_id: TemplateOverlaySetId,
+    context: TemplateViewContext,
 ) -> Result<(), CompilerError> {
-    let overlay_set = store.overlay_set(overlay_set_id).ok_or_else(|| {
-        CompilerError::compiler_error(format!(
-            "TIR environment-aware payload collection referenced missing overlay set {}",
-            overlay_set_id
-        ))
-    })?;
-
-    if let Some(expression_overlay_id) = overlay_set.expression_overrides {
+    if let Some(expression_overlay_id) = context.expression_overlay {
         store
             .expression_overlay(expression_overlay_id)
             .ok_or_else(|| {
@@ -195,7 +178,7 @@ fn validate_expression_overlay_authority(
 struct EnvironmentAwarePayloadCollector<'store, 'flow> {
     store: &'store TemplateIrStore,
     flows: &'flow FxHashMap<InternedPath, FunctionTemplateFlow>,
-    overlay_set_stack: Vec<TemplateOverlaySetId>,
+    context_stack: Vec<TemplateViewContext>,
     payloads: Vec<EnvironmentAwarePayload>,
     active_nodes: HashSet<TemplateIrNodeId>,
     completed_nodes: HashSet<TemplateIrNodeId>,
@@ -209,14 +192,14 @@ impl<'store, 'flow> EnvironmentAwarePayloadCollector<'store, 'flow> {
     fn new(
         store: &'store TemplateIrStore,
         flows: &'flow FxHashMap<InternedPath, FunctionTemplateFlow>,
-        root_overlay_set_id: TemplateOverlaySetId,
+        root_context: TemplateViewContext,
     ) -> Result<Self, CompilerError> {
-        validate_expression_overlay_authority(store, root_overlay_set_id)?;
+        validate_expression_overlay_authority(store, root_context)?;
 
         Ok(Self {
             store,
             flows,
-            overlay_set_stack: vec![root_overlay_set_id],
+            context_stack: vec![root_context],
             payloads: Vec::new(),
             active_nodes: HashSet::new(),
             completed_nodes: HashSet::new(),
@@ -238,7 +221,7 @@ impl<'store, 'flow> EnvironmentAwarePayloadCollector<'store, 'flow> {
     ) -> Result<Expression, CompilerError> {
         Ok(self
             .store
-            .expression_for_overlay_stack(&self.overlay_set_stack, site_id)?
+            .expression_for_context_stack(&self.context_stack, site_id)?
             .cloned()
             .unwrap_or_else(|| structural_expression.clone()))
     }
@@ -471,10 +454,10 @@ impl<'store, 'flow> EnvironmentAwarePayloadCollector<'store, 'flow> {
                 if reference.phase.is_at_least(TemplateTirPhase::Composed)
                     && let template_id = reference.root
                 {
-                    validate_expression_overlay_authority(self.store, reference.overlay_set_id)?;
-                    self.overlay_set_stack.push(reference.overlay_set_id);
+                    validate_expression_overlay_authority(self.store, reference.context)?;
+                    self.context_stack.push(reference.context);
                     let result = self.collect_template(template_id, environment);
-                    self.overlay_set_stack.pop();
+                    self.context_stack.pop();
                     result?;
                 }
                 Ok(())
@@ -1254,7 +1237,7 @@ fn annotate_template_tir_root(
     let environment_aware_payloads = collect_environment_aware_tir_expression_payloads(
         store,
         root,
-        reference.overlay_set_id,
+        reference.context,
         value_environment,
         flows,
     )?;
@@ -1276,10 +1259,9 @@ fn annotate_template_tir_root(
         annotated_overrides.push((payload.site_id, Box::new(payload.expression)));
     }
 
-    let new_overlay_set_id =
-        compose_expression_overlays(store, reference.overlay_set_id, annotated_overrides)?;
+    let new_context = compose_expression_overlays(store, reference.context, annotated_overrides)?;
 
-    reference.overlay_set_id = new_overlay_set_id;
+    reference.context = new_context;
 
     Ok(())
 }

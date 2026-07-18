@@ -26,7 +26,7 @@ use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use super::builder::TemplateIrBuilder;
 use super::ids::{TemplateIrId, TemplateIrNodeId};
 use super::node::{TemplateIrBranch, TemplateIrNodeKind};
-use super::overlays::TemplateOverlaySetId;
+use super::overlays::TemplateViewContext;
 use super::refs::{TemplateTirChildReference, TemplateTirReference};
 use super::store::TemplateIrStore;
 use super::summary::TemplateIrSummary;
@@ -75,13 +75,13 @@ impl TemplateParserIrBuilderState {
     pub(crate) fn finalized_reference(
         &self,
         template_id: TemplateIrId,
-        overlay_set_id: TemplateOverlaySetId,
+        context: TemplateViewContext,
         phase: TemplateTirPhase,
     ) -> TemplateTirReference {
         TemplateTirReference {
             root: template_id,
             phase,
-            overlay_set_id,
+            context,
         }
     }
 
@@ -183,11 +183,8 @@ impl TemplateParserIrBuilderState {
     ) {
         let node_id = {
             let mut builder = TemplateIrBuilder::new(store);
-            let child_reference = TemplateTirChildReference::new(
-                reference.root,
-                reference.phase,
-                reference.overlay_set_id,
-            );
+            let child_reference =
+                TemplateTirChildReference::new(reference.root, reference.phase, reference.context);
             builder.push_child_template_node_with_reference(child_reference, location)
         };
 

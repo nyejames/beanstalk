@@ -19,14 +19,14 @@ use crate::compiler_frontend::ast::templates::tir::ids::{
 };
 use crate::compiler_frontend::ast::templates::tir::node::TemplateIrNodeKind;
 use crate::compiler_frontend::ast::templates::tir::overlays::{
-    TemplateOverlaySet, TirWrapperApplicationMode, TirWrapperContext, TirWrapperContextOverlay,
+    TemplateViewContext, TirWrapperApplicationMode, TirWrapperContext, TirWrapperContextOverlay,
 };
 use crate::compiler_frontend::ast::templates::tir::refs::TemplateTirReference;
 use crate::compiler_frontend::ast::templates::tir::refs::{
     TemplateTirChildReference, TemplateWrapperReference,
 };
 use crate::compiler_frontend::ast::templates::tir::store::TemplateIrStore;
-use crate::compiler_frontend::ast::templates::tir::view::TemplateTirPhase;
+use crate::compiler_frontend::ast::templates::tir::view::{TemplateTirPhase, validate_context};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -35,7 +35,7 @@ use std::rc::Rc;
 ///
 /// WHAT: compares the two vectors element-wise using `TemplateWrapperReference`
 /// equality. Because wrapper sets store effective refs (root + phase +
-/// overlay_set_id), two sets are equivalent exactly when all three fields match
+/// context), two sets are equivalent exactly when all three fields match
 /// for every wrapper in the same order.
 ///
 /// Empty wrapper vectors are always equivalent, so control-flow children that
@@ -54,7 +54,7 @@ pub(crate) fn wrapper_sets_are_equivalent(
 
 /// Converts a wrapper `Template` into an effective module-local wrapper reference.
 ///
-/// WHAT: extracts the template's TIR reference (root, phase, overlay-set ID)
+/// WHAT: extracts the template's TIR reference (root, phase, value context)
 ///       and validates its overlay and template identity in the active store.
 /// WHY: wrapper references carry only module-local root, phase, and overlay
 ///      identity because every TIR value in this AST build uses one store.
@@ -66,15 +66,11 @@ pub(crate) fn wrapper_reference_for_template(
     current_store: &TemplateIrStore,
 ) -> Result<TemplateWrapperReference, CompilerError> {
     let reference = &template.tir_reference;
-    current_store
-        .overlay_set(reference.overlay_set_id)
-        .ok_or_else(|| {
-            CompilerError::compiler_error(format!(
-                "wrapper-reference normalization: TIR reference used missing overlay set {}.",
-                reference.overlay_set_id
-            ))
-        })?;
-
+    validate_context(
+        current_store,
+        reference.context,
+        "wrapper-reference normalization",
+    )?;
     current_store.get_template(reference.root).ok_or_else(|| {
         CompilerError::compiler_error(format!(
             "wrapper-reference normalization: template {} was missing from the current store.",
@@ -85,7 +81,7 @@ pub(crate) fn wrapper_reference_for_template(
     Ok(TemplateWrapperReference::new(
         reference.root,
         reference.phase,
-        reference.overlay_set_id,
+        reference.context,
     ))
 }
 
@@ -98,11 +94,11 @@ pub(crate) fn wrapper_reference_for_template(
 /// WHAT: walks the owning template's structural root, finds every
 /// `ChildTemplate` occurrence, and records `$fresh` suppression or inherited
 /// wrapper-set context. The resulting overlay is composed with the reference's
-/// current overlay set so downstream `TirView` resolution applies wrappers at
+/// current view context so downstream `TirView` resolution applies wrappers at
 /// child-template boundaries without mutating shared structural roots.
 ///
 /// WHY: wrapper-context overlay construction is TIR-owned because wrapper-set
-/// canonicalization, overlay storage, and wrapper-reference validation already
+/// composition, overlay storage, and wrapper-reference validation already
 /// live here. Moving the traversal out of the template construction orchestrator
 /// keeps the orchestrator focused on ordering and lets the wrapper owner enforce
 /// required authority and propagate failures.
@@ -126,14 +122,11 @@ pub(crate) fn attach_wrapper_context_overlay(
     // authority is proven before durable wrapper or overlay state is allocated.
     let root = {
         let store = store_handle.borrow();
-        store
-            .overlay_set(tir_reference.overlay_set_id)
-            .ok_or_else(|| {
-                CompilerError::compiler_error(format!(
-                    "wrapper-context overlay: current overlay set {} does not exist.",
-                    tir_reference.overlay_set_id
-                ))
-            })?;
+        validate_context(
+            &store,
+            tir_reference.context,
+            "wrapper-context current reference",
+        )?;
         store
             .get_template(tir_reference.root)
             .ok_or_else(|| {
@@ -192,15 +185,14 @@ pub(crate) fn attach_wrapper_context_overlay(
     let mut store = store_handle.borrow_mut();
     let wrapper_overlay_id =
         store.allocate_wrapper_context_overlay(TirWrapperContextOverlay { contexts });
-    let wrapper_only_overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet {
-        expression_overrides: None,
+    let wrapper_only_context = TemplateViewContext {
+        expression_overlay: None,
         slot_resolution: None,
         wrapper_context: Some(wrapper_overlay_id),
-    });
-    let merged_overlay_set_id =
-        store.compose_overlay_sets(&[tir_reference.overlay_set_id, wrapper_only_overlay_set_id])?;
+    };
+    let merged_context = tir_reference.context.merge(wrapper_only_context);
 
-    tir_reference.overlay_set_id = merged_overlay_set_id;
+    tir_reference.context = merged_context;
     if !tir_reference.phase.is_at_least(TemplateTirPhase::Composed) {
         tir_reference.phase = TemplateTirPhase::Composed;
     }
@@ -315,15 +307,11 @@ fn resolve_child_wrapper_metadata(
     current_store: &TemplateIrStore,
     reference: &TemplateTirChildReference,
 ) -> Result<ChildWrapperMetadata, CompilerError> {
-    current_store
-        .overlay_set(reference.overlay_set_id)
-        .ok_or_else(|| {
-            CompilerError::compiler_error(format!(
-                "wrapper-context overlay: child reference uses missing overlay set {}.",
-                reference.overlay_set_id
-            ))
-        })?;
-
+    validate_context(
+        current_store,
+        reference.context,
+        "wrapper-context child reference",
+    )?;
     let child = current_store.get_template(reference.root).ok_or_else(|| {
         CompilerError::compiler_error(format!(
             "wrapper-context overlay: child template {} not found in current store.",

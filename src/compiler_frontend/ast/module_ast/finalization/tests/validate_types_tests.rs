@@ -11,8 +11,8 @@ use crate::compiler_frontend::ast::templates::template_control_flow::{
 };
 use crate::compiler_frontend::ast::templates::tir::{
     ExpressionSiteId, TemplateIr, TemplateIrBranch, TemplateIrBuilder, TemplateIrNode,
-    TemplateIrStore, TemplateIrSummary, TemplateLoopHeaderExpressionSites, TemplateOverlaySet,
-    TemplateOverlaySetId, TemplateTirPhase, TemplateTirReference, TirExpressionOverlay,
+    TemplateIrStore, TemplateIrSummary, TemplateLoopHeaderExpressionSites, TemplateTirPhase,
+    TemplateTirReference, TemplateViewContext, TirExpressionOverlay,
 };
 use crate::compiler_frontend::compiler_errors::ErrorType;
 use crate::compiler_frontend::compiler_messages::source_location::CharPosition;
@@ -62,17 +62,17 @@ fn template_with_dynamic_overlay(
     let expression_overlay_id = store.allocate_expression_overlay(TirExpressionOverlay {
         overrides: vec![(site_id, Box::new(overlay))],
     });
-    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet {
-        expression_overrides: Some(expression_overlay_id),
+    let context = TemplateViewContext {
+        expression_overlay: Some(expression_overlay_id),
         slot_resolution: None,
         wrapper_context: None,
-    });
+    };
     Template {
         kind: TemplateType::StringFunction,
         tir_reference: TemplateTirReference {
             root,
             phase,
-            overlay_set_id,
+            context,
         },
         location: SourceLocation::default(),
     }
@@ -138,7 +138,7 @@ fn validation_reports_missing_template_root() {
         tir_reference: TemplateTirReference {
             root: crate::compiler_frontend::ast::templates::tir::TemplateIrId::new(99),
             phase: TemplateTirPhase::Finalized,
-            overlay_set_id: TemplateOverlaySetId::empty(),
+            context: TemplateViewContext::default(),
         },
         location: SourceLocation::default(),
     };
@@ -179,17 +179,17 @@ fn finalized_template_with_site_overlay(
     let expression_overlay_id = store.allocate_expression_overlay(TirExpressionOverlay {
         overrides: vec![(site_id, Box::new(overlay_expression))],
     });
-    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet {
-        expression_overrides: Some(expression_overlay_id),
+    let context = TemplateViewContext {
+        expression_overlay: Some(expression_overlay_id),
         slot_resolution: None,
         wrapper_context: None,
-    });
+    };
     Template {
         kind: TemplateType::StringFunction,
         tir_reference: TemplateTirReference {
             root,
             phase: TemplateTirPhase::Finalized,
-            overlay_set_id,
+            context,
         },
         location: SourceLocation::default(),
     }

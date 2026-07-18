@@ -130,17 +130,12 @@ fn child_wrapper_composition_marks_template_tir_reference_composed() {
         "wrapper-only composition with TIR-normalized wrappers should reach Formatted through the TIR formatter view"
     );
 
-    let store = context.template_ir_store.borrow();
-    let overlay_set = store
-        .overlay_set(reference.overlay_set_id)
-        .expect("composed reference overlay set should resolve in the store");
-
     assert!(
-        overlay_set.wrapper_context.is_some(),
+        reference.context.wrapper_context.is_some(),
         "direct-child wrappers must thread a wrapper-context overlay"
     );
     assert!(
-        overlay_set.slot_resolution.is_none(),
+        reference.context.slot_resolution.is_none(),
         "direct-child wrapper removal must not leave structural slot-resolution composition"
     );
 }

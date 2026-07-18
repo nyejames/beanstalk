@@ -41,7 +41,7 @@ pub(in crate::compiler_frontend::ast::templates) fn install_formatted_tir_refere
         return Ok(());
     }
 
-    let reference = tir_reference.clone();
+    let reference = *tir_reference;
 
     if reference.phase.is_at_least(TemplateTirPhase::Formatted) {
         return Ok(());
@@ -62,7 +62,7 @@ pub(in crate::compiler_frontend::ast::templates) fn install_formatted_tir_refere
         &mut store,
         reference.root,
         reference.phase,
-        reference.overlay_set_id,
+        reference.context,
         style,
         context,
         string_table,
@@ -78,7 +78,7 @@ pub(in crate::compiler_frontend::ast::templates) fn install_formatted_tir_refere
     *tir_reference = TemplateTirReference {
         root: formatted_template_id,
         phase: TemplateTirPhase::Formatted,
-        overlay_set_id: reference.overlay_set_id,
+        context: reference.context,
     };
 
     Ok(())

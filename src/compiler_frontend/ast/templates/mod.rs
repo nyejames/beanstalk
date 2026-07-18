@@ -62,7 +62,7 @@
 //! | `tir/mod.rs` | Module entry, narrow re-exports, ownership contract |
 //! | `tir/ids.rs` | Typed module-local IDs (`TemplateIrId`, `TemplateIrNodeId`, …) |
 //! | `tir/refs.rs` | Module-local final TIR references |
-//! | `tir/overlays.rs` | Final overlay set and overlay dimension handles |
+//! | `tir/overlays.rs` | Final view context and overlay dimension handles |
 //! | `tir/store.rs` | `TemplateIrStore` — central contiguous storage |
 //! | `tir/node.rs` | `TemplateIr`, `TemplateIrNode`, `TemplateIrNodeKind` |
 //! | `tir/summary.rs` | `TemplateIrSummary` — cheap shape metadata |
@@ -102,7 +102,7 @@
 //! | `tir/mod.rs` | TIR module entry, re-exports, ownership contract |
 //! | `tir/ids.rs` | Typed module-local IDs |
 //! | `tir/refs.rs` | Module-local final TIR references |
-//! | `tir/overlays.rs` | Final overlay set and overlay dimension handles |
+//! | `tir/overlays.rs` | Final view context and overlay dimension handles |
 //! | `tir/store.rs` | `TemplateIrStore` — central contiguous storage |
 //! | `tir/node.rs` | `TemplateIr`, `TemplateIrNode`, `TemplateIrNodeKind` |
 //! | `tir/summary.rs` | `TemplateIrSummary` — cheap shape metadata |

@@ -306,7 +306,7 @@ pub struct Template {
 
     /// Authoritative TIR reference.
     ///
-    /// WHAT: holds the module-local root, pipeline phase, and overlay-set ID.
+    /// WHAT: holds the module-local root, pipeline phase, and value context.
     /// WHY: this long-lived reference carries the exact view and overlay identity
     ///      needed by consumers of the shared module store.
     pub(crate) tir_reference: TemplateTirReference,
@@ -318,9 +318,9 @@ impl Clone for Template {
     fn clone(&self) -> Self {
         Self {
             kind: self.kind.to_owned(),
-            // `tir_reference` is a compact module-local identity; cloning it
+            // `tir_reference` is a compact module-local identity; copying it
             // preserves the exact root, phase, and overlay context.
-            tir_reference: self.tir_reference.clone(),
+            tir_reference: self.tir_reference,
             location: self.location.to_owned(),
         }
     }

@@ -10,7 +10,7 @@
 use super::super::builder::TemplateIrBuilder;
 use super::super::ids::{TemplateIrId, TemplateIrNodeId};
 use super::super::node::{TemplateIrBranch, TemplateIrNodeKind};
-use super::super::overlays::TemplateOverlaySetId;
+use super::super::overlays::TemplateViewContext;
 use super::super::refs::TemplateWrapperReference;
 use super::super::store::TemplateIrStore;
 use super::super::summary::TemplateIrSummary;
@@ -155,7 +155,7 @@ fn body_root_wraps_non_control_flow_direct_child() {
         &[TemplateWrapperReference::new(
             wrapper,
             TemplateTirPhase::Finalized,
-            TemplateOverlaySetId::empty(),
+            TemplateViewContext::default(),
         )],
         &mut store,
         &string_table,
@@ -208,7 +208,7 @@ fn body_root_skips_fresh_direct_child() {
         &[TemplateWrapperReference::new(
             wrapper,
             TemplateTirPhase::Finalized,
-            TemplateOverlaySetId::empty(),
+            TemplateViewContext::default(),
         )],
         &mut store,
         &string_table,
@@ -236,7 +236,7 @@ fn body_root_wraps_control_flow_direct_child_with_conditional_wrappers() {
         &[TemplateWrapperReference::new(
             wrapper,
             TemplateTirPhase::Finalized,
-            TemplateOverlaySetId::empty(),
+            TemplateViewContext::default(),
         )],
         &mut store,
         &string_table,
@@ -289,7 +289,7 @@ fn body_root_leaves_slot_bearing_child_unwrapped() {
         &[TemplateWrapperReference::new(
             wrapper,
             TemplateTirPhase::Finalized,
-            TemplateOverlaySetId::empty(),
+            TemplateViewContext::default(),
         )],
         &mut store,
         &string_table,

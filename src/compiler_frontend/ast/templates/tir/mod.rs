@@ -31,7 +31,7 @@
 //!
 //! `TemplateIrStore` owns all structural and overlay data for one module.
 //! `TirView` is the single production read API: it pairs a module-local root
-//! with a phase and an overlay-set ID.
+//! with a phase and a value-carried view context.
 //!
 //! ## Module layout
 //!
@@ -40,7 +40,7 @@
 //! ├── mod.rs                           Module entry and narrow re-exports
 //! ├── ids.rs                           Typed store IDs (template, node, wrapper set, slot plan)
 //! ├── refs.rs                          Module-local durable TIR references
-//! ├── overlays.rs                      Final overlay set and overlay dimension handles
+//! ├── overlays.rs                      Final view context and overlay dimension handles
 //! ├── store.rs                         TemplateIrStore — central owned storage
 //! ├── node.rs                          TemplateIr, TemplateIrNode, TemplateIrNodeKind
 //! ├── summary.rs                       TemplateIrSummary — shape metadata for capacity planning
@@ -89,14 +89,14 @@ pub(crate) mod refs;
 // focused tests keep currently-unused freeze/domain helpers gated to test
 // builds.
 
-// `overlays` defines active overlay-set and overlay-dimension payloads. The
+// `overlays` defines active view context and overlay-dimension payloads. The
 // production store/view paths consume expression and slot-resolution
 // overlays; focused tests keep the wrapper-context payload surface covered
 // until production allocates that overlay dimension.
 mod overlays;
 
 // `view` is the central AST-local read API over store-owned template roots
-// and body/root subtrees plus overlay sets. It is consumed by production final
+// and body/root subtrees plus view contexts. It is consumed by production final
 // type-boundary and debug validation as well as tests.
 mod view;
 
@@ -188,12 +188,13 @@ pub(crate) use summary::TemplateIrSummary;
 pub(crate) use refs::{TemplateTirReference, TemplateWrapperReference};
 pub(crate) use wrapper_sets::{attach_wrapper_context_overlay, wrapper_reference_for_template};
 
-// Final overlay set and expression-overlay types consumed by production
+// Final view context and expression-overlay types consumed by production
 // template creation and finalization.
-pub(crate) use overlays::{TemplateOverlaySet, TemplateOverlaySetId, TirExpressionOverlay};
+pub(crate) use overlays::{TemplateViewContext, TirExpressionOverlay};
 #[cfg(test)]
 pub(crate) use overlays::{
-    TirSlotResolution, TirSlotResolutionOverlay, TirWrapperContext, TirWrapperContextOverlay,
+    TirExpressionOverlayId, TirSlotResolution, TirSlotResolutionOverlay, TirWrapperContext,
+    TirWrapperContextOverlay,
 };
 #[cfg(test)]
 pub(crate) use store::TemplateWrapperSet;
@@ -217,7 +218,7 @@ pub(crate) use contribution_shape::{ContributionShape, classify_tir_contribution
 pub(crate) use slot_composition::{
     RoutedTirSlotContributions, TirSlotContributions, TirSlotSchema,
     collect_tir_slot_placeholders_in_order, collect_tir_slot_schema, compose_tir_head_chain,
-    compose_tir_head_chain_with_overlays, merge_tir_slot_resolution_overlay_sets,
+    compose_tir_head_chain_with_overlays, merge_tir_slot_resolution_contexts,
     wrap_tir_node_in_wrappers,
 };
 
@@ -271,5 +272,5 @@ pub(crate) use slot_plan::{
     TemplateSlotSiteRenderPiece, TemplateSlotSiteRenderPlan, convert_tir_tree_to_active_slot_plan,
 };
 
-// Central read API over store-owned template roots and overlay sets.
+// Central read API over structural roots in the store and value-carried view contexts.
 pub(crate) use view::{TemplateTirPhase, TirView, finalized_tir_view_for_template};

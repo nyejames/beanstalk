@@ -30,7 +30,7 @@ use crate::compiler_frontend::ast::templates::tir::ids::{TemplateIrId, TemplateI
 use crate::compiler_frontend::ast::templates::tir::node::{
     TemplateIr, TemplateIrNode, TemplateIrNodeKind,
 };
-use crate::compiler_frontend::ast::templates::tir::overlays::TemplateOverlaySetId;
+use crate::compiler_frontend::ast::templates::tir::overlays::TemplateViewContext;
 use crate::compiler_frontend::ast::templates::tir::refs::TemplateTirChildReference;
 use crate::compiler_frontend::ast::templates::tir::store::TemplateIrStore;
 use crate::compiler_frontend::ast::templates::tir::view::{TemplateTirPhase, TirView};
@@ -66,12 +66,12 @@ struct FormatterStore<'store> {
     store: &'store mut TemplateIrStore,
     root: TemplateIrId,
     phase: TemplateTirPhase,
-    overlay_set_id: TemplateOverlaySetId,
+    context: TemplateViewContext,
 }
 
 impl FormatterStore<'_> {
     fn view(&self) -> Result<TirView<'_>, CompilerError> {
-        TirView::new(&*self.store, self.root, self.phase, self.overlay_set_id)
+        TirView::new(&*self.store, self.root, self.phase, self.context)
     }
 
     fn root_template(&self) -> Result<TemplateIr, CompilerError> {
@@ -119,7 +119,7 @@ pub(crate) fn format_tir_template(
     store: &mut TemplateIrStore,
     root: TemplateIrId,
     phase: TemplateTirPhase,
-    overlay_set_id: TemplateOverlaySetId,
+    context: TemplateViewContext,
     style: &Style,
     string_table: &mut StringTable,
 ) -> Result<TirFormatterResult, CompilerMessages> {
@@ -127,7 +127,7 @@ pub(crate) fn format_tir_template(
         store,
         root,
         phase,
-        overlay_set_id,
+        context,
     };
     let root_node_id = {
         let template = formatter_store
@@ -272,7 +272,7 @@ fn format_child_templates_in_subtree(
                 formatter_store,
                 reference.root,
                 reference.phase,
-                reference.overlay_set_id,
+                reference.context,
                 string_table,
             )?;
         }
@@ -343,7 +343,7 @@ fn format_child_templates_in_subtree(
                 formatter_store,
                 child_ref,
                 TemplateTirPhase::Formatted,
-                formatter_store.overlay_set_id,
+                formatter_store.context,
                 string_table,
             )?;
         }
@@ -365,7 +365,7 @@ fn format_referenced_child_template(
     formatter_store: &mut FormatterStore<'_>,
     template_ref: TemplateIrId,
     phase: TemplateTirPhase,
-    overlay_set_id: TemplateOverlaySetId,
+    context: TemplateViewContext,
     string_table: &mut StringTable,
 ) -> Result<(), CompilerMessages> {
     let style = {
@@ -398,7 +398,7 @@ fn format_referenced_child_template(
         formatter_store.store,
         template_ref,
         phase,
-        overlay_set_id,
+        context,
         &style,
         string_table,
     )?;
@@ -719,7 +719,7 @@ fn child_template_is_head_expression_insert_in_tir(
         &*formatter_store.store,
         reference.root,
         reference.phase,
-        reference.overlay_set_id,
+        reference.context,
     )?;
     let child_template = child_view.root_template()?;
     let root_node_ref = child_template.root;

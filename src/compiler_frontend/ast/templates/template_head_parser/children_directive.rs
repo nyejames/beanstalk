@@ -177,6 +177,6 @@ fn normalize_string_child_wrapper_reference(
     Ok(TemplateWrapperReference::new(
         reference.root,
         reference.phase,
-        reference.overlay_set_id,
+        reference.context,
     ))
 }

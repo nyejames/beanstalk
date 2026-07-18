@@ -18,7 +18,7 @@ fn fresh_marks_template_to_skip_parent_child_wrappers() {
         .expect("inherited wrapper should parse");
     let inherited_wrapper = {
         let reference = &wrapper.tir_reference;
-        TemplateWrapperReference::new(reference.root, reference.phase, reference.overlay_set_id)
+        TemplateWrapperReference::new(reference.root, reference.phase, reference.context)
     };
 
     let mut token_stream =
@@ -38,12 +38,8 @@ fn fresh_marks_template_to_skip_parent_child_wrappers() {
     assert!(effective_style.skip_parent_child_wrappers);
 
     // No $children directive means no wrapper-context overlay is attached.
-    let registry = context.template_ir_store.borrow();
-    let overlay_set = registry
-        .overlay_set(template.tir_reference.overlay_set_id)
-        .expect("overlay set should exist");
     assert!(
-        overlay_set.wrapper_context.is_none(),
+        template.tir_reference.context.wrapper_context.is_none(),
         "template without $children should not attach wrapper-context overlays"
     );
 }
@@ -60,14 +56,13 @@ fn children_directive_attaches_wrapper_context_to_direct_child() {
 
     // The $children directive attaches a wrapper-context overlay carrying
     // one inherited wrapper set for the direct child occurrence.
-    let registry = context.template_ir_store.borrow();
-    let overlay_set = registry
-        .overlay_set(template.tir_reference.overlay_set_id)
-        .expect("overlay set should exist");
-    let wrapper_overlay_id = overlay_set
+    let store = context.template_ir_store.borrow();
+    let wrapper_overlay_id = template
+        .tir_reference
+        .context
         .wrapper_context
         .expect("$children should attach a wrapper-context overlay");
-    let wrapper_overlay = registry
+    let wrapper_overlay = store
         .wrapper_context_overlay(wrapper_overlay_id)
         .expect("wrapper-context overlay should exist");
     assert_eq!(
@@ -109,14 +104,13 @@ fn children_directive_accepts_const_string_reference() {
         .expect("children directive should accept const-folded references");
 
     // Resolve the wrapper reference through the TIR overlay system.
-    let registry = context.template_ir_store.borrow();
-    let overlay_set = registry
-        .overlay_set(template.tir_reference.overlay_set_id)
-        .expect("overlay set should exist");
-    let wrapper_overlay_id = overlay_set
+    let store = context.template_ir_store.borrow();
+    let wrapper_overlay_id = template
+        .tir_reference
+        .context
         .wrapper_context
         .expect("$children should attach a wrapper-context overlay");
-    let wrapper_overlay = registry
+    let wrapper_overlay = store
         .wrapper_context_overlay(wrapper_overlay_id)
         .expect("wrapper-context overlay should exist");
     let wrapper_context = &wrapper_overlay.contexts[0].1;

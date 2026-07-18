@@ -17,7 +17,7 @@ use super::super::slot_plan::{
 };
 use super::super::store::{TemplateIrStore, TemplateWrapperSet};
 use super::super::summary::TemplateIrSummary;
-use super::super::{TemplateOverlaySetId, TemplateTirPhase};
+use super::super::{TemplateTirPhase, TemplateViewContext};
 use super::validation_support::validate_tir_store;
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, ExpressionValueShape,
@@ -659,7 +659,7 @@ fn store_with_unique_child_template_occurrence_ids_is_valid() {
     let child_a_reference = TemplateTirChildReference::new(
         TemplateIrId::new(0),
         TemplateTirPhase::Parsed,
-        TemplateOverlaySetId::empty(),
+        TemplateViewContext::default(),
     );
     let child_a = store.push_node(TemplateIrNode::new(
         TemplateIrNodeKind::ChildTemplate {
@@ -671,7 +671,7 @@ fn store_with_unique_child_template_occurrence_ids_is_valid() {
     let child_b_reference = TemplateTirChildReference::new(
         TemplateIrId::new(1),
         TemplateTirPhase::Parsed,
-        TemplateOverlaySetId::empty(),
+        TemplateViewContext::default(),
     );
     let child_b = store.push_node(TemplateIrNode::new(
         TemplateIrNodeKind::ChildTemplate {
@@ -724,7 +724,7 @@ fn store_with_duplicate_child_template_occurrence_ids_is_invalid() {
     let child_a_reference = TemplateTirChildReference::new(
         TemplateIrId::new(0),
         TemplateTirPhase::Parsed,
-        TemplateOverlaySetId::empty(),
+        TemplateViewContext::default(),
     );
     let child_a = store.push_node(TemplateIrNode::new(
         TemplateIrNodeKind::ChildTemplate {
@@ -736,7 +736,7 @@ fn store_with_duplicate_child_template_occurrence_ids_is_invalid() {
     let child_b_reference = TemplateTirChildReference::new(
         TemplateIrId::new(0),
         TemplateTirPhase::Parsed,
-        TemplateOverlaySetId::empty(),
+        TemplateViewContext::default(),
     );
     let child_b = store.push_node(TemplateIrNode::new(
         TemplateIrNodeKind::ChildTemplate {
@@ -980,7 +980,7 @@ fn store_with_valid_wrapper_set_refs_is_valid() {
         wrappers: vec![TemplateWrapperReference::new(
             wrapper_ref,
             TemplateTirPhase::Finalized,
-            TemplateOverlaySetId::empty(),
+            TemplateViewContext::default(),
         )],
     });
 
@@ -997,7 +997,7 @@ fn wrapper_set_with_out_of_bounds_template_ref_is_invalid() {
         wrappers: vec![TemplateWrapperReference::new(
             stale_ref,
             TemplateTirPhase::Finalized,
-            TemplateOverlaySetId::empty(),
+            TemplateViewContext::default(),
         )],
     });
 

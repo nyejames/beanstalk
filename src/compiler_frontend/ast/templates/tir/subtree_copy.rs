@@ -14,7 +14,7 @@ use crate::compiler_frontend::ast::templates::tir::ids::{
 use crate::compiler_frontend::ast::templates::tir::node::{
     TemplateIr, TemplateIrBranch, TemplateIrNode, TemplateIrNodeKind,
 };
-use crate::compiler_frontend::ast::templates::tir::overlays::TemplateOverlaySetId;
+use crate::compiler_frontend::ast::templates::tir::overlays::TemplateViewContext;
 use crate::compiler_frontend::ast::templates::tir::refs::TemplateTirChildReference;
 use crate::compiler_frontend::ast::templates::tir::slot_plan::convert_runtime_slot_site;
 use crate::compiler_frontend::ast::templates::tir::store::TemplateIrStore;
@@ -164,7 +164,7 @@ fn copy_tir_node_with_active_slot_plan(
             let reference = TemplateTirChildReference::new(
                 new_child_id,
                 TemplateTirPhase::Parsed,
-                TemplateOverlaySetId::empty(),
+                TemplateViewContext::default(),
             );
             let node_id = store.push_node(TemplateIrNode::new(
                 TemplateIrNodeKind::ChildTemplate {

@@ -9,7 +9,7 @@ use crate::compiler_frontend::ast::templates::tir::builder::TemplateIrBuilder;
 use crate::compiler_frontend::ast::templates::tir::ids::TemplateIrId;
 use crate::compiler_frontend::ast::templates::tir::node::TemplateIrBranch;
 use crate::compiler_frontend::ast::templates::tir::overlays::{
-    TemplateOverlaySet, TemplateOverlaySetId, TirWrapperApplicationMode,
+    TemplateViewContext, TirExpressionOverlayId, TirWrapperApplicationMode,
 };
 use crate::compiler_frontend::ast::templates::tir::refs::{
     TemplateTirChildReference, TemplateTirReference, TemplateWrapperReference,
@@ -111,18 +111,18 @@ fn wrapper_template(
     TemplateWrapperReference::new(
         wrapper_id,
         TemplateTirPhase::Finalized,
-        TemplateOverlaySetId::empty(),
+        TemplateViewContext::default(),
     )
 }
 
 fn parent_with_child(
     store: &mut TemplateIrStore,
     child: TemplateIrId,
-    overlay_set_id: TemplateOverlaySetId,
+    context: TemplateViewContext,
 ) -> TemplateIrId {
     let mut builder = TemplateIrBuilder::new(store);
     let child_node = builder.push_child_template_node_with_reference(
-        TemplateTirChildReference::new(child, TemplateTirPhase::Composed, overlay_set_id),
+        TemplateTirChildReference::new(child, TemplateTirPhase::Composed, context),
         location(),
     );
     let root = builder.push_sequence_node(vec![child_node], location());
@@ -135,11 +135,11 @@ fn parent_with_child(
     )
 }
 
-fn reference(root: TemplateIrId, overlay_set_id: TemplateOverlaySetId) -> TemplateTirReference {
+fn reference(root: TemplateIrId, context: TemplateViewContext) -> TemplateTirReference {
     TemplateTirReference {
         root,
         phase: TemplateTirPhase::Composed,
-        overlay_set_id,
+        context,
     }
 }
 
@@ -147,9 +147,7 @@ fn reference(root: TemplateIrId, overlay_set_id: TemplateOverlaySetId) -> Templa
 fn fresh_child_suppresses_inherited_wrappers() {
     let store = Rc::new(RefCell::new(TemplateIrStore::new()));
     let mut strings = StringTable::new();
-    let empty = store
-        .borrow_mut()
-        .allocate_overlay_set(TemplateOverlaySet::empty());
+    let empty = TemplateViewContext::default();
     let (parent, wrapper) = {
         let mut store = store.borrow_mut();
         let child = text_template(
@@ -170,11 +168,13 @@ fn fresh_child_suppresses_inherited_wrappers() {
         .expect("fresh child should be represented by an overlay context");
 
     let store = store.borrow();
-    let set = store
-        .overlay_set(parent_reference.overlay_set_id)
-        .expect("composed overlay set should exist");
     let overlay = store
-        .wrapper_context_overlay(set.wrapper_context.expect("wrapper context should exist"))
+        .wrapper_context_overlay(
+            parent_reference
+                .context
+                .wrapper_context
+                .expect("wrapper context should exist"),
+        )
         .expect("wrapper context payload should exist");
     assert_eq!(overlay.contexts.len(), 1);
     let (_, context) = &overlay.contexts[0];
@@ -186,9 +186,7 @@ fn fresh_child_suppresses_inherited_wrappers() {
 fn control_flow_child_uses_if_child_emits_wrapper_mode() {
     let store = Rc::new(RefCell::new(TemplateIrStore::new()));
     let mut strings = StringTable::new();
-    let empty = store
-        .borrow_mut()
-        .allocate_overlay_set(TemplateOverlaySet::empty());
+    let empty = TemplateViewContext::default();
     let (parent, wrapper) = {
         let mut store = store.borrow_mut();
         let child = control_flow_template(&mut store, &mut strings);
@@ -201,11 +199,13 @@ fn control_flow_child_uses_if_child_emits_wrapper_mode() {
         .expect("control-flow child should receive an inherited context");
 
     let store = store.borrow();
-    let set = store
-        .overlay_set(parent_reference.overlay_set_id)
-        .expect("composed overlay set should exist");
     let overlay = store
-        .wrapper_context_overlay(set.wrapper_context.expect("wrapper context should exist"))
+        .wrapper_context_overlay(
+            parent_reference
+                .context
+                .wrapper_context
+                .expect("wrapper context should exist"),
+        )
         .expect("wrapper context payload should exist");
     let (_, context) = &overlay.contexts[0];
     assert!(!context.skip_parent_child_wrappers);
@@ -219,9 +219,7 @@ fn control_flow_child_uses_if_child_emits_wrapper_mode() {
 #[test]
 fn missing_parent_template_is_an_internal_error() {
     let store = Rc::new(RefCell::new(TemplateIrStore::new()));
-    let empty = store
-        .borrow_mut()
-        .allocate_overlay_set(TemplateOverlaySet::empty());
+    let empty = TemplateViewContext::default();
     let mut reference = reference(TemplateIrId::new(99), empty);
 
     let error = attach_wrapper_context_overlay(&mut reference, &[], &store)
@@ -233,9 +231,7 @@ fn missing_parent_template_is_an_internal_error() {
 fn missing_child_template_is_an_internal_error() {
     let store = Rc::new(RefCell::new(TemplateIrStore::new()));
     let mut strings = StringTable::new();
-    let empty = store
-        .borrow_mut()
-        .allocate_overlay_set(TemplateOverlaySet::empty());
+    let empty = TemplateViewContext::default();
     let (parent, wrapper) = {
         let mut store = store.borrow_mut();
         let parent = parent_with_child(&mut store, TemplateIrId::new(99), empty);
@@ -249,12 +245,10 @@ fn missing_child_template_is_an_internal_error() {
 }
 
 #[test]
-fn template_without_child_contexts_keeps_its_overlay_set() {
+fn template_without_child_contexts_keeps_its_view_context() {
     let store = Rc::new(RefCell::new(TemplateIrStore::new()));
     let mut strings = StringTable::new();
-    let empty = store
-        .borrow_mut()
-        .allocate_overlay_set(TemplateOverlaySet::empty());
+    let empty = TemplateViewContext::default();
     let (parent, wrapper) = {
         let mut store = store.borrow_mut();
         let parent = text_template(&mut store, &mut strings, "plain", Style::default());
@@ -264,7 +258,7 @@ fn template_without_child_contexts_keeps_its_overlay_set() {
 
     attach_wrapper_context_overlay(&mut reference, &[wrapper], &store)
         .expect("templates without child occurrences should be valid");
-    assert_eq!(reference.overlay_set_id, empty);
+    assert_eq!(reference.context, empty);
 }
 
 #[test]
@@ -274,16 +268,19 @@ fn missing_current_overlay_is_rejected_before_allocation() {
     let (parent, wrapper) = {
         let mut store = store.borrow_mut();
         let child = text_template(&mut store, &mut strings, "child", Style::default());
-        let parent = parent_with_child(&mut store, child, TemplateOverlaySetId::empty());
+        let parent = parent_with_child(&mut store, child, TemplateViewContext::default());
         (parent, wrapper_template(&mut store, &mut strings))
     };
-    let missing = TemplateOverlaySetId::new(999);
+    let missing = TemplateViewContext {
+        expression_overlay: Some(TirExpressionOverlayId::new(999)),
+        ..TemplateViewContext::default()
+    };
     let mut reference = reference(parent, missing);
     let wrapper_count = store.borrow().wrapper_sets.len();
 
     let error = attach_wrapper_context_overlay(&mut reference, &[wrapper], &store)
         .expect_err("missing current overlay should be rejected");
-    assert!(error.msg.contains("current overlay set"));
+    assert!(error.msg.contains("expression overlay"));
     assert_eq!(store.borrow().wrapper_sets.len(), wrapper_count);
 }
 
@@ -291,14 +288,15 @@ fn missing_current_overlay_is_rejected_before_allocation() {
 fn missing_child_overlay_is_rejected_before_allocation() {
     let store = Rc::new(RefCell::new(TemplateIrStore::new()));
     let mut strings = StringTable::new();
-    let empty = store
-        .borrow_mut()
-        .allocate_overlay_set(TemplateOverlaySet::empty());
-    let missing = TemplateOverlaySetId::new(999);
+    let empty = TemplateViewContext::default();
+    let missing = TemplateViewContext {
+        expression_overlay: Some(TirExpressionOverlayId::new(999)),
+        ..TemplateViewContext::default()
+    };
     let (parent, wrapper) = {
         let mut store = store.borrow_mut();
         let child = text_template(&mut store, &mut strings, "child", Style::default());
-        // The child reference carries a missing overlay set so child-overlay
+        // The child reference carries a missing expression overlay so child
         // validation must fail before any wrapper set is allocated.
         let parent = parent_with_child(&mut store, child, missing);
         (parent, wrapper_template(&mut store, &mut strings))
@@ -310,9 +308,7 @@ fn missing_child_overlay_is_rejected_before_allocation() {
         .expect_err("missing child overlay should fail before allocation");
 
     assert!(
-        error
-            .msg
-            .contains("child reference uses missing overlay set"),
+        error.msg.contains("child reference") && error.msg.contains("expression overlay"),
         "error must report the missing child overlay: {error:?}"
     );
     assert_eq!(
@@ -320,5 +316,5 @@ fn missing_child_overlay_is_rejected_before_allocation() {
         wrapper_count,
         "failed child resolution must not allocate a wrapper set"
     );
-    assert_eq!(parent_reference.overlay_set_id, empty);
+    assert_eq!(parent_reference.context, empty);
 }

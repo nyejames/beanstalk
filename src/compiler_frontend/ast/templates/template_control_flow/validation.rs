@@ -12,7 +12,7 @@ use crate::compiler_frontend::ast::templates::template::Template;
 use crate::compiler_frontend::ast::templates::template::TemplateType;
 use crate::compiler_frontend::ast::templates::tir::{
     TemplateIrBranch, TemplateIrId, TemplateIrNodeId, TemplateIrNodeKind, TemplateIrStore,
-    TemplateLoopHeaderExpressionSites, TemplateOverlaySetId, TemplateTirPhase, TirView,
+    TemplateLoopHeaderExpressionSites, TemplateTirPhase, TemplateViewContext, TirView,
     effective_branch_selector_for_view, effective_loop_header_for_view,
     tir_view_expression_is_const_evaluable_value_with_bindings,
     tir_view_option_capture_presence_is_const_decidable, tir_view_subtree_is_const_evaluable_value,
@@ -43,13 +43,13 @@ use super::types::{TemplateBranchSelector, TemplateLoopHeader};
 ///      not permission to fall back to a raw store walk.
 pub(crate) fn validate_const_required_template_control_flow(
     template: &Template,
-    registry: &TemplateIrStore,
+    tir_store: &TemplateIrStore,
     string_table: &StringTable,
 ) -> Result<(), CompilerDiagnostic> {
     validate_const_required_template_control_flow_with_bindings(
         template,
         &[],
-        registry,
+        tir_store,
         string_table,
     )
 }
@@ -68,9 +68,9 @@ pub(crate) fn validate_const_required_template_control_flow(
 ///       error rather than a silent no-op.
 pub(crate) fn validate_runtime_template_control_flow_slot_artifacts(
     template: &Template,
-    registry: &TemplateIrStore,
+    tir_store: &TemplateIrStore,
 ) -> Result<(), TemplateError> {
-    let view = runtime_tir_view_for_template(template, registry)?;
+    let view = runtime_tir_view_for_template(template, tir_store)?;
     validate_runtime_tir_view_control_flow_slot_artifacts(&view)
 }
 
@@ -84,15 +84,15 @@ pub(crate) fn validate_runtime_template_control_flow_slot_artifacts(
 ///       error, not permission to fall back to a raw store walk.
 fn runtime_tir_view_for_template<'a>(
     template: &Template,
-    registry: &'a TemplateIrStore,
+    tir_store: &'a TemplateIrStore,
 ) -> Result<TirView<'a>, TemplateError> {
     let reference = &template.tir_reference;
 
     TirView::new(
-        registry,
+        tir_store,
         reference.root,
         reference.phase,
-        reference.overlay_set_id,
+        reference.context,
     )
     .map_err(TemplateError::from)
 }
@@ -100,10 +100,10 @@ fn runtime_tir_view_for_template<'a>(
 fn validate_const_required_template_control_flow_with_bindings(
     template: &Template,
     loop_binding_paths: &[InternedPath],
-    registry: &TemplateIrStore,
+    tir_store: &TemplateIrStore,
     string_table: &StringTable,
 ) -> Result<(), CompilerDiagnostic> {
-    let view = const_required_tir_view_for_template(template, registry)
+    let view = const_required_tir_view_for_template(template, tir_store)
         .map_err(TemplateError::into_diagnostic)?;
     let store = view.store();
 
@@ -113,7 +113,7 @@ fn validate_const_required_template_control_flow_with_bindings(
 /// Cycle-detection key for runtime and const-required child-view traversal.
 ///
 /// WHAT: uniquely identifies a child view by its module-local root, pipeline
-///       phase and overlay set so the same root visited under a different
+///       phase and view context so the same root visited under a different
 ///       overlay context is still checked.
 /// WHY: child templates may reference each other; the cycle key prevents infinite
 ///      recursion while preserving each reference's exact identity. Runtime and
@@ -123,7 +123,7 @@ fn validate_const_required_template_control_flow_with_bindings(
 struct TirViewCycleKey {
     root: TemplateIrId,
     phase: TemplateTirPhase,
-    overlay_set_id: TemplateOverlaySetId,
+    context: TemplateViewContext,
 }
 
 impl TirViewCycleKey {
@@ -131,7 +131,7 @@ impl TirViewCycleKey {
         Self {
             root: view.root_ref(),
             phase: view.phase(),
-            overlay_set_id: view.overlay_set_id(),
+            context: view.context(),
         }
     }
 }
@@ -224,7 +224,7 @@ fn validate_runtime_tir_view_node(
                 view,
                 reference.root,
                 reference.phase,
-                reference.overlay_set_id,
+                reference.context,
                 visiting,
             )?;
         }
@@ -235,7 +235,7 @@ fn validate_runtime_tir_view_node(
                 view,
                 template_id,
                 view.phase(),
-                view.overlay_set_id(),
+                view.context(),
                 visiting,
             )?;
         }
@@ -262,19 +262,19 @@ fn validate_runtime_qualified_child_view(
     parent_view: &TirView<'_>,
     child_root: TemplateIrId,
     child_phase: TemplateTirPhase,
-    child_overlay_set_id: TemplateOverlaySetId,
+    child_context: TemplateViewContext,
     visiting: &mut HashSet<TirViewCycleKey>,
 ) -> Result<(), TemplateError> {
     let cycle_key = TirViewCycleKey {
         root: child_root,
         phase: child_phase,
-        overlay_set_id: child_overlay_set_id,
+        context: child_context,
     };
     if !visiting.insert(cycle_key) {
         return Ok(());
     }
 
-    let child_view = parent_view.child_view(child_root, child_phase, child_overlay_set_id)?;
+    let child_view = parent_view.child_view(child_root, child_phase, child_context)?;
     let child_root_node = child_view.root_template()?.root;
     let result = validate_runtime_tir_view_node(&child_view, child_root_node, visiting);
 
@@ -412,7 +412,7 @@ fn tir_view_subtree_contains_runtime_artifact(
                 view,
                 reference.root,
                 reference.phase,
-                reference.overlay_set_id,
+                reference.context,
                 artifact,
                 visiting,
             )
@@ -424,7 +424,7 @@ fn tir_view_subtree_contains_runtime_artifact(
                 view,
                 template_id,
                 view.phase(),
-                view.overlay_set_id(),
+                view.context(),
                 artifact,
                 visiting,
             )
@@ -449,20 +449,20 @@ fn runtime_child_view_contains_artifact(
     parent_view: &TirView<'_>,
     child_root: TemplateIrId,
     child_phase: TemplateTirPhase,
-    child_overlay_set_id: TemplateOverlaySetId,
+    child_context: TemplateViewContext,
     artifact: RuntimeControlFlowArtifact,
     visiting: &mut HashSet<TirViewCycleKey>,
 ) -> Result<bool, TemplateError> {
     let cycle_key = TirViewCycleKey {
         root: child_root,
         phase: child_phase,
-        overlay_set_id: child_overlay_set_id,
+        context: child_context,
     };
     if !visiting.insert(cycle_key) {
         return Ok(false);
     }
 
-    let child_view = parent_view.child_view(child_root, child_phase, child_overlay_set_id)?;
+    let child_view = parent_view.child_view(child_root, child_phase, child_context)?;
 
     if matches!(artifact, RuntimeControlFlowArtifact::EscapedInsert) {
         let child_template = child_view.root_template()?;
@@ -497,7 +497,7 @@ fn runtime_child_view_contains_artifact(
 ///      preserves the same reference. Missing authority indicates compiler drift.
 fn const_required_tir_view_for_template<'a>(
     template: &Template,
-    registry: &'a TemplateIrStore,
+    tir_store: &'a TemplateIrStore,
 ) -> Result<TirView<'a>, TemplateError> {
     let reference = &template.tir_reference;
     if !reference.phase.is_at_least(TemplateTirPhase::Composed) {
@@ -509,11 +509,11 @@ fn const_required_tir_view_for_template<'a>(
     }
 
     TirView::with_minimum_phase(
-        registry,
+        tir_store,
         reference.root,
         reference.phase,
         TemplateTirPhase::Composed,
-        reference.overlay_set_id,
+        reference.context,
     )
     .map_err(TemplateError::from)
 }
@@ -621,7 +621,7 @@ fn validate_const_required_tir_view_node(
                 view,
                 reference.root,
                 reference.phase,
-                reference.overlay_set_id,
+                reference.context,
                 loop_binding_paths,
                 string_table,
                 visiting,
@@ -634,7 +634,7 @@ fn validate_const_required_tir_view_node(
                 view,
                 template_id,
                 view.phase(),
-                view.overlay_set_id(),
+                view.context(),
                 loop_binding_paths,
                 string_table,
                 visiting,
@@ -656,7 +656,7 @@ fn validate_const_required_qualified_child_view(
     parent_view: &TirView<'_>,
     child_root: TemplateIrId,
     child_phase: TemplateTirPhase,
-    child_overlay_set_id: TemplateOverlaySetId,
+    child_context: TemplateViewContext,
     loop_binding_paths: &[InternedPath],
     string_table: &StringTable,
     visiting: &mut HashSet<TirViewCycleKey>,
@@ -664,14 +664,14 @@ fn validate_const_required_qualified_child_view(
     let cycle_key = TirViewCycleKey {
         root: child_root,
         phase: child_phase,
-        overlay_set_id: child_overlay_set_id,
+        context: child_context,
     };
     if !visiting.insert(cycle_key) {
         return Ok(());
     }
 
     let child_view = parent_view
-        .child_view(child_root, child_phase, child_overlay_set_id)
+        .child_view(child_root, child_phase, child_context)
         .map_err(|error| TemplateError::from(error).into_diagnostic())?;
     let child_store = child_view.store();
     let child_root_node = child_view

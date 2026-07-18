@@ -7,7 +7,7 @@
 //! bodies, sink operands, and runtime slot-site render pieces.
 //! WHY: reactive metadata is the value-level contract between finalized AST
 //!      templates and the reactive backend. One `TemplateIrStore` owns every
-//!      TIR root and overlay set used here.
+//!      TIR root and overlay payload used here.
 
 use super::propagate_reactive_template_metadata_in_ast;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
@@ -34,11 +34,12 @@ use crate::compiler_frontend::ast::templates::template_control_flow::{
     TemplateBranchSelector, TemplateLoopHeader,
 };
 use crate::compiler_frontend::ast::templates::template_slots::RuntimeSlotSiteId;
+use crate::compiler_frontend::ast::templates::tir::TirExpressionOverlayId;
 use crate::compiler_frontend::ast::templates::tir::{
     ExpressionSiteId, TemplateIr, TemplateIrBranch, TemplateIrId, TemplateIrNode, TemplateIrNodeId,
     TemplateIrNodeKind, TemplateIrStore, TemplateIrSummary, TemplateLoopHeaderExpressionSites,
-    TemplateOverlaySet, TemplateOverlaySetId, TemplateTirPhase, TemplateTirReference,
-    TirExpressionOverlay, refs::TemplateTirChildReference,
+    TemplateTirPhase, TemplateTirReference, TemplateViewContext, TirExpressionOverlay,
+    refs::TemplateTirChildReference,
 };
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
@@ -70,7 +71,7 @@ fn composed_reference(template_id: TemplateIrId) -> TemplateTirReference {
     TemplateTirReference {
         root: template_id,
         phase: TemplateTirPhase::Composed,
-        overlay_set_id: TemplateOverlaySetId::empty(),
+        context: TemplateViewContext::default(),
     }
 }
 
@@ -197,8 +198,7 @@ fn root_overlay_expression_metadata<'a>(
     template: &Template,
     site_id: ExpressionSiteId,
 ) -> Option<&'a ReactiveTemplateMetadata> {
-    let overlay_set = store.overlay_set(template.tir_reference.overlay_set_id)?;
-    let expression_overlay_id = overlay_set.expression_overrides?;
+    let expression_overlay_id = template.tir_reference.context.expression_overlay?;
     let expression_overlay = store.expression_overlay(expression_overlay_id)?;
     let expression = expression_overlay.expression_for_site(site_id)?;
     expression.reactive_template.as_ref()
@@ -1000,17 +1000,17 @@ fn annotates_existing_effective_expression_override_instead_of_structural_payloa
             )),
         )],
     });
-    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet {
-        expression_overrides: Some(expression_overlay_id),
+    let context = TemplateViewContext {
+        expression_overlay: Some(expression_overlay_id),
         slot_resolution: None,
         wrapper_context: None,
-    });
+    };
 
     let template = template_with_reference(
         TemplateTirReference {
             root: template_id,
             phase: TemplateTirPhase::Composed,
-            overlay_set_id,
+            context,
         },
         location.clone(),
     );
@@ -1094,17 +1094,17 @@ fn annotates_existing_same_store_child_expression_override() {
             )),
         )],
     });
-    let child_overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet {
-        expression_overrides: Some(child_expression_overlay_id),
+    let child_context = TemplateViewContext {
+        expression_overlay: Some(child_expression_overlay_id),
         slot_resolution: None,
         wrapper_context: None,
-    });
-    let root_overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet::empty());
+    };
+    let root_context = TemplateViewContext::default();
 
     let child_reference = TemplateTirChildReference::new(
         child_template_id,
         TemplateTirPhase::Composed,
-        child_overlay_set_id,
+        child_context,
     );
     let child_occurrence_id = store.next_child_template_occurrence_id();
     let parent_root = store.push_node(TemplateIrNode::new(
@@ -1126,7 +1126,7 @@ fn annotates_existing_same_store_child_expression_override() {
         TemplateTirReference {
             root: parent_template_id,
             phase: TemplateTirPhase::Composed,
-            overlay_set_id: root_overlay_set_id,
+            context: root_context,
         },
         location.clone(),
     );
@@ -1309,7 +1309,7 @@ fn reactive_annotation_rejects_missing_same_store_root_template() {
         TemplateTirReference {
             root: TemplateIrId::new(99),
             phase: TemplateTirPhase::Composed,
-            overlay_set_id: TemplateOverlaySetId::empty(),
+            context: TemplateViewContext::default(),
         },
         location.clone(),
     );
@@ -1325,7 +1325,7 @@ fn reactive_annotation_rejects_missing_same_store_root_template() {
 }
 
 #[test]
-fn reactive_annotation_rejects_missing_same_store_root_overlay_set() {
+fn reactive_annotation_rejects_missing_same_store_root_view_context() {
     let mut store = TemplateIrStore::new();
     let location = test_location(2);
     let root = store.push_node(TemplateIrNode::new(
@@ -1345,7 +1345,10 @@ fn reactive_annotation_rejects_missing_same_store_root_overlay_set() {
         TemplateTirReference {
             root: template_id,
             phase: TemplateTirPhase::Composed,
-            overlay_set_id: TemplateOverlaySetId::new(99),
+            context: TemplateViewContext {
+                expression_overlay: Some(TirExpressionOverlayId::new(99)),
+                ..TemplateViewContext::default()
+            },
         },
         location.clone(),
     );
@@ -1357,7 +1360,7 @@ fn reactive_annotation_rejects_missing_same_store_root_overlay_set() {
     let error = propagate_reactive_template_metadata_in_ast(&mut ast, &mut store)
         .expect_err("missing same-store root overlay authority must propagate");
 
-    assert!(format!("{error:?}").contains("overlay set"));
+    assert!(format!("{error:?}").contains("expression overlay"));
 }
 
 #[test]
@@ -1377,23 +1380,23 @@ fn reactive_annotation_rejects_missing_same_store_expression_overlay() {
         TemplateIrSummary::empty(),
         location.clone(),
     ));
-    // Allocate a real expression overlay and reference it from the overlay set,
+    // Allocate a real expression overlay and reference it from the view context,
     // then drop the expression-overlay arena so the retained ID dangles. This
     // keeps the malformed state inside the test-owned store without adding a
     // production constructor.
     let expression_overlay_id = store.allocate_expression_overlay(TirExpressionOverlay::default());
-    let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet {
-        expression_overrides: Some(expression_overlay_id),
+    let context = TemplateViewContext {
+        expression_overlay: Some(expression_overlay_id),
         slot_resolution: None,
         wrapper_context: None,
-    });
+    };
     store.expression_overlays.clear();
 
     let template = template_with_reference(
         TemplateTirReference {
             root: template_id,
             phase: TemplateTirPhase::Composed,
-            overlay_set_id,
+            context,
         },
         location.clone(),
     );

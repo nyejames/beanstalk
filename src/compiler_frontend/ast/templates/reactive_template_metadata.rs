@@ -26,8 +26,8 @@ use crate::compiler_frontend::ast::templates::template_control_flow::{
 use crate::compiler_frontend::ast::templates::template_slots::RuntimeSlotSiteId;
 use crate::compiler_frontend::ast::templates::tir::{
     ExpressionSiteId, TemplateIrId, TemplateIrNodeId, TemplateIrNodeKind, TemplateIrStore,
-    TemplateLoopHeaderExpressionSites, TemplateOverlaySetId, TemplateSlotPlanId,
-    TemplateSlotSiteRenderPiece, TemplateSlotSiteRenderPlan, TemplateTirPhase, TirView,
+    TemplateLoopHeaderExpressionSites, TemplateSlotPlanId, TemplateSlotSiteRenderPiece,
+    TemplateSlotSiteRenderPlan, TemplateTirPhase, TemplateViewContext, TirView,
     finalized_tir_view_for_template,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
@@ -601,8 +601,8 @@ pub(crate) fn merge_reactive_template_metadata_with_store(
 
 #[derive(Default)]
 struct TirViewMetadataTraversal {
-    active_views: HashSet<(TemplateIrId, TemplateTirPhase, TemplateOverlaySetId)>,
-    completed_views: HashSet<(TemplateIrId, TemplateTirPhase, TemplateOverlaySetId)>,
+    active_views: HashSet<(TemplateIrId, TemplateTirPhase, TemplateViewContext)>,
+    completed_views: HashSet<(TemplateIrId, TemplateTirPhase, TemplateViewContext)>,
 }
 
 /// Merges reactive metadata by walking the finalized effective `TirView`.
@@ -619,7 +619,7 @@ fn merge_reactive_template_metadata_from_tir_view(
     resolver: &mut ReactiveMetadataResolver<'_>,
     traversal: &mut TirViewMetadataTraversal,
 ) -> Result<(), CompilerError> {
-    let identity = (view.root_ref(), view.phase(), view.overlay_set_id());
+    let identity = (view.root_ref(), view.phase(), view.context());
     if traversal.completed_views.contains(&identity) {
         return Ok(());
     }
@@ -644,7 +644,6 @@ fn merge_tir_view_root_contents(
     traversal: &mut TirViewMetadataTraversal,
 ) -> Result<(), CompilerError> {
     let (root_node_id, slot_plan_id) = {
-        view.overlay_set()?;
         view.expression_overlay()?;
         view.slot_resolution_overlay()?;
         view.wrapper_context_overlay()?;
@@ -749,8 +748,7 @@ fn merge_tir_view_node_metadata(
         TemplateIrNodeKind::ChildTemplate { reference, .. } => {
             let reference = *reference;
 
-            let child_view =
-                view.child_view(reference.root, reference.phase, reference.overlay_set_id)?;
+            let child_view = view.child_view(reference.root, reference.phase, reference.context)?;
             merge_reactive_template_metadata_from_tir_view(
                 &child_view,
                 metadata,
@@ -761,7 +759,7 @@ fn merge_tir_view_node_metadata(
 
         TemplateIrNodeKind::InsertContribution { template } => {
             let template_id = *template;
-            let insert_view = view.child_view(template_id, view.phase(), view.overlay_set_id())?;
+            let insert_view = view.child_view(template_id, view.phase(), view.context())?;
             merge_reactive_template_metadata_from_tir_view(
                 &insert_view,
                 metadata,
@@ -1037,8 +1035,8 @@ mod tests {
     };
     use crate::compiler_frontend::ast::templates::tir::{
         TemplateIr, TemplateIrId, TemplateIrNode, TemplateIrNodeId, TemplateIrNodeKind,
-        TemplateIrStore, TemplateIrSummary, TemplateOverlaySet, TemplateOverlaySetId,
-        TemplateTirPhase, TemplateTirReference, TirExpressionOverlay,
+        TemplateIrStore, TemplateIrSummary, TemplateTirPhase, TemplateTirReference,
+        TemplateViewContext, TirExpressionOverlay,
     };
     use crate::compiler_frontend::compiler_errors::CompilerError;
     use crate::compiler_frontend::datatypes::DataType;
@@ -1085,7 +1083,7 @@ mod tests {
         store: &mut TemplateIrStore,
         node: TemplateIrNodeId,
         phase: TemplateTirPhase,
-        overlay_set_id: TemplateOverlaySetId,
+        context: TemplateViewContext,
     ) -> Template {
         let root = store.push_template(TemplateIr::new(
             node,
@@ -1099,7 +1097,7 @@ mod tests {
             tir_reference: TemplateTirReference {
                 root,
                 phase,
-                overlay_set_id,
+                context,
             },
             location: location(),
         }
@@ -1138,7 +1136,7 @@ mod tests {
             &mut store,
             node,
             TemplateTirPhase::Composed,
-            TemplateOverlaySetId::empty(),
+            TemplateViewContext::default(),
         );
 
         let metadata = merge(&template, &store).expect("metadata walk should succeed");
@@ -1164,17 +1162,12 @@ mod tests {
         let overlay_id = store.allocate_expression_overlay(TirExpressionOverlay {
             overrides: vec![(site_id, Box::new(overlay_expression))],
         });
-        let overlay_set_id = store.allocate_overlay_set(TemplateOverlaySet {
-            expression_overrides: Some(overlay_id),
+        let context = TemplateViewContext {
+            expression_overlay: Some(overlay_id),
             slot_resolution: None,
             wrapper_context: None,
-        });
-        let template = template_from_node(
-            &mut store,
-            node,
-            TemplateTirPhase::Finalized,
-            overlay_set_id,
-        );
+        };
+        let template = template_from_node(&mut store, node, TemplateTirPhase::Finalized, context);
 
         let mut metadata = ReactiveTemplateMetadata::template_backed();
         merge_reactive_template_metadata_with_store(
@@ -1214,7 +1207,7 @@ mod tests {
             tir_reference: TemplateTirReference {
                 root: TemplateIrId::new(99),
                 phase: TemplateTirPhase::Composed,
-                overlay_set_id: TemplateOverlaySetId::empty(),
+                context: TemplateViewContext::default(),
             },
             location: location(),
         };

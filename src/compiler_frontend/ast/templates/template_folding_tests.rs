@@ -27,8 +27,8 @@ use crate::compiler_frontend::ast::templates::template_folding::{
     selected_option_capture_payload,
 };
 use crate::compiler_frontend::ast::templates::tir::{
-    TemplateIrBuilder, TemplateIrStore, TemplateIrSummary, TemplateOverlaySet,
-    TemplateOverlaySetId, TemplateTirPhase, TemplateTirReference, TirFoldCache,
+    TemplateIrBuilder, TemplateIrStore, TemplateIrSummary, TemplateTirPhase, TemplateTirReference,
+    TemplateViewContext, TirFoldCache,
 };
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
@@ -232,9 +232,7 @@ fn option_present_capture_substitution_returns_owned() {
 fn option_capture_classifies_same_store_payload_under_active_fold_borrow() {
     let mut string_table = StringTable::new();
     let store = Rc::new(RefCell::new(TemplateIrStore::new()));
-    let overlay_set_id = store
-        .borrow_mut()
-        .allocate_overlay_set(TemplateOverlaySet::empty());
+    let context = TemplateViewContext::default();
 
     let template_id = {
         let mut store_borrow = store.borrow_mut();
@@ -254,14 +252,14 @@ fn option_capture_classifies_same_store_payload_under_active_fold_borrow() {
     let payload_template = store_qualified_template_with_tir_reference(TemplateTirReference {
         root: template_id,
         phase: TemplateTirPhase::Composed,
-        overlay_set_id,
+        context,
     });
 
     assert_store_backed_option_capture(&mut string_table, Rc::clone(&store), payload_template);
 }
 
 #[test]
-fn option_capture_scalar_payload_does_not_require_tir_registry() {
+fn option_capture_scalar_payload_does_not_require_tir_store() {
     let mut string_table = StringTable::new();
     let option_path = InternedPath::from_single_str("maybe_payload", &mut string_table);
     let option_value = Expression::coerced(
@@ -437,7 +435,7 @@ fn coerced_template_with_no_bindings_returns_inner_template_borrow() {
         tir_reference: TemplateTirReference {
             root: template_id,
             phase: TemplateTirPhase::Parsed,
-            overlay_set_id: TemplateOverlaySetId::empty_for_test(),
+            context: TemplateViewContext::default(),
         },
         location: SourceLocation::default(),
     };

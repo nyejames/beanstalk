@@ -32,7 +32,7 @@ use crate::compiler_frontend::ast::templates::tir::{
     TemplateIrId, TemplateIrNodeId, TemplateSlotPlanId,
 };
 use crate::compiler_frontend::ast::templates::tir::{
-    TemplateOverlaySetId, TemplateTirPhase, TemplateTirReference,
+    TemplateTirPhase, TemplateTirReference, TemplateViewContext,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 
@@ -62,7 +62,7 @@ pub(crate) trait TirExpressionPayloadMutator {
 ///       expressions prefer the override expression provided by each effective
 ///       view, falling back to the stored structural expression. Insert
 ///       contributions recurse through a child `TirView` that inherits the
-///       parent phase and overlay set, so every reachable payload is read
+///       parent phase and view context, so every reachable payload is read
 ///       through the same effective-view authority.
 /// WHY: centralizes the view-based expression-payload traversal used by debug
 ///      TypeId validation and final type-boundary validation without
@@ -80,7 +80,7 @@ pub(crate) fn walk_tir_view_expression_payloads(
 /// WHAT: same structural coverage as [`walk_tir_view_expression_payloads`], but
 ///       accepts an external visited set so callers that also enter TIR views
 ///       through nested `ExpressionKind` paths can share one cycle-prevention
-///       set keyed by `(TemplateIrId, TemplateTirPhase, TemplateOverlaySetId)`.
+///       set keyed by `(TemplateIrId, TemplateTirPhase, TemplateViewContext)`.
 /// WHY: the nested-expression walker needs a single visited set across both
 ///      TIR-view child-template references and `ExpressionKind::Template`
 ///      re-entries; extracting this entry point avoids duplicating the
@@ -89,9 +89,9 @@ pub(crate) fn walk_tir_view_expression_payloads(
 fn walk_tir_view_expression_payloads_with_visited(
     view: &TirView<'_>,
     visitor: &mut impl FnMut(&Expression) -> Result<(), CompilerError>,
-    visited_templates: &mut HashSet<(TemplateIrId, TemplateTirPhase, TemplateOverlaySetId)>,
+    visited_templates: &mut HashSet<(TemplateIrId, TemplateTirPhase, TemplateViewContext)>,
 ) -> Result<(), CompilerError> {
-    let identity = (view.root_ref(), view.phase(), view.overlay_set_id());
+    let identity = (view.root_ref(), view.phase(), view.context());
     if !visited_templates.insert(identity) {
         return Ok(());
     }
@@ -107,7 +107,7 @@ fn walk_tir_view_expression_payloads_with_visited(
 
 /// Walks every expression payload reachable from `expression`, including nested
 /// `ExpressionKind` internals and template-valued TIR views, using one shared
-/// visited set keyed by `(TemplateIrId, TemplateTirPhase, TemplateOverlaySetId)`.
+/// visited set keyed by `(TemplateIrId, TemplateTirPhase, TemplateViewContext)`.
 ///
 /// WHAT: starts from an AST expression, recursively inspects `ExpressionKind`
 ///       internals (`Runtime` operands, `Coerced` values), and enters the
@@ -153,21 +153,16 @@ pub(crate) fn walk_expression_payloads_with_nested_tir_views(
 fn drain_pending_template_views(
     store: &TemplateIrStore,
     visitor: &mut impl FnMut(&Expression) -> Result<(), CompilerError>,
-    visited_templates: &mut HashSet<(TemplateIrId, TemplateTirPhase, TemplateOverlaySetId)>,
+    visited_templates: &mut HashSet<(TemplateIrId, TemplateTirPhase, TemplateViewContext)>,
     pending_template_views: &mut Vec<TemplateTirReference>,
 ) -> Result<(), CompilerError> {
     while let Some(reference) = pending_template_views.pop() {
-        let identity = (reference.root, reference.phase, reference.overlay_set_id);
+        let identity = (reference.root, reference.phase, reference.context);
         if visited_templates.contains(&identity) {
             continue;
         }
 
-        let view = TirView::new(
-            store,
-            reference.root,
-            reference.phase,
-            reference.overlay_set_id,
-        )?;
+        let view = TirView::new(store, reference.root, reference.phase, reference.context)?;
 
         let mut expression_visitor = |expression: &Expression| {
             inspect_nested_expression_kind(expression, visitor, pending_template_views)
@@ -200,7 +195,7 @@ fn inspect_nested_expression_kind(
 ) -> Result<(), CompilerError> {
     match &expression.kind {
         ExpressionKind::Template(template) => {
-            pending_template_views.push(template.tir_reference.clone());
+            pending_template_views.push(template.tir_reference);
             Ok(())
         }
 
@@ -225,7 +220,7 @@ fn walk_tir_view_expression_payload_node(
     view: &TirView<'_>,
     node_ref: TemplateIrNodeId,
     visitor: &mut impl FnMut(&Expression) -> Result<(), CompilerError>,
-    visited_templates: &mut HashSet<(TemplateIrId, TemplateTirPhase, TemplateOverlaySetId)>,
+    visited_templates: &mut HashSet<(TemplateIrId, TemplateTirPhase, TemplateViewContext)>,
 ) -> Result<(), CompilerError> {
     let node = view.effective_node(node_ref)?;
 
@@ -300,10 +295,10 @@ fn walk_tir_view_expression_payload_node(
 
         TemplateIrNodeKind::ChildTemplate { reference, .. } => {
             let reference = *reference;
-            let effective_identity = (reference.root, reference.phase, reference.overlay_set_id);
+            let effective_identity = (reference.root, reference.phase, reference.context);
             if visited_templates.insert(effective_identity) {
                 let child_view =
-                    view.child_view(reference.root, reference.phase, reference.overlay_set_id)?;
+                    view.child_view(reference.root, reference.phase, reference.context)?;
                 let child_root_node_id = {
                     let child_root_template = child_view.root_template()?;
                     child_root_template.root
@@ -325,14 +320,13 @@ fn walk_tir_view_expression_payload_node(
         TemplateIrNodeKind::InsertContribution { template } => {
             let template_id = *template;
             let insert_root = template_id;
-            let effective_identity = (insert_root, view.phase(), view.overlay_set_id());
+            let effective_identity = (insert_root, view.phase(), view.context());
             if visited_templates.insert(effective_identity) {
-                // Insert contributions inherit the parent phase and overlay set,
+                // Insert contributions inherit the parent phase and view context,
                 // so they recurse through a child `TirView` instead of a raw
-                // same-store walk. A missing insert template or overlay set is an
+                // same-store walk. A missing insert template or view context is an
                 // explicit internal error from `child_view` / `root_template`.
-                let insert_view =
-                    view.child_view(insert_root, view.phase(), view.overlay_set_id())?;
+                let insert_view = view.child_view(insert_root, view.phase(), view.context())?;
                 let insert_root_node_id = {
                     let insert_root_template = insert_view.root_template()?;
                     insert_root_template.root
@@ -490,10 +484,9 @@ pub(crate) fn collect_tir_expression_overlay_payloads(
 pub(crate) fn collect_effective_tir_expression_overlay_payloads(
     store: &TemplateIrStore,
     template_id: TemplateIrId,
-    root_overlay_set_id: TemplateOverlaySetId,
+    root_context: TemplateViewContext,
 ) -> Result<Vec<(ExpressionSiteId, Expression)>, CompilerError> {
-    let mut collector =
-        ExpressionOverlayPayloadCollector::new_effective(store, root_overlay_set_id)?;
+    let mut collector = ExpressionOverlayPayloadCollector::new_effective(store, root_context)?;
     collector.collect_template(template_id)?;
     Ok(collector.into_payloads())
 }
@@ -740,13 +733,13 @@ enum ExpressionOverlayCollectionChild {
     Node(TemplateIrNodeId),
     Template {
         template_id: TemplateIrId,
-        overlay_set_id: Option<TemplateOverlaySetId>,
+        context: Option<TemplateViewContext>,
     },
 }
 
 struct ExpressionOverlayPayloadCollector<'store> {
     store: &'store TemplateIrStore,
-    overlay_set_stack: Vec<TemplateOverlaySetId>,
+    context_stack: Vec<TemplateViewContext>,
     payloads: Vec<(ExpressionSiteId, Expression)>,
     active_nodes: HashSet<TemplateIrNodeId>,
     completed_nodes: HashSet<TemplateIrNodeId>,
@@ -760,7 +753,7 @@ impl<'store> ExpressionOverlayPayloadCollector<'store> {
     fn new(store: &'store TemplateIrStore) -> Self {
         Self {
             store,
-            overlay_set_stack: Vec::new(),
+            context_stack: Vec::new(),
             payloads: Vec::new(),
             active_nodes: HashSet::new(),
             completed_nodes: HashSet::new(),
@@ -773,17 +766,10 @@ impl<'store> ExpressionOverlayPayloadCollector<'store> {
 
     fn new_effective(
         store: &'store TemplateIrStore,
-        root_overlay_set_id: TemplateOverlaySetId,
+        root_context: TemplateViewContext,
     ) -> Result<Self, CompilerError> {
-        store.overlay_set(root_overlay_set_id).ok_or_else(|| {
-            CompilerError::compiler_error(format!(
-                "TIR expression overlay collection referenced missing root overlay set {}",
-                root_overlay_set_id
-            ))
-        })?;
-
         let mut collector = Self::new(store);
-        collector.overlay_set_stack.push(root_overlay_set_id);
+        collector.context_stack.push(root_context);
         Ok(collector)
     }
 
@@ -796,13 +782,13 @@ impl<'store> ExpressionOverlayPayloadCollector<'store> {
         site_id: ExpressionSiteId,
         structural_expression: &Expression,
     ) -> Result<Expression, CompilerError> {
-        if self.overlay_set_stack.is_empty() {
+        if self.context_stack.is_empty() {
             return Ok(structural_expression.clone());
         }
 
         Ok(self
             .store
-            .expression_for_overlay_stack(&self.overlay_set_stack, site_id)?
+            .expression_for_context_stack(&self.context_stack, site_id)?
             .cloned()
             .unwrap_or_else(|| structural_expression.clone()))
     }
@@ -900,14 +886,14 @@ impl<'store> ExpressionOverlayPayloadCollector<'store> {
                         }
                         ExpressionOverlayCollectionChild::Template {
                             template_id,
-                            overlay_set_id,
+                            context,
                         } => {
-                            if let Some(overlay_set_id) = overlay_set_id {
-                                self.overlay_set_stack.push(overlay_set_id);
+                            if let Some(context) = context {
+                                self.context_stack.push(context);
                             }
                             let result = self.collect_template(template_id);
-                            if overlay_set_id.is_some() {
-                                self.overlay_set_stack.pop();
+                            if context.is_some() {
+                                self.context_stack.pop();
                             }
                             result?;
                         }
@@ -997,14 +983,14 @@ impl<'store> ExpressionOverlayPayloadCollector<'store> {
             TemplateIrNodeKind::ChildTemplate { reference, .. } => {
                 Ok(vec![ExpressionOverlayCollectionChild::Template {
                     template_id: reference.root,
-                    overlay_set_id: Some(reference.overlay_set_id),
+                    context: Some(reference.context),
                 }])
             }
 
             TemplateIrNodeKind::InsertContribution { template } => {
                 Ok(vec![ExpressionOverlayCollectionChild::Template {
                     template_id: *template,
-                    overlay_set_id: None,
+                    context: None,
                 }])
             }
 
