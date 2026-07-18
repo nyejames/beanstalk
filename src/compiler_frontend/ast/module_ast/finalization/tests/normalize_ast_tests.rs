@@ -575,6 +575,108 @@ fn finalization_normalizes_dynamic_expression_payloads_into_expression_overlay()
 }
 
 #[test]
+fn finalization_merges_expression_overrides_without_duplicate_sites() {
+    let mut string_table = StringTable::new();
+    let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
+    let template_id = {
+        let mut store = template_ir_store.borrow_mut();
+        let mut builder = TemplateIrBuilder::new(&mut store);
+        let dynamic_node = builder.push_dynamic_expression_node(
+            Expression::int(1, SourceLocation::default(), ValueMode::ImmutableOwned),
+            TemplateSegmentOrigin::Body,
+            None,
+            SourceLocation::default(),
+        );
+        builder.finish_template(
+            dynamic_node,
+            Style::default(),
+            TemplateType::StringFunction,
+            TemplateIrSummary::default(),
+            SourceLocation::default(),
+        )
+    };
+    let site_id = {
+        let store = template_ir_store.borrow();
+        match &store
+            .get_node(store.get_template(template_id).expect("template").root)
+            .expect("dynamic node")
+            .kind
+        {
+            TemplateIrNodeKind::DynamicExpression { site_id, .. } => *site_id,
+            other => panic!("expected dynamic expression node, got {other:?}"),
+        }
+    };
+    let existing_overlay_id =
+        template_ir_store
+            .borrow_mut()
+            .allocate_expression_overlay(TirExpressionOverlay {
+                overrides: vec![
+                    (
+                        site_id,
+                        Box::new(Expression::int(
+                            2,
+                            SourceLocation::default(),
+                            ValueMode::ImmutableOwned,
+                        )),
+                    ),
+                    (
+                        site_id,
+                        Box::new(Expression::int(
+                            3,
+                            SourceLocation::default(),
+                            ValueMode::ImmutableOwned,
+                        )),
+                    ),
+                ],
+            });
+    let initial_context = TemplateViewContext {
+        expression_overlay: Some(existing_overlay_id),
+        slot_resolution: None,
+        wrapper_context: None,
+    };
+    let mut template = template_with_reference(
+        TemplateTirReference {
+            root: template_id,
+            phase: TemplateTirPhase::Composed,
+            context: initial_context,
+        },
+        TemplateType::StringFunction,
+        SourceLocation::default(),
+    );
+
+    let project_path_resolver = test_project_path_resolver();
+    let path_format_config = PathStringFormatConfig::default();
+    let source_file_scope = InternedPath::new();
+    let mut context = TemplateNormalizationContext {
+        source_file_scope: &source_file_scope,
+        path_format_config: &path_format_config,
+        project_path_resolver: &project_path_resolver,
+        template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
+        string_table: &mut string_table,
+        template_ir_store: Rc::clone(&template_ir_store),
+    };
+
+    normalize_template_for_hir(&mut template, &mut context)
+        .expect("normalization should canonicalize the root expression overlay");
+
+    let store = template_ir_store.borrow();
+    let overlay_id = template
+        .tir_reference
+        .context
+        .expression_overlay
+        .expect("normalization should retain an expression overlay");
+    let overlay = store
+        .expression_overlay(overlay_id)
+        .expect("normalized expression overlay should exist");
+    assert_eq!(overlay.overrides.len(), 1);
+    assert_eq!(overlay.overrides[0].0, site_id);
+    assert!(matches!(
+        overlay.overrides[0].1.kind,
+        ExpressionKind::Int(2)
+    ));
+}
+
+#[test]
 fn finalization_does_not_mark_parsed_expression_overlay_reference_finalized() {
     let mut string_table = StringTable::new();
     let normalized_text = string_table.intern("normalized parsed dynamic payload");

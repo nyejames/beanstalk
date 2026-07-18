@@ -182,11 +182,13 @@ fn mutates_nested_same_store_child_expression() {
 fn structural_collection_includes_dynamic_and_branch_payloads() {
     let mut store = TemplateIrStore::new();
     let body = dynamic_node(&mut store, 2);
+    let selector_site_id = store.next_expression_site_id();
     let branch = TemplateIrBranch::new(
         TemplateBranchSelector::Bool(expression(1)),
         body,
         empty_location(),
-    );
+    )
+    .with_selector_site_id(selector_site_id);
     let branch_root = store.push_node(TemplateIrNode::new(
         TemplateIrNodeKind::BranchChain {
             branches: vec![branch],
@@ -239,6 +241,127 @@ fn effective_collection_reads_same_store_child_overlay() {
     assert!(payloads.iter().any(|(site_id, value)| {
         *site_id == child_site_id && matches!(value.kind, ExpressionKind::Int(9))
     }));
+}
+
+#[test]
+fn effective_collection_preserves_outer_context_precedence_for_reused_site() {
+    let mut store = TemplateIrStore::new();
+    let shared_root = dynamic_node(&mut store, 1);
+    let shared_site_id = dynamic_site_id(&store, shared_root);
+    let shared_template = push_template(&mut store, shared_root, TemplateType::StringFunction);
+
+    let outer_overlay = store.allocate_expression_overlay(TirExpressionOverlay {
+        overrides: vec![(shared_site_id, Box::new(expression(9)))],
+    });
+    let descendant_overlay = store.allocate_expression_overlay(TirExpressionOverlay {
+        overrides: vec![(shared_site_id, Box::new(expression(42)))],
+    });
+    let descendant_context = TemplateViewContext {
+        expression_overlay: Some(descendant_overlay),
+        slot_resolution: None,
+        wrapper_context: None,
+    };
+
+    let child_occurrence = store.next_child_template_occurrence_id();
+    let child_reference = TemplateTirChildReference::new(
+        shared_template,
+        TemplateTirPhase::Composed,
+        descendant_context,
+    );
+    let child_node = store.push_node(TemplateIrNode::new(
+        TemplateIrNodeKind::ChildTemplate {
+            reference: child_reference,
+            occurrence_id: child_occurrence,
+        },
+        empty_location(),
+    ));
+    let parent_root = store.push_node(TemplateIrNode::new(
+        TemplateIrNodeKind::Sequence {
+            children: vec![shared_root, child_node],
+        },
+        empty_location(),
+    ));
+    let parent_template = push_template(&mut store, parent_root, TemplateType::StringFunction);
+    let outer_context = TemplateViewContext {
+        expression_overlay: Some(outer_overlay),
+        slot_resolution: None,
+        wrapper_context: None,
+    };
+
+    let payloads =
+        collect_effective_tir_expression_overlay_payloads(&store, parent_template, outer_context)
+            .expect("effective collection should succeed");
+
+    assert_eq!(payloads.len(), 1);
+    assert!(matches!(payloads[0].1.kind, ExpressionKind::Int(9)));
+}
+
+#[test]
+fn effective_collection_revisits_shared_root_for_a_new_context_once() {
+    let mut store = TemplateIrStore::new();
+    let shared_root = dynamic_node(&mut store, 1);
+    let shared_site_id = dynamic_site_id(&store, shared_root);
+    let shared_template = push_template(&mut store, shared_root, TemplateType::StringFunction);
+    let override_overlay = store.allocate_expression_overlay(TirExpressionOverlay {
+        overrides: vec![(shared_site_id, Box::new(expression(2)))],
+    });
+    let override_context = TemplateViewContext {
+        expression_overlay: Some(override_overlay),
+        slot_resolution: None,
+        wrapper_context: None,
+    };
+
+    let first_occurrence = store.next_child_template_occurrence_id();
+    let first_child = store.push_node(TemplateIrNode::new(
+        TemplateIrNodeKind::ChildTemplate {
+            reference: TemplateTirChildReference::new(
+                shared_template,
+                TemplateTirPhase::Composed,
+                TemplateViewContext::default(),
+            ),
+            occurrence_id: first_occurrence,
+        },
+        empty_location(),
+    ));
+    let second_occurrence = store.next_child_template_occurrence_id();
+    let second_child = store.push_node(TemplateIrNode::new(
+        TemplateIrNodeKind::ChildTemplate {
+            reference: TemplateTirChildReference::new(
+                shared_template,
+                TemplateTirPhase::Composed,
+                override_context,
+            ),
+            occurrence_id: second_occurrence,
+        },
+        empty_location(),
+    ));
+    let parent_root = store.push_node(TemplateIrNode::new(
+        TemplateIrNodeKind::Sequence {
+            children: vec![first_child, second_child],
+        },
+        empty_location(),
+    ));
+    let parent_template = push_template(&mut store, parent_root, TemplateType::StringFunction);
+
+    let payloads = collect_effective_tir_expression_overlay_payloads(
+        &store,
+        parent_template,
+        TemplateViewContext::default(),
+    )
+    .expect("effective collection should succeed");
+
+    assert_eq!(payloads.len(), 1);
+    assert!(matches!(payloads[0].1.kind, ExpressionKind::Int(2)));
+}
+
+#[test]
+#[should_panic(expected = "was not allocated by this module's expression-site counter")]
+fn expression_overlay_rejects_unallocated_site() {
+    let mut store = TemplateIrStore::new();
+
+    store.allocate_expression_overlay(TirExpressionOverlay {
+        overrides: vec![(ExpressionSiteId::new(0), Box::new(expression(1)))],
+    });
 }
 
 #[test]

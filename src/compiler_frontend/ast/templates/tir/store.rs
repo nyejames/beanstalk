@@ -133,8 +133,8 @@ pub(crate) struct TemplateIrStore {
     /// WHAT: advances by one each time a `DynamicExpression` node is emitted
     /// into this store.
     /// WHY: gives expression-overlay phases a stable per-site key for each
-    /// dynamic-expression splice. Branch-selector and loop-header expression
-    /// sites will receive their own counters in a later Phase 3 slice.
+    /// dynamic-expression splice. Branch selectors and loop headers draw from
+    /// the same counter so every expression-bearing position is module-unique.
     next_expression_site: u32,
 
     /// Top-level templates.
@@ -634,6 +634,13 @@ impl TemplateIrStore {
         &mut self,
         overlay: TirExpressionOverlay,
     ) -> TirExpressionOverlayId {
+        for (site_id, _) in &overlay.overrides {
+            assert!(
+                site_id.index() < self.next_expression_site as usize,
+                "TIR expression overlay entry {site_id} was not allocated by this module's expression-site counter"
+            );
+        }
+
         let id = TirExpressionOverlayId::new(self.expression_overlays.len());
         self.expression_overlays.push(overlay);
         id

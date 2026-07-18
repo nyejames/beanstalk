@@ -477,7 +477,9 @@ pub(crate) fn collect_tir_expression_overlay_payloads(
 ///       [`collect_tir_expression_overlay_payloads`] while resolving each site
 ///       through a root-first overlay stack. Same-store child-template
 ///       references temporarily add their own overlay identity, and runtime
-///       slot-plan roots retain the active owning-template stack.
+///       slot-plan roots retain the active owning-template stack. Completion is
+///       keyed by the active context stack, and each site is retained once with
+///       the strongest effective override discovered for it.
 /// WHY: finalization writes one new root overlay, but must normalize the
 ///      effective result of every earlier root and child overlay rather than
 ///      replacing child-specific expressions with stale structural payloads.
@@ -737,16 +739,18 @@ enum ExpressionOverlayCollectionChild {
     },
 }
 
+type ExpressionOverlayTraversalKey = Vec<TemplateViewContext>;
+
 struct ExpressionOverlayPayloadCollector<'store> {
     store: &'store TemplateIrStore,
     context_stack: Vec<TemplateViewContext>,
-    payloads: Vec<(ExpressionSiteId, Expression)>,
+    payloads: Vec<(ExpressionSiteId, Expression, Option<usize>)>,
     active_nodes: HashSet<TemplateIrNodeId>,
-    completed_nodes: HashSet<TemplateIrNodeId>,
+    completed_nodes: HashSet<(TemplateIrNodeId, ExpressionOverlayTraversalKey)>,
     active_templates: HashSet<TemplateIrId>,
-    completed_templates: HashSet<TemplateIrId>,
+    completed_templates: HashSet<(TemplateIrId, ExpressionOverlayTraversalKey)>,
     active_slot_plans: HashSet<TemplateSlotPlanId>,
-    completed_slot_plans: HashSet<TemplateSlotPlanId>,
+    completed_slot_plans: HashSet<(TemplateSlotPlanId, ExpressionOverlayTraversalKey)>,
 }
 
 impl<'store> ExpressionOverlayPayloadCollector<'store> {
@@ -775,26 +779,64 @@ impl<'store> ExpressionOverlayPayloadCollector<'store> {
 
     fn into_payloads(self) -> Vec<(ExpressionSiteId, Expression)> {
         self.payloads
+            .into_iter()
+            .map(|(site_id, expression, _)| (site_id, expression))
+            .collect()
     }
 
     fn effective_expression(
         &self,
         site_id: ExpressionSiteId,
         structural_expression: &Expression,
-    ) -> Result<Expression, CompilerError> {
-        if self.context_stack.is_empty() {
-            return Ok(structural_expression.clone());
+    ) -> Result<(Expression, Option<usize>), CompilerError> {
+        for (context_index, context) in self.context_stack.iter().copied().enumerate() {
+            let Some(overlay_id) = context.expression_overlay else {
+                continue;
+            };
+
+            let overlay = self.store.expression_overlay(overlay_id).ok_or_else(|| {
+                CompilerError::compiler_error(format!(
+                    "TIR expression overlay collection referenced missing expression overlay {overlay_id}"
+                ))
+            })?;
+
+            if let Some(expression) = overlay.expression_for_site(site_id) {
+                return Ok((expression.clone(), Some(context_index)));
+            }
         }
 
-        Ok(self
-            .store
-            .expression_for_context_stack(&self.context_stack, site_id)?
-            .cloned()
-            .unwrap_or_else(|| structural_expression.clone()))
+        Ok((structural_expression.clone(), None))
+    }
+
+    fn record_payload(
+        &mut self,
+        site_id: ExpressionSiteId,
+        expression: Expression,
+        precedence: Option<usize>,
+    ) {
+        if let Some((_, existing_expression, existing_precedence)) = self
+            .payloads
+            .iter_mut()
+            .find(|(existing_site_id, _, _)| *existing_site_id == site_id)
+        {
+            let should_replace = match (precedence, *existing_precedence) {
+                (Some(candidate), Some(existing)) => candidate < existing,
+                (Some(_), None) => true,
+                (None, _) => false,
+            };
+
+            if should_replace {
+                *existing_expression = expression;
+                *existing_precedence = precedence;
+            }
+        } else {
+            self.payloads.push((site_id, expression, precedence));
+        }
     }
 
     fn collect_template(&mut self, template_id: TemplateIrId) -> Result<(), CompilerError> {
-        if self.completed_templates.contains(&template_id) {
+        let traversal_key = (template_id, self.context_stack.clone());
+        if self.completed_templates.contains(&traversal_key) {
             return Ok(());
         }
 
@@ -821,7 +863,7 @@ impl<'store> ExpressionOverlayPayloadCollector<'store> {
 
         self.active_templates.remove(&template_id);
         if result.is_ok() {
-            self.completed_templates.insert(template_id);
+            self.completed_templates.insert(traversal_key);
         }
 
         result
@@ -832,7 +874,8 @@ impl<'store> ExpressionOverlayPayloadCollector<'store> {
         wrapper_root: TemplateIrNodeId,
         slot_plan_id: TemplateSlotPlanId,
     ) -> Result<(), CompilerError> {
-        if self.completed_slot_plans.contains(&slot_plan_id) {
+        let traversal_key = (slot_plan_id, self.context_stack.clone());
+        if self.completed_slot_plans.contains(&traversal_key) {
             return self.collect_node(wrapper_root);
         }
 
@@ -859,14 +902,15 @@ impl<'store> ExpressionOverlayPayloadCollector<'store> {
 
         self.active_slot_plans.remove(&slot_plan_id);
         if result.is_ok() {
-            self.completed_slot_plans.insert(slot_plan_id);
+            self.completed_slot_plans.insert(traversal_key);
         }
 
         result
     }
 
     fn collect_node(&mut self, node_id: TemplateIrNodeId) -> Result<(), CompilerError> {
-        if self.completed_nodes.contains(&node_id) {
+        let traversal_key = (node_id, self.context_stack.clone());
+        if self.completed_nodes.contains(&traversal_key) {
             return Ok(());
         }
 
@@ -907,7 +951,7 @@ impl<'store> ExpressionOverlayPayloadCollector<'store> {
 
         self.active_nodes.remove(&node_id);
         if result.is_ok() {
-            self.completed_nodes.insert(node_id);
+            self.completed_nodes.insert(traversal_key);
         }
 
         result
@@ -935,8 +979,8 @@ impl<'store> ExpressionOverlayPayloadCollector<'store> {
                 site_id,
                 ..
             } => {
-                self.payloads
-                    .push((*site_id, self.effective_expression(*site_id, expression)?));
+                let (expression, precedence) = self.effective_expression(*site_id, expression)?;
+                self.record_payload(*site_id, expression, precedence);
                 Ok(Vec::new())
             }
 
@@ -944,13 +988,11 @@ impl<'store> ExpressionOverlayPayloadCollector<'store> {
                 let mut children =
                     Vec::with_capacity(branches.len() + usize::from(fallback.is_some()));
                 for branch in branches {
-                    self.payloads.push((
+                    let (expression, precedence) = self.effective_expression(
                         branch.selector_site_id,
-                        self.effective_expression(
-                            branch.selector_site_id,
-                            branch.condition_expression(),
-                        )?,
-                    ));
+                        branch.condition_expression(),
+                    )?;
+                    self.record_payload(branch.selector_site_id, expression, precedence);
                     children.push(ExpressionOverlayCollectionChild::Node(branch.body));
                 }
 
@@ -1012,25 +1054,25 @@ impl<'store> ExpressionOverlayPayloadCollector<'store> {
                 TemplateLoopHeader::Conditional { condition },
                 TemplateLoopHeaderExpressionSites::Conditional { condition: site_id },
             ) => {
-                self.payloads
-                    .push((*site_id, self.effective_expression(*site_id, condition)?));
+                let (expression, precedence) = self.effective_expression(*site_id, condition)?;
+                self.record_payload(*site_id, expression, precedence);
             }
 
             (
                 TemplateLoopHeader::Range { range, .. },
                 TemplateLoopHeaderExpressionSites::Range { start, end, step },
             ) => {
-                self.payloads
-                    .push((*start, self.effective_expression(*start, &range.start)?));
-                self.payloads
-                    .push((*end, self.effective_expression(*end, &range.end)?));
+                let (expression, precedence) = self.effective_expression(*start, &range.start)?;
+                self.record_payload(*start, expression, precedence);
+
+                let (expression, precedence) = self.effective_expression(*end, &range.end)?;
+                self.record_payload(*end, expression, precedence);
 
                 match (step, &range.step) {
                     (Some(step_site_id), Some(step_expression)) => {
-                        self.payloads.push((
-                            *step_site_id,
-                            self.effective_expression(*step_site_id, step_expression)?,
-                        ));
+                        let (expression, precedence) =
+                            self.effective_expression(*step_site_id, step_expression)?;
+                        self.record_payload(*step_site_id, expression, precedence);
                     }
                     (None, None) => {}
                     _ => {
@@ -1045,8 +1087,8 @@ impl<'store> ExpressionOverlayPayloadCollector<'store> {
                 TemplateLoopHeader::Collection { iterable, .. },
                 TemplateLoopHeaderExpressionSites::Collection { iterable: site_id },
             ) => {
-                self.payloads
-                    .push((*site_id, self.effective_expression(*site_id, iterable)?));
+                let (expression, precedence) = self.effective_expression(*site_id, iterable)?;
+                self.record_payload(*site_id, expression, precedence);
             }
 
             _ => {

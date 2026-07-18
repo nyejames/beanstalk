@@ -280,7 +280,7 @@ fn effective_expression_for_site_returns_none_for_uncovered_site() {
     let site_id = { dynamic_expression_site_id(&store, root_node) };
 
     // The overlay covers a different site than the one we query.
-    let other_site = ExpressionSiteId::new(100);
+    let other_site = store.next_expression_site_id();
     assert_ne!(other_site, site_id);
     let expression_overlay_id = store.allocate_expression_overlay(TirExpressionOverlay {
         overrides: vec![(other_site, Box::new(bool_expression()))],
@@ -348,8 +348,9 @@ fn effective_expression_for_node_returns_none_for_non_expression_node() {
         (TemplateIrId::new(0), template.root)
     };
 
+    let unused_site = store.next_expression_site_id();
     let expression_overlay_id = store.allocate_expression_overlay(TirExpressionOverlay {
-        overrides: vec![(ExpressionSiteId::new(0), Box::new(bool_expression()))],
+        overrides: vec![(unused_site, Box::new(bool_expression()))],
     });
     let context = TemplateViewContext {
         expression_overlay: Some(expression_overlay_id),

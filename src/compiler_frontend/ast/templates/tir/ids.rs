@@ -242,6 +242,11 @@ impl ExpressionSiteId {
                 .expect("expression site index exceeds u32::MAX; this is a compiler bug"),
         )
     }
+
+    /// Returns the raw module-local counter value for store validation.
+    pub(crate) fn index(self) -> usize {
+        self.0 as usize
+    }
 }
 
 impl fmt::Display for ExpressionSiteId {

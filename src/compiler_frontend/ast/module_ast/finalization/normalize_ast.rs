@@ -914,7 +914,7 @@ fn normalize_expression_overlays_for_template_reference(
     // can receive normalized overlays without becoming finalized views.
     let should_mark_finalized = reference.phase.is_at_least(TemplateTirPhase::Composed);
     let expression_payloads = collect_expression_overlay_payloads(&reference, context)?;
-    if expression_payloads.is_empty() {
+    if expression_payloads.is_empty() && reference.context.expression_overlay.is_none() {
         if should_mark_finalized {
             template.tir_reference.phase = TemplateTirPhase::Finalized;
         }
@@ -937,6 +937,7 @@ fn normalize_expression_overlays_for_template_reference(
         .map(|(site_id, _)| *site_id)
         .collect::<HashSet<_>>();
 
+    let mut retained_site_ids = HashSet::new();
     let mut overrides = if let Some(existing_overlay_id) = reference.context.expression_overlay {
         let existing_overlay = store
             .expression_overlay(existing_overlay_id)
@@ -949,13 +950,19 @@ fn normalize_expression_overlays_for_template_reference(
         existing_overlay
             .overrides
             .iter()
-            .filter(|(site_id, _)| !normalized_site_ids.contains(site_id))
+            .filter(|(site_id, _)| {
+                !normalized_site_ids.contains(site_id) && retained_site_ids.insert(*site_id)
+            })
             .map(|(site_id, expression)| (*site_id, expression.clone()))
             .collect()
     } else {
         Vec::new()
     };
-    overrides.extend(normalized_overrides);
+    for (site_id, expression) in normalized_overrides {
+        if retained_site_ids.insert(site_id) {
+            overrides.push((site_id, expression));
+        }
+    }
 
     let expression_overlay_id =
         store.allocate_expression_overlay(TirExpressionOverlay { overrides });

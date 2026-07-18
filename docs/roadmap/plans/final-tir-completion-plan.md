@@ -29,28 +29,28 @@ TIR remains AST-local. No TIR store, ID, view, overlay or preparation type may c
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/final-tir-completion-plan.md
 STATUS: active
-CURRENT_SLICE: R2A accepted; checkpoint ready to commit before R2B
-LAST_ACCEPTED_COMMIT: 0d42188ca (R1 ownership and reference collapse)
-WORKTREE: main at 5fa9bb32f with accepted uncommitted R2A source and plan changes; the concurrent user documentation work is committed separately at 5fa9bb32f
+CURRENT_SLICE: R2B accepted; checkpoint ready to commit before R2C
+LAST_ACCEPTED_COMMIT: ee30d9aef (R2A value-carried view context)
+WORKTREE: main at ee30d9aef with accepted uncommitted R2B source, tests and plan changes; concurrent user documentation is the separate preceding commit 5fa9bb32f
 REQUIRED_RELOADS: startup files, this plan, and current TIR source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: compiler-design-overview.md one-store TIR contract and this plan's R2 exact-view contract
-- code: TemplateViewContext is carried by value; optional overlay IDs use NonZeroU32 index-plus-one encoding; overlay-set storage and APIs are deleted; R2B descendant expression completeness and R2C transition centralization remain
+- code: finalization now writes one canonical complete root expression overlay; ExpressionOverlayPayloadCollector has context-exact completion and outer-precedence site deduplication; TemplateIrStore rejects unallocated expression sites; R2C still owns all transition centralization and expression-stack deletion
 ACCEPTANCE_CRITERIA:
-- commit the accepted R2A source and this plan only
-- preserve the value-carried context and compact reference layout invariants
-- begin R2B with the existing normalization collector; do not begin R2C or preparation
+- commit only the accepted R2B source, focused tests and this plan
+- preserve complete-overlay, outer-precedence, structural-fallback and module-global site invariants
+- begin R2C by centralizing exact TirView identity and transitions; do not begin preparation
 VALIDATION_STATE:
-- cargo fmt --check and git diff --check: passed
+- cargo fmt --check and git diff --check: passed for R2B
 - deleted overlay-set, stale ownership, compatibility-parameter, and HIR/backend TIR-boundary greps: passed
-- TIR line inventory: 20,048 production and 16,727 test lines (R1: 20,368 and 17,224; 069a29acb: 24,274 and 27,231)
-- just validate: passed; cross-target Clippy, 3413 unit tests, 1784 integration cases, docs check, and 28 benchmark sanity cases; -7ms average, 22 faster and 0 slower
-DOCS_IMPACT: none beyond this parent-managed plan checkpoint; R2A is an internal refactor
+- TIR line inventory: 20,102 production and 16,851 test lines (R2A: 20,048 and 16,727; 069a29acb: 24,274 and 27,231); R2C deletion remains before phase acceptance
+- R2B just validate: passed; cross-target Clippy, 3417 unit tests, 1784 integration cases, docs check, and 28 benchmark sanity cases; -7ms average, 23 faster and 0 slower
+DOCS_IMPACT: none beyond this parent-managed plan checkpoint; R2B is an internal refactor
 BLOCKERS_OR_OPEN_DECISIONS: none
-DELEGATION_DECISION: codex-cli for R2B - user requires Codex CLI for subsequent worker slices
+DELEGATION_DECISION: codex-cli for R2C - the prior Ollama slice is complete and the user requires Codex CLI for subsequent worker slices
 NEXT_WORKER_ORDER: codex-cli (user-required provider)
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit R2A with explicit staging, reload the plan, then launch the smallest R2B Codex CLI slice
+NEXT_RESUME_ACTION: commit R2B with explicit staging, reload the plan, then launch the smallest R2C Codex CLI slice
 ```
 
 Use `069a29acb` as the implementation and regression base. Do not continue extending `FoldAuthorityWalk`, foreign-store traversal, external expression-overlay stacks or prepared foreign-wrapper proofs.
@@ -602,6 +602,12 @@ inventory is 20,048 production and 16,727 test lines. `just validate` passed wit
 - Preserve outer-context precedence for reused sites.
 - Assert that all expression overlay entries refer to valid module-global `ExpressionSiteId`s.
 - Keep structural fallback for sites with no override.
+
+R2B accepted on the pre-commit `ee30d9aef` worktree. The existing finalization collector now
+revisits shared structure by active context, preserves the outer effective override, emits one
+payload per module-global expression site and writes one canonical root overlay. Store allocation
+rejects unallocated expression sites. `just validate` passed with 3,417 unit tests, 1,784
+integration cases, docs checking and all 28 benchmark sanity cases.
 
 #### R2C - Centralize transitions
 
