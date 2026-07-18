@@ -12,6 +12,7 @@ Use the [Progress Matrix](docs/src/docs/progress/#page.bst) as a reference for w
 ## Active implementation work
 
 - [Final TIR completion](docs/roadmap/plans/final-tir-completion-plan.md)
+- [Test Suite Hardening](docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md)
 - [Compiler diagnostics improvements](docs/roadmap/plans/compiler-diagnostics-improvement-plan.md)
 
 ## Mandatory post-TIR plan review checkpoint
