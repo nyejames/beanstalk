@@ -39,7 +39,7 @@ ACTIVE_PLAN: `docs/roadmap/plans/compiler-diagnostics-improvement-plan.md`
 STATUS: active
 CURRENT_SLICE: Phase 4.1b+d complete; 4.1c (multiple-success return-shape reason) remains
 LAST_ACCEPTED_COMMIT: `d7fb3654f` (Phase 4.1d)
-WORKTREE: `main`, clean; unrelated docs commits `6c513f025`/`d96590791`/`c31ad8b55` are separate branch work
+WORKTREE: not refreshed during this documentation-only tidy; record the current branch, HEAD and `git status --short` before Phase 4.1c
 REQUIRED_RELOADS: startup files, this plan and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: access-and-aliasing and assignment contracts distinguish immutable root bindings from assignment-target syntax; no general documentation edits are allowed

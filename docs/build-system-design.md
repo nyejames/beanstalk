@@ -778,6 +778,10 @@ Persistent or precompiled dependency artefacts may later replace source compilat
 
 Package declaration syntax, registries, remote fetching, version solving and lockfiles remain deferred.
 
+Imported build-value namespaces are scoped to one project or package compilation boundary. A consuming command's unqualified CLI or programmatic inputs do not implicitly satisfy a dependency's #Import contracts. 
+
+A dependency resolves its contracts from its own config, defaults and compatible builder-provided globals. No implicit cross-boundary input lookup or same-name inheritance is allowed.
+
 ### Core and Builder source package graphs
 
 Source-backed Core and Builder packages compile as separate immutable package graphs. Their private implementation does not join the consuming project graph.

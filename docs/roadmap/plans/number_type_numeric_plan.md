@@ -56,7 +56,7 @@ Retain accepted Number decisions:
 - no hidden literal rounding
 - exact cast policy
 - canonical string formatting
-- `Byte` scaffold only when still desired by the current plan
+- `Byte` scaffold
 - clean target rejection until lowerings exist
 
 Present type and operator rules as compact lists rather than tables.

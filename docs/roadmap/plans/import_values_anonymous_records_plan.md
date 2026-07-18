@@ -150,10 +150,10 @@ Retain and sharpen:
 ## Risks and blockers
 
 - config `#Import` must resolve early enough to affect other config values, while ordinary source `#Import` resolves after config validation
-- unknown CLI input validation must wait until both config globals and reachable source contracts are known
+- unknown CLI input validation must wait until fixed and imported project fields plus reachable source contracts are known
 - dev server must preserve input values through runtime path resolution, initial build and every rebuild
 - `|...|` is already used in parameters, struct declarations, choice payloads, receiver signatures and templates, so expression parser changes must be context-specific
-- config validation currently assumes all authored config constants are known flat keys, so grouped config and public user globals must land as one clean break
+- config validation currently assumes all authored config constants are known flat keys, so grouped config and open project metadata must land as one clean break
 
 ## Implementation phases
 
@@ -185,11 +185,12 @@ See `docs/compiler-design-overview.md` "Public-surface validation" for the escap
 
 ### Phase 3: Replace flat config keys with one section-aware recursive schema owner
 
-Context: config validation currently assumes all authored config constants are known flat keys. Grouped config and public user globals must land as one clean break.
+Context: replace the flat config-key registry with one recursive schema owner for compiler-owned project fields and builder or tooling section record fields. Private helper constants participate in folding but are not schema keys.
 
 See `docs/build-system-design.md` "Builder and tooling sections" for the section schema contract.
 
-- Extend `ProjectConfigKeyRegistry` or equivalent into a path-aware schema supporting top-level primitive keys, known record names and known record fields.
+- Model compiler-owned project fields and builder or tooling section record fields recursively under the one schema owner.
+- Keep private top-level helper constants as ordinary foldable source rather than schema entries.
 - Keep separate project and entry schemas with no shared fields.
 - Active sections are schema-validated. Unknown fields in active sections are diagnostics.
 - Inactive or unavailable sections are parsed, name-resolved and folded but not schema-validated and not retained.

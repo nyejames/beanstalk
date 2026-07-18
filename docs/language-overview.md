@@ -1354,9 +1354,11 @@ A normal module root may contain one optional `config:` block for root-local bui
 
 ```beanstalk
 config:
-    title #= "Docs"
-    description #= "Documentation pages"
-    head #= default_head
+    html #= |
+        title = "Docs",
+        description = "Documentation pages",
+        head = default_head,
+    |
 ;
 ```
 

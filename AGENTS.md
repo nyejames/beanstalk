@@ -40,7 +40,7 @@ Use:
 3. This file
 4. Existing implementation behavior
 
-A narrow leaf document takes precedence over a broad overview within the same documentation area.
+A narrow canonical design or standards document may refine a broader authority within its declared ownership area. Educational compiler-design pages explain concepts and implementation examples but cannot override the compiler overview, build-system design, language authorities, memory authorities or progress matrix.
 
 `docs/compiler-design-overview.md` is the authority for compiler semantics and stage contracts. `docs/build-system-design.md` is the authority for project and build orchestration. A plan that crosses compiler and build ownership must read both documents. Roadmap plans cannot override either authority.
 

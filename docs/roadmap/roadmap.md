@@ -9,14 +9,10 @@ Use the [Progress Matrix](docs/src/docs/progress/#page.bst) as a reference for w
 
 # Plans
 
-## Current documentation alignment
-
-- [Roadmap architecture alignment and compiler implementation audit](docs/roadmap/plans/compiler-architecture-documentation-and-roadmap-alignment-plan.md)
-
 ## Active implementation work
 
-- [Compiler diagnostics improvements](docs/roadmap/plans/compiler-diagnostics-improvement-plan.md)
 - [Final TIR completion](docs/roadmap/plans/final-tir-completion-plan.md)
+- [Compiler diagnostics improvements](docs/roadmap/plans/compiler-diagnostics-improvement-plan.md)
 
 ## Queued implementation chain
 
@@ -148,21 +144,6 @@ These surfaces are intentionally not roadmap items unless the language philosoph
 ---
 
 # Future Design Notes
-
-## Wasm
-
-- Define the Wasm external package policy: host imports, JS-backed package rejection, Core package native lowerings and future package-provided Wasm imports.
-- Add Wasm lowerings for selected core packages in order: `@core/math`, `@core/text`, `@core/random`, then `@core/time`.
-- Split HTML-Wasm integration from generic Wasm module output so browser bootstrap policy does not leak into the core backend.
-- Add a Wasm capability matrix tracking scalar operations, strings and templates, structs, choices, options and results, collections, generics, traits, binding-backed packages, Core packages, assertions, IO and runtime memory helpers.
-- Harden reachable unsupported-backend diagnostics so every unsupported Wasm feature fails before HIR-to-LIR lowering or byte emission.
-- Stabilize the HIR-to-Wasm-LIR contract and document which HIR constructs are accepted, rejected or lowered through runtime helpers.
-- Define the Wasm ABI type mapping for scalars, handles, strings, collections, structs, choices, options and errors.
-- Complete the runtime string model: allocation, UTF-8 layout, interpolation helpers, host string extraction, release hooks and replacement of bridge-only helpers.
-- Design and implement Wasm layout for structs, including field offsets, alignment, construction, field access, mutation and ownership hooks.
-- Design and implement Wasm layout for choices, including unit variants, payload variants, tag representation, payload storage, equality, matching and generic choices.
-- Design and implement Wasm lowering for options, fallible results, multi-return carriers, `catch`, postfix `!`, postfix `?` and error payload propagation.
-- Add Wasm validation and artifact assertions to canonical integration cases, using backend-specific `expect.toml` sections and `golden/html_wasm/` outputs.
 
 ## Package manager ideas
 

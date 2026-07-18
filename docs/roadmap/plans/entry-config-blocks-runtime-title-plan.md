@@ -70,11 +70,12 @@ Schema and activity:
 - active entry sections are schema-validated
 - inactive sections are parsed and folded but not schema-validated
 - the block is optional, and its active artefact-builder section is also optional so tooling-only metadata remains possible
-- every normal module selected into the command's semantic graph has its block validated whether or not an entry activates it
-- imported modules never apply their entry metadata to an importer
+- every selected normal module captures, folds and validates its own block once as part of canonical module compilation
+- resolved entry metadata is stored in that module's canonical `ModuleCompilerMetadata`
+- importers never apply another module's entry metadata
+- entry assembly activates entry metadata only for the selected module
 - only active artefact-builder settings contribute entry activity
 - entry metadata contributes to the root-activity fingerprint
-- entry metadata is stored in module compiler metadata (`ModuleCompilerMetadata`)
 - entry activation does not compile it later
 
 Use `current entry config surface`, not `V1`.
@@ -92,7 +93,7 @@ Retain:
 - no silent no-op
 - no assumption that every JavaScript target has `document`
 
-HTML entry keys (entry-only, String shape):
+Active `html` entry-section fields (String shape):
 - `title` for `<title>` content
 - `description` for `<meta name="description">`
 - `lang` for `<html lang="...">`
@@ -154,13 +155,14 @@ See `docs/build-system-design.md` "Entry-local config: blocks" placement rules.
 - Parse through the matching top-level closing `;`.
 - Capture the block body with original source file identity, token or source locations and block start location.
 - Ensure block tokens are not emitted as normal module headers, constants, exports, `start` body tokens or page fragments.
-- Enforce one block per active root. A second block is a structured duplicate-block diagnostic.
+- Enforce one block per normal module root. A second block is a structured duplicate-block diagnostic.
 - Reject `config:` in normal non-root files, support roots, the project facade, inside `export:`, inside executable bodies and in `config.bst`.
 - Reject nested `config:` blocks.
 - Reject malformed or missing colon and unterminated forms.
-- Add root-role behaviour: active root captures one block, imported root recognises and suppresses its block for the importer, normal file rejects the block.
+- Use one canonical normal-root parse path: every selected normal module captures its own optional block whether it later becomes an entry or is imported by another module.
+- Do not add active-root or imported-root parser modes. Importers never receive, suppress or activate another module's block payload.
 - Add block payload remapping for worker-local string tables.
-- Thread optional block payload through header aggregation without making it a declaration graph node.
+- Thread the optional block payload through the owning module's header aggregation without making it a declaration graph node.
 
 ### Phase 3: Add local dependency hints and AST folding through bound visibility
 
@@ -170,7 +172,7 @@ See `docs/build-system-design.md` "Entry-local config: blocks" visibility rules.
 
 - Header syntax records local dependencies for the block (references to same-file earlier constants, `@project`, imported constants, resolved source `#Import` constants).
 - Interface binding resolves imports normally for the root file. The block benefits from the same bound visibility.
-- AST folds the block through the ordinary module semantic path.
+- AST folds the block once through the ordinary canonical module semantic path.
 - Same-file forward references remain invalid.
 - The block creates no ordinary module symbol, no HIR and no project-global value.
 - Do not inject surrounding module runtime values or start bindings into the block.
@@ -183,20 +185,20 @@ Context: entry config needs its own schema validation and must be stored as buil
 - Add separate entry schemas (distinct from project schemas, no shared fields, no `ProjectAndEntry`).
 - Active entry sections are schema-validated. Unknown fields in active sections are diagnostics.
 - Inactive sections are parsed and folded but not schema-validated.
-- Store resolved entry config in `ModuleCompilerMetadata`, not in HIR.
+- Store resolved entry config in the owning module's canonical `ModuleCompilerMetadata`, not in HIR.
 - Ensure HIR generation consumes only the normal module AST.
 - Ensure HIR validation and borrow validation need no config-specific nodes.
 - Add empty or default representation for roots without a block.
 - Implement `StringId` and source-location remapping for the module payload.
 - Update root activity representation so non-empty entry config is available to builder artefact policy.
-- Confirm imported roots never contribute entry config to importer.
-- Confirm each active module compiles its block at most once.
+- Confirm importers never apply another module's entry metadata.
+- Confirm every selected normal module processes its optional block through capture, folding and validation exactly once.
 
 ### Phase 5: Replace HTML reserved-constant scanning
 
 Context: this is the behaviour cutover. The HTML builder reads resolved entry config instead of scanning HIR constants by name.
 
-- Register HTML entry-only keys: `title`, `description`, `lang`, `favicon`, `body_style`, `head` (all String shape).
+- Register `title`, `description`, `lang`, `favicon`, `body_style` and `head` as fields of the active `html` entry section (all String shape).
 - Add an HTML entry-config resolver that reads already-validated resolved values and maps them to `HtmlPageMetadata`.
 - Keep one resolver shared by HTML-JS and HTML-Wasm paths.
 - Preserve document shell defaults and escaping behaviour.
@@ -204,14 +206,14 @@ Context: this is the behaviour cutover. The HTML builder reads resolved entry co
 - Remove HIR module constant scanning from page metadata extraction.
 - Remove reserved metadata-name tables and entry-scope prefix matching.
 - Remove duplicate and wrong-string page metadata diagnostics now covered by shared config validation.
-- Add targeted migration diagnostics for legacy `page_*` constants in HTML active roots.
+- Add targeted migration diagnostics for legacy `page_*` constants in normal modules selected as HTML entries.
 - Update HTML artefact filtering: non-empty entry config counts as HTML artefact activity, config-only root emits a document, API-only root with no config, body or fragments remains skipped.
 
 ### Phase 6: Share document metadata across JavaScript and mixed output
 
 Context: the initial document shell must be identical for HTML-JS and HTML-Wasm.
 
-- Ensure HTML-JS and HTML-Wasm use the same compile-time entry config when rendering the initial document shell.
+- Ensure HTML-JS and HTML-Wasm use the same resolved active `html` entry section when rendering the initial document shell.
 - Add JS and Wasm shell parity tests.
 - Add config-only page test.
 - Add no-config fallback tests.
@@ -248,7 +250,7 @@ Context: the refactor is not complete while old isolated config parsing, compati
 
 Context: documentation and scaffolding must teach the accepted entry config model.
 
-- Migrate every legacy HTML metadata declaration (`page_title` to `config:title`, `page_head` to `config:head`, etc).
+- Migrate every legacy HTML metadata declaration into the active `html` entry section (`page_title` to its `title` field, `page_head` to its `head` field, etc).
 - Move required imports outside the block in the normal root file.
 - Update generated HTML project scaffolding.
 - Update integration manifest entries.

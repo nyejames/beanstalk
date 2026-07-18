@@ -6,6 +6,8 @@ This document is the single source of truth for accepted core compiler architect
 
 `docs/build-system-design.md` owns project bootstrap, Stage 0 graph construction, config, module and package topology, command policy, project builders, linking and output ownership. Read both documents when a task crosses the compiler and build-system boundary.
 
+`docs/src/docs/codebase/compiler-design/**` is an educational explanation layer for compiler concepts and their relationship to Beanstalk. It does not override this architecture document, `docs/build-system-design.md`, the language authorities or the progress matrix.
+
 Companion authorities:
 
 - `docs/build-system-design.md` for project and build orchestration
@@ -26,7 +28,7 @@ User-facing pages under `docs/src/docs/**` teach the language. They do not repla
 - Tokenization and declaration-shell parsing happen once. Later phases bind and consume retained syntax rather than reparsing source.
 - Each semantic fact has one source owner. A later stage does not reconstruct the same fact from source or an earlier IR.
 - Module interfaces use stable semantic identities rather than donor-local indexes.
-- AST resolves constants, generic requests, traits, casts and template semantics before executable HIR reaches a backend.
+- AST resolves constants, generic call inference, traits, casts and template semantics, then emits concrete generic requests. Generated functions are materialised, HIR-validated and borrow-validated before backend handoff.
 - TIR is AST-local. HIR receives folded strings or neutral owned runtime handoff data only.
 - HIR is the first backend-facing semantic IR. Borrow validation reads validated HIR and writes side tables without rewriting it.
 - Public semantic facts, executable state, backend-neutral link facts and compiler metadata are separate artefact lanes.
@@ -183,6 +185,8 @@ Diagnostics are durable compiler data rather than a final formatting step.
 - Deferred-feature diagnostics remain distinct from outside-design-scope diagnostics.
 
 Type diagnostics carry semantic type identities plus context. Rendering resolves user-facing names through `DiagnosticRenderContext` and the relevant local type environment.
+
+Every user-facing diagnostic has a stable code and descriptor independent of its rendered wording. A stable code is not repurposed for a different semantic diagnostic family. Renderers may improve wording and presentation without changing the payload identity or code contract.
 
 ### Build-lifetime render context
 
@@ -409,6 +413,8 @@ Covers backend-neutral link facts derived from callable functions and dormant ro
 - target-gated features
 - runtime glue requirements
 - rendered runtime path and asset facts
+
+Generated-function requests are worklist dependencies carried with module link data, but they are not runtime-dependency fingerprint contents. A change to the emitted request set is covered by implementation and worklist invalidation, updates generated sidecars and relinks affected assemblies.
 
 ### Documentation fingerprint
 
@@ -758,6 +764,12 @@ One semantic preparation owner:
 - returns `CompilerError` for missing authority
 
 Preparation validates and classifies. It does not perform final folding or HIR handoff.
+
+Preparation has two semantic modes. Ordinary value mode permits either a folded or runtime result while preserving lazy runtime behaviour. Const-required mode validates every required reachable branch, loop and helper before the owning caller rejects a runtime result through the established const diagnostic.
+
+Discovering runtime dependence does not end authority validation. Preparation still validates every required reachable TIR structure so a valid runtime classification cannot conceal malformed internal state.
+
+Folding and runtime handoff consume the same exact TirView accepted by preparation and use the same structural and nested-value transitions. They do not classify again, reconstruct overlays or apply a second interpretation of template structure.
 
 AST finalisation:
 
