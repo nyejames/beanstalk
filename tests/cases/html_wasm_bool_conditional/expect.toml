@@ -3,11 +3,8 @@ entry = "."
 [backends.html]
 mode = "success"
 warnings = "forbid"
-
-[[backends.html.artifact_assertions]]
-path = "index.html"
-kind = "html"
-must_contain = ["yes"]
+rendered_output_contains = ["bool-branch-yes"]
+rendered_output_not_contains = ["bool-branch-no"]
 
 [backends.html_wasm]
 mode = "success"

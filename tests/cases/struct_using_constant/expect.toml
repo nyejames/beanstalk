@@ -2,7 +2,4 @@
 mode = "success"
 warnings = "forbid"
 
-[[backends.html.artifact_assertions]]
-path = "index.html"
-kind = "html"
-must_contain = ["struct_using_constant"]
+rendered_output_contains = ["Hello World!"]

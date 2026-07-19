@@ -1,6 +1,3 @@
 flag = true
-if flag:
-    #[:yes]
-else
-    #[:no]
-;
+branch = if flag then [:bool-branch-yes] else [:bool-branch-no]
+[: [branch]]

@@ -30,28 +30,28 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 2R5b — correct the three explicitly named non-choice fixtures
-LAST_ACCEPTED_COMMIT: pending Phase 2R5a acceptance commit (previous plan commit `5e39b34aa`)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 2R5a changes ready to commit
+CURRENT_SLICE: Phase 2R5c — replace ambiguous runtime substrings in the named review set
+LAST_ACCEPTED_COMMIT: pending Phase 2R5b acceptance commit (previous plan commit `8992704e9`)
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 2R5b changes ready to commit
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: `testing.bd`, `validation.bd`, compiler/build-system overviews, and progress matrix govern runner contracts and gates
-- code: `struct_using_constant`, `html_wasm_bool_conditional`, and `config_current_keys_success` source/expectation contracts
+- code: named `borrow_checker_alias_not_live_after_scope`, adversarial, multi-bind, and `choice_payload_match_*` fixtures with weak runtime substrings
 ACCEPTANCE_CRITERIA:
-- `struct_using_constant` omits the constant-backed default field and observes `Hello World!`
-- the boolean conditional requires the true marker and forbids the false marker without changing backend outcomes
-- the current-config case removes backward-compatibility vocabulary from source and artifact assertions
+- every numeric-only, very short, or repeated generic marker in the named review set is replaced by context-rich observable output
+- static page contracts remain artifact-owned and no artificial console output is introduced
+- current backend outcomes and distinct fixture ownership remain unchanged
 - exact case runs, canonical audit, and `just validate` pass
 VALIDATION_STATE:
 - `cargo test --quiet integration_test_runner -- --format terse`: passed; 100 tests
-- `cargo run --quiet -- tests --audit`: passed; 1,651 cases, 1,784 backend executions, 17 acceptance-only, 33 baseline-only, zero hard findings
+- `cargo run --quiet -- tests --audit`: passed; 1,651 cases, 1,784 backend executions, 17 acceptance-only, 33 baseline-only, 528 rendered-output blocks, zero hard findings
 - `just validate`: passed; cross-target Clippy, 3,496 Rust tests, 1,784 integration executions, docs check, and 28 benchmark cases
 DOCS_IMPACT: progress matrix unchanged; workflow prose remains scheduled for Phase 2R8
 BLOCKERS_OR_OPEN_DECISIONS: none; compiler diagnostics Phase 4.1c remains serialized and untouched
 DELEGATION_DECISION: codex-cli — explicit user-selected provider for implementation workers
 NEXT_WORKER_ORDER: codex-cli only for this run-local override
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit accepted Phase 2R5a, refresh its hash, then launch bounded Phase 2R5b through `codex-cli-beanstalk`
+NEXT_RESUME_ACTION: commit accepted Phase 2R5b, refresh its hash, inventory the named weak markers, then launch bounded Phase 2R5c through `codex-cli-beanstalk`
 
 ---
 
@@ -129,7 +129,8 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 2R2 golden inventory | `ca2d013ee` | Accepted | 3,480 Rust tests; 1,784 integration executions; 38 file-backed golden blocks; 17 orphaned modes removed; zero hard findings |
 | Phase 2R3 suite policy owner | `7f9078329` | Accepted | 3,486 Rust tests; 1,784 integration executions; 33 baseline-only advisories; zero hard findings |
 | Phase 2R4 path containment | `5e39b34aa` | Accepted | 3,496 Rust tests; 1,784 integration executions; canonical fixture/input/entry containment enforced; zero hard findings |
-| Phase 2R5a choice-construction contracts | pending acceptance commit | Accepted | 17 acceptance-only; 526 rendered-output blocks; six choice cases now observe variants/payloads; zero hard findings |
+| Phase 2R5a choice-construction contracts | `8992704e9` | Accepted | 17 acceptance-only; 526 rendered-output blocks; six choice cases now observe variants/payloads; zero hard findings |
+| Phase 2R5b named fixture contracts | pending acceptance commit | Accepted | 17 acceptance-only; 528 rendered-output blocks; struct default, Bool branch, and current-config wording now observed; zero hard findings |
 
 ---
 
@@ -402,18 +403,18 @@ For each:
 
 ### `struct_using_constant`
 
-- [ ] Construct the struct.
-- [ ] Omit the defaulted field so the constant-backed default is exercised.
-- [ ] Render the resulting default value.
-- [ ] Assert `Hello World!` through the correct static artifact or runtime lane.
-- [ ] Remove the unrelated `struct_using_constant` marker contract.
+- [x] Construct the struct.
+- [x] Omit the defaulted field so the constant-backed default is exercised.
+- [x] Render the resulting default value.
+- [x] Assert `Hello World!` through the correct static artifact or runtime lane.
+- [x] Remove the unrelated `struct_using_constant` marker contract.
 
 ### `html_wasm_bool_conditional`
 
-- [ ] Use distinct branch markers such as `bool-branch-yes` and `bool-branch-no`.
-- [ ] Require the true marker.
-- [ ] Forbid the false marker.
-- [ ] Preserve current backend outcomes.
+- [x] Use distinct branch markers such as `bool-branch-yes` and `bool-branch-no`.
+- [x] Require the true marker.
+- [x] Forbid the false marker.
+- [x] Preserve current backend outcomes.
 
 ### Ambiguous runtime substrings
 
@@ -430,9 +431,9 @@ For each:
 
 ### Config wording
 
-- [ ] Rename the `config_current_keys_success` marker from `Backward Compatibility Test` to current-behaviour wording such as `Current Config Keys`.
-- [ ] Update its artifact assertion atomically.
-- [ ] Do not preserve legacy vocabulary as a contractual artifact.
+- [x] Rename the `config_current_keys_success` marker from `Backward Compatibility Test` to current-behaviour wording such as `Current Config Keys`.
+- [x] Update its artifact assertion atomically.
+- [x] Do not preserve legacy vocabulary as a contractual artifact.
 
 ### Role audit
 

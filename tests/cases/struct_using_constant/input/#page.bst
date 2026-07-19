@@ -5,4 +5,6 @@ Basic = |
     complex_const String = const_message
 |
 
-#[:struct_using_constant]
+basic = Basic(nothing = "required")
+
+[:[basic.complex_const]]
