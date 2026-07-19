@@ -3097,6 +3097,7 @@ tags = ["integration","results","diagnostics"]
 id = "multi_bind_optional_slots"
 path = "multi_bind_optional_slots"
 tags = ["integration","results"]
+role = "smoke"
 
 [[case]]
 id = "multi_bind_plain_multi_return"
