@@ -5,13 +5,14 @@
 
 use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckError;
 use crate::compiler_frontend::analysis::borrow_checker::state::{
-    BorrowState, FunctionLayout, RootSet,
+    BorrowState, FunctionLayout, FutureUseKind, RootSet,
 };
 use crate::compiler_frontend::analysis::borrow_checker::types::{AccessKind, LocalMode};
 use crate::compiler_frontend::compiler_messages::{
     BorrowAccessKind, DiagnosticPlace, InvalidMutableAccessReason,
 };
 use crate::compiler_frontend::hir::hir_side_table::HirLocalOriginKind;
+use crate::compiler_frontend::hir::ids::BlockId;
 
 use super::{AccessCheckContext, BorrowTransferContext, MutableAccessPolicy};
 
@@ -21,6 +22,16 @@ pub(super) fn check_shared_access(
     check: &mut AccessCheckContext<'_, '_>,
     roots: &RootSet,
 ) -> Result<(), BorrowCheckError> {
+    let preserve_loop_carried_activity =
+        preserves_loop_carried_alias_activity(check.context, check.layout, check.actor_index_hint);
+    let alias_activity = AliasActivityContext {
+        layout: check.layout,
+        state: check.state,
+        block_id: check.block_id,
+        current_order: check.current_order,
+        preserve_loop_carried_activity,
+    };
+
     for root_index in roots.iter_ones() {
         check.stats.conflicts_checked += 1;
 
@@ -42,11 +53,9 @@ pub(super) fn check_shared_access(
 
         if let Some(conflicting_index) = active_mutable_alias_for_root(
             check.context,
-            check.layout,
-            check.state,
+            &alias_activity,
             root_index,
             check.actor_index_hint,
-            check.current_order,
         ) {
             let place = check
                 .context
@@ -81,6 +90,16 @@ pub(super) fn check_mutable_access(
     roots: &RootSet,
     policy: MutableAccessPolicy,
 ) -> Result<(), BorrowCheckError> {
+    let preserve_loop_carried_activity =
+        preserves_loop_carried_alias_activity(check.context, check.layout, check.actor_index_hint);
+    let alias_activity = AliasActivityContext {
+        layout: check.layout,
+        state: check.state,
+        block_id: check.block_id,
+        current_order: check.current_order,
+        preserve_loop_carried_activity,
+    };
+
     for root_index in roots.iter_ones() {
         check.stats.conflicts_checked += 1;
 
@@ -126,37 +145,64 @@ pub(super) fn check_mutable_access(
 
         let actor_index = check.actor_index_hint.unwrap_or(root_index);
         let alias_count = active_alias_count_for_root(
-            check.layout,
-            check.state,
+            &alias_activity,
             root_index,
             actor_index,
-            check.current_order,
             policy.strict_move_exclusivity,
         );
         if alias_count > 1 {
-            let conflicting_local = conflicting_active_local_for_root(
-                check.layout,
-                check.state,
+            let conflicting_local_index = conflicting_active_local_for_root(
+                &alias_activity,
                 root_index,
                 actor_index,
-                check.current_order,
                 policy.strict_move_exclusivity,
-            )
-            .map(|index| {
-                check
-                    .context
-                    .diagnostics
-                    .local_place(check.layout.local_ids[index])
-            });
+            );
             let place = check
                 .context
                 .diagnostics
                 .local_place(check.layout.local_ids[actor_index]);
 
+            if !policy.strict_move_exclusivity
+                && conflicting_local_index.is_some_and(|index| {
+                    // Compiler loop temporaries are mutable storage slots, but an iterable
+                    // alias remains shared access from the source program's perspective.
+                    preserve_loop_carried_activity
+                        && has_loop_carried_future_use(
+                            check.layout,
+                            index,
+                            check.block_id,
+                            check.current_order,
+                        )
+                        && is_shared_alias_conflict(check.context, check.layout, index)
+                })
+            {
+                let conflicting_place = conflicting_local_index.map(|index| {
+                    check
+                        .context
+                        .diagnostics
+                        .local_place(check.layout.local_ids[index])
+                });
+                return Err(check.context.diagnostics.shared_mutable_conflict(
+                    place,
+                    BorrowAccessKind::Shared,
+                    BorrowAccessKind::Mutable,
+                    conflicting_place,
+                    None,
+                    check.location.clone(),
+                ));
+            }
+
             return Err(check.context.diagnostics.invalid_mutable_access(
                 place,
                 InvalidMutableAccessReason::AliasedValueRequiresExclusiveAccess,
-                conflicting_local.or(Some(DiagnosticPlace::Unknown)),
+                conflicting_local_index
+                    .map(|index| {
+                        check
+                            .context
+                            .diagnostics
+                            .local_place(check.layout.local_ids[index])
+                    })
+                    .or(Some(DiagnosticPlace::Unknown)),
                 check.location.clone(),
             ));
         }
@@ -176,26 +222,32 @@ fn borrow_access_kind(access: AccessKind) -> BorrowAccessKind {
     }
 }
 
+struct AliasActivityContext<'a> {
+    layout: &'a FunctionLayout,
+    state: &'a BorrowState,
+    block_id: BlockId,
+    current_order: i32,
+    preserve_loop_carried_activity: bool,
+}
+
 fn active_alias_count_for_root(
-    layout: &FunctionLayout,
-    state: &BorrowState,
+    activity: &AliasActivityContext<'_>,
     root_index: usize,
     actor_index: usize,
-    current_order: i32,
     strict_move_exclusivity: bool,
 ) -> u32 {
     let mut count = 0u32;
-    let actor_state = state.local_state(actor_index);
+    let actor_state = activity.state.local_state(actor_index);
     let actor_is_alias_for_root = actor_index != root_index
         && actor_state.mode.contains(LocalMode::ALIAS)
         && actor_state.alias_roots.contains(root_index);
 
-    for candidate_index in 0..layout.local_count() {
+    for candidate_index in 0..activity.layout.local_count() {
         if actor_is_alias_for_root && candidate_index == root_index {
             continue;
         }
 
-        let roots = state.effective_roots(candidate_index);
+        let roots = activity.state.effective_roots(candidate_index);
         if !roots.contains(root_index) {
             continue;
         }
@@ -206,11 +258,9 @@ fn active_alias_count_for_root(
         }
 
         if !is_local_active_for_alias_conflict(
-            layout,
-            state,
+            activity,
             root_index,
             candidate_index,
-            current_order,
             strict_move_exclusivity,
         ) {
             continue;
@@ -224,42 +274,40 @@ fn active_alias_count_for_root(
 
 fn active_mutable_alias_for_root(
     context: &BorrowTransferContext<'_>,
-    layout: &FunctionLayout,
-    state: &BorrowState,
+    activity: &AliasActivityContext<'_>,
     root_index: usize,
     actor_index_hint: Option<usize>,
-    current_order: i32,
 ) -> Option<usize> {
-    for candidate_index in 0..layout.local_count() {
+    for candidate_index in 0..activity.layout.local_count() {
         if Some(candidate_index) == actor_index_hint {
             continue;
         }
 
-        if !layout.local_mutable[candidate_index] {
+        if !activity.layout.local_mutable[candidate_index] {
             continue;
         }
 
         if matches!(
             context
                 .diagnostics
-                .local_origin_kind(layout.local_ids[candidate_index]),
+                .local_origin_kind(activity.layout.local_ids[candidate_index]),
             Some(kind) if kind != HirLocalOriginKind::User
         ) {
             continue;
         }
 
-        let candidate_state = state.local_state(candidate_index);
+        let candidate_state = activity.state.local_state(candidate_index);
         if !candidate_state.mode.contains(LocalMode::ALIAS) {
             continue;
         }
 
-        if layout.local_is_expired(candidate_index, current_order)
-            && !local_alias_never_read(layout, state, candidate_index)
+        if !is_local_active_for_alias_conflict(activity, root_index, candidate_index, false)
+            && !local_alias_never_read(activity.layout, activity.state, candidate_index)
         {
             continue;
         }
 
-        let roots = state.effective_roots(candidate_index);
+        let roots = activity.state.effective_roots(candidate_index);
         if roots.contains(root_index) {
             return Some(candidate_index);
         }
@@ -269,19 +317,17 @@ fn active_mutable_alias_for_root(
 }
 
 fn conflicting_active_local_for_root(
-    layout: &FunctionLayout,
-    state: &BorrowState,
+    activity: &AliasActivityContext<'_>,
     root_index: usize,
     actor_index: usize,
-    current_order: i32,
     strict_move_exclusivity: bool,
 ) -> Option<usize> {
-    let actor_state = state.local_state(actor_index);
+    let actor_state = activity.state.local_state(actor_index);
     let actor_is_alias_for_root = actor_index != root_index
         && actor_state.mode.contains(LocalMode::ALIAS)
         && actor_state.alias_roots.contains(root_index);
 
-    for candidate_index in 0..layout.local_count() {
+    for candidate_index in 0..activity.layout.local_count() {
         if actor_is_alias_for_root && candidate_index == root_index {
             continue;
         }
@@ -291,17 +337,15 @@ fn conflicting_active_local_for_root(
         }
 
         if !is_local_active_for_alias_conflict(
-            layout,
-            state,
+            activity,
             root_index,
             candidate_index,
-            current_order,
             strict_move_exclusivity,
         ) {
             continue;
         }
 
-        let roots = state.effective_roots(candidate_index);
+        let roots = activity.state.effective_roots(candidate_index);
         if roots.contains(root_index) {
             return Some(candidate_index);
         }
@@ -313,44 +357,101 @@ fn conflicting_active_local_for_root(
 // WHAT: Determines whether a candidate alias can still participate in exclusivity conflicts.
 // WHY: Expired alias views should stop blocking mutable access unless strict move rules apply.
 fn is_local_active_for_alias_conflict(
-    layout: &FunctionLayout,
-    state: &BorrowState,
+    activity: &AliasActivityContext<'_>,
     root_index: usize,
     local_index: usize,
-    current_order: i32,
     strict_move_exclusivity: bool,
 ) -> bool {
-    let last_use = layout.local_last_use_order[local_index];
+    let last_use = activity.layout.local_last_use_order[local_index];
     if last_use >= 0 {
-        if last_use >= current_order {
+        if !activity
+            .layout
+            .local_is_expired(local_index, activity.current_order)
+        {
             return true;
         }
 
-        let local_state = state.local_state(local_index);
+        let local_state = activity.state.local_state(local_index);
         if !local_state.mode.contains(LocalMode::ALIAS) {
             return false;
         }
 
+        if activity.preserve_loop_carried_activity
+            && has_loop_carried_future_use(
+                activity.layout,
+                local_index,
+                activity.block_id,
+                activity.current_order,
+            )
+        {
+            return true;
+        }
+
         if strict_move_exclusivity {
             return local_state.direct_alias_roots.contains(root_index)
-                || layout.local_mutable[local_index];
+                || activity.layout.local_mutable[local_index];
         }
 
         return false;
     }
 
-    let local_state = state.local_state(local_index);
+    let local_state = activity.state.local_state(local_index);
     if !local_state.mode.contains(LocalMode::ALIAS) {
         return false;
     }
 
     if strict_move_exclusivity {
         return local_state.direct_alias_roots.contains(root_index)
-            || layout.local_mutable[local_index];
+            || activity.layout.local_mutable[local_index];
     }
 
     // Unused mutable aliases remain active until the end of the scope.
-    layout.local_mutable[local_index]
+    activity.layout.local_mutable[local_index]
+}
+
+// WHAT: Limits loop-carried future-use retention to source-semantic access actors.
+// WHY: compiler-temporary rebinding in template lowering is not a source mutation and must keep
+//      its existing linear-expiry behaviour.
+fn preserves_loop_carried_alias_activity(
+    context: &BorrowTransferContext<'_>,
+    layout: &FunctionLayout,
+    actor_index_hint: Option<usize>,
+) -> bool {
+    actor_index_hint.is_none_or(|actor_index| {
+        !matches!(
+            context
+                .diagnostics
+                .local_origin_kind(layout.local_ids[actor_index]),
+            Some(HirLocalOriginKind::CompilerTemp)
+        )
+    })
+}
+
+fn has_loop_carried_future_use(
+    layout: &FunctionLayout,
+    local_index: usize,
+    block_id: BlockId,
+    current_order: i32,
+) -> bool {
+    layout.local_is_expired(local_index, current_order)
+        && matches!(
+            layout.future_use_kind(block_id, local_index, current_order),
+            FutureUseKind::May | FutureUseKind::Must
+        )
+}
+
+fn is_shared_alias_conflict(
+    context: &BorrowTransferContext<'_>,
+    layout: &FunctionLayout,
+    local_index: usize,
+) -> bool {
+    !layout.local_mutable[local_index]
+        || matches!(
+            context
+                .diagnostics
+                .local_origin_kind(layout.local_ids[local_index]),
+            Some(HirLocalOriginKind::CompilerTemp)
+        )
 }
 
 fn local_alias_never_read(
