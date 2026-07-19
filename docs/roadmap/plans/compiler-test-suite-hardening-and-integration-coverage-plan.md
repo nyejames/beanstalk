@@ -29,28 +29,29 @@ This ordering is mandatory. Do not begin broad pruning while the harness can sti
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 1A — split harness self-tests before expansion
-LAST_ACCEPTED_COMMIT: `b4503794e` — Phase 0A repository-anchor refresh
-WORKTREE: `main` at `b4503794e` with the Phase 0B/0C documentation-only checkpoint ready; only the primary worktree exists
+CURRENT_SLICE: Phase 1B — retain case identity and metadata
+LAST_ACCEPTED_COMMIT: `58dd13f98` — split integration-runner self-tests by owner
+WORKTREE: parent `main` at `58dd13f98`; accepted Phase 1A worker retained at `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase1a` on `codex/test-hardening-phase1a`
 REQUIRED_RELOADS: startup files, this plan and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: `testing.bd` requires tests to live outside production files with helpers local to their owner; `validation.bd` requires formatting and `just validate` for this code-bearing slice
-- code: `src/compiler_tests/integration_test_runner/tests.rs` contains 39 self-tests and shared helpers across manifest, expectations, fixture, assertions and execution; `mod.rs` currently wires the monolithic module
+- docs: `testing.bd` makes integration cases the primary owner of user-visible behaviour; `validation.bd` requires formatting and `just validate` for this code-bearing slice
+- code: `ManifestCaseToml` validates but discards tags, `ManifestCaseSpec` retains only ID/path, and `TestCaseSpec` retains only a display name rather than canonical metadata
 ACCEPTANCE_CRITERIA:
-- split the monolithic integration-runner self-tests by existing owner without changing behaviour
-- delete the old monolithic test path after module wiring and keep helpers local to the narrowest owner
+- retain canonical case ID, tags, optional contract and optional typed role through manifest parsing and backend expansion
+- reject unknown roles, primary roles without contracts and duplicate primary contracts while preserving unclassified cases, manifest order and backend matrix expansion
 - pass focused harness tests, formatting, diff checks and `just validate`
 VALIDATION_STATE:
 - final TIR at `dc81f7e53`: `just validate` passed with 3,433 Rust tests, 1,784 integration executions, docs checking and 28 benchmark sanity cases
 - Phase 0A documentation-only gate: `cargo run --quiet -- build docs --release` passed; 72 files built and no generated diff was produced (`bean` was unavailable in `PATH`)
 - Phase 0B operational evidence: three Rust and three integration runs passed; median wall times were 1.53s and 7.89s respectively
 - Phase 0B/0C documentation-only gate: `cargo run --quiet -- build docs --release` passed; 72 files built and no generated diff was produced
-DOCS_IMPACT: Phase 0 changed this plan only; roadmap already activates it before canonical module work and the progress matrix remains unchanged
+- Phase 1A: focused 48-test integration-runner suite, `cargo fmt`, `git diff --check` and `just validate` passed; the full gate covered cross-target Clippy, 3,433 Rust tests, 1,784 integration executions, docs checking and 28 benchmark sanity cases
+DOCS_IMPACT: Phase 1A moved only harness self-tests and this plan; `index.md` already names the runner directory and the progress matrix remains unchanged
 BLOCKERS_OR_OPEN_DECISIONS: diagnostics Phase 4.1c remains incomplete but is explicitly serialized at clean accepted commit `d7fb3654f`; no diagnostics, manifest or runner worker may overlap this plan
-DELEGATION_DECISION: codex-cli — the refreshed simple-exploration profile completed Phase 0B read-only classification; use the requested Codex CLI implementation profile for Phase 1A
-NEXT_WORKER_ORDER: codex-cli only for the Phase 1A implementation slice
+DELEGATION_DECISION: codex-cli — use the user-requested Codex CLI implementation profile for Phase 1B
+NEXT_WORKER_ORDER: codex-cli only for the Phase 1B implementation slice
 STOP_REASON: none
-NEXT_RESUME_ACTION: create the dedicated Phase 1A worker worktree and launch the bounded Codex CLI implementation slice
+NEXT_RESUME_ACTION: commit this Phase 1A plan checkpoint, create a dedicated Phase 1B worker worktree and launch the bounded Codex CLI implementation slice
 
 ## Recommended roadmap placement and activation conditions
 
@@ -92,17 +93,17 @@ ACTIVE_PLAN:
 
 CURRENT_SLICE:
 - Phase: 1
-- Checklist item: 1A — split harness self-tests before expansion
-- Goal: give manifest, expectation, fixture, assertion, execution and reporting self-tests narrow file owners before the harness grows
-- Non-goals: no behaviour, schema, CLI, fixture, manifest, diagnostic or assertion-policy changes
+- Checklist item: 1B — retain case identity and metadata
+- Goal: carry canonical case identity, tags, optional contracts and typed roles from the manifest into every backend-expanded test case
+- Non-goals: no CLI filters/listing, audit report, expectation-schema, fixture outcome, diagnostic or assertion-policy changes
 
 LAST_GOOD_COMMIT:
-- `b4503794e` — accepted Phase 0A anchor refresh; Phase 0B/0C is ready for its documentation-only checkpoint
+- `58dd13f98` — accepted Phase 1A integration-runner self-test split
 
 CURRENT_WORKTREE_STATE:
-- Clean / known changes: `main` at `b4503794e` has only this accepted Phase 0B/0C plan update
+- Clean / known changes: parent `main` is at `58dd13f98`; this accepted Phase 1A capsule update is parent-owned
 - Branch: local `main`
-- Dedicated worker worktrees: none; create and record one before the first implementation worker
+- Dedicated worker worktrees: accepted Phase 1A at `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase1a` on `codex/test-hardening-phase1a` commit `48aece83e`; no Phase 1B worktree yet
 
 RELEVANT_DOCS_THIS_SLICE:
 - `AGENTS.md`
@@ -127,7 +128,7 @@ RELEVANT_CODE:
 - `src/compiler_tests/integration_test_runner/expectations.rs`: `expect.toml` schema and parsing
 - `src/compiler_tests/integration_test_runner/assertions.rs`: success, failure, artifact, golden, Wasm, and Node-rendered-output validation
 - `src/compiler_tests/integration_test_runner/runner.rs`: execution filtering, ordering, reporting, and failure triage
-- `src/compiler_tests/integration_test_runner/tests.rs`: current harness self-tests; split before materially expanding
+- `src/compiler_tests/integration_test_runner/tests/`: focused harness self-tests by manifest, fixture, expectation, assertion and execution owner
 - `src/projects/cli.rs::parse_tests_command`: currently supports only `--backend`
 - `tests/fixtures/stubs/expect.toml`: implicit success fallback slated for deletion
 - `justfile::validate`: final code-bearing gate
@@ -139,8 +140,10 @@ RELEVANT_CODE:
 - `src/compiler_frontend/ast/templates/tir/tests/`: accepted post-TIR hidden-invariant inventory; later suite-wide ownership review belongs to this plan and must not reopen final TIR architecture
 
 ACCEPTANCE_CRITERIA:
-- the monolithic harness self-tests are split by existing owner with no test or behaviour change
-- the old `tests.rs` path is removed and helpers stay local to the narrowest test owner
+- `TestCaseSpec` carries a first-class canonical ID instead of reconstructing it from `display_name`
+- tags, optional contract and optional typed role survive manifest parsing and backend expansion
+- unknown roles, primary-without-contract and duplicate classified primary contracts fail with clear harness errors
+- existing unclassified cases remain valid; manifest order and backend matrix expansion are unchanged
 - focused harness tests, formatting, diff checks and `just validate` pass
 
 DECISIONS_ALREADY_MADE:
@@ -174,11 +177,13 @@ BLOCKERS / RISKS:
 - the design documents describe accepted end state while the progress matrix describes current support
 
 VALIDATION_STATE:
-- last recorded command: `just validate`, recorded by final TIR final review before the `dc81f7e53` accepted correction checkpoint
+- last recorded command: `just validate`, run for accepted Phase 1A in the dedicated worker worktree
 - result: passed with cross-target Clippy, 3,433 Rust unit tests, 1,784 integration executions, docs checking, and 28 benchmark sanity cases
 - known unrelated failures: none recorded
 - Phase 0A `cargo run --quiet -- build docs --release`: passed, 72 files built and no generated diff produced; direct `bean` invocation was unavailable in `PATH`
 - Phase 0B/0C `cargo run --quiet -- build docs --release`: passed, 72 files built and no generated diff produced
+- Phase 1A `cargo test --quiet integration_test_runner -- --format terse`: passed, 48 tests
+- Phase 1A `cargo fmt` and `git diff --check`: passed
 
 DOCS_IMPACT:
 - progress matrix needed: review after every phase that adds, removes, or materially strengthens current coverage; update only when the coverage statement changes
@@ -186,7 +191,7 @@ DOCS_IMPACT:
 - authorized docs updates: this plan explicitly authorizes the documentation changes listed in each phase; do not broaden language or architecture docs without a discovered contradiction or an intentional accepted behaviour change
 
 NEXT_ACTION:
-- create a dedicated Phase 1A worker worktree and launch the bounded Codex CLI implementation slice
+- commit this Phase 1A plan checkpoint, create a dedicated Phase 1B worker worktree and launch the bounded Codex CLI implementation slice
 
 ---
 
@@ -1003,7 +1008,7 @@ This phase changes runner metadata and developer workflow only. It does not chan
 - `src/compiler_tests/integration_test_runner/fixture.rs`
 - `src/compiler_tests/integration_test_runner/runner.rs`
 - `src/compiler_tests/integration_test_runner/reporting.rs`
-- `src/compiler_tests/integration_test_runner/tests.rs`
+- `src/compiler_tests/integration_test_runner/tests/`
 - `src/projects/cli.rs`
 - `tests/cases/manifest.toml`
 
@@ -1018,11 +1023,17 @@ This phase changes runner metadata and developer workflow only. It does not chan
 
 ### 1A — Split harness self-tests before expansion
 
-- [ ] Convert the monolithic harness test file into a focused test module directory.
-- [ ] Use files such as manifest, expectations, fixture, assertions, execution, and reporting tests.
-- [ ] Keep test helpers local to the smallest owner.
-- [ ] Delete the old monolithic path after wiring the new module.
-- [ ] Do not change behaviour in this slice.
+- [x] Convert the monolithic harness test file into a focused test module directory.
+- [x] Use files such as manifest, expectations, fixture, assertions, execution, and reporting tests.
+- [x] Keep test helpers local to the smallest owner.
+- [x] Delete the old monolithic path after wiring the new module.
+- [x] Do not change behaviour in this slice.
+
+Accepted at `58dd13f98`: 41 tests and five local helpers moved into manifest, fixture,
+expectation, assertion and execution owners; no reporting self-tests existed to move. The original
+and split function-name inventories were identical, the focused runner still executed 48 tests,
+and `just validate` passed. `index.md` already points at the runner directory, so the path move did
+not require a locator update.
 
 ### 1B — Retain case identity and metadata
 
