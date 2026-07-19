@@ -2,11 +2,9 @@
 //!
 //! WHAT: walks the structural shape of a `Template` and merges reactive metadata
 //! using a caller-supplied expression resolver. Runtime handoffs are walked
-//! through owned expression payloads. The pre-overlay structural pass traverses
-//! raw templates with a `TemplateIrStore`; the post-normalization view path
-//! requires a Finalized `TirView`, validates its overlay authority, and reads
-//! effective node and expression state.
-//! Runtime slot-site render pieces are traversed through the store's slot plan so
+//! through owned expression payloads. Template-backed metadata uses one exact
+//! `TirView` structural path and reads effective node and expression state.
+//! Runtime slot-site render pieces are traversed through the view's slot plan so
 //! nested subscriptions inside site render roots are discovered.
 //! WHY: template shape is owned by the template subsystem, but expression metadata
 //! resolution differs by caller. AST finalization supplies flow-aware resolution
@@ -19,75 +17,20 @@ use crate::compiler_frontend::ast::templates::runtime_handoff;
 use crate::compiler_frontend::ast::templates::runtime_handoff::{
     OwnedRuntimeSlotApplicationHandoff, OwnedRuntimeTemplateHandoff, OwnedRuntimeTemplateNode,
 };
-use crate::compiler_frontend::ast::templates::template::Template;
 use crate::compiler_frontend::ast::templates::template_control_flow::{
     TemplateBranchSelector, TemplateLoopHeader,
 };
 use crate::compiler_frontend::ast::templates::template_slots::RuntimeSlotSiteId;
 use crate::compiler_frontend::ast::templates::tir::{
-    ExpressionSiteId, TemplateIrId, TemplateIrNodeId, TemplateIrNodeKind, TemplateIrStore,
-    TemplateLoopHeaderExpressionSites, TemplateSlotPlanId, TemplateSlotSiteRenderPiece,
-    TemplateSlotSiteRenderPlan, TemplateTirPhase, TirView, TirViewIdentity,
-    finalized_tir_view_for_template,
+    ExpressionSiteId, TemplateIrNodeId, TemplateIrNodeKind, TemplateLoopHeaderExpressionSites,
+    TemplateSlotPlanId, TemplateSlotSiteRenderPiece, TemplateSlotSiteRenderPlan, TemplateTirPhase,
+    TemplateWrapperSetId, TirView, TirViewIdentity,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use std::collections::HashSet;
 
 type ReactiveMetadataResolver<'a> =
     dyn FnMut(&Expression) -> Result<Option<ReactiveTemplateMetadata>, CompilerError> + 'a;
-
-/// Store-aware reactive-template metadata traversal.
-///
-/// WHAT: walks same-store TIR roots where they are authoritative. Both linear
-///       and control-flow templates read their body metadata from the
-///       `Composed`-or-later TIR root. The TIR node walker discovers
-///       `BranchChain` selectors, `Loop` headers, branch/fallback/loop bodies
-///       and aggregate wrappers directly from the TIR tree.
-/// WHY: AST finalization has access to the module-scoped `TemplateIrStore`.
-/// Walking the TIR root keeps reactive metadata aligned with the finalized
-/// TIR representation that render-unit preparation wrote into the store.
-/// Below-Composed roots remain semantic absence; once a same-store
-/// Composed-or-later root is selected, missing authority is an internal error.
-pub(crate) fn merge_reactive_template_metadata_with_store_and_resolver(
-    template: &Template,
-    store: &TemplateIrStore,
-    metadata: &mut ReactiveTemplateMetadata,
-    resolver: &mut ReactiveMetadataResolver<'_>,
-) -> Result<(), CompilerError> {
-    if let Some(template_id) = authoritative_tir_root_for_template(template, store)? {
-        merge_tir_template_metadata(store, template_id, metadata, resolver)?;
-    }
-
-    Ok(())
-}
-
-/// Returns the authoritative same-store TIR root for a template.
-///
-/// WHAT: accepts same-store TIR references whose phase is Composed or later.
-///       The reference must belong to the current store. Both linear and
-///       control-flow templates use this root because the TIR node walker
-///       handles `BranchChain` and `Loop` nodes directly.
-/// WHY: the finalized TIR root is the structural authority for template output.
-///      Reactive metadata must follow that authority or subscriptions can be
-///      dropped and hide reactive backend requirements.
-fn authoritative_tir_root_for_template(
-    template: &Template,
-    store: &TemplateIrStore,
-) -> Result<Option<TemplateIrId>, CompilerError> {
-    let reference = &template.tir_reference;
-    if !reference.phase.is_at_least(TemplateTirPhase::Composed) {
-        return Ok(None);
-    }
-
-    if store.get_template(reference.root).is_none() {
-        return Err(CompilerError::compiler_error(format!(
-            "reactive TIR metadata: template root {} does not exist in the store",
-            reference.root
-        )));
-    }
-
-    Ok(Some(reference.root))
-}
 
 fn merge_owned_runtime_template_handoff_metadata(
     handoff: &OwnedRuntimeTemplateHandoff,
@@ -229,304 +172,6 @@ fn merge_expression_metadata(
     Ok(())
 }
 
-/// Read-only TIR node metadata walker.
-///
-/// WHAT: recursively walks a TIR node from `store` and merges reactive metadata
-/// — dynamic expression metadata, reactive subscriptions, child template bodies,
-/// branch selectors, loop headers, loop bodies, and aggregate wrappers —
-/// consistently with the existing owned-handoff and content traversals.
-/// WHY: the store-aware control-flow body path reads finalized TIR body roots.
-///      This walker mirrors the owned-handoff node walker so reactive metadata
-///      parity is preserved across representations.
-fn merge_tir_node_metadata(
-    store: &TemplateIrStore,
-    node_id: TemplateIrNodeId,
-    metadata: &mut ReactiveTemplateMetadata,
-    resolver: &mut ReactiveMetadataResolver<'_>,
-) -> Result<(), CompilerError> {
-    merge_tir_node_metadata_with_slot_site_mode(
-        store,
-        node_id,
-        RuntimeSlotSiteMetadataMode::WalkRenderPieces,
-        metadata,
-        resolver,
-    )
-}
-
-#[derive(Clone, Copy)]
-enum RuntimeSlotSiteMetadataMode {
-    WalkRenderPieces,
-    WrapperNodeOnly,
-}
-
-/// Raw-store TIR node metadata walker.
-///
-/// WHAT: recursively walks a TIR node tree from `store`, merging dynamic-expression
-///       metadata, reactive subscriptions, nested templates, branch selectors,
-///       loop headers, and runtime slot-site render plans.
-/// WHY: this is the implementation of `merge_tir_node_metadata` and the store-aware
-///      body-root path. The slot-site mode lets callers decide whether a runtime
-///      slot site should walk its render pieces (body traversal) or stop at the
-///      wrapper node (runtime slot application wrapper traversal).
-fn merge_tir_node_metadata_with_slot_site_mode(
-    store: &TemplateIrStore,
-    node_id: TemplateIrNodeId,
-    runtime_slot_site_mode: RuntimeSlotSiteMetadataMode,
-    metadata: &mut ReactiveTemplateMetadata,
-    resolver: &mut ReactiveMetadataResolver<'_>,
-) -> Result<(), CompilerError> {
-    let Some(node) = store.get_node(node_id) else {
-        return Err(CompilerError::compiler_error(format!(
-            "reactive TIR metadata: node {} does not exist in store {}",
-            node_id, "the store"
-        )));
-    };
-
-    match &node.kind {
-        TemplateIrNodeKind::Sequence { children } => {
-            for child in children {
-                merge_tir_node_metadata_with_slot_site_mode(
-                    store,
-                    *child,
-                    runtime_slot_site_mode,
-                    metadata,
-                    resolver,
-                )?;
-            }
-        }
-
-        TemplateIrNodeKind::DynamicExpression {
-            expression,
-            reactive_subscription,
-            ..
-        } => {
-            if let Some(subscription) = reactive_subscription {
-                metadata.push_subscription(subscription.clone());
-            }
-            merge_expression_metadata(expression, metadata, resolver)?;
-        }
-
-        TemplateIrNodeKind::ChildTemplate { reference, .. } => {
-            if reference.phase.is_at_least(TemplateTirPhase::Composed) {
-                merge_tir_template_metadata(store, reference.root, metadata, resolver)?;
-            }
-        }
-
-        TemplateIrNodeKind::InsertContribution { template } => {
-            merge_tir_template_metadata(store, *template, metadata, resolver)?;
-        }
-
-        TemplateIrNodeKind::BranchChain { branches, fallback } => {
-            for branch in branches {
-                merge_branch_selector_metadata(&branch.selector, metadata, resolver)?;
-                merge_tir_node_metadata_with_slot_site_mode(
-                    store,
-                    branch.body,
-                    runtime_slot_site_mode,
-                    metadata,
-                    resolver,
-                )?;
-            }
-
-            if let Some(fallback) = fallback {
-                merge_tir_node_metadata_with_slot_site_mode(
-                    store,
-                    *fallback,
-                    runtime_slot_site_mode,
-                    metadata,
-                    resolver,
-                )?;
-            }
-        }
-
-        TemplateIrNodeKind::Loop {
-            header,
-            body,
-            aggregate_wrapper,
-            ..
-        } => {
-            merge_loop_header_metadata(header, metadata, resolver)?;
-            merge_tir_node_metadata_with_slot_site_mode(
-                store,
-                *body,
-                runtime_slot_site_mode,
-                metadata,
-                resolver,
-            )?;
-
-            if let Some(aggregate_wrapper) = aggregate_wrapper {
-                merge_tir_node_metadata_with_slot_site_mode(
-                    store,
-                    *aggregate_wrapper,
-                    runtime_slot_site_mode,
-                    metadata,
-                    resolver,
-                )?;
-            }
-        }
-
-        TemplateIrNodeKind::RuntimeSlotSite { plan, site } => {
-            // The slot plan lives in the same store. Walk the render pieces for
-            // this concrete site so nested subscriptions inside site render roots
-            // are discovered, matching the owned runtime-slot-handoff traversal.
-            // Contribution-source pieces do not directly carry a TIR render root;
-            // their metadata is reached through the source's own `render_root`.
-            let slot_plan = store.get_slot_plan(*plan).ok_or_else(|| {
-                CompilerError::compiler_error(format!(
-                    "reactive TIR metadata: slot plan {} does not exist in store {}",
-                    plan, "the store"
-                ))
-            })?;
-            let site_plan = slot_plan
-                .slot_sites
-                .iter()
-                .find(|s| s.site == *site)
-                .ok_or_else(|| {
-                    CompilerError::compiler_error(format!(
-                        "reactive TIR metadata: slot site {:?} does not exist in slot plan {}",
-                        site, plan
-                    ))
-                })?;
-
-            if matches!(
-                runtime_slot_site_mode,
-                RuntimeSlotSiteMetadataMode::WrapperNodeOnly
-            ) {
-                return Ok(());
-            }
-
-            merge_tir_slot_site_render_plan_metadata(
-                store,
-                &site_plan.render_plan,
-                slot_plan.contribution_sources.len(),
-                metadata,
-                resolver,
-            )?;
-        }
-
-        // Text, Slot, AggregateOutput, and LoopControl carry no reactive
-        // expression metadata.
-        TemplateIrNodeKind::Text { .. }
-        | TemplateIrNodeKind::Slot { .. }
-        | TemplateIrNodeKind::AggregateOutput
-        | TemplateIrNodeKind::LoopControl { .. } => {}
-    }
-
-    Ok(())
-}
-
-/// Merges reactive metadata from a TIR template root.
-///
-/// WHAT: reads the template from `store`; if it carries a runtime slot plan,
-///       delegates to the runtime-slot application walker, otherwise walks the root node.
-/// WHY: runtime slot application templates have a wrapper root and a separate plan;
-///      both must be walked to match the owned handoff traversal.
-fn merge_tir_template_metadata(
-    store: &TemplateIrStore,
-    template_id: TemplateIrId,
-    metadata: &mut ReactiveTemplateMetadata,
-    resolver: &mut ReactiveMetadataResolver<'_>,
-) -> Result<(), CompilerError> {
-    let tir_template = store.get_template(template_id).ok_or_else(|| {
-        CompilerError::compiler_error(format!(
-            "reactive TIR metadata: template {} does not exist in store {}",
-            template_id, "the store"
-        ))
-    })?;
-
-    if let Some(slot_plan_id) = tir_template.runtime_slot_plan {
-        merge_tir_runtime_slot_application_metadata(
-            store,
-            tir_template.root,
-            slot_plan_id,
-            metadata,
-            resolver,
-        )?;
-        return Ok(());
-    }
-
-    merge_tir_node_metadata(store, tir_template.root, metadata, resolver)
-}
-
-/// Merges reactive metadata for a runtime slot application template.
-///
-/// WHAT: walks the wrapper root in wrapper-only mode, then walks contribution-source
-///       render roots and site render plans in normal mode.
-/// WHY: mirrors the owned runtime-slot handoff traversal so subscriptions inside
-///      contribution sources and site render pieces are discovered consistently.
-fn merge_tir_runtime_slot_application_metadata(
-    store: &TemplateIrStore,
-    wrapper_root: TemplateIrNodeId,
-    slot_plan_id: TemplateSlotPlanId,
-    metadata: &mut ReactiveTemplateMetadata,
-    resolver: &mut ReactiveMetadataResolver<'_>,
-) -> Result<(), CompilerError> {
-    merge_tir_node_metadata_with_slot_site_mode(
-        store,
-        wrapper_root,
-        RuntimeSlotSiteMetadataMode::WrapperNodeOnly,
-        metadata,
-        resolver,
-    )?;
-
-    let slot_plan = store.get_slot_plan(slot_plan_id).ok_or_else(|| {
-        CompilerError::compiler_error(format!(
-            "reactive TIR metadata: slot plan {} does not exist in store {}",
-            slot_plan_id, "the store"
-        ))
-    })?;
-
-    // Runtime slot application metadata mirrors the owned handoff traversal:
-    // wrapper first, contribution-source render roots once, and direct render
-    // pieces through the site plan after routed sources.
-    for source in &slot_plan.contribution_sources {
-        merge_tir_node_metadata(store, source.render_root, metadata, resolver)?;
-    }
-
-    for site in &slot_plan.slot_sites {
-        merge_tir_slot_site_render_plan_metadata(
-            store,
-            &site.render_plan,
-            slot_plan.contribution_sources.len(),
-            metadata,
-            resolver,
-        )?;
-    }
-
-    Ok(())
-}
-
-/// Merges reactive metadata from a TIR slot-site render plan.
-///
-/// WHAT: walks each `Render` piece root and ignores `ContributionSource` pieces;
-///       their metadata is reached through the source's own render root.
-fn merge_tir_slot_site_render_plan_metadata(
-    store: &TemplateIrStore,
-    render_plan: &TemplateSlotSiteRenderPlan,
-    contribution_source_count: usize,
-    metadata: &mut ReactiveTemplateMetadata,
-    resolver: &mut ReactiveMetadataResolver<'_>,
-) -> Result<(), CompilerError> {
-    for piece in &render_plan.pieces {
-        match piece {
-            TemplateSlotSiteRenderPiece::Render(root) => {
-                merge_tir_node_metadata(store, *root, metadata, resolver)?;
-            }
-
-            TemplateSlotSiteRenderPiece::ContributionSource(source_id) => {
-                if source_id.0 >= contribution_source_count {
-                    return Err(CompilerError::compiler_error(format!(
-                        "reactive TIR metadata: slot render plan references missing contribution source {:?}",
-                        source_id
-                    )));
-                }
-            }
-        }
-    }
-
-    Ok(())
-}
-
 /// Merges reactive metadata from a branch selector expression.
 ///
 /// WHAT: resolves the boolean condition or option-present scrutinee through the
@@ -579,24 +224,28 @@ fn merge_loop_header_metadata(
     Ok(())
 }
 
-/// Store-backed metadata traversal.
+/// Merges template-backed metadata through one exact TIR view.
 ///
-/// WHAT: resolves the required finalized effective `TirView` and walks every
-///       reachable TIR root through its exact phase and overlay identity.
-///       Missing authority is reported as an internal compiler error rather than
-///       downgraded to a raw-store interpretation.
-/// WHY: post-normalization metadata is part of the AST-to-HIR boundary. The
-///      finalized module-store view is the representation that includes
-///      expression, slot-resolution, and wrapper-context overlay dimensions.
-pub(crate) fn merge_reactive_template_metadata_with_store(
-    template: &Template,
-    store: &TemplateIrStore,
+/// WHAT: walks every reachable structural root through exact view transitions,
+///       resolving effective expressions, child templates, helpers, wrappers,
+///       control-flow bodies, and runtime slot plans.
+/// WHY: callers own the phase boundary. Flow-aware collection supplies a
+///      Composed-or-later view, while post-normalization collection supplies a
+///      Finalized view. The reducer owns only read-only traversal state.
+pub(crate) fn merge_reactive_template_metadata(
+    view: &TirView<'_>,
     metadata: &mut ReactiveTemplateMetadata,
     resolver: &mut ReactiveMetadataResolver<'_>,
 ) -> Result<(), CompilerError> {
-    let view = finalized_tir_view_for_template(template, store)?;
+    if !view.phase().is_at_least(TemplateTirPhase::Composed) {
+        return Err(CompilerError::compiler_error(format!(
+            "reactive TIR metadata: view rooted at {} is below the required Composed phase",
+            view.root_ref()
+        )));
+    }
+
     let mut traversal = TirViewMetadataTraversal::default();
-    merge_reactive_template_metadata_from_tir_view(&view, metadata, resolver, &mut traversal)
+    merge_reactive_template_metadata_from_tir_view(view, metadata, resolver, &mut traversal)
 }
 
 #[derive(Default)]
@@ -605,14 +254,19 @@ struct TirViewMetadataTraversal {
     completed_views: HashSet<TirViewIdentity>,
 }
 
-/// Merges reactive metadata by walking the finalized effective `TirView`.
+#[derive(Clone, Copy)]
+enum RuntimeSlotSiteMetadataMode {
+    WalkRenderPieces,
+    WrapperNodeOnly,
+}
+
+/// Merges reactive metadata by walking one exact effective `TirView`.
 ///
 /// WHAT: walks the TIR body and every referenced child view, resolving each
 ///       view's own store for slot-plan side tables. Expression overrides are
 ///       optional semantic values; all structural authority is required.
-/// WHY: this is the post-normalization metadata owner. Keeping traversal on the
-///      finalized view preserves every overlay dimension without bypassing the
-///      exact view identity.
+/// WHY: keeping traversal on the exact view preserves every overlay dimension
+///      without bypassing the view identity supplied by the caller.
 fn merge_reactive_template_metadata_from_tir_view(
     view: &TirView<'_>,
     metadata: &mut ReactiveTemplateMetadata,
@@ -643,13 +297,17 @@ fn merge_tir_view_root_contents(
     resolver: &mut ReactiveMetadataResolver<'_>,
     traversal: &mut TirViewMetadataTraversal,
 ) -> Result<(), CompilerError> {
-    let (root_node_id, slot_plan_id) = {
+    let (root_node_id, slot_plan_id, conditional_child_wrapper_set) = {
         view.expression_overlay()?;
         view.slot_resolution_overlay()?;
         view.wrapper_context_overlay()?;
 
         let root_template = view.root_template()?;
-        (root_template.root, root_template.runtime_slot_plan)
+        (
+            root_template.root,
+            root_template.runtime_slot_plan,
+            root_template.conditional_child_wrapper_set,
+        )
     };
 
     if let Some(slot_plan_id) = slot_plan_id {
@@ -697,12 +355,16 @@ fn merge_tir_view_root_contents(
         )?;
     }
 
+    if let Some(wrapper_set_id) = conditional_child_wrapper_set {
+        merge_tir_view_wrapper_set_metadata(view, wrapper_set_id, metadata, resolver, traversal)?;
+    }
+
     Ok(())
 }
 
-/// View-based TIR node metadata walker.
+/// Exact-view TIR node metadata walker.
 ///
-/// WHAT: reads finalized nodes and expressions through `TirView` overlay lookups.
+/// WHAT: reads nodes and expressions through `TirView` overlay lookups.
 ///       Dynamic-expression splices, branch selectors, and loop-header
 ///       expressions prefer the override expression when the view provides
 ///       one and otherwise use the stored structural expression directly.
@@ -742,11 +404,32 @@ fn merge_tir_view_node_metadata(
             if let Some(subscription) = reactive_subscription {
                 metadata.push_subscription(subscription.clone());
             }
-            merge_effective_expression_metadata(view, *site_id, expression, metadata, resolver)?;
+            merge_effective_expression_metadata(
+                view, *site_id, expression, metadata, resolver, traversal,
+            )?;
         }
 
-        TemplateIrNodeKind::ChildTemplate { reference, .. } => {
+        TemplateIrNodeKind::ChildTemplate {
+            reference,
+            occurrence_id,
+        } => {
             let reference = *reference;
+            let occurrence_id = *occurrence_id;
+
+            let wrapper_set_id =
+                view.effective_wrapper_context(occurrence_id)?
+                    .and_then(|context| {
+                        (!context.skip_parent_child_wrappers)
+                            .then_some(context.inherited_wrapper_set)
+                            .flatten()
+                    });
+            merge_optional_wrapper_set_metadata(
+                view,
+                wrapper_set_id,
+                metadata,
+                resolver,
+                traversal,
+            )?;
 
             let child_view = view.structural_child(reference)?;
             merge_reactive_template_metadata_from_tir_view(
@@ -777,6 +460,7 @@ fn merge_tir_view_node_metadata(
                     branch.condition_expression(),
                     metadata,
                     resolver,
+                    traversal,
                 )?;
                 body_ids.push(branch.body);
             }
@@ -812,7 +496,14 @@ fn merge_tir_view_node_metadata(
             aggregate_wrapper,
             ..
         } => {
-            merge_tir_view_loop_header_metadata(view, header, header_sites, metadata, resolver)?;
+            merge_tir_view_loop_header_metadata(
+                view,
+                header,
+                header_sites,
+                metadata,
+                resolver,
+                traversal,
+            )?;
 
             let body = *body;
             let aggregate_wrapper = *aggregate_wrapper;
@@ -862,10 +553,85 @@ fn merge_tir_view_node_metadata(
             }
         }
 
-        TemplateIrNodeKind::Text { .. }
-        | TemplateIrNodeKind::Slot { .. }
-        | TemplateIrNodeKind::AggregateOutput
-        | TemplateIrNodeKind::LoopControl { .. } => {}
+        TemplateIrNodeKind::Text { .. } => {}
+
+        TemplateIrNodeKind::Slot { placeholder } => {
+            merge_optional_wrapper_set_metadata(
+                view,
+                placeholder.applied_child_wrapper_set,
+                metadata,
+                resolver,
+                traversal,
+            )?;
+            merge_optional_wrapper_set_metadata(
+                view,
+                placeholder.child_wrapper_set,
+                metadata,
+                resolver,
+                traversal,
+            )?;
+
+            if let Some(resolution) = view.effective_slot_resolution(placeholder.occurrence_id)? {
+                for source in resolution.sources() {
+                    let source_view = view.resolved_slot_source(*source)?;
+                    merge_reactive_template_metadata_from_tir_view(
+                        &source_view,
+                        metadata,
+                        resolver,
+                        traversal,
+                    )?;
+                }
+            }
+        }
+
+        TemplateIrNodeKind::AggregateOutput | TemplateIrNodeKind::LoopControl { .. } => {}
+    }
+
+    Ok(())
+}
+
+fn merge_optional_wrapper_set_metadata(
+    view: &TirView<'_>,
+    wrapper_set_id: Option<TemplateWrapperSetId>,
+    metadata: &mut ReactiveTemplateMetadata,
+    resolver: &mut ReactiveMetadataResolver<'_>,
+    traversal: &mut TirViewMetadataTraversal,
+) -> Result<(), CompilerError> {
+    if let Some(wrapper_set_id) = wrapper_set_id {
+        merge_tir_view_wrapper_set_metadata(view, wrapper_set_id, metadata, resolver, traversal)?;
+    }
+
+    Ok(())
+}
+
+fn merge_tir_view_wrapper_set_metadata(
+    view: &TirView<'_>,
+    wrapper_set_id: TemplateWrapperSetId,
+    metadata: &mut ReactiveTemplateMetadata,
+    resolver: &mut ReactiveMetadataResolver<'_>,
+    traversal: &mut TirViewMetadataTraversal,
+) -> Result<(), CompilerError> {
+    let wrapper_references = view
+        .store()
+        .get_wrapper_set(wrapper_set_id)
+        .ok_or_else(|| {
+            CompilerError::compiler_error(format!(
+                "reactive TIR metadata: wrapper set {} does not exist in owning store {}",
+                wrapper_set_id,
+                view.root_ref()
+            ))
+        })?
+        .wrappers
+        .clone();
+
+    for wrapper_reference in wrapper_references {
+        let wrapper_view = view.wrapper(wrapper_reference)?;
+        merge_reactive_template_metadata_from_tir_view(
+            &wrapper_view,
+            metadata,
+            resolver,
+            traversal,
+        )?;
     }
 
     Ok(())
@@ -877,6 +643,7 @@ fn merge_tir_view_loop_header_metadata(
     header_sites: &TemplateLoopHeaderExpressionSites,
     metadata: &mut ReactiveTemplateMetadata,
     resolver: &mut ReactiveMetadataResolver<'_>,
+    traversal: &mut TirViewMetadataTraversal,
 ) -> Result<(), CompilerError> {
     match (header, header_sites) {
         (
@@ -889,6 +656,7 @@ fn merge_tir_view_loop_header_metadata(
                 condition.as_ref(),
                 metadata,
                 resolver,
+                traversal,
             )?;
         }
 
@@ -896,8 +664,17 @@ fn merge_tir_view_loop_header_metadata(
             TemplateLoopHeader::Range { range, .. },
             TemplateLoopHeaderExpressionSites::Range { start, end, step },
         ) => {
-            merge_effective_expression_metadata(view, *start, &range.start, metadata, resolver)?;
-            merge_effective_expression_metadata(view, *end, &range.end, metadata, resolver)?;
+            merge_effective_expression_metadata(
+                view,
+                *start,
+                &range.start,
+                metadata,
+                resolver,
+                traversal,
+            )?;
+            merge_effective_expression_metadata(
+                view, *end, &range.end, metadata, resolver, traversal,
+            )?;
             if let (Some(step_expr), Some(step_site_id)) = (&range.step, *step) {
                 merge_effective_expression_metadata(
                     view,
@@ -905,6 +682,7 @@ fn merge_tir_view_loop_header_metadata(
                     step_expr,
                     metadata,
                     resolver,
+                    traversal,
                 )?;
             } else if range.step.is_some() {
                 return Err(CompilerError::compiler_error(
@@ -923,6 +701,7 @@ fn merge_tir_view_loop_header_metadata(
                 iterable.as_ref(),
                 metadata,
                 resolver,
+                traversal,
             )?;
         }
 
@@ -960,7 +739,7 @@ fn view_slot_plan_render_roots(
         Vec::new()
     };
 
-    let render_roots = match site_id {
+    let render_plans: Vec<&TemplateSlotSiteRenderPlan> = match site_id {
         Some(site_id) => {
             let site_plan = slot_plan
                 .slot_sites
@@ -972,26 +751,31 @@ fn view_slot_plan_render_roots(
                         site_id, plan_id
                     ))
                 })?;
-            site_plan
-                .render_plan
-                .pieces
-                .iter()
-                .filter_map(|piece| match piece {
-                    TemplateSlotSiteRenderPiece::Render(root) => Some(*root),
-                    TemplateSlotSiteRenderPiece::ContributionSource(_) => None,
-                })
-                .collect()
+            vec![&site_plan.render_plan]
         }
         None => slot_plan
             .slot_sites
             .iter()
-            .flat_map(|site_plan| site_plan.render_plan.pieces.iter())
-            .filter_map(|piece| match piece {
-                TemplateSlotSiteRenderPiece::Render(root) => Some(*root),
-                TemplateSlotSiteRenderPiece::ContributionSource(_) => None,
-            })
+            .map(|site_plan| &site_plan.render_plan)
             .collect(),
     };
+
+    let mut render_roots = Vec::new();
+    for render_plan in render_plans {
+        for piece in &render_plan.pieces {
+            match piece {
+                TemplateSlotSiteRenderPiece::Render(root) => render_roots.push(*root),
+                TemplateSlotSiteRenderPiece::ContributionSource(source_id) => {
+                    if slot_plan.contribution_sources.get(source_id.0).is_none() {
+                        return Err(CompilerError::compiler_error(format!(
+                            "reactive TIR metadata: slot render plan references missing contribution source {:?}",
+                            source_id
+                        )));
+                    }
+                }
+            }
+        }
+    }
 
     Ok((contribution_roots, render_roots))
 }
@@ -1009,13 +793,52 @@ fn merge_effective_expression_metadata(
     stored: &Expression,
     metadata: &mut ReactiveTemplateMetadata,
     resolver: &mut ReactiveMetadataResolver<'_>,
+    traversal: &mut TirViewMetadataTraversal,
 ) -> Result<(), CompilerError> {
     if let Some(expression) = view.effective_expression_for_site(site_id)? {
-        merge_expression_metadata(expression, metadata, resolver)?;
+        merge_view_expression_metadata(view, expression, metadata, resolver, traversal)?;
     } else {
         // No override is a semantic absence, so the structural expression remains
         // the effective payload for this site.
-        merge_expression_metadata(stored, metadata, resolver)?;
+        merge_view_expression_metadata(view, stored, metadata, resolver, traversal)?;
+    }
+
+    Ok(())
+}
+
+/// Merges an expression using the current structural or nested-value view.
+///
+/// WHAT: enters a direct template or a template reached through top-level
+///       coercions with its durable nested-value reference, while leaving all
+///       other expressions at the caller's outer resolver boundary.
+/// WHY: nested values do not inherit structural overlays from their container,
+///      and coercion fallback must retain the caller's outer-expression policy.
+fn merge_view_expression_metadata(
+    view: &TirView<'_>,
+    expression: &Expression,
+    metadata: &mut ReactiveTemplateMetadata,
+    resolver: &mut ReactiveMetadataResolver<'_>,
+    traversal: &mut TirViewMetadataTraversal,
+) -> Result<(), CompilerError> {
+    let mut candidate = expression;
+    let template = loop {
+        match &candidate.kind {
+            ExpressionKind::Template(template) => break Some(template),
+            ExpressionKind::Coerced { value, .. } => candidate = value,
+            _ => break None,
+        }
+    };
+
+    if let Some(template) = template {
+        let nested_view = view.nested_template_value(template.tir_reference)?;
+        merge_reactive_template_metadata_from_tir_view(
+            &nested_view,
+            metadata,
+            resolver,
+            traversal,
+        )?;
+    } else {
+        merge_expression_metadata(expression, metadata, resolver)?;
     }
 
     Ok(())
@@ -1031,12 +854,14 @@ mod tests {
         OwnedRuntimeTemplateBody, OwnedRuntimeTemplateHandoff, OwnedRuntimeTemplateNode,
     };
     use crate::compiler_frontend::ast::templates::template::{
-        ReactiveSubscription, Style, TemplateSegmentOrigin, TemplateType,
+        ReactiveSubscription, SlotKey, Style, Template, TemplateSegmentOrigin, TemplateType,
     };
+    use crate::compiler_frontend::ast::templates::tir::refs::TemplateTirChildReference;
     use crate::compiler_frontend::ast::templates::tir::{
         TemplateIr, TemplateIrId, TemplateIrNode, TemplateIrNodeId, TemplateIrNodeKind,
         TemplateIrStore, TemplateIrSummary, TemplateTirPhase, TemplateTirReference,
-        TemplateViewContext, TirExpressionOverlay,
+        TemplateViewContext, TemplateWrapperReference, TemplateWrapperSet, TirExpressionOverlay,
+        TirSlotPlaceholder, TirSlotResolution, TirSlotResolutionOverlay,
     };
     use crate::compiler_frontend::compiler_errors::CompilerError;
     use crate::compiler_frontend::datatypes::DataType;
@@ -1107,17 +932,22 @@ mod tests {
         store: &TemplateIrStore,
     ) -> Result<ReactiveTemplateMetadata, CompilerError> {
         let mut metadata = ReactiveTemplateMetadata::template_backed();
-        merge_reactive_template_metadata_with_store_and_resolver(
-            template,
+        let reference = template.tir_reference;
+        let view = TirView::with_minimum_phase(
             store,
-            &mut metadata,
-            &mut |expression| Ok(expression.reactive_template.clone()),
+            reference.root,
+            reference.phase,
+            TemplateTirPhase::Composed,
+            reference.context,
         )?;
+        merge_reactive_template_metadata(&view, &mut metadata, &mut |expression| {
+            Ok(expression.reactive_template.clone())
+        })?;
         Ok(metadata)
     }
 
     #[test]
-    fn store_tir_walk_collects_dynamic_subscription_metadata() {
+    fn composed_view_walk_collects_dynamic_subscription_metadata() {
         let mut strings = StringTable::new();
         let (expression, subscription) = reactive_expression(&mut strings, "value");
         let mut store = TemplateIrStore::new();
@@ -1169,13 +999,206 @@ mod tests {
         let template = template_from_node(&mut store, node, TemplateTirPhase::Finalized, context);
 
         let mut metadata = ReactiveTemplateMetadata::template_backed();
-        merge_reactive_template_metadata_with_store(
-            &template,
+        let view = TirView::with_minimum_phase(
             &store,
-            &mut metadata,
-            &mut |expression| Ok(expression.reactive_template.clone()),
+            template.tir_reference.root,
+            template.tir_reference.phase,
+            TemplateTirPhase::Finalized,
+            template.tir_reference.context,
         )
+        .expect("finalized view should be available");
+        merge_reactive_template_metadata(&view, &mut metadata, &mut |expression| {
+            Ok(expression.reactive_template.clone())
+        })
         .expect("effective metadata walk should succeed");
+        assert!(metadata.subscriptions.contains(&subscription));
+    }
+
+    #[test]
+    fn composed_view_walk_enters_parsed_structural_child() {
+        let mut strings = StringTable::new();
+        let (expression, subscription) = reactive_expression(&mut strings, "parsed-child");
+        let mut store = TemplateIrStore::new();
+        let child_site_id = store.next_expression_site_id();
+        let child_node = store.push_node(TemplateIrNode::new(
+            TemplateIrNodeKind::DynamicExpression {
+                expression: Box::new(expression),
+                origin: TemplateSegmentOrigin::Body,
+                reactive_subscription: Some(subscription.clone()),
+                site_id: child_site_id,
+            },
+            location(),
+        ));
+        let child = template_from_node(
+            &mut store,
+            child_node,
+            TemplateTirPhase::Parsed,
+            TemplateViewContext::default(),
+        );
+        let child_reference = TemplateTirChildReference::new(
+            child.tir_reference.root,
+            TemplateTirPhase::Parsed,
+            TemplateViewContext::default(),
+        );
+        let child_occurrence_id = store.next_child_template_occurrence_id();
+        let root_node = store.push_node(TemplateIrNode::new(
+            TemplateIrNodeKind::ChildTemplate {
+                reference: child_reference,
+                occurrence_id: child_occurrence_id,
+            },
+            location(),
+        ));
+        let root = template_from_node(
+            &mut store,
+            root_node,
+            TemplateTirPhase::Composed,
+            TemplateViewContext::default(),
+        );
+
+        let metadata = merge(&root, &store).expect("parsed structural child should be readable");
+        assert!(metadata.subscriptions.contains(&subscription));
+    }
+
+    #[test]
+    fn resolved_slot_source_contributes_metadata_through_exact_view_context() {
+        let mut strings = StringTable::new();
+        let (expression, subscription) = reactive_expression(&mut strings, "slot-source");
+        let mut store = TemplateIrStore::new();
+        let source_site_id = store.next_expression_site_id();
+        let source_node = store.push_node(TemplateIrNode::new(
+            TemplateIrNodeKind::DynamicExpression {
+                expression: Box::new(expression),
+                origin: TemplateSegmentOrigin::Body,
+                reactive_subscription: Some(subscription.clone()),
+                site_id: source_site_id,
+            },
+            location(),
+        ));
+        let source = template_from_node(
+            &mut store,
+            source_node,
+            TemplateTirPhase::Composed,
+            TemplateViewContext::default(),
+        );
+        let occurrence_id = store.next_slot_occurrence_id();
+        let slot_node = store.push_node(TemplateIrNode::new(
+            TemplateIrNodeKind::Slot {
+                placeholder: TirSlotPlaceholder::new(SlotKey::Default, occurrence_id, location()),
+            },
+            location(),
+        ));
+        let slot_resolution_overlay =
+            store.allocate_slot_resolution_overlay(TirSlotResolutionOverlay {
+                resolutions: vec![(
+                    occurrence_id,
+                    TirSlotResolution::resolved(SlotKey::Default, vec![source.tir_reference.root]),
+                )],
+            });
+        let root = template_from_node(
+            &mut store,
+            slot_node,
+            TemplateTirPhase::Composed,
+            TemplateViewContext {
+                slot_resolution: Some(slot_resolution_overlay),
+                ..TemplateViewContext::default()
+            },
+        );
+
+        let metadata = merge(&root, &store).expect("resolved slot source should be readable");
+        assert!(metadata.subscriptions.contains(&subscription));
+    }
+
+    #[test]
+    fn non_template_coercion_is_resolved_at_the_outer_expression_boundary() {
+        let mut strings = StringTable::new();
+        let (inner, inner_subscription) = reactive_expression(&mut strings, "coerced-inner");
+        let (_, outer_subscription) = reactive_expression(&mut strings, "coerced-outer");
+        let mut coerced = Expression::coerced(inner, builtin_type_ids::FLOAT);
+        coerced.reactive_template = Some(ReactiveTemplateMetadata {
+            template_backed: false,
+            subscriptions: vec![outer_subscription.clone()],
+            template_value_parameters: vec![],
+        });
+        let mut store = TemplateIrStore::new();
+        let site_id = store.next_expression_site_id();
+        let node = store.push_node(TemplateIrNode::new(
+            TemplateIrNodeKind::DynamicExpression {
+                expression: Box::new(coerced),
+                origin: TemplateSegmentOrigin::Body,
+                reactive_subscription: None,
+                site_id,
+            },
+            location(),
+        ));
+        let template = template_from_node(
+            &mut store,
+            node,
+            TemplateTirPhase::Composed,
+            TemplateViewContext::default(),
+        );
+
+        let metadata = merge(&template, &store).expect("outer coercion should be resolved");
+        assert!(metadata.subscriptions.contains(&outer_subscription));
+        assert!(!metadata.subscriptions.contains(&inner_subscription));
+    }
+
+    #[test]
+    fn wrapper_transition_contributes_metadata_through_exact_view() {
+        let mut strings = StringTable::new();
+        let (expression, subscription) = reactive_expression(&mut strings, "wrapper");
+        let mut store = TemplateIrStore::new();
+        let wrapper_site_id = store.next_expression_site_id();
+        let wrapper_node = store.push_node(TemplateIrNode::new(
+            TemplateIrNodeKind::DynamicExpression {
+                expression: Box::new(expression),
+                origin: TemplateSegmentOrigin::Body,
+                reactive_subscription: Some(subscription.clone()),
+                site_id: wrapper_site_id,
+            },
+            location(),
+        ));
+        let wrapper = template_from_node(
+            &mut store,
+            wrapper_node,
+            TemplateTirPhase::Composed,
+            TemplateViewContext::default(),
+        );
+        let wrapper_set = store.push_wrapper_set(TemplateWrapperSet {
+            wrappers: vec![TemplateWrapperReference::new(
+                wrapper.tir_reference.root,
+                TemplateTirPhase::Composed,
+                TemplateViewContext::default(),
+            )],
+        });
+        let root_node = store.push_node(TemplateIrNode::new(
+            TemplateIrNodeKind::Text {
+                text: strings.intern("root"),
+                byte_len: 4,
+                origin: TemplateSegmentOrigin::Body,
+            },
+            location(),
+        ));
+        let root = store.push_template({
+            let mut template = TemplateIr::new(
+                root_node,
+                Style::default(),
+                TemplateType::StringFunction,
+                TemplateIrSummary::default(),
+                location(),
+            );
+            template.conditional_child_wrapper_set = Some(wrapper_set);
+            template
+        });
+        let root_template = Template {
+            tir_reference: TemplateTirReference {
+                root,
+                phase: TemplateTirPhase::Composed,
+                context: TemplateViewContext::default(),
+            },
+            location: location(),
+        };
+
+        let metadata = merge(&root_template, &store).expect("wrapper should be readable");
         assert!(metadata.subscriptions.contains(&subscription));
     }
 

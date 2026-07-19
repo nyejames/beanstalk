@@ -769,9 +769,9 @@ fn reactive_template_metadata_from_store(
     store: &TemplateIrStore,
 ) -> Result<Option<ReactiveTemplateMetadata>, CompilerError> {
     let mut metadata = ReactiveTemplateMetadata::template_backed();
-    reactive_template_metadata::merge_reactive_template_metadata_with_store(
-        template,
-        store,
+    let view = finalized_tir_view_for_template(template, store)?;
+    reactive_template_metadata::merge_reactive_template_metadata(
+        &view,
         &mut metadata,
         &mut |expression| expression_reactive_template_metadata_from_store(expression, store),
     )?;

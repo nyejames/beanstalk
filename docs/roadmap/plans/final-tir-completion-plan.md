@@ -29,17 +29,19 @@ TIR remains AST-local. No TIR store, ID, view, overlay or preparation type may c
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/final-tir-completion-plan.md
 STATUS: active
-CURRENT_SLICE: R5B accepted and ready to commit; next slice is R5A reactive metadata exact-view consolidation
-LAST_ACCEPTED_COMMIT: a16cf5a1f (R4 prepared fold and runtime handoff)
-WORKTREE: main at a16cf5a1f with accepted uncommitted R5B source/tests plus this parent-owned plan update; concurrent user documentation remains untouched
+CURRENT_SLICE: R5A accepted and ready to commit; R5C primary-owner test cleanup is next
+LAST_ACCEPTED_COMMIT: a8bfdb213 (R5B; R5A accepted on the current pre-commit worktree)
+WORKTREE: main at a8bfdb213 with the accepted R5A source and plan diff; concurrent user documentation remains untouched
 REQUIRED_RELOADS: startup files, this plan, and current TIR source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: compiler-design-overview.md one-preparation-owner and AST-to-HIR handoff contracts; this plan's R5 remaining-consumer, duplicate-state and test-ownership requirements
-- code: Template now contains only tir_reference and location; TemplateBuildState owns parser-local mutable kind and TemplateIr.kind is the sole durable authority; scalar string coercion no longer interprets templates; reactive metadata still has a raw-store walker for R5A
+- docs: compiler-design-overview.md exact-view transition and AST-to-HIR contracts; testing.bd primary-owner rules; this plan's R5C ownership matrix
+- code: reactive_template_metadata.rs now owns one exact-view reducer; collector.rs supplies a Composed view, normalize_ast.rs supplies a Finalized view, annotation.rs remains the distinct flow-aware overlay mutator and owned runtime handoff remains a distinct post-TIR reducer
 ACCEPTANCE_CRITERIA:
-- commit the accepted R5B hard migration with the plan checkpoint
-- reload the plan and map R5A's pre-final annotation caller plus post-final metadata caller onto one exact TirView traversal owner
-- preserve preparation/fold/handoff ownership and do not begin broad R5C test pruning or R6 work
+- commit the accepted R5A exact-view metadata consolidation without unrelated files
+- use the accepted R5 ownership/test map to assign one primary owner per R5C behavior
+- remove only redundant, obsolete or implementation-shaped tests and helpers while preserving distinct semantic, stage-boundary and backend coverage
+- record final production/test inventory and run the common code gate before accepting R5
+- do not begin R6 documentation, benchmark recording or roadmap handoff work
 VALIDATION_STATE:
 - R2C just validate: passed; cross-target Clippy, 3421 unit tests, 1784 integration cases, docs check and 28 benchmark sanity cases; -7ms average, 23 faster and 0 slower
 - R3 ownership map: passed through Codex CLI simple-exploration; no repeated preparation proving a cache, new preparation.rs is the required final owner, and classification/control-flow predicates remain only where they answer earlier-stage questions
@@ -55,12 +57,16 @@ VALIDATION_STATE:
 - R5B Codex implementation and parent-review correction slices: accepted; Template has exactly two fields, missing kind authority remains an infrastructure error, scalar coercion is template-free and the synchronization-only test is deleted
 - R5B just validate: passed; cross-target Clippy, 3434 unit tests, 1784 integration cases, docs check and 28 benchmark sanity cases; -7ms average, 22 faster and 0 slower
 - TIR inventory: 18,858 production and 17,739 test lines (R4: 18,851 and 17,747; 069a29acb: 24,274 and 27,231)
+- R5A Codex implementation and parent-review correction slices: accepted; one exact-view metadata reducer now owns structural, nested-value, wrapper and resolved-slot transitions while annotation and owned handoff retain their distinct outputs
+- R5A focused validation: passed; formatting, cargo check, 9 reactive metadata tests, 19 flow-aware collector tests, 27 normalization tests and git diff checks
+- R5A just validate: passed; cross-target Clippy, 3438 unit tests, 1784 integration cases, docs check and 28 benchmark sanity cases; -7ms average, 22 faster and 0 slower
+- TIR inventory: 18,861 production and 17,739 test lines (R5B: 18,858 and 17,739; 069a29acb: 24,274 and 27,231)
 DOCS_IMPACT: index.md locator updated for preparation.rs; progress matrix unchanged because user-visible support did not change
 BLOCKERS_OR_OPEN_DECISIONS: none
-DELEGATION_DECISION: codex-cli implementation next - user requires Codex CLI for worker slices and R5A is a bounded remaining-consumer consolidation
+DELEGATION_DECISION: codex-cli implementation - user requires Codex CLI for worker slices and R5C is a bounded test-ownership cleanup
 NEXT_WORKER_ORDER: codex-cli (user-required provider)
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit the accepted R5B checkpoint, reload, then launch the bounded Codex CLI R5A implementation
+NEXT_RESUME_ACTION: commit the accepted R5A checkpoint, refresh this state with its commit and launch bounded R5C test cleanup
 ```
 
 Use `069a29acb` as the implementation and regression base. Do not continue extending `FoldAuthorityWalk`, foreign-store traversal, external expression-overlay stacks or prepared foreign-wrapper proofs.
@@ -753,6 +759,16 @@ sanity cases.
 - Use exact finalized views for final type and debug validation.
 - Remove raw-store authority helpers and registry-era comments.
 - Keep distinct reducer matches where metadata, folding and handoff genuinely produce different results.
+
+R5A accepted on the pre-commit `a8bfdb213` worktree. Template-backed reactive metadata now has
+one exact-view reducer with exact-identity cycle state and shared structural, nested-value, wrapper
+and resolved-slot transitions. The flow-aware collector supplies a Composed-or-later view and
+normalization supplies a Finalized view. The raw-store root selector and duplicate node, template
+and runtime-slot walkers are deleted, while flow-aware overlay annotation and owned runtime-handoff
+metadata remain distinct reducers because they mutate or consume different representations.
+Focused validation and `just validate` passed with cross-target Clippy, 3,438 unit tests, 1,784
+integration cases, docs checking and all 28 benchmark sanity cases. The tracked TIR inventory is
+18,861 production and 17,739 test lines.
 
 #### R5B - Remove duplicate durable state
 

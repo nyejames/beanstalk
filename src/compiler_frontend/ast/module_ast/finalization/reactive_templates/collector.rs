@@ -14,7 +14,7 @@ use crate::compiler_frontend::ast::expressions::expression::{
 };
 use crate::compiler_frontend::ast::templates::reactive_template_metadata;
 use crate::compiler_frontend::ast::templates::template::Template;
-use crate::compiler_frontend::ast::templates::tir::TemplateIrStore;
+use crate::compiler_frontend::ast::templates::tir::{TemplateIrStore, TemplateTirPhase, TirView};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use rustc_hash::FxHashMap;
@@ -83,13 +83,17 @@ fn metadata_for_template(
     store: &TemplateIrStore,
 ) -> Result<Option<ReactiveTemplateMetadata>, CompilerError> {
     let mut metadata = ReactiveTemplateMetadata::template_backed();
-
-    // Use the raw store-aware traversal so control-flow bodies are read from
-    // same-store Composed-or-later TIR roots and required authority failures
-    // reach the annotation/finalizer boundary.
-    reactive_template_metadata::merge_reactive_template_metadata_with_store_and_resolver(
-        template,
+    let reference = template.tir_reference;
+    let view = TirView::with_minimum_phase(
         store,
+        reference.root,
+        reference.phase,
+        TemplateTirPhase::Composed,
+        reference.context,
+    )?;
+
+    reactive_template_metadata::merge_reactive_template_metadata(
+        &view,
         &mut metadata,
         &mut |expression| metadata_for_expression(expression, flows, value_environment, store),
     )?;

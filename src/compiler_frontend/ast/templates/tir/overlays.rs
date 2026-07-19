@@ -166,11 +166,14 @@ impl TirSlotResolution {
     }
 
     /// Returns the contribution source refs for a resolved slot.
-    #[cfg(test)]
+    ///
+    /// Missing and test-only unresolved slots have no contribution sources.
     pub(crate) fn sources(&self) -> &[TemplateIrId] {
         match &self.kind {
             TirSlotResolutionKind::Resolved { sources } => sources,
-            TirSlotResolutionKind::Missing | TirSlotResolutionKind::Unresolved => &[],
+            TirSlotResolutionKind::Missing => &[],
+            #[cfg(test)]
+            TirSlotResolutionKind::Unresolved => &[],
         }
     }
 
