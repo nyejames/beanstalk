@@ -1,6 +1,7 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
+rendered_output_contains = ["trait_incompatibility_parse_success result=ok"]
 
 [backends.html_wasm]
 mode = "failure"

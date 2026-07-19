@@ -5,4 +5,4 @@
 import @greeting { format_greeting }
 
 result = format_greeting("World")
-io.line([: [result]])
+io.line([: entry_start_sees_sorted_declarations greeting=[result]])

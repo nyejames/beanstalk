@@ -18,4 +18,4 @@ Wrapper must A
 
 A must not B
 
-io.line("ok")
+io.line("trait_incompatibility_parse_success result=ok")

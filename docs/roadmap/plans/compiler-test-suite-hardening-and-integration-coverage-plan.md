@@ -30,27 +30,27 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 2D1 — migrate trait, ordering, package-alias, and config-package success contracts
-LAST_ACCEPTED_COMMIT: `5fbf183a4` (Phase 2R7c)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 2R8 documentation and generated routes ready to commit
+CURRENT_SLICE: Phase 2D2 — correct the misclassified same-module choice visibility fixture contract
+LAST_ACCEPTED_COMMIT: `4fa34390c` (Phase 2R8)
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 2D1 fixture migrations ready to commit
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: workflow guidance now matches acceptance-only, baseline, golden, path-containment, audit-policy, and contract-filter behavior; progress coverage uses future-use/final-use terminology
-- code: the fresh audit owns 32 baseline-only advisories; Phase 2D1 starts with `trait_incompatibility_parse_success`, `trait_relation_facade_private_private_success`, `entry_start_sees_sorted_declarations`, `two_package_symbols_same_name_aliases`, and `config_package_folder_missing_default_ignored`
+- code: Phase 2D1 leaves 26 baseline-only advisories; `choice_import_visibility_non_exported` imports `choices.bst` inside the same module, so accepted same-module visibility rules permit its current success despite the stale cross-module wording in this plan
 ACCEPTANCE_CRITERIA:
-- each named backend receives the strongest observable contract available without forcing cross-backend symmetry
-- trait, declaration-ordering, and config-package behavior emits and asserts context-rich markers; the private/private trait case uses static HTML evidence where runtime output is unavailable
-- `two_package_symbols_same_name_aliases` uses acceptance-only only if inspection confirms no meaningful observable result, with a truthful whole-case role
-- exact cases, focused harness tests, audit, `git diff --check`, and the full code-bearing gate pass
+- preserve same-module private declaration visibility and do not introduce a cross-module rejection
+- give the choice construction/import success a meaningful observable contract and correct misleading fixture/plan terminology if needed
+- keep the manifest serialized and use the user-selected Codex CLI provider for the bounded fixture change
+- exact case, focused harness tests, audit, `git diff --check`, and the full code-bearing gate pass
 VALIDATION_STATE:
-- `cargo run --quiet -- build docs --release`: passed; 72 files; generated codebase-standards and progress routes inspected
-- latest code-bearing `just validate`: passed at Phase 2R7c; cross-target Clippy, 3,505 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
-DOCS_IMPACT: Phase 2R8 corrections are complete; Phase 2D1 is expected to change assertion coverage only
-BLOCKERS_OR_OPEN_DECISIONS: none; compiler diagnostics Phase 4.1c remains serialized and untouched
-DELEGATION_DECISION: codex-cli — explicit user-selected provider for the bounded Phase 2D1 fixture family
+- `just validate`: passed for Phase 2D1; cross-target Clippy, 3,505 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
+- `cargo run --quiet -- tests --audit`: passed; 1,645 cases, 1,778 executions, 13 acceptance-only, 26 baseline-only, 532 rendered-output, 257 artifact, and zero hard findings
+DOCS_IMPACT: Phase 2D1 changes assertion coverage only; Phase 2D2 requires correcting stale plan terminology, not accepted language docs
+BLOCKERS_OR_OPEN_DECISIONS: none; primary compiler/build/language docs agree that same-module imports see private declarations
+DELEGATION_DECISION: codex-cli — explicit user-selected provider for the bounded Phase 2D2 fixture correction
 NEXT_WORKER_ORDER: codex-cli only for this run-local override
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit accepted Phase 2R8, refresh its hash, then launch bounded Phase 2D1 through `codex-cli-beanstalk`
+NEXT_RESUME_ACTION: commit accepted Phase 2D1, refresh its hash, then launch bounded Phase 2D2 through `codex-cli-beanstalk`
 
 ---
 
@@ -139,7 +139,8 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 2R6b loop-borrow edge matrix | `8dc9f6049` | Accepted | 3,504 Rust tests; 1,652 cases and 1,785 executions; one primary plus one boundary integration owner; zero hard findings |
 | Phase 2R7b inferred assignment-move fact | `26a707729` | Accepted | 3,505 Rust tests; source `UNINIT`, target `SLOT`, and empty target aliases protected by one focused snapshot test |
 | Phase 2R7c lifetime/final-use ownership | `5fbf183a4` | Accepted | 1,645 cases and 1,778 executions; 12 acceptance-only; 32 baseline-only; 529 rendered-output; zero hard findings |
-| Phase 2R8 workflow documentation | pending acceptance commit | Accepted | 1,645 cases and 1,778 executions; 32 baseline-only; codebase-standards and progress routes rebuilt from corrected source |
+| Phase 2R8 workflow documentation | `4fa34390c` | Accepted | 1,645 cases and 1,778 executions; 32 baseline-only; codebase-standards and progress routes rebuilt from corrected source |
+| Phase 2D1 trait/order/package/config contracts | pending acceptance commit | Accepted | 13 acceptance-only; 26 baseline-only; 532 rendered-output; 257 artifact; zero hard findings |
 
 ---
 
@@ -598,19 +599,20 @@ For every remaining baseline-only success backend:
 
 Formerly queued as 2B11d:
 
-- [ ] `trait_incompatibility_parse_success`: assert HTML runtime output; preserve the existing HTML-Wasm structured failure.
-- [ ] `trait_relation_facade_private_private_success`: assert the HTML static artifact; use HTML-Wasm acceptance-only parity because its current artifact does not expose the HTML marker.
-- [ ] `entry_start_sees_sorted_declarations`: assert labeled runtime output.
-- [ ] `two_package_symbols_same_name_aliases`: use acceptance-only only after confirming there is no meaningful observable result; classify the whole case as smoke if appropriate.
-- [ ] `config_package_folder_missing_default_ignored`: assert labeled runtime output.
-- [ ] Preserve warning policy, source behavior, and backend outcomes.
+- [x] `trait_incompatibility_parse_success`: assert HTML runtime output; preserve the existing HTML-Wasm structured failure.
+- [x] `trait_relation_facade_private_private_success`: assert the HTML static artifact; use HTML-Wasm acceptance-only parity because its current artifact does not expose the HTML marker.
+- [x] `entry_start_sees_sorted_declarations`: assert labeled runtime output.
+- [x] `two_package_symbols_same_name_aliases`: use acceptance-only only after confirming there is no meaningful observable result; classify the whole case as smoke if appropriate.
+- [x] `config_package_folder_missing_default_ignored`: assert labeled runtime output.
+- [x] Preserve warning policy, source behavior, and backend outcomes.
 
 ### 2D2 — Isolated design conflict
 
-- [ ] Review `choice_import_visibility_non_exported` against current private cross-module import rules and the progress matrix.
-- [ ] If current success is a compiler bug, preserve the failing fixture and fix the root cause in a separate slice.
-- [ ] If current support intentionally differs from accepted end state, assert the current structured rejection and record the canonical-module handoff.
-- [ ] Do not silently encode the current success as an authored success contract.
+- [x] Review `choice_import_visibility_non_exported` against current private cross-module import rules and the progress matrix.
+- [x] Confirm the fixture is not cross-module: `#page.bst` and `choices.bst` belong to one module, whose files may import private declarations directly.
+- [ ] Rename or otherwise correct misleading cross-module terminology while preserving same-module success.
+- [ ] Add a meaningful observable construction/import contract rather than acceptance-only intent.
+- [ ] Remove the stale canonical-module handoff after the corrected fixture is accepted.
 
 ### 2D3 — Remaining families
 
@@ -1265,7 +1267,7 @@ Do not present lower counts or faster time as proof of correctness.
 | `check`/build frontend parity | Same frontend diagnostics; `check` emits no artifacts | Command tests | Phase 10 |
 | Ordered root/fragment execution | Active root once; imported root dormant; source order preserved | Integration | Phases 5 and 10 |
 | Structured diagnostic remapping | Codes/reasons/locations survive supported file boundaries | Integration | Phases 4 and 9 |
-| `choice_import_visibility_non_exported` | Current result conflicts with accepted private visibility | Root-cause review or structured rejection; future success may belong to canonical module plan | Phase 2D2 |
+| `choice_import_visibility_non_exported` | Same-module imports may use private declarations; the old cross-module conflict premise was incorrect | Rename/correct the fixture and add an observable same-module choice construction contract | Phase 2D2 |
 | Removed misleading lifetime precision case | No valid location contract existed | Real negative path/line case | Phase 4 |
 
 ### Durable decision log

@@ -3,3 +3,4 @@ entry = "."
 [backends.html]
 mode = "success"
 warnings = "forbid"
+rendered_output_contains = ["config_package_folder_missing_default_ignored result=ok"]
