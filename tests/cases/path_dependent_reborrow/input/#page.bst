@@ -6,9 +6,9 @@ condition = true
 
 if condition:
     result1 ~= x
-    io.line([: [result1]])
+    io.line([: path_dependent_reborrow executed-path-result=[result1]])
 else
     result2 ~= x
-    io.line([: [result2]])
-    io.line([: [x]])
+    io.line([: path_dependent_reborrow alternate-path-result=[result2]])
+    io.line([: path_dependent_reborrow alternate-source=[x]])
 ;

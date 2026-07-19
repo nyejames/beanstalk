@@ -1,4 +1,4 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
-rendered_output_contains = ["test_data"]
+rendered_output_contains = ["consistent_ownership_outcomes true-branch-result=test_data"]

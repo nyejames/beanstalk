@@ -13,4 +13,4 @@ value = load_value(true) catch:
 ;
 alias1 = value
 alias2 = alias1
-io.line([: [alias2]])
+io.line([: adversarial_borrow_after_result_handler recovered-alias=[alias2]])

@@ -21,4 +21,4 @@ loop i < 4:
     i = i + 1
 ;
 
-io.line([: [sum]])
+io.line([: adversarial_loop_match_result_chain final-total=[sum]])

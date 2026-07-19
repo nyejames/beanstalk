@@ -7,9 +7,9 @@ some_condition = true
 first_ref ~= data
 
 if some_condition:
-    io.line([: [first_ref]])
+    io.line([: branch_reborrow_after_last_use executed-first-reference=[first_ref]])
 else
-    io.line([: [first_ref]])
+    io.line([: branch_reborrow_after_last_use alternate-first-reference=[first_ref]])
     second_ref ~= data
-    io.line([: [second_ref]])
+    io.line([: branch_reborrow_after_last_use alternate-second-reference=[second_ref]])
 ;

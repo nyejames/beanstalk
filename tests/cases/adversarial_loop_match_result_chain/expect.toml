@@ -1,4 +1,4 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
-rendered_output_contains = ["32"]
+rendered_output_contains = ["adversarial_loop_match_result_chain final-total=32"]

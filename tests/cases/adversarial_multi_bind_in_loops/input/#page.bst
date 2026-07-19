@@ -11,4 +11,4 @@ loop idx < 4:
     idx = idx + 1
 ;
 
-io.line([: [total]])
+io.line([: adversarial_multi_bind_in_loops final-total=[total]])

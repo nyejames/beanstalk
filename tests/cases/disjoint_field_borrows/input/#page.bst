@@ -11,4 +11,4 @@ sum = x_ref + y_ref
 
 pair.x = sum
 pair.y = pair.y + 1
-io.line([: [pair.x] [pair.y]])
+io.line([: disjoint_field_borrows final-fields=[pair.x] [pair.y]])

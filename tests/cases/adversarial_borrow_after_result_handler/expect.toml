@@ -1,4 +1,4 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
-rendered_output_contains = ["value"]
+rendered_output_contains = ["adversarial_borrow_after_result_handler recovered-alias=value"]

@@ -10,12 +10,12 @@ condition = true
 if condition:
     -- On this path, data is moved (last use)
     result1 ~= data
-    io.line([: [result1]])
+    io.line([: consistent_ownership_outcomes true-branch-result=[result1]])
     -- No further use of data
 else
     -- On this path, data is also moved (last use)
     result2 ~= data
-    io.line([: [result2]])
+    io.line([: consistent_ownership_outcomes false-branch-result=[result2]])
     -- No further use of data
 ;
 

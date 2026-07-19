@@ -1,4 +1,4 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
-rendered_output_contains = ["30 21"]
+rendered_output_contains = ["disjoint_field_borrows final-fields=30 21"]

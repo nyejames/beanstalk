@@ -30,15 +30,15 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 2R5c2 — replace remaining weak borrow and adversarial runtime markers
-LAST_ACCEPTED_COMMIT: pending Phase 2R5c1 acceptance commit (previous plan commit `dee1a6176`)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 2R5c1 changes ready to commit
+CURRENT_SLICE: Phase 2R5c3 — strengthen weak call, result, option, and multi-bind observations
+LAST_ACCEPTED_COMMIT: pending Phase 2R5c2 acceptance commit (previous plan commit `d036eef0d`)
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 2R5c2 changes ready to commit
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: `testing.bd`, `validation.bd`, compiler/build-system overviews, and progress matrix govern runner contracts and gates
-- code: Phase 2-migrated borrow/adversarial fixtures whose outputs remain unlabeled values such as `value`, `shared`, `32`, `16`, `true`, `30 21`, `shared_data`, or `test_value`
+- code: Phase 2-migrated choice-import, call, error/catch, multi-bind, and `none_*` fixtures with generic or unlabeled output
 ACCEPTANCE_CRITERIA:
-- the remaining weak borrow/adversarial markers are replaced by context-rich observable output without changing the access/control-flow contract
+- call, result, and multi-bind values are context-labeled; the three `none_*` cases observe actual absence instead of printing unrelated `ok`
 - static page contracts remain artifact-owned and no artificial console output is introduced
 - current backend outcomes and distinct fixture ownership remain unchanged
 - exact case runs, canonical audit, and `just validate` pass
@@ -51,7 +51,7 @@ BLOCKERS_OR_OPEN_DECISIONS: none; compiler diagnostics Phase 4.1c remains serial
 DELEGATION_DECISION: codex-cli — explicit user-selected provider for implementation workers
 NEXT_WORKER_ORDER: codex-cli only for this run-local override
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit accepted Phase 2R5c1, refresh its hash, then launch bounded Phase 2R5c2 through `codex-cli-beanstalk`
+NEXT_RESUME_ACTION: commit accepted Phase 2R5c2, refresh its hash, then launch bounded Phase 2R5c3 through `codex-cli-beanstalk`
 
 ---
 
@@ -131,7 +131,8 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 2R4 path containment | `5e39b34aa` | Accepted | 3,496 Rust tests; 1,784 integration executions; canonical fixture/input/entry containment enforced; zero hard findings |
 | Phase 2R5a choice-construction contracts | `8992704e9` | Accepted | 17 acceptance-only; 526 rendered-output blocks; six choice cases now observe variants/payloads; zero hard findings |
 | Phase 2R5b named fixture contracts | `dee1a6176` | Accepted | 17 acceptance-only; 528 rendered-output blocks; struct default, Bool branch, and current-config wording now observed; zero hard findings |
-| Phase 2R5c1 named weak runtime markers | pending acceptance commit | Accepted | 528 rendered-output blocks; ten named fixtures now use context-rich markers; zero hard findings |
+| Phase 2R5c1 named weak runtime markers | `d036eef0d` | Accepted | 528 rendered-output blocks; ten named fixtures now use context-rich markers; zero hard findings |
+| Phase 2R5c2 borrow/adversarial markers | pending acceptance commit | Accepted | 528 rendered-output blocks; ten borrow/adversarial fixtures now use context-rich markers; zero hard findings |
 
 ---
 

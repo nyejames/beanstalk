@@ -1,4 +1,4 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
-rendered_output_contains = ["test_value"]
+rendered_output_contains = ["path_dependent_reborrow executed-path-result=test_value"]

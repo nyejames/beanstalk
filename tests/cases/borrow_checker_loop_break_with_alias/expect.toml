@@ -3,4 +3,7 @@ entry = "."
 [backends.html]
 mode = "success"
 warnings = "forbid"
-rendered_output_contains = ["loop_value", "true"]
+rendered_output_contains = [
+    "borrow_checker_loop_break_with_alias aliased-loop-value=loop_value",
+    "borrow_checker_loop_break_with_alias final-found=true",
+]

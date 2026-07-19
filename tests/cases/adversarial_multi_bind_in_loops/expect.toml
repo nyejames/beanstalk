@@ -1,4 +1,4 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
-rendered_output_contains = ["16"]
+rendered_output_contains = ["adversarial_multi_bind_in_loops final-total=16"]

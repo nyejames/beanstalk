@@ -1,4 +1,8 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
-rendered_output_contains = ["shared"]
+rendered_output_contains = [
+    "adversarial_borrow_nested_loop_aliases alias-path=shared",
+    "adversarial_borrow_nested_loop_aliases copied-path=shared",
+    "adversarial_borrow_nested_loop_aliases final-source=shared",
+]
