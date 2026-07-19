@@ -3067,6 +3067,7 @@ tags = ["integration","diagnostics"]
 id = "mixed_numeric_literals"
 path = "mixed_numeric_literals"
 tags = ["integration","language"]
+role = "smoke"
 
 [[case]]
 id = "modulus_operator"
