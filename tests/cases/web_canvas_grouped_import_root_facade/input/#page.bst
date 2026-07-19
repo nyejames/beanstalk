@@ -1,7 +1,13 @@
 import @web/canvas { get_canvas, context_2d, Canvas2d }
 
-uses_grouped_canvas_imports |context Canvas2d| -> String, Error!:
-    return "grouped_canvas_ok"
+uses_grouped_canvas_imports || -> String, Error!:
+    canvas = get_canvas("game_canvas")!
+    context ~Canvas2d = context_2d(canvas)!
+    return "grouped_canvas_binding_ready"
 ;
 
-io.line("grouped_canvas_imports_resolved")
+status = uses_grouped_canvas_imports() catch:
+    then "grouped_canvas_binding_unavailable"
+;
+
+io.line([: [status]])
