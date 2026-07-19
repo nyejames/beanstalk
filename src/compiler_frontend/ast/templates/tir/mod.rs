@@ -163,6 +163,9 @@ pub(crate) use classification::{
 };
 
 pub(crate) use fold::fold_prepared_template;
+pub(crate) use handoff_materialization::{
+    owned_runtime_slot_handoff_for_prepared_view, owned_runtime_template_handoff_for_prepared_view,
+};
 pub(crate) use preparation::{
     PreparedRuntime, PreparedTemplate, RuntimeTemplateReason, TemplateHelperKind,
     TemplatePreparationMode, prepare_tir_view,

@@ -31,7 +31,9 @@ use crate::compiler_frontend::ast::templates::tir::summary::{
     TemplateIrSummary, summarize_existing_root,
 };
 use crate::compiler_frontend::ast::templates::tir::view::{TemplateTirPhase, TirView};
-use crate::compiler_frontend::ast::templates::tir::{PreparedRuntime, RuntimeTemplateReason};
+use crate::compiler_frontend::ast::templates::tir::{
+    PreparedRuntime, RuntimeTemplateReason, owned_runtime_template_handoff_for_prepared_view,
+};
 use crate::compiler_frontend::ast::templates::{
     OwnedRuntimeTemplateBody, OwnedRuntimeTemplateNode,
 };
@@ -57,11 +59,10 @@ fn prepared_runtime(view: &TirView<'_>) -> PreparedRuntime {
 }
 
 fn handoff_for_view(
-    store: &TemplateIrStore,
     view: TirView<'_>,
 ) -> Result<crate::compiler_frontend::ast::templates::OwnedRuntimeTemplateHandoff, CompilerError> {
     let prepared = prepared_runtime(&view);
-    store.owned_runtime_template_handoff_for_prepared_view(&prepared, view)
+    owned_runtime_template_handoff_for_prepared_view(&prepared, view)
 }
 
 /// Pushes a literal text node into the store and returns its ID.
@@ -195,7 +196,7 @@ fn materialize_parent_handoff_result(
 ) -> Result<OwnedRuntimeTemplateBody, CompilerError> {
     let store_ref = store.borrow();
     let view = view_for(&store_ref, parent_template_id, view_context);
-    handoff_for_view(&store_ref, view).map(|handoff| handoff.body)
+    handoff_for_view(view).map(|handoff| handoff.body)
 }
 
 /// Convenience wrapper for success-path tests that expect materialization to
@@ -475,7 +476,7 @@ fn owned_handoff_materializes_text_from_the_shared_store() {
     let handoff = {
         let store_ref = store.borrow();
         let view = view_for(&store_ref, template_id, TemplateViewContext::default());
-        handoff_for_view(&store_ref, view).expect("text handoff should succeed")
+        handoff_for_view(view).expect("text handoff should succeed")
     };
 
     let OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::Text { text, .. }) =
@@ -529,7 +530,7 @@ fn owned_handoff_resolves_slot_overlay_to_a_child_template() {
     let handoff = {
         let store_ref = store.borrow();
         let view = view_for(&store_ref, parent_id, view_context);
-        handoff_for_view(&store_ref, view).expect("slot handoff should succeed")
+        handoff_for_view(view).expect("slot handoff should succeed")
     };
 
     let OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::ChildTemplate {
@@ -574,7 +575,7 @@ fn owned_handoff_missing_slot_resolution_renders_slot_placeholder() {
     let handoff = {
         let store_ref = store.borrow();
         let view = view_for(&store_ref, parent_id, view_context);
-        handoff_for_view(&store_ref, view).expect("handoff materialization should succeed")
+        handoff_for_view(view).expect("handoff materialization should succeed")
     };
 
     assert!(
@@ -619,7 +620,7 @@ fn owned_handoff_preserves_child_boundary() {
     let handoff = {
         let store_ref = store.borrow();
         let view = view_for(&store_ref, parent_id, TemplateViewContext::default());
-        handoff_for_view(&store_ref, view).expect("child handoff should succeed")
+        handoff_for_view(view).expect("child handoff should succeed")
     };
 
     let OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::ChildTemplate {

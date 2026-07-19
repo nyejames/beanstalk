@@ -142,7 +142,6 @@ fn collect_doc_fragments(
             path_format_config: context.path_format_config,
             source_file_scope: &template.location.scope,
             template_const_loop_iteration_limit: context.template_const_loop_iteration_limit,
-            template_ir_store: Some(Rc::clone(&context.template_ir_store)),
             bindings: Vec::new(),
             fold_cache: TirFoldCache::new(),
         };
@@ -155,7 +154,7 @@ fn collect_doc_fragments(
             TemplateTirPhase::Composed,
             reference.context,
         )?;
-        let preparation = prepare_tir_view(&view, &store, TemplatePreparationMode::ConstRequired)?;
+        let preparation = prepare_tir_view(&view, TemplatePreparationMode::ConstRequired)?;
         let prepared = match preparation {
             PreparedTemplate::Foldable(prepared) => prepared,
             PreparedTemplate::Helper(_) | PreparedTemplate::Runtime(_) => {

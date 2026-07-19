@@ -67,7 +67,7 @@ pub(super) fn finalize_template_value(
 
     // Preparation validates and classifies the exact view before cache lookup
     // or folding. Its compact result is the sole final-value decision source.
-    let preparation = prepare_tir_view(&view, &store, preparation_mode)?;
+    let preparation = prepare_tir_view(&view, preparation_mode)?;
     let fold_preparation = match preparation {
         PreparedTemplate::Helper(kind) => {
             increment_ast_counter(AstCounter::TirFinalizationFoldSuccesses);
@@ -85,7 +85,6 @@ pub(super) fn finalize_template_value(
         fold_inputs.project_path_resolver,
         fold_inputs.string_table,
         fold_inputs.template_const_loop_iteration_limit,
-        Some(Rc::clone(&store_handle)),
     );
     let result = fold_prepared_template(&fold_preparation, view, &mut fold_context)?;
     let folded = template_emission_to_string_id(result, &mut fold_context)?;
@@ -112,11 +111,10 @@ fn template_emission_to_string_id(
 
 /// Project-aware inputs for finalization-time template folding.
 ///
-/// WHAT: bundles the stable services and TIR ownership handles needed to build
-/// a `TemplateFoldContext`.
-/// WHY: finalization folds need the shared module-store handle. Keeping these
-/// values together avoids long signatures as TIR authority is passed into the
-/// fold path.
+/// WHAT: bundles the stable services and TIR ownership handle needed to build
+/// the exact finalization view and run one fold operation.
+/// WHY: finalization owns the module-store handle while the active `TirView`
+/// carries structural authority through preparation and folding.
 pub(super) struct TemplateValueFinalizationInputs<'a, 'strings> {
     pub(super) source_file_scope: &'a InternedPath,
     pub(super) path_format_config: &'a PathStringFormatConfig,
@@ -128,16 +126,15 @@ pub(super) struct TemplateValueFinalizationInputs<'a, 'strings> {
 
 /// Creates a `TemplateFoldContext` from finalization parameters.
 ///
-/// WHAT: bundles project-aware folding services and the module-store authority.
-/// WHY: folding receives the exact store at each TIR entry point, so the context
-///      no longer carries a duplicate snapshot or borrowed-store access model.
+/// WHAT: bundles project-aware folding services for one fold operation.
+/// WHY: TIR structural authority comes from the exact view at each fold entry
+///      point rather than from a duplicate context field.
 pub(super) fn make_fold_context<'a>(
     source_file_scope: &'a InternedPath,
     path_format_config: &'a PathStringFormatConfig,
     project_path_resolver: &'a ProjectPathResolver,
     string_table: &'a mut StringTable,
     template_const_loop_iteration_limit: usize,
-    template_ir_store: Option<Rc<RefCell<TemplateIrStore>>>,
 ) -> TemplateFoldContext<'a> {
     TemplateFoldContext {
         string_table,
@@ -145,7 +142,6 @@ pub(super) fn make_fold_context<'a>(
         path_format_config,
         source_file_scope,
         template_const_loop_iteration_limit,
-        template_ir_store,
         bindings: Vec::new(),
         fold_cache: TirFoldCache::new(),
     }

@@ -80,7 +80,7 @@ fn prepare_root(
         TemplateViewContext::default(),
     )?;
     let identity = view.identity();
-    let prepared = prepare_tir_view(&view, &store, mode)?;
+    let prepared = prepare_tir_view(&view, mode)?;
     Ok((prepared, identity))
 }
 
@@ -410,7 +410,7 @@ fn preparation_reenters_nested_template_payload_authority() {
     let view = TirView::new(&store, outer_id, TemplateTirPhase::Composed, context)
         .expect("outer view should construct");
 
-    let error = prepare_tir_view(&view, &store, TemplatePreparationMode::Value)
+    let error = prepare_tir_view(&view, TemplatePreparationMode::Value)
         .expect_err("nested template authority must be traversed");
     let TemplateError::Infrastructure(error) = error else {
         panic!("nested authority failure must remain infrastructure");
@@ -446,7 +446,7 @@ fn preparation_classifies_exact_child_cycle_as_runtime() {
     )
     .expect("cyclic view should construct");
 
-    let prepared = prepare_tir_view(&view, &store, TemplatePreparationMode::Value)
+    let prepared = prepare_tir_view(&view, TemplatePreparationMode::Value)
         .expect("child cycles remain valid runtime values");
     assert!(matches!(
         prepared,
@@ -506,7 +506,7 @@ fn preparation_classifies_nested_value_cycle_as_runtime() {
     let view = TirView::new(&store, outer_id, TemplateTirPhase::Composed, context)
         .expect("outer nested-cycle view should construct");
 
-    let prepared = prepare_tir_view(&view, &store, TemplatePreparationMode::Value)
+    let prepared = prepare_tir_view(&view, TemplatePreparationMode::Value)
         .expect("nested value cycles remain valid runtime values");
     assert!(matches!(
         prepared,
@@ -540,7 +540,7 @@ fn preparation_validates_runtime_slot_plan_authority() {
     )
     .expect("view should construct before slot-plan preparation");
 
-    let error = prepare_tir_view(&view, &store, TemplatePreparationMode::Value)
+    let error = prepare_tir_view(&view, TemplatePreparationMode::Value)
         .expect_err("missing runtime slot plan must remain authority failure");
     let TemplateError::Infrastructure(error) = error else {
         panic!("missing slot plan must remain infrastructure");
@@ -574,7 +574,7 @@ fn preparation_validates_wrapper_set_authority() {
     )
     .expect("view should construct before wrapper-set preparation");
 
-    let error = prepare_tir_view(&view, &store, TemplatePreparationMode::Value)
+    let error = prepare_tir_view(&view, TemplatePreparationMode::Value)
         .expect_err("missing wrapper set must remain authority failure");
     let TemplateError::Infrastructure(error) = error else {
         panic!("missing wrapper set must remain infrastructure");

@@ -41,7 +41,8 @@ use crate::compiler_frontend::ast::templates::tir::store::{TemplateIrStore, Temp
 use crate::compiler_frontend::ast::templates::tir::summary::TemplateIrSummary;
 use crate::compiler_frontend::ast::templates::tir::view::{TemplateTirPhase, TirView};
 use crate::compiler_frontend::ast::templates::tir::{
-    PreparedTemplate, TemplatePreparationMode, prepare_tir_view,
+    PreparedTemplate, TemplatePreparationMode, owned_runtime_template_handoff_for_prepared_view,
+    prepare_tir_view,
 };
 use crate::compiler_frontend::ast::templates::{
     OwnedRuntimeTemplateBody, OwnedRuntimeTemplateHandoff, OwnedRuntimeTemplateNode,
@@ -63,10 +64,7 @@ fn empty_location() -> SourceLocation {
     SourceLocation::default()
 }
 
-fn fold_context<'a>(
-    string_table: &'a mut StringTable,
-    store: &Rc<RefCell<TemplateIrStore>>,
-) -> TemplateFoldContext<'a> {
+fn fold_context<'a>(string_table: &'a mut StringTable) -> TemplateFoldContext<'a> {
     let cwd = std::env::temp_dir();
     let resolver = Box::leak(Box::new(
         ProjectPathResolver::new(
@@ -87,7 +85,6 @@ fn fold_context<'a>(
         path_format_config: path_format,
         source_file_scope: source_scope,
         template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
-        template_ir_store: Some(Rc::clone(store)),
         bindings: vec![],
         fold_cache: TirFoldCache::new(),
     }
@@ -790,7 +787,7 @@ fn prepared_fold_fixture_result(
     let (phase, store) = fixture_parent_view(fixture);
     let view = TirView::new(&store, fixture.parent, phase, fixture.context)
         .expect("test view should construct");
-    let preparation = match prepare_tir_view(&view, &store, TemplatePreparationMode::Value)? {
+    let preparation = match prepare_tir_view(&view, TemplatePreparationMode::Value)? {
         PreparedTemplate::Foldable(preparation) => preparation,
         PreparedTemplate::Runtime(runtime) => {
             return Err(CompilerError::compiler_error(format!(
@@ -806,7 +803,7 @@ fn prepared_fold_fixture_result(
             .into());
         }
     };
-    let mut context = fold_context(string_table, &fixture.store);
+    let mut context = fold_context(string_table);
     fold_prepared_template(&preparation, view, &mut context)
 }
 
@@ -821,9 +818,7 @@ fn handoff_fixture_result(
         identity: view.identity(),
         reason: RuntimeTemplateReason::RuntimeExpression,
     };
-    store
-        .owned_runtime_template_handoff_for_prepared_view(&prepared, view)
-        .map_err(Into::into)
+    owned_runtime_template_handoff_for_prepared_view(&prepared, view).map_err(Into::into)
 }
 
 fn handoff_fixture(
@@ -1094,7 +1089,7 @@ fn preparation_preserves_outer_runtime_expression_override_in_handoff() {
         let (phase, store) = fixture_parent_view(&fixture);
         let view = TirView::new(&store, fixture.parent, phase, fixture.context)
             .expect("parent view should construct");
-        prepare_tir_view(&view, &store, TemplatePreparationMode::Value)
+        prepare_tir_view(&view, TemplatePreparationMode::Value)
             .expect("outer runtime wrapper override should be a valid runtime result")
     };
     assert!(
@@ -1174,7 +1169,7 @@ fn preparation_ignores_runtime_referenced_wrapper_expression_overlay() {
         let (phase, store) = fixture_parent_view(&fixture);
         let view = TirView::new(&store, fixture.parent, phase, fixture.context)
             .expect("parent view should construct");
-        prepare_tir_view(&view, &store, TemplatePreparationMode::Value)
+        prepare_tir_view(&view, TemplatePreparationMode::Value)
             .expect("referenced wrapper expression should be ignored by the structural transition")
     };
     assert!(
@@ -1249,7 +1244,7 @@ fn preparation_falls_back_for_runtime_non_injected_slot_source() {
             fixture.context,
         )
         .expect("parent view should construct");
-        prepare_tir_view(&view, &store, TemplatePreparationMode::Value)
+        prepare_tir_view(&view, TemplatePreparationMode::Value)
             .expect("runtime slot source should be an eligible runtime result")
     };
     assert_eq!(
@@ -1350,7 +1345,7 @@ fn prepared_fold_rejects_slot_insert_from_wrapper_context_set() {
     let (phase, store) = fixture_parent_view(&fixture);
     let view = TirView::new(&store, fixture.parent, phase, fixture.context)
         .expect("test view should construct");
-    let preparation = prepare_tir_view(&view, &store, TemplatePreparationMode::Value)
+    let preparation = prepare_tir_view(&view, TemplatePreparationMode::Value)
         .expect("slot insert helper should prepare without folding");
     assert!(!matches!(preparation, PreparedTemplate::Foldable(_)));
 }
@@ -1387,7 +1382,7 @@ fn prepared_fold_rejects_slot_insert_from_effective_slot_source() {
         context,
     )
     .expect("slot-overlay view should construct");
-    let preparation = prepare_tir_view(&view, &store_ref, TemplatePreparationMode::Value)
+    let preparation = prepare_tir_view(&view, TemplatePreparationMode::Value)
         .expect("slot insert source should prepare without folding");
     assert!(!matches!(preparation, PreparedTemplate::Foldable(_)));
 }
@@ -1493,7 +1488,7 @@ fn preparation_terminates_for_cyclic_nested_wrapper_contexts() {
         parent_context,
     )
     .expect("cyclic wrapper view should construct");
-    let preparation = prepare_tir_view(&view, &store_ref, TemplatePreparationMode::Value)
+    let preparation = prepare_tir_view(&view, TemplatePreparationMode::Value)
         .expect("cyclic wrapper contexts should produce a bounded runtime result");
     assert!(
         matches!(preparation, PreparedTemplate::Runtime(_)),

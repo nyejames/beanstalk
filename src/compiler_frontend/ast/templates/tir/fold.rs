@@ -151,20 +151,6 @@ impl<'view, 'store> FoldTraversalInput<'view, 'store> {
     }
 }
 
-struct PreparedWrapperReference {
-    reference: TemplateWrapperReference,
-}
-
-fn prepare_wrapper_references(
-    wrapper_references: &[TemplateWrapperReference],
-) -> Result<Vec<PreparedWrapperReference>, TemplateError> {
-    Ok(wrapper_references
-        .iter()
-        .copied()
-        .map(|reference| PreparedWrapperReference { reference })
-        .collect())
-}
-
 // -------------------------
 //  Public entry point
 // -------------------------
@@ -886,12 +872,10 @@ fn fold_conditional_child_wrappers_around_emission(
     fold_context: &mut TemplateFoldContext<'_>,
     fold_input: &FoldTraversalInput<'_, '_>,
 ) -> Result<TemplateEmission, TemplateError> {
-    let prepared_wrappers = prepare_wrapper_references(wrapper_references)?;
-
     let (output, signal_kind) = match emission {
         TemplateEmission::NoOutput => {
             if matches!(application_mode, TirWrapperApplicationMode::IfChildEmits)
-                || prepared_wrappers.is_empty()
+                || wrapper_references.is_empty()
             {
                 return Ok(TemplateEmission::NoOutput);
             }
@@ -905,7 +889,7 @@ fn fold_conditional_child_wrappers_around_emission(
         }
         TemplateEmission::Break(None) => {
             if matches!(application_mode, TirWrapperApplicationMode::IfChildEmits)
-                || prepared_wrappers.is_empty()
+                || wrapper_references.is_empty()
             {
                 return Ok(TemplateEmission::Break(None));
             }
@@ -917,7 +901,7 @@ fn fold_conditional_child_wrappers_around_emission(
         }
         TemplateEmission::Continue(None) => {
             if matches!(application_mode, TirWrapperApplicationMode::IfChildEmits)
-                || prepared_wrappers.is_empty()
+                || wrapper_references.is_empty()
             {
                 return Ok(TemplateEmission::Continue(None));
             }
@@ -929,7 +913,7 @@ fn fold_conditional_child_wrappers_around_emission(
         }
     };
 
-    if prepared_wrappers.is_empty() {
+    if wrapper_references.is_empty() {
         return Ok(template_emission_from_output_and_signal(
             output,
             signal_kind,
@@ -938,14 +922,14 @@ fn fold_conditional_child_wrappers_around_emission(
 
     add_ast_counter(
         AstCounter::TemplateWrapperApplications,
-        prepared_wrappers.len(),
+        wrapper_references.len(),
     );
 
     // Iterate wrappers in reverse (outermost-first), folding each around the
     // current child output. The output of one wrapper becomes the input to the
     // next, matching the nesting order of the structural wrap path.
     let mut current_output = output;
-    for wrapper_reference in prepared_wrappers.iter().rev() {
+    for wrapper_reference in wrapper_references.iter().rev() {
         current_output = fold_tir_wrapper_around_child_output(
             store,
             wrapper_reference,
@@ -974,12 +958,11 @@ fn fold_conditional_child_wrappers_around_emission(
 ///      `fold_tir_node` on a synthetic subtree.
 fn fold_tir_wrapper_around_child_output(
     store: &TemplateIrStore,
-    prepared_wrapper: &PreparedWrapperReference,
+    wrapper_reference: &TemplateWrapperReference,
     child_output: StringId,
     fold_context: &mut TemplateFoldContext<'_>,
     fold_input: &FoldTraversalInput<'_, '_>,
 ) -> Result<StringId, TemplateError> {
-    let wrapper_reference = prepared_wrapper.reference;
     let wrapper_store = store;
     let wrapper_template = wrapper_store
         .get_template(wrapper_reference.root)
@@ -992,7 +975,7 @@ fn fold_tir_wrapper_around_child_output(
         })?;
 
     let parent_view = fold_input.view;
-    let wrapper_view = parent_view.wrapper(wrapper_reference)?;
+    let wrapper_view = parent_view.wrapper(*wrapper_reference)?;
     let wrapper_fold_input = FoldTraversalInput {
         view: &wrapper_view,
     };
@@ -1369,9 +1352,12 @@ fn fold_tir_wrapper_branch_chain(
                 fold_bool_condition(effective, &branch.location, fold_context)?
             }
             (TemplateBranchSelector::OptionPresentCapture { scrutinee, pattern }, None) => {
-                if let Some(payload) =
-                    selected_option_capture_payload(scrutinee, pattern, fold_context)?
-                {
+                if let Some(payload) = selected_option_capture_payload(
+                    scrutinee,
+                    pattern,
+                    fold_input.view.store(),
+                    fold_context,
+                )? {
                     return fold_tir_wrapper_branch_with_bindings(
                         store,
                         branch,
@@ -1388,9 +1374,12 @@ fn fold_tir_wrapper_branch_chain(
                 false
             }
             (TemplateBranchSelector::OptionPresentCapture { pattern, .. }, Some(effective)) => {
-                if let Some(payload) =
-                    selected_option_capture_payload(effective, pattern, fold_context)?
-                {
+                if let Some(payload) = selected_option_capture_payload(
+                    effective,
+                    pattern,
+                    fold_input.view.store(),
+                    fold_context,
+                )? {
                     return fold_tir_wrapper_branch_with_bindings(
                         store,
                         branch,
@@ -1497,9 +1486,12 @@ fn fold_tir_branch_chain(
                 fold_bool_condition(effective, &branch.location, fold_context)?
             }
             (TemplateBranchSelector::OptionPresentCapture { scrutinee, pattern }, None) => {
-                if let Some(payload) =
-                    selected_option_capture_payload(scrutinee, pattern, fold_context)?
-                {
+                if let Some(payload) = selected_option_capture_payload(
+                    scrutinee,
+                    pattern,
+                    fold_input.view.store(),
+                    fold_context,
+                )? {
                     return fold_tir_branch_with_bindings(
                         store,
                         branch,
@@ -1514,9 +1506,12 @@ fn fold_tir_branch_chain(
                 false
             }
             (TemplateBranchSelector::OptionPresentCapture { pattern, .. }, Some(effective)) => {
-                if let Some(payload) =
-                    selected_option_capture_payload(effective, pattern, fold_context)?
-                {
+                if let Some(payload) = selected_option_capture_payload(
+                    effective,
+                    pattern,
+                    fold_input.view.store(),
+                    fold_context,
+                )? {
                     return fold_tir_branch_with_bindings(
                         store,
                         branch,

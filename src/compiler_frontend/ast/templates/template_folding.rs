@@ -8,7 +8,6 @@
 //! without entangling parser or HIR code.
 
 use crate::compiler_frontend::ast::const_eval::constant_fold;
-use crate::compiler_frontend::ast::const_values::resolver::classify_template_from_effective_tir;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::expressions::expression_rpn::{
     ExpressionRpn, ExpressionRpnItem,
@@ -18,7 +17,9 @@ use crate::compiler_frontend::ast::templates::error::TemplateError;
 use crate::compiler_frontend::ast::templates::template_control_flow::{
     TemplateFoldBinding, TemplateLoopControlKind,
 };
-use crate::compiler_frontend::ast::templates::tir::{TemplateIrStore, TirFoldCache};
+use crate::compiler_frontend::ast::templates::tir::{
+    TemplateIrStore, TemplateTirPhase, TirFoldCache, TirView, classify_effective_tir_view_template,
+};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, InvalidTemplateStructureReason,
@@ -29,8 +30,6 @@ use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
-use std::cell::RefCell;
-use std::rc::Rc;
 
 // -------------------------
 //  Folding Context
@@ -47,13 +46,6 @@ pub struct TemplateFoldContext<'a> {
     pub path_format_config: &'a PathStringFormatConfig,
     pub source_file_scope: &'a InternedPath,
     pub template_const_loop_iteration_limit: usize,
-
-    /// Module-local TIR store used by nested constant-expression folding.
-    ///
-    /// The final template-value boundary owns preparation and exact-view
-    /// construction. This handle remains available only for nested expression
-    /// constant evaluation inside an already active fold.
-    pub(crate) template_ir_store: Option<Rc<RefCell<TemplateIrStore>>>,
 
     pub(crate) bindings: Vec<TemplateFoldBinding>,
 
@@ -139,9 +131,10 @@ impl TemplateFoldContext<'_> {
 pub(crate) fn selected_option_capture_payload(
     scrutinee: &Expression,
     pattern: &MatchPattern,
+    store: &TemplateIrStore,
     fold_context: &mut TemplateFoldContext<'_>,
 ) -> Result<Option<TemplateFoldBinding>, TemplateError> {
-    match const_option_presence(scrutinee, fold_context)? {
+    match const_option_presence(scrutinee, store, fold_context)? {
         ConstOptionPresence::Present(value) => Ok(Some(TemplateFoldBinding {
             path: option_capture_binding_path(pattern)?,
             value: *value,
@@ -158,6 +151,7 @@ enum ConstOptionPresence {
 
 fn const_option_presence(
     scrutinee: &Expression,
+    store: &TemplateIrStore,
     fold_context: &mut TemplateFoldContext<'_>,
 ) -> Result<ConstOptionPresence, TemplateError> {
     let resolved = resolve_fold_bindings_in_expression(scrutinee, fold_context)?;
@@ -174,20 +168,21 @@ fn const_option_presence(
 
         ExpressionKind::Coerced { value, .. } => {
             let payload = (**value).clone();
-            let template_ir_store = fold_context.template_ir_store.as_ref();
 
             // Scalar and other non-template payloads keep their ordinary const rules.
-            // Store authority is required only when expression recursion reaches
-            // a nested template.
+            // The active fold view supplies the store authority for any nested
+            // template reached by expression recursion.
             let payload_is_compile_time_constant = payload
                 .const_value_kind_with_template_classifier(&mut |template| {
-                    let store = template_ir_store.ok_or_else(|| {
-                        CompilerError::compiler_error(
-                            "Template option-capture folding requires the module-local TIR store.",
-                        )
-                    })?;
-
-                    classify_template_from_effective_tir(template, store)
+                    let reference = template.tir_reference;
+                    let view = TirView::with_minimum_phase(
+                        store,
+                        reference.root,
+                        reference.phase,
+                        TemplateTirPhase::Composed,
+                        reference.context,
+                    )?;
+                    Ok(classify_effective_tir_view_template(&view)?.const_value_kind)
                 })?
                 .is_compile_time_value();
 

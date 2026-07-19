@@ -14,10 +14,6 @@ Use the [Progress Matrix](docs/src/docs/progress/#page.bst) as a reference for w
 - [Test Suite Hardening](docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md)
 - [Compiler diagnostics improvements](docs/roadmap/plans/compiler-diagnostics-improvement-plan.md)
 
-## Completed architecture work
-
-- [Final TIR completion](docs/roadmap/plans/final-tir-completion-plan.md) — R0-R6C accepted and retained as historical architecture, validation and performance evidence.
-
 ## Completed post-TIR plan review checkpoint
 
 The mandatory repository-wide refresh was completed against `1298da468` after final TIR
@@ -60,8 +56,8 @@ keys, imported-constant/directive invalidation, incremental template prerequisit
 parallel folding and cross-owner backend string-assembly investigation. It requires profiles and a
 complete semantic key/invalidation model before any cache or scheduling implementation.
 
-The [final TIR completion plan](docs/roadmap/plans/final-tir-completion-plan.md) remains the historical
-architecture source. Broad arena and invariant work remains in the
+The final TIR completion plan remains the historical architecture source. Broad arena and invariant
+work remains in the
 [frontend optimisation plan](docs/roadmap/plans/frontend-arena-semantic-invariant-optimization-plan.md).
 
 ## Genuinely deferred items

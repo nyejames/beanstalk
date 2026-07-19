@@ -69,7 +69,6 @@ fn build_test_fold_context<'a>(
     resolver: &'a ProjectPathResolver,
     path_format: &'a PathStringFormatConfig,
     source_scope: &'a InternedPath,
-    store: &'a Rc<RefCell<TemplateIrStore>>,
 ) -> TemplateFoldContext<'a> {
     TemplateFoldContext {
         string_table,
@@ -77,7 +76,6 @@ fn build_test_fold_context<'a>(
         path_format_config: path_format,
         source_file_scope: source_scope,
         template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
-        template_ir_store: Some(Rc::clone(store)),
         bindings: vec![],
         fold_cache: TirFoldCache::new(),
     }
@@ -148,15 +146,10 @@ fn fold_final_view_fixture(
     let view = TirView::new(&store, fixture.template_id, phase, fixture.context)
         .expect("test view should construct");
 
-    let mut fold_context = build_test_fold_context(
-        string_table,
-        &resolver,
-        &path_format,
-        &source_scope,
-        &fixture.store,
-    );
+    let mut fold_context =
+        build_test_fold_context(string_table, &resolver, &path_format, &source_scope);
 
-    let prepared = match prepare_tir_view(&view, &store, TemplatePreparationMode::Value)? {
+    let prepared = match prepare_tir_view(&view, TemplatePreparationMode::Value)? {
         PreparedTemplate::Foldable(prepared) => prepared,
         PreparedTemplate::Runtime(_) | PreparedTemplate::Helper(_) => {
             return Err(TemplateError::Infrastructure(Box::new(
@@ -663,15 +656,10 @@ fn final_view_runtime_slot_application_requires_handoff() {
         fixture.context,
     )
     .expect("final view should construct");
-    let fold_context = build_test_fold_context(
-        &mut string_table,
-        &resolver,
-        &path_format,
-        &source_scope,
-        &fixture.store,
-    );
+    let fold_context =
+        build_test_fold_context(&mut string_table, &resolver, &path_format, &source_scope);
 
-    let first = prepare_tir_view(&view, &store, TemplatePreparationMode::Value)
+    let first = prepare_tir_view(&view, TemplatePreparationMode::Value)
         .expect("runtime slot application should prepare as runtime");
     assert!(matches!(first, PreparedTemplate::Runtime(_)));
 
@@ -685,7 +673,7 @@ fn final_view_runtime_slot_application_requires_handoff() {
         "runtime slot application must not populate the fold cache"
     );
 
-    let second = prepare_tir_view(&view, &store, TemplatePreparationMode::Value)
+    let second = prepare_tir_view(&view, TemplatePreparationMode::Value)
         .expect("runtime slot application should remain a runtime result");
     assert!(matches!(second, PreparedTemplate::Runtime(_)));
     assert!(fold_context.fold_cache.get(&key).is_none());

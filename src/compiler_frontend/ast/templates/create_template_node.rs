@@ -450,9 +450,7 @@ impl Template {
                 tir_reference.context,
             )
             .map_err(|error| TemplateError::from(error).into_diagnostic())?;
-            let template_ir_store = context.template_ir_store.borrow();
-            classify_effective_tir_view_template(&view, &template_ir_store)
-                .map_err(TemplateError::into_diagnostic)?
+            classify_effective_tir_view_template(&view).map_err(TemplateError::into_diagnostic)?
         };
 
         build_state.refresh_kind_from_tir_classification(&template_classification);

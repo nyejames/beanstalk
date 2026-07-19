@@ -81,7 +81,6 @@ fn bool_condition_with_no_bindings_returns_borrowed() {
         path_format_config: &path_format,
         source_file_scope: &source_scope,
         template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
-        template_ir_store: None,
         bindings: vec![],
         fold_cache: TirFoldCache::new(),
     };
@@ -109,7 +108,6 @@ fn string_slice_with_no_bindings_returns_borrowed() {
         path_format_config: &path_format,
         source_file_scope: &source_scope,
         template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
-        template_ir_store: None,
         bindings: vec![],
         fold_cache: TirFoldCache::new(),
     };
@@ -156,7 +154,6 @@ fn bool_condition_binding_substitution_returns_owned() {
         path_format_config: &path_format,
         source_file_scope: &source_scope,
         template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
-        template_ir_store: None,
         bindings,
         fold_cache: TirFoldCache::new(),
     };
@@ -214,7 +211,6 @@ fn option_present_capture_substitution_returns_owned() {
         path_format_config: &path_format,
         source_file_scope: &source_scope,
         template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
-        template_ir_store: None,
         bindings,
         fold_cache: TirFoldCache::new(),
     };
@@ -259,7 +255,7 @@ fn option_capture_classifies_same_store_payload_under_active_fold_borrow() {
 }
 
 #[test]
-fn option_capture_scalar_payload_does_not_require_tir_store() {
+fn option_capture_scalar_payload_uses_ordinary_const_rules() {
     let mut string_table = StringTable::new();
     let option_path = InternedPath::from_single_str("maybe_payload", &mut string_table);
     let option_value = Expression::coerced(
@@ -288,13 +284,13 @@ fn option_capture_scalar_payload_does_not_require_tir_store() {
     let resolver = test_project_path_resolver();
     let path_format = PathStringFormatConfig::default();
     let source_scope = InternedPath::new();
+    let store = TemplateIrStore::new();
     let mut fold_context = TemplateFoldContext {
         string_table: &mut string_table,
         project_path_resolver: &resolver,
         path_format_config: &path_format,
         source_file_scope: &source_scope,
         template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
-        template_ir_store: None,
         bindings: vec![TemplateFoldBinding {
             path: option_path,
             value: option_value,
@@ -302,8 +298,8 @@ fn option_capture_scalar_payload_does_not_require_tir_store() {
         fold_cache: TirFoldCache::new(),
     };
 
-    let capture = selected_option_capture_payload(&scrutinee, &pattern, &mut fold_context)
-        .expect("a scalar const option payload should not need TIR authority")
+    let capture = selected_option_capture_payload(&scrutinee, &pattern, &store, &mut fold_context)
+        .expect("a scalar const option payload should remain compile-time constant")
         .expect("the present option should produce a capture binding");
 
     assert_eq!(capture.path, capture_path);
@@ -352,7 +348,6 @@ fn assert_store_backed_option_capture(
         path_format_config: &path_format,
         source_file_scope: &source_scope,
         template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
-        template_ir_store: Some(Rc::clone(&store)),
         bindings: vec![TemplateFoldBinding {
             path: option_path,
             value: option_value,
@@ -362,10 +357,15 @@ fn assert_store_backed_option_capture(
 
     // The TIR folder retains this borrow while option-capture resolution classifies
     // nested template payloads. Store classification must therefore remain read-only.
-    let _active_fold_borrow = store.borrow();
-    let capture = selected_option_capture_payload(&scrutinee, &pattern, &mut fold_context)
-        .expect("the composed slot wrapper is a compile-time option payload")
-        .expect("the present option should produce a capture binding");
+    let active_fold_borrow = store.borrow();
+    let capture = selected_option_capture_payload(
+        &scrutinee,
+        &pattern,
+        &active_fold_borrow,
+        &mut fold_context,
+    )
+    .expect("the composed slot wrapper is a compile-time option payload")
+    .expect("the present option should produce a capture binding");
 
     assert_eq!(capture.path, capture_path);
     assert!(matches!(capture.value.kind, ExpressionKind::Template(_)));
@@ -394,7 +394,6 @@ fn coerced_expression_with_no_bindings_returns_borrowed() {
         path_format_config: &path_format,
         source_file_scope: &source_scope,
         template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
-        template_ir_store: None,
         bindings: vec![],
         fold_cache: TirFoldCache::new(),
     };
@@ -454,7 +453,6 @@ fn coerced_template_with_no_bindings_returns_inner_template_borrow() {
         path_format_config: &path_format,
         source_file_scope: &source_scope,
         template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
-        template_ir_store: None,
         bindings: vec![],
         fold_cache: TirFoldCache::new(),
     };
@@ -490,7 +488,6 @@ fn rpn_with_no_substitutable_operands_returns_borrowed() {
         path_format_config: &path_format,
         source_file_scope: &source_scope,
         template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
-        template_ir_store: None,
         bindings: vec![],
         fold_cache: TirFoldCache::new(),
     };
@@ -576,7 +573,6 @@ fn rpn_with_bound_reference_operand_returns_owned() {
         path_format_config: &path_format,
         source_file_scope: &source_scope,
         template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
-        template_ir_store: None,
         bindings,
         fold_cache: TirFoldCache::new(),
     };

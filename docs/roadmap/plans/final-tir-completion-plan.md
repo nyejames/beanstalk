@@ -28,18 +28,18 @@ TIR remains AST-local. No TIR store, ID, view, overlay or preparation type may c
 
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/final-tir-completion-plan.md
-STATUS: active
-CURRENT_SLICE: final architecture audit, closure validation and historical handoff
-LAST_ACCEPTED_COMMIT: 1298da468 (R6C six-run recorded performance evidence and historical-summary review)
-WORKTREE: main at 1298da468; clean before this parent-owned R6D state refresh; concurrent user documentation remains untouched
+STATUS: final review
+CURRENT_SLICE: final-audit corrections accepted and validated; checkpoint ready to commit
+LAST_ACCEPTED_COMMIT: 271f40786 (R6D reviewed roadmap handoff and dedicated post-TIR optimisation owner)
+WORKTREE: main at 271f40786 with accepted uncommitted correction A plus this parent-owned final-review state; concurrent user documentation remains untouched
 REQUIRED_RELOADS: startup files, this plan, and current TIR source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: final-review instructions, this completed R0-R6 record, compiler design, roadmap and post-TIR handoffs
 - code: final one-store/exact-view/prepared fold and owned runtime-handoff implementation plus the complete accepted diff from 069a29acb
 ACCEPTANCE_CRITERIA:
-- run the orchestrator final audit against the complete final TIR change and resolve every confirmed finding
-- rerun the required final validation and architecture/hard-grep gates after any correction
-- mark this plan historical/complete in its capsule, keep the roadmap handoffs accurate and clean `.codex-worker` only after the entire plan is accepted
+- commit the accepted correction set with the focused re-audit, full validation, index repair and completed-plan roadmap unlink recorded
+- then mark this historical plan complete against that accepted checkpoint
+- run the documentation-only closure gate, commit the final plan capsule and clean worker artifacts once
 VALIDATION_STATE:
 - R2C just validate: passed; cross-target Clippy, 3421 unit tests, 1784 integration cases, docs check and 28 benchmark sanity cases; -7ms average, 23 faster and 0 slower
 - R3 ownership map: passed through Codex CLI simple-exploration; no repeated preparation proving a cache, new preparation.rs is the required final owner, and classification/control-flow predicates remain only where they answer earlier-stage questions
@@ -76,12 +76,21 @@ VALIDATION_STATE:
 - R6C just bench-report: latest comparison 0ms with 28/28 cases, no counters, ratios or investigation candidates; the six samples show no consistent stage regression, so no profiling or architectural restoration is warranted
 - R6D Codex CLI roadmap review: accepted; roadmap, five queued-chain plans, test-suite hardening, diagnostics, frontend optimisation and docs migration were checked against 1298da468 and current source owners
 - R6D documentation handoff: roadmap records final TIR and the mandatory review as complete; every queued plan records 1298da468 and consumes folded owned values or neutral runtime handoffs; the dedicated non-blocking post-TIR optimisation plan owns source-text/parser/formatter/cache/invalidation/fold-scheduling/backend-string investigations
-DOCS_IMPACT: compiler-design-overview.md and Rust module maps updated for the final architecture; index.md locator already names preparation.rs; progress matrix unchanged because user-visible support did not change
+- final Codex CLI audit at 271f40786: required corrections; exact-view preparation/classification/handoff and reactive/fold contexts retain a parallel store authority, four instrumentation counters and PreparedWrapperReference are obsolete, reactive metadata tests remain inline in production, and index.md names two deleted TIR files
+- correction A Codex CLI implementation and parent-review fix: accepted; preparation, classification, runtime handoff, reactive collection and nested option capture now derive structural reads from the active exact view, and every duplicate store API/context field is removed without a shim or mismatch test
+- correction A focused validation: passed; cargo fmt, cargo check, 10 template-folding tests, 19 reactive-template tests and git diff checks
+- correction B Codex CLI implementation and parent review: accepted; four zero-owner counters plus the timing summary metric are deleted, wrapper references fold directly without the no-op adapter, and all eight reactive metadata tests moved unchanged to the module test directory
+- correction B focused validation: passed; cargo fmt, cargo check, reactive metadata, wrapper-context, final-view and instrumentation feature tests plus git diff checks
+- parent documentation locator repair: index.md no longer names runtime_template_expression.rs or tir/finalize_sync.rs and now points to runtime_handoff.rs, refs.rs, view.rs, preparation.rs and handoff_materialization.rs as the current owners
+- focused Codex CLI correction re-audit: passed with no required findings; all four original findings are resolved, no shim or pointer check remains, tests retain one owner, every index target exists and the five intentional exact-view reducers remain correctly separate
+- final hard ownership/stale-path gates: passed; parallel exact-view store APIs, four dead counters and timing metric, wrapper adapter, inline production test body, deleted index paths and HIR/backend TIR imports are absent
+- final just validate after all corrections: passed; cross-target Clippy, 3433 unit tests, 1784 integration cases, docs check and 28 benchmark sanity cases; no measurable aggregate change, with 28/28 cases
+DOCS_IMPACT: compiler-design-overview.md and Rust module maps updated for the final architecture; index.md repaired for the final exact-view and neutral-handoff owners; progress matrix unchanged because user-visible support did not change
 BLOCKERS_OR_OPEN_DECISIONS: none
-DELEGATION_DECISION: codex-cli audit - user requires Codex CLI for worker slices and the orchestrator requires an independent final review before closure
-NEXT_WORKER_ORDER: codex-cli (user-required provider for the next worker slice)
+DELEGATION_DECISION: parent commit/closure - the required Codex CLI correction slices and focused re-audit are accepted and the full gate passed
+NEXT_WORKER_ORDER: none unless final validation exposes a new bounded correction
 STOP_REASON: none
-NEXT_RESUME_ACTION: review and commit the R6D documentation handoff, then run the Codex CLI final audit and closure gate
+NEXT_RESUME_ACTION: commit the accepted final-audit correction checkpoint, then mark this plan complete against that commit and clean worker artifacts after the closure commit
 ```
 
 Use `069a29acb` as the implementation and regression base. Do not continue extending `FoldAuthorityWalk`, foreign-store traversal, external expression-overlay stacks or prepared foreign-wrapper proofs.

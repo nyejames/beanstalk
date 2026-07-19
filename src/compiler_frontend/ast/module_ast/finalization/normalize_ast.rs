@@ -61,7 +61,8 @@ use crate::compiler_frontend::ast::templates::template::Template;
 use crate::compiler_frontend::ast::templates::tir::{
     ExpressionSiteId, PreparedRuntime, TemplateIrStore, TemplateTirPhase, TemplateTirReference,
     TemplateViewContext, TirExpressionOverlay, collect_effective_tir_expression_overlay_payloads,
-    finalized_tir_view_for_template,
+    finalized_tir_view_for_template, owned_runtime_slot_handoff_for_prepared_view,
+    owned_runtime_template_handoff_for_prepared_view,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_messages::{
@@ -946,9 +947,7 @@ fn materialize_runtime_template_handoff_for_hir(
         .into());
     }
 
-    if let Some(handoff) =
-        store.owned_runtime_slot_handoff_for_prepared_view(prepared, view.clone())?
-    {
+    if let Some(handoff) = owned_runtime_slot_handoff_for_prepared_view(prepared, view.clone())? {
         increment_ast_counter(AstCounter::RuntimeTemplateHandoffsMaterialized);
         return Ok(Some(NormalizedTemplateExpression::RuntimeSlotApplication(
             handoff,
@@ -956,7 +955,7 @@ fn materialize_runtime_template_handoff_for_hir(
         )));
     }
 
-    let handoff = store.owned_runtime_template_handoff_for_prepared_view(prepared, view)?;
+    let handoff = owned_runtime_template_handoff_for_prepared_view(prepared, view)?;
 
     increment_ast_counter(AstCounter::RuntimeTemplateHandoffsMaterialized);
     Ok(Some(NormalizedTemplateExpression::RuntimeTemplate(

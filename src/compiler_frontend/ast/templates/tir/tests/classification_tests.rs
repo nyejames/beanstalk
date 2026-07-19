@@ -147,7 +147,7 @@ fn classify_store_view_template_result(
     )
     .expect("test view should resolve");
 
-    classify_effective_tir_view_template(&view, &store)
+    classify_effective_tir_view_template(&view)
 }
 
 fn assert_compiler_infrastructure_error<T>(result: Result<T, TemplateError>, context: &str) {
@@ -443,7 +443,6 @@ fn expression_overlay_requires_finalized_view_and_drives_classification() {
         wrapper_context: None,
     };
     let context = empty_context.merge(expression_context);
-    let store_snapshot = &store;
     let composed_view = TirView::with_minimum_phase(
         &store,
         template_id,
@@ -453,7 +452,7 @@ fn expression_overlay_requires_finalized_view_and_drives_classification() {
     )
     .expect("composed test view should resolve");
 
-    let error = match classify_effective_tir_view_template(&composed_view, store_snapshot) {
+    let error = match classify_effective_tir_view_template(&composed_view) {
         Ok(_) => panic!("expression overlays must not classify before Finalized"),
         Err(error) => error,
     };
@@ -478,7 +477,7 @@ fn expression_overlay_requires_finalized_view_and_drives_classification() {
     )
     .expect("test view should resolve");
 
-    let classification = classify_effective_tir_view_template(&view, store_snapshot)
+    let classification = classify_effective_tir_view_template(&view)
         .expect("finalized effective view classification should succeed");
 
     assert_eq!(
@@ -528,7 +527,6 @@ fn finalized_tir_view_classification_accepts_slot_resolution_overlay() {
             empty_location(),
         )
     };
-    let store_snapshot = &store;
     let view = TirView::with_minimum_phase(
         &store,
         template_id,
@@ -538,7 +536,7 @@ fn finalized_tir_view_classification_accepts_slot_resolution_overlay() {
     )
     .expect("test view should resolve");
 
-    let classification = classify_effective_tir_view_template(&view, store_snapshot)
+    let classification = classify_effective_tir_view_template(&view)
         .expect("classification with a slot-resolution overlay should succeed");
 
     assert_eq!(
@@ -587,7 +585,6 @@ fn composed_tir_view_classification_accepts_slot_resolution_overlay() {
             empty_location(),
         )
     };
-    let store_snapshot = &store;
     let view = TirView::with_minimum_phase(
         &store,
         template_id,
@@ -597,7 +594,7 @@ fn composed_tir_view_classification_accepts_slot_resolution_overlay() {
     )
     .expect("test view should resolve");
 
-    let classification = classify_effective_tir_view_template(&view, store_snapshot)
+    let classification = classify_effective_tir_view_template(&view)
         .expect("classification with a Composed slot-resolution overlay should succeed");
 
     assert_eq!(
@@ -686,7 +683,6 @@ fn finalized_tir_view_classification_with_resolved_slot_returns_wrapper_template
         slot_resolution: Some(slot_overlay_id),
         wrapper_context: None,
     };
-    let store_snapshot = &store;
     let view = TirView::with_minimum_phase(
         &store,
         wrapper_template_id,
@@ -696,7 +692,7 @@ fn finalized_tir_view_classification_with_resolved_slot_returns_wrapper_template
     )
     .expect("test view should resolve");
 
-    let classification = classify_effective_tir_view_template(&view, store_snapshot)
+    let classification = classify_effective_tir_view_template(&view)
         .expect("classification with resolved slot overlay should succeed");
 
     assert_eq!(
@@ -749,7 +745,6 @@ fn finalized_tir_view_classification_accepts_wrapper_context_overlay() {
             empty_location(),
         )
     };
-    let store_snapshot = &store;
     let view = TirView::with_minimum_phase(
         &store,
         template_id,
@@ -759,7 +754,7 @@ fn finalized_tir_view_classification_accepts_wrapper_context_overlay() {
     )
     .expect("test view should resolve");
 
-    let classification = classify_effective_tir_view_template(&view, store_snapshot)
+    let classification = classify_effective_tir_view_template(&view)
         .expect("wrapper-context overlays should not prevent classification");
 
     assert_eq!(
@@ -796,7 +791,6 @@ fn effective_view_classification_unresolved_slot_with_no_overlay_returns_rendera
     };
 
     let context = TemplateViewContext::default();
-    let store_snapshot = &store;
     let view = TirView::with_minimum_phase(
         &store,
         template_id,
@@ -806,7 +800,7 @@ fn effective_view_classification_unresolved_slot_with_no_overlay_returns_rendera
     )
     .expect("test view should resolve");
 
-    let classification = classify_effective_tir_view_template(&view, store_snapshot)
+    let classification = classify_effective_tir_view_template(&view)
         .expect("effective view classification should succeed");
 
     assert_eq!(
@@ -853,7 +847,6 @@ fn effective_view_classification_unresolved_slot_with_empty_overlay_returns_rend
         slot_resolution: Some(slot_overlay_id),
         wrapper_context: None,
     };
-    let store_snapshot = &store;
     let view = TirView::with_minimum_phase(
         &store,
         template_id,
@@ -863,7 +856,7 @@ fn effective_view_classification_unresolved_slot_with_empty_overlay_returns_rend
     )
     .expect("test view should resolve");
 
-    let classification = classify_effective_tir_view_template(&view, store_snapshot)
+    let classification = classify_effective_tir_view_template(&view)
         .expect("effective view classification should succeed");
 
     assert_eq!(
@@ -945,7 +938,6 @@ fn effective_view_classification_resolved_slot_returns_wrapper_template() {
         slot_resolution: Some(slot_overlay_id),
         wrapper_context: None,
     };
-    let store_snapshot = &store;
     let view = TirView::with_minimum_phase(
         &store,
         wrapper_template_id,
@@ -955,7 +947,7 @@ fn effective_view_classification_resolved_slot_returns_wrapper_template() {
     )
     .expect("test view should resolve");
 
-    let classification = classify_effective_tir_view_template(&view, store_snapshot)
+    let classification = classify_effective_tir_view_template(&view)
         .expect("classification with resolved slot overlay should succeed");
 
     assert_eq!(
@@ -1026,7 +1018,6 @@ fn effective_view_classification_partially_resolved_slots_returns_wrapper_templa
         slot_resolution: Some(slot_overlay_id),
         wrapper_context: None,
     };
-    let store_snapshot = &store;
     let view = TirView::with_minimum_phase(
         &store,
         wrapper_template_id,
@@ -1036,7 +1027,7 @@ fn effective_view_classification_partially_resolved_slots_returns_wrapper_templa
     )
     .expect("test view should resolve");
 
-    let classification = classify_effective_tir_view_template(&view, store_snapshot)
+    let classification = classify_effective_tir_view_template(&view)
         .expect("classification with partially resolved slots should succeed");
 
     assert_eq!(
@@ -1079,7 +1070,6 @@ fn effective_view_classification_two_unresolved_slots_returns_renderable_string(
         slot_resolution: Some(slot_overlay_id),
         wrapper_context: None,
     };
-    let store_snapshot = &store;
     let view = TirView::with_minimum_phase(
         &store,
         template_id,
@@ -1089,7 +1079,7 @@ fn effective_view_classification_two_unresolved_slots_returns_renderable_string(
     )
     .expect("test view should resolve");
 
-    let classification = classify_effective_tir_view_template(&view, store_snapshot)
+    let classification = classify_effective_tir_view_template(&view)
         .expect("effective view classification should succeed");
 
     assert_eq!(

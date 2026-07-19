@@ -23,8 +23,7 @@ pub(crate) enum AstCounter {
     BoundedExpressionTokenWindows,
     BoundedExpressionTokenCopiesAvoided,
 
-    // Template parsing, composition, planning, and folding pressure.
-    TemplateCompositionPasses,
+    // Template parsing and folding pressure.
     TemplateWrapperApplications,
     TemplateFoldLoopIterations,
     TemplateNormalizationNodesVisited,
@@ -40,9 +39,6 @@ pub(crate) enum AstCounter {
     TemplateTirChildWrapperHits,
 
     RuntimeTemplateHandoffsRefreshedForHir,
-    RuntimeSlotApplicationPlansBuilt,
-    RuntimeSlotSourcesPlanned,
-    RuntimeSlotSitesPlanned,
     RuntimeSlotHandoffsMaterialized,
     RuntimeSlotHandoffOwnedNodesMaterialized,
     RuntimeTemplateHandoffsMaterialized,
@@ -72,7 +68,7 @@ pub(crate) enum AstCounter {
     // Field/receiver lowering pressure.
     PostfixReceiverNodesCopied,
 
-    // Template IR (TIR) store and converter pressure.
+    // Template IR (TIR) store, preparation, and folding pressure.
     TirTemplatesCreated,
     TirNodesCreated,
     TirTextNodesCreated,
@@ -215,7 +211,6 @@ mod detailed {
             AstCounter::ScopeLocalDeclarationsInserted,
             AstCounter::BoundedExpressionTokenWindows,
             AstCounter::BoundedExpressionTokenCopiesAvoided,
-            AstCounter::TemplateCompositionPasses,
             AstCounter::TemplateWrapperApplications,
             AstCounter::TemplateFoldLoopIterations,
             AstCounter::TemplateNormalizationNodesVisited,
@@ -226,9 +221,6 @@ mod detailed {
             AstCounter::TemplateTirChildWrapperCalls,
             AstCounter::TemplateTirChildWrapperHits,
             AstCounter::RuntimeTemplateHandoffsRefreshedForHir,
-            AstCounter::RuntimeSlotApplicationPlansBuilt,
-            AstCounter::RuntimeSlotSourcesPlanned,
-            AstCounter::RuntimeSlotSitesPlanned,
             AstCounter::RuntimeSlotHandoffsMaterialized,
             AstCounter::RuntimeSlotHandoffOwnedNodesMaterialized,
             AstCounter::RuntimeTemplateHandoffsMaterialized,
@@ -292,7 +284,6 @@ mod detailed {
             AstCounter::BoundedExpressionTokenCopiesAvoided => {
                 "bounded expression token copies avoided"
             }
-            AstCounter::TemplateCompositionPasses => "template composition passes",
             AstCounter::TemplateWrapperApplications => "template wrapper applications",
             AstCounter::TemplateFoldLoopIterations => "template fold loop iterations",
             AstCounter::TemplateNormalizationNodesVisited => "template normalization nodes visited",
@@ -309,9 +300,6 @@ mod detailed {
             AstCounter::RuntimeTemplateHandoffsRefreshedForHir => {
                 "runtime template handoffs refreshed for HIR"
             }
-            AstCounter::RuntimeSlotApplicationPlansBuilt => "runtime slot application plans built",
-            AstCounter::RuntimeSlotSourcesPlanned => "runtime slot sources planned",
-            AstCounter::RuntimeSlotSitesPlanned => "runtime slot sites planned",
             AstCounter::RuntimeSlotHandoffsMaterialized => "runtime slot handoffs materialized",
             AstCounter::RuntimeSlotHandoffOwnedNodesMaterialized => {
                 "runtime slot handoff owned nodes materialized"
@@ -393,7 +381,6 @@ mod detailed {
             AstCounter::BoundedExpressionTokenCopiesAvoided => {
                 "ast_bounded_expression_token_copies_avoided"
             }
-            AstCounter::TemplateCompositionPasses => "ast_template_composition_passes",
             AstCounter::TemplateWrapperApplications => "ast_template_wrapper_applications",
             AstCounter::TemplateFoldLoopIterations => "ast_template_fold_loop_iterations",
             AstCounter::TemplateNormalizationNodesVisited => {
@@ -418,11 +405,6 @@ mod detailed {
             AstCounter::RuntimeTemplateHandoffsRefreshedForHir => {
                 "ast_runtime_template_handoffs_refreshed_for_hir"
             }
-            AstCounter::RuntimeSlotApplicationPlansBuilt => {
-                "ast_runtime_slot_application_plans_built"
-            }
-            AstCounter::RuntimeSlotSourcesPlanned => "ast_runtime_slot_sources_planned",
-            AstCounter::RuntimeSlotSitesPlanned => "ast_runtime_slot_sites_planned",
             AstCounter::RuntimeSlotHandoffsMaterialized => "ast_runtime_slot_handoffs_materialized",
             AstCounter::RuntimeSlotHandoffOwnedNodesMaterialized => {
                 "ast_runtime_slot_handoff_owned_nodes_materialized"

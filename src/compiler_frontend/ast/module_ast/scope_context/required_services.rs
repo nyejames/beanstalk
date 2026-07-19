@@ -95,7 +95,6 @@ impl ScopeContext {
             path_format_config: &self.path_format_config,
             source_file_scope,
             template_const_loop_iteration_limit: self.shared.template_const_loop_iteration_limit,
-            template_ir_store: Some(Rc::clone(&self.template_ir_store)),
             bindings: Vec::new(),
             fold_cache: TirFoldCache::new(),
         })

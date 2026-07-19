@@ -105,7 +105,7 @@ fn collect_environment_aware_tir_expression_payloads(
     .collect();
     let root_view = TirView::new(store, root_template_id, root_phase, root_context)?;
     let mut collector =
-        EnvironmentAwarePayloadCollector::new(store, flows, root_view, effective_expressions);
+        EnvironmentAwarePayloadCollector::new(flows, root_view, effective_expressions);
     collector.collect_node(root, base_environment)?;
     Ok(collector.into_payloads())
 }
@@ -174,7 +174,6 @@ fn compose_expression_overlays(
 ///      place so the annotation pass composes one authoritative root overlay
 ///      without flattening control-flow scopes.
 struct EnvironmentAwarePayloadCollector<'store, 'flow> {
-    store: &'store TemplateIrStore,
     flows: &'flow FxHashMap<InternedPath, FunctionTemplateFlow>,
     view: TirView<'store>,
     // Temporary normalization input for the root overlay being constructed.
@@ -191,13 +190,11 @@ struct EnvironmentAwarePayloadCollector<'store, 'flow> {
 
 impl<'store, 'flow> EnvironmentAwarePayloadCollector<'store, 'flow> {
     fn new(
-        store: &'store TemplateIrStore,
         flows: &'flow FxHashMap<InternedPath, FunctionTemplateFlow>,
         view: TirView<'store>,
         effective_expressions: FxHashMap<ExpressionSiteId, Expression>,
     ) -> Self {
         Self {
-            store,
             flows,
             view,
             effective_expressions,
@@ -244,7 +241,8 @@ impl<'store, 'flow> EnvironmentAwarePayloadCollector<'store, 'flow> {
         }
 
         let (root, runtime_slot_plan) = self
-            .store
+            .view
+            .store()
             .get_template(template_id)
             .map(|template| (template.root, template.runtime_slot_plan))
             .ok_or_else(|| {
@@ -307,7 +305,7 @@ impl<'store, 'flow> EnvironmentAwarePayloadCollector<'store, 'flow> {
         &self,
         slot_plan_id: TemplateSlotPlanId,
     ) -> Result<(Vec<TemplateIrNodeId>, Vec<TemplateIrNodeId>), CompilerError> {
-        let slot_plan = self.store.get_slot_plan(slot_plan_id).ok_or_else(|| {
+        let slot_plan = self.view.store().get_slot_plan(slot_plan_id).ok_or_else(|| {
             CompilerError::compiler_error(format!(
                 "TIR environment-aware payload collection referenced missing runtime slot plan {}",
                 slot_plan_id
@@ -372,7 +370,7 @@ impl<'store, 'flow> EnvironmentAwarePayloadCollector<'store, 'flow> {
         node_id: TemplateIrNodeId,
         environment: &ReactiveTemplateValueEnvironment,
     ) -> Result<(), CompilerError> {
-        let Some(node) = self.store.get_node(node_id) else {
+        let Some(node) = self.view.store().get_node(node_id) else {
             return Err(CompilerError::compiler_error(format!(
                 "TIR environment-aware payload collection referenced missing node {}",
                 node_id
@@ -423,7 +421,7 @@ impl<'store, 'flow> EnvironmentAwarePayloadCollector<'store, 'flow> {
                             &selector_expression,
                             self.flows,
                             &branch_environment,
-                            self.store,
+                            self.view.store(),
                         )?;
                         branch_environment.record_binding_metadata(binding_path, captured_metadata);
                     }
@@ -477,7 +475,7 @@ impl<'store, 'flow> EnvironmentAwarePayloadCollector<'store, 'flow> {
             }
 
             TemplateIrNodeKind::RuntimeSlotSite { plan, site } => {
-                let slot_plan = self.store.get_slot_plan(*plan).ok_or_else(|| {
+                let slot_plan = self.view.store().get_slot_plan(*plan).ok_or_else(|| {
                     CompilerError::compiler_error(format!(
                         "TIR environment-aware payload collection referenced missing runtime slot plan {}",
                         plan

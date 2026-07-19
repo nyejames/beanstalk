@@ -25,6 +25,7 @@ use crate::compiler_frontend::tokenizer::tokens::{
 use crate::compiler_frontend::value_mode::ValueMode;
 use crate::compiler_tests::test_support::frontend_test_style_directives;
 use crate::projects::html_project::style_directives::html_project_style_directives;
+use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -164,20 +165,21 @@ fn fold_template_in_context(
     let mut fold_context = context
         .new_template_fold_context(string_table, "template tests fold")
         .expect("test context should include fold dependencies");
-    fold_template_with_fold_context(template, &mut fold_context, TemplatePreparationMode::Value)
-        .expect("template should fold")
+    fold_template_with_fold_context(
+        template,
+        &context.template_ir_store,
+        &mut fold_context,
+        TemplatePreparationMode::Value,
+    )
+    .expect("template should fold")
 }
 
 fn fold_template_with_fold_context(
     template: &Template,
+    store_handle: &Rc<RefCell<TemplateIrStore>>,
     fold_context: &mut crate::compiler_frontend::ast::templates::template_folding::TemplateFoldContext<'_>,
     preparation_mode: TemplatePreparationMode,
 ) -> Result<StringId, crate::compiler_frontend::ast::templates::error::TemplateError> {
-    let store_handle = fold_context
-        .template_ir_store
-        .as_ref()
-        .expect("test fold context should carry the module TIR store")
-        .clone();
     let store = store_handle.borrow();
     let reference = &template.tir_reference;
     let view = TirView::with_minimum_phase(
@@ -187,7 +189,7 @@ fn fold_template_with_fold_context(
         TemplateTirPhase::Composed,
         reference.context,
     )?;
-    let prepared = match prepare_tir_view(&view, &store, preparation_mode)? {
+    let prepared = match prepare_tir_view(&view, preparation_mode)? {
         PreparedTemplate::Foldable(prepared) => prepared,
         PreparedTemplate::Runtime(_) | PreparedTemplate::Helper(_) => {
             panic!("test template expected to be foldable")

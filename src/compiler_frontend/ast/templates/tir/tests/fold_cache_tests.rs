@@ -163,7 +163,6 @@ fn fold_context<'a>(string_table: &'a mut StringTable) -> TemplateFoldContext<'a
         )),
         source_file_scope: Box::leak(Box::new(InternedPath::new())),
         template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
-        template_ir_store: None,
         bindings: vec![],
         fold_cache: TirFoldCache::new(),
     }
@@ -173,7 +172,7 @@ fn fold_prepared_view(
     view: &TirView<'_>,
     context: &mut TemplateFoldContext<'_>,
 ) -> Result<TemplateEmission, TemplateError> {
-    let prepared = match prepare_tir_view(view, view.store(), TemplatePreparationMode::Value)? {
+    let prepared = match prepare_tir_view(view, TemplatePreparationMode::Value)? {
         PreparedTemplate::Foldable(prepared) => prepared,
         PreparedTemplate::Runtime(_) | PreparedTemplate::Helper(_) => {
             panic!("test view expected to be foldable")
@@ -261,7 +260,6 @@ fn fold_view_does_not_cache_active_bindings() {
         path_format_config: &path_format,
         source_file_scope: &source_scope,
         template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
-        template_ir_store: None,
         bindings: vec![TemplateFoldBinding {
             path,
             value: Expression::int(1, empty_location(), ValueMode::ImmutableOwned),
@@ -314,12 +312,8 @@ fn prepared_view_rejects_identity_mismatch() {
         fixture.context,
     )
     .expect("alternate view should construct");
-    let preparation = match prepare_tir_view(
-        &original_view,
-        &fixture.store,
-        TemplatePreparationMode::Value,
-    )
-    .expect("preparation should succeed")
+    let preparation = match prepare_tir_view(&original_view, TemplatePreparationMode::Value)
+        .expect("preparation should succeed")
     {
         PreparedTemplate::Foldable(preparation) => preparation,
         PreparedTemplate::Runtime(_) | PreparedTemplate::Helper(_) => {
@@ -343,7 +337,6 @@ fn prepared_view_rejects_identity_mismatch() {
         path_format_config: &path_format,
         source_file_scope: &source_scope,
         template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
-        template_ir_store: None,
         bindings: vec![],
         fold_cache: TirFoldCache::new(),
     };
@@ -363,7 +356,7 @@ fn foldable_preparation_accepts_simple_text() {
         fixture.context,
     )
     .expect("view should construct");
-    let preparation = prepare_tir_view(&view, &fixture.store, TemplatePreparationMode::Value)
+    let preparation = prepare_tir_view(&view, TemplatePreparationMode::Value)
         .expect("simple text should have a valid preparation");
     assert!(
         matches!(preparation, PreparedTemplate::Foldable(_)),
@@ -486,7 +479,7 @@ fn child_template_cycle_is_rejected() {
         TemplateViewContext::default(),
     )
     .expect("view should construct");
-    let result = prepare_tir_view(&view, &store, TemplatePreparationMode::Value);
+    let result = prepare_tir_view(&view, TemplatePreparationMode::Value);
     assert!(matches!(
         result,
         Ok(PreparedTemplate::Runtime(runtime))
@@ -902,7 +895,7 @@ fn prepared_fold_cache_hit_still_validates_malformed_authority() {
             fixture.context,
         )
         .expect("view should construct");
-        let prepared = match prepare_tir_view(&view, &fixture.store, TemplatePreparationMode::Value)
+        let prepared = match prepare_tir_view(&view, TemplatePreparationMode::Value)
             .expect("preparation should succeed")
         {
             PreparedTemplate::Foldable(prepared) => prepared,
@@ -951,7 +944,7 @@ fn prepared_runtime_plan_validates_plan_authority_before_handoff() {
         fixture.context,
     )
     .expect("view should construct");
-    let error = prepare_tir_view(&view, &fixture.store, TemplatePreparationMode::Value)
+    let error = prepare_tir_view(&view, TemplatePreparationMode::Value)
         .expect_err("preparation must validate its required runtime slot plan");
     assert!(
         format!("{error:?}").contains("TIR preparation: slot plan"),
@@ -1028,7 +1021,6 @@ fn fold_dynamic_ast_template_with_missing_root_authority() -> TemplateError {
         )),
         source_file_scope: Box::leak(Box::new(InternedPath::new())),
         template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
-        template_ir_store: Some(Rc::clone(&store)),
         bindings: vec![],
         fold_cache: TirFoldCache::new(),
     };

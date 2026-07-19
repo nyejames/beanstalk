@@ -90,7 +90,7 @@ pub(super) fn parse_template_expression(
                 TemplateTirPhase::Composed,
                 reference.context,
             )?;
-            let preparation = prepare_tir_view(&view, &store, TemplatePreparationMode::Value)?;
+            let preparation = prepare_tir_view(&view, TemplatePreparationMode::Value)?;
             let PreparedTemplate::Foldable(prepared) = preparation else {
                 return Ok(Some(Expression::template(template, value_mode.to_owned())));
             };

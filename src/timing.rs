@@ -555,7 +555,6 @@ const COUNTER_SUMMARY_GROUPS: &[CounterSummaryGroup] = &[
             ("const_template_count", "const"),
             ("runtime_template_count", "runtime"),
             ("ast_template_atoms_parsed", "atoms"),
-            ("ast_template_composition_passes", "composition"),
             (
                 "ast_templates_folded_during_finalization",
                 "finalized folds",

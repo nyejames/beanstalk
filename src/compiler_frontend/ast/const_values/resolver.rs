@@ -399,5 +399,5 @@ pub(crate) fn classify_template_effective_tir(
         TemplateTirPhase::Composed,
         reference.context,
     )?;
-    classify_effective_tir_view_template(&view, &store)
+    classify_effective_tir_view_template(&view)
 }

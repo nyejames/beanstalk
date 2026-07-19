@@ -46,7 +46,7 @@ pub(crate) fn validate_const_required_template_control_flow(
     .map_err(TemplateError::from)
     .map_err(TemplateError::into_diagnostic)?;
 
-    prepare_tir_view(&view, tir_store, TemplatePreparationMode::ConstRequired)
+    prepare_tir_view(&view, TemplatePreparationMode::ConstRequired)
         .map_err(TemplateError::into_diagnostic)
 }
 

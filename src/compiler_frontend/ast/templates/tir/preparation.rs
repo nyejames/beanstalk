@@ -25,7 +25,6 @@ use crate::compiler_frontend::ast::templates::tir::overlays::{
 use crate::compiler_frontend::ast::templates::tir::refs::TemplateTirReference;
 use crate::compiler_frontend::ast::templates::tir::slot_composition::collect_tir_slot_schema;
 use crate::compiler_frontend::ast::templates::tir::slot_plan::TemplateSlotSiteRenderPiece;
-use crate::compiler_frontend::ast::templates::tir::store::TemplateIrStore;
 use crate::compiler_frontend::ast::templates::tir::view::{
     TemplateTirPhase, TirView, TirViewIdentity,
 };
@@ -198,7 +197,6 @@ impl PreparationWalk {
 /// Prepares one exact view for folding or runtime handoff.
 pub(crate) fn prepare_tir_view(
     view: &TirView<'_>,
-    store: &TemplateIrStore,
     mode: TemplatePreparationMode,
 ) -> Result<PreparedTemplate, TemplateError> {
     if !view.phase().is_at_least(TemplateTirPhase::Composed) {
@@ -213,7 +211,6 @@ pub(crate) fn prepare_tir_view(
     increment_ast_counter(AstCounter::TirPreparationAttempts);
     let mut walk = PreparationWalk::new(mode);
     let facts = walk.walk_template(
-        store,
         view.root_ref(),
         view,
         &[],
@@ -222,11 +219,12 @@ pub(crate) fn prepare_tir_view(
     if let Some(diagnostic) = walk.const_diagnostic {
         return Err(TemplateError::Diagnostic(diagnostic));
     }
-    let template = store
+    let template = view
+        .store()
         .get_template(view.root_ref())
         .ok_or_else(|| missing_template_error(view.root_ref()))?;
     let const_value_kind = if matches!(
-        store.get_node(template.root).map(|node| &node.kind),
+        view.store().get_node(template.root).map(|node| &node.kind),
         Some(TemplateIrNodeKind::LoopControl { .. })
     ) {
         TemplateConstValueKind::LoopControlSignal
@@ -285,7 +283,6 @@ pub(crate) fn prepare_tir_view(
 impl PreparationWalk {
     fn walk_template(
         &mut self,
-        store: &TemplateIrStore,
         template_id: TemplateIrId,
         view: &TirView<'_>,
         loop_binding_paths: &[InternedPath],
@@ -299,6 +296,7 @@ impl PreparationWalk {
         }
         let result = (|| {
             let mut wrapper_foldable = true;
+            let store = view.store();
             let (root, kind, conditional_child_wrapper_set, runtime_slot_plan) = store
                 .get_template(template_id)
                 .map(|template| {
@@ -311,10 +309,10 @@ impl PreparationWalk {
                 })
                 .ok_or_else(|| missing_template_error(template_id))?;
 
-            self.validate_template_identity(store, template_id, root, view)?;
+            self.validate_template_identity(template_id, root, view)?;
             if let Some(wrapper_set_id) = conditional_child_wrapper_set {
                 let wrapper_facts =
-                    self.walk_wrapper_set(store, wrapper_set_id, view, role.in_aggregate_wrapper)?;
+                    self.walk_wrapper_set(wrapper_set_id, view, role.in_aggregate_wrapper)?;
                 if !wrapper_facts.foldable {
                     let reason = if wrapper_facts.contains_slot_insert {
                         RuntimeTemplateReason::SlotContribution
@@ -328,13 +326,13 @@ impl PreparationWalk {
                 }
             }
             if let Some(slot_plan_id) = runtime_slot_plan {
-                self.walk_slot_plan(store, slot_plan_id, view, &role)?;
+                self.walk_slot_plan(slot_plan_id, view, &role)?;
                 wrapper_foldable = false;
                 if !role.virtual_wrapper {
                     self.record_runtime(RuntimeTemplateReason::RuntimeSlotPlan);
                 }
             }
-            let mut facts = self.walk_node(store, root, view, loop_binding_paths, &role)?;
+            let mut facts = self.walk_node(root, view, loop_binding_paths, &role)?;
 
             if matches!(
                 kind,
@@ -361,7 +359,6 @@ impl PreparationWalk {
 
     fn validate_template_identity(
         &self,
-        store: &TemplateIrStore,
         template_id: TemplateIrId,
         root_node_id: TemplateIrNodeId,
         view: &TirView<'_>,
@@ -381,18 +378,18 @@ impl PreparationWalk {
                 root_node_id
             )));
         }
-        validate_view_context_dimensions(store, view.context())?;
+        validate_view_context_dimensions(view)?;
         Ok(())
     }
 
     fn walk_node(
         &mut self,
-        store: &TemplateIrStore,
         node_id: TemplateIrNodeId,
         view: &TirView<'_>,
         loop_binding_paths: &[InternedPath],
         role: &PreparationTraversalRole,
     ) -> Result<PreparationFacts, TemplateError> {
+        let store = view.store();
         increment_ast_counter(AstCounter::TirPreparationNodesVisited);
         let traversal_key = (node_id, view.identity());
         if !self.visiting_nodes.insert(traversal_key) {
@@ -411,13 +408,7 @@ impl PreparationWalk {
                 TemplateIrNodeKind::Sequence { children } => {
                     let mut facts = PreparationFacts::const_value();
                     for child in children {
-                        facts.merge(self.walk_node(
-                            store,
-                            *child,
-                            view,
-                            loop_binding_paths,
-                            role,
-                        )?);
+                        facts.merge(self.walk_node(*child, view, loop_binding_paths, role)?);
                     }
                     Ok(facts)
                 }
@@ -431,7 +422,6 @@ impl PreparationWalk {
                         && let Some(wrapper_set_ref) = context.inherited_wrapper_set
                     {
                         let wrapper_facts = self.walk_wrapper_set(
-                            store,
                             wrapper_set_ref,
                             view,
                             role.in_aggregate_wrapper,
@@ -448,7 +438,6 @@ impl PreparationWalk {
                     let child_template_id = reference.root;
                     let child_view = view.structural_child(*reference)?;
                     let child_facts = self.walk_template(
-                        store,
                         child_template_id,
                         &child_view,
                         loop_binding_paths,
@@ -476,12 +465,8 @@ impl PreparationWalk {
                     .into_iter()
                     .flatten()
                     {
-                        let wrapper_facts = self.walk_wrapper_set(
-                            store,
-                            wrapper_set_id,
-                            view,
-                            role.in_aggregate_wrapper,
-                        )?;
+                        let wrapper_facts =
+                            self.walk_wrapper_set(wrapper_set_id, view, role.in_aggregate_wrapper)?;
                         if !wrapper_facts.foldable {
                             self.record_role_runtime(
                                 &mut facts,
@@ -502,7 +487,6 @@ impl PreparationWalk {
                         for source in sources {
                             let source_view = view.resolved_slot_source(*source)?;
                             facts.merge(self.walk_template(
-                                store,
                                 *source,
                                 &source_view,
                                 loop_binding_paths,
@@ -550,7 +534,6 @@ impl PreparationWalk {
                 TemplateIrNodeKind::InsertContribution { template } => {
                     let helper_view = view.structural_helper(*template)?;
                     let mut facts = self.walk_template(
-                        store,
                         *template,
                         &helper_view,
                         loop_binding_paths,
@@ -578,7 +561,6 @@ impl PreparationWalk {
                                 &branch_selector,
                                 &node.location,
                                 loop_binding_paths,
-                                store,
                                 role,
                             )?;
                         facts.merge(selector_facts);
@@ -591,7 +573,7 @@ impl PreparationWalk {
                             );
                         }
                         let branch_facts =
-                            self.walk_node(store, branch.body, view, &branch_binding_paths, role)?;
+                            self.walk_node(branch.body, view, &branch_binding_paths, role)?;
                         if !branch_facts.const_evaluable {
                             self.record_role_runtime(
                                 &mut facts,
@@ -611,7 +593,7 @@ impl PreparationWalk {
                     }
                     if let Some(fallback) = fallback {
                         let fallback_facts =
-                            self.walk_node(store, *fallback, view, loop_binding_paths, role)?;
+                            self.walk_node(*fallback, view, loop_binding_paths, role)?;
                         if !fallback_facts.const_evaluable {
                             self.record_role_runtime(
                                 &mut facts,
@@ -640,17 +622,11 @@ impl PreparationWalk {
                 } => {
                     let effective_header =
                         effective_loop_header_for_view(view, header, *header_sites)?;
-                    let mut facts = self.walk_loop_header(
-                        view,
-                        &effective_header,
-                        &node.location,
-                        store,
-                        role,
-                    )?;
+                    let mut facts =
+                        self.walk_loop_header(view, &effective_header, &node.location, role)?;
                     let body_binding_paths =
                         loop_body_const_evaluation_bindings(&effective_header, loop_binding_paths);
-                    let body_facts =
-                        self.walk_node(store, *body, view, &body_binding_paths, role)?;
+                    let body_facts = self.walk_node(*body, view, &body_binding_paths, role)?;
                     if !body_facts.const_evaluable
                         && matches!(self.mode, TemplatePreparationMode::ConstRequired)
                     {
@@ -668,7 +644,6 @@ impl PreparationWalk {
                             ..role.clone()
                         };
                         facts.merge(self.walk_node(
-                            store,
                             *aggregate_wrapper,
                             view,
                             loop_binding_paths,
@@ -678,7 +653,7 @@ impl PreparationWalk {
                     Ok(facts)
                 }
                 TemplateIrNodeKind::RuntimeSlotSite { plan, .. } => {
-                    self.walk_slot_plan(store, *plan, view, role)?;
+                    self.walk_slot_plan(*plan, view, role)?;
                     let mut facts = PreparationFacts::default();
                     self.record_role_runtime(
                         &mut facts,
@@ -696,13 +671,8 @@ impl PreparationWalk {
                     let effective_expression = view
                         .effective_expression_for_site(*site_id)?
                         .unwrap_or(expression.as_ref());
-                    let mut facts = self.walk_expression(
-                        view,
-                        store,
-                        effective_expression,
-                        loop_binding_paths,
-                        role,
-                    )?;
+                    let mut facts =
+                        self.walk_expression(view, effective_expression, loop_binding_paths, role)?;
                     if reactive_subscription.is_some() {
                         self.record_role_runtime(
                             &mut facts,
@@ -761,11 +731,11 @@ impl PreparationWalk {
 
     fn walk_slot_plan(
         &mut self,
-        store: &TemplateIrStore,
         slot_plan_id: TemplateSlotPlanId,
         view: &TirView<'_>,
         role: &PreparationTraversalRole,
     ) -> Result<(), TemplateError> {
+        let store = view.store();
         let traversal_key = (slot_plan_id, view.identity());
         if !self.visiting_slot_plans.insert(traversal_key) {
             return Ok(());
@@ -776,13 +746,13 @@ impl PreparationWalk {
                 .ok_or_else(|| missing_slot_plan_error(slot_plan_id))?;
 
             for source in &slot_plan.contribution_sources {
-                self.walk_node(store, source.render_root, view, &[], role)?;
+                self.walk_node(source.render_root, view, &[], role)?;
             }
             for site in &slot_plan.slot_sites {
                 for piece in &site.render_plan.pieces {
                     match piece {
                         TemplateSlotSiteRenderPiece::Render(node_id) => {
-                            self.walk_node(store, *node_id, view, &[], role)?;
+                            self.walk_node(*node_id, view, &[], role)?;
                         }
                         TemplateSlotSiteRenderPiece::ContributionSource(source_id) => {
                             if slot_plan.contribution_sources.get(source_id.0).is_none() {
@@ -805,11 +775,11 @@ impl PreparationWalk {
 
     fn walk_wrapper_set(
         &mut self,
-        store: &TemplateIrStore,
         wrapper_set_id: TemplateWrapperSetId,
         view: &TirView<'_>,
         in_aggregate_wrapper: bool,
     ) -> Result<WrapperSetFacts, TemplateError> {
+        let store = view.store();
         let wrapper_set = store
             .get_wrapper_set(wrapper_set_id)
             .ok_or_else(|| missing_wrapper_set_error(wrapper_set_id))?;
@@ -825,7 +795,6 @@ impl PreparationWalk {
                 ))
             })?;
             let wrapper_facts = self.walk_template(
-                store,
                 wrapper.root,
                 &wrapper_view,
                 &[],
@@ -850,7 +819,6 @@ impl PreparationWalk {
     fn walk_expression(
         &mut self,
         view: &TirView<'_>,
-        store: &TemplateIrStore,
         expression: &Expression,
         loop_binding_paths: &[InternedPath],
         role: &PreparationTraversalRole,
@@ -860,7 +828,6 @@ impl PreparationWalk {
             |reference: TemplateTirReference, nested_binding_paths: &[InternedPath]| {
                 let nested_view = view.nested_template_value(reference)?;
                 let facts = self.walk_template(
-                    store,
                     reference.root,
                     &nested_view,
                     nested_binding_paths,
@@ -893,7 +860,6 @@ impl PreparationWalk {
         selector: &TemplateBranchSelector,
         fallback_location: &SourceLocation,
         loop_binding_paths: &[InternedPath],
-        store: &TemplateIrStore,
         role: &PreparationTraversalRole,
     ) -> Result<(Vec<InternedPath>, bool, PreparationFacts), TemplateError> {
         let mut branch_binding_paths = loop_binding_paths.to_owned();
@@ -901,7 +867,7 @@ impl PreparationWalk {
         let result = match selector {
             TemplateBranchSelector::Bool(condition) => {
                 let condition_facts =
-                    self.walk_expression(view, store, condition, loop_binding_paths, role)?;
+                    self.walk_expression(view, condition, loop_binding_paths, role)?;
                 let is_const = condition_facts.const_evaluable;
                 selector_facts.merge(condition_facts);
                 if is_const {
@@ -921,14 +887,14 @@ impl PreparationWalk {
                     }
                     ExpressionKind::Coerced { value, .. } => {
                         let value_facts =
-                            self.walk_expression(view, store, value, loop_binding_paths, role)?;
+                            self.walk_expression(view, value, loop_binding_paths, role)?;
                         let is_const = value_facts.const_evaluable;
                         selector_facts.merge(value_facts);
                         is_const
                     }
                     _ => {
                         let scrutinee_facts =
-                            self.walk_expression(view, store, scrutinee, loop_binding_paths, role)?;
+                            self.walk_expression(view, scrutinee, loop_binding_paths, role)?;
                         selector_facts.merge(scrutinee_facts);
                         false
                     }
@@ -970,13 +936,12 @@ impl PreparationWalk {
         view: &TirView<'_>,
         header: &TemplateLoopHeader,
         loop_location: &SourceLocation,
-        store: &TemplateIrStore,
         role: &PreparationTraversalRole,
     ) -> Result<PreparationFacts, TemplateError> {
         let mut facts = PreparationFacts::const_value();
         let diagnostic = match header {
             TemplateLoopHeader::Conditional { condition } => {
-                let condition_facts = self.walk_expression(view, store, condition, &[], role)?;
+                let condition_facts = self.walk_expression(view, condition, &[], role)?;
                 facts.merge(condition_facts);
 
                 let mut diagnostic_condition = condition.as_ref();
@@ -1002,14 +967,14 @@ impl PreparationWalk {
                 }
             }
             TemplateLoopHeader::Range { range, .. } => {
-                let start_facts = self.walk_expression(view, store, &range.start, &[], role)?;
-                let end_facts = self.walk_expression(view, store, &range.end, &[], role)?;
+                let start_facts = self.walk_expression(view, &range.start, &[], role)?;
+                let end_facts = self.walk_expression(view, &range.end, &[], role)?;
                 let mut header_const = start_facts.const_evaluable;
                 header_const &= end_facts.const_evaluable;
                 facts.merge(start_facts);
                 facts.merge(end_facts);
                 if let Some(step) = &range.step {
-                    let step_facts = self.walk_expression(view, store, step, &[], role)?;
+                    let step_facts = self.walk_expression(view, step, &[], role)?;
                     header_const &= step_facts.const_evaluable;
                     facts.merge(step_facts);
                 }
@@ -1021,7 +986,7 @@ impl PreparationWalk {
                 })
             }
             TemplateLoopHeader::Collection { iterable, .. } => {
-                let iterable_facts = self.walk_expression(view, store, iterable, &[], role)?;
+                let iterable_facts = self.walk_expression(view, iterable, &[], role)?;
                 let header_const = iterable_facts.const_evaluable;
                 facts.merge(iterable_facts);
                 (!header_const).then(|| {
@@ -1048,10 +1013,9 @@ fn slot_placeholder_has_wrapper_context(placeholder: &TirSlotPlaceholder) -> boo
         || placeholder.skip_parent_child_wrappers
 }
 
-fn validate_view_context_dimensions(
-    store: &TemplateIrStore,
-    context: TemplateViewContext,
-) -> Result<(), CompilerError> {
+fn validate_view_context_dimensions(view: &TirView<'_>) -> Result<(), CompilerError> {
+    let store = view.store();
+    let context = view.context();
     if let Some(overlay_id) = context.expression_overlay
         && store.expression_overlay(overlay_id).is_none()
     {

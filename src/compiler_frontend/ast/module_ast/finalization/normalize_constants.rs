@@ -260,7 +260,7 @@ impl AstFinalizer<'_, '_> {
                     TemplateTirPhase::Composed,
                     reference.context,
                 )?;
-                let preparation = prepare_tir_view(&view, &store, TemplatePreparationMode::Value)?;
+                let preparation = prepare_tir_view(&view, TemplatePreparationMode::Value)?;
                 matches!(
                     preparation,
                     PreparedTemplate::Helper(TemplateHelperKind::SlotInsert)

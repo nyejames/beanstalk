@@ -1,6 +1,6 @@
 //! Owned runtime-template handoff materialization from TIR.
 //!
-//! WHAT: builds an owned, recursive runtime-template tree from `TemplateIrStore`
+//! WHAT: builds an owned, recursive runtime-template tree from an exact `TirView`
 //! for the AST-to-HIR boundary.
 //!
 //! WHY: HIR should consume finalized runtime template metadata without holding
@@ -38,52 +38,40 @@ use crate::compiler_frontend::ast::templates::tir::slot_composition::collect_tir
 use crate::compiler_frontend::ast::templates::tir::slot_plan::{
     TemplateSlotPlan, TemplateSlotSiteRenderPiece,
 };
-use crate::compiler_frontend::ast::templates::tir::store::TemplateIrStore;
 use crate::compiler_frontend::ast::templates::tir::view::TirView;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::instrumentation::{AstCounter, increment_ast_counter};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
-impl TemplateIrStore {
-    /// Materializes a prepared runtime slot application from its exact view.
-    ///
-    /// WHAT: uses the `TirView` root and expression overlays while preserving
-    /// the existing owned slot handoff shape.
-    /// WHY: AST finalization must replace runtime templates from the same
-    /// effective view it used for runtime classification, without leaking TIR
-    /// IDs past the AST/HIR boundary.
-    pub(crate) fn owned_runtime_slot_handoff_for_prepared_view(
-        &self,
-        prepared: &PreparedRuntime,
-        view: TirView<'_>,
-    ) -> Result<Option<OwnedRuntimeSlotApplicationHandoff>, CompilerError> {
-        validate_prepared_runtime(prepared, &view)?;
-        let template_id = self.template_id_for_view(&view)?;
-        let mut materializer = RuntimeHandoffMaterializer::new_with_view(self, view);
-        materializer.owned_runtime_slot_handoff_for_template(template_id)
-    }
+/// Materializes a prepared runtime slot application from its exact view.
+pub(crate) fn owned_runtime_slot_handoff_for_prepared_view(
+    prepared: &PreparedRuntime,
+    view: TirView<'_>,
+) -> Result<Option<OwnedRuntimeSlotApplicationHandoff>, CompilerError> {
+    validate_prepared_runtime(prepared, &view)?;
+    let template_id = template_id_for_view(&view)?;
+    let mut materializer = RuntimeHandoffMaterializer::new_with_view(view);
+    materializer.owned_runtime_slot_handoff_for_template(template_id)
+}
 
-    /// Materializes an ordinary runtime template from its prepared exact view.
-    pub(crate) fn owned_runtime_template_handoff_for_prepared_view(
-        &self,
-        prepared: &PreparedRuntime,
-        view: TirView<'_>,
-    ) -> Result<OwnedRuntimeTemplateHandoff, CompilerError> {
-        validate_prepared_runtime(prepared, &view)?;
-        let template_id = self.template_id_for_view(&view)?;
-        let mut materializer = RuntimeHandoffMaterializer::new_with_view(self, view);
-        materializer.owned_runtime_template_handoff_for_template(template_id)
-    }
+/// Materializes an ordinary runtime template from its prepared exact view.
+pub(crate) fn owned_runtime_template_handoff_for_prepared_view(
+    prepared: &PreparedRuntime,
+    view: TirView<'_>,
+) -> Result<OwnedRuntimeTemplateHandoff, CompilerError> {
+    validate_prepared_runtime(prepared, &view)?;
+    let template_id = template_id_for_view(&view)?;
+    let mut materializer = RuntimeHandoffMaterializer::new_with_view(view);
+    materializer.owned_runtime_template_handoff_for_template(template_id)
+}
 
-    fn template_id_for_view(&self, view: &TirView<'_>) -> Result<TemplateIrId, CompilerError> {
-        let template_id = view.root_ref();
-        self.get_template(template_id).ok_or_else(|| {
-            CompilerError::compiler_error(
-                "TIR HIR handoff view materialization referenced a missing template.",
-            )
-        })?;
-        Ok(template_id)
-    }
+fn template_id_for_view(view: &TirView<'_>) -> Result<TemplateIrId, CompilerError> {
+    let template_id = view.root_ref();
+    view.root_template().map(|_| template_id).map_err(|_| {
+        CompilerError::compiler_error(
+            "TIR HIR handoff view materialization referenced a missing template.",
+        )
+    })
 }
 
 fn validate_prepared_runtime(
@@ -100,15 +88,13 @@ fn validate_prepared_runtime(
 }
 
 struct RuntimeHandoffMaterializer<'store> {
-    store: &'store TemplateIrStore,
     /// Exact view for the structural root currently being materialized.
     effective_view: TirView<'store>,
 }
 
 impl<'store> RuntimeHandoffMaterializer<'store> {
-    fn new_with_view(store: &'store TemplateIrStore, view: TirView<'store>) -> Self {
+    fn new_with_view(view: TirView<'store>) -> Self {
         Self {
-            store,
             effective_view: view,
         }
     }
@@ -297,7 +283,11 @@ impl<'store> RuntimeHandoffMaterializer<'store> {
             } => Ok(OwnedRuntimeTemplateNode::Text {
                 text,
                 byte_len,
-                reactive_subscription: self.store.node_reactive_subscription(id).cloned(),
+                reactive_subscription: self
+                    .current_view()
+                    .store()
+                    .node_reactive_subscription(id)
+                    .cloned(),
                 location: node.location,
             }),
 
@@ -449,7 +439,7 @@ impl<'store> RuntimeHandoffMaterializer<'store> {
     }
 
     fn get_template(&self, id: TemplateIrId) -> Result<&TemplateIr, CompilerError> {
-        self.store.get_template(id).ok_or_else(|| {
+        self.current_view().store().get_template(id).ok_or_else(|| {
             CompilerError::compiler_error(
                 "TIR HIR handoff materialization referenced a missing template.",
             )
@@ -457,7 +447,7 @@ impl<'store> RuntimeHandoffMaterializer<'store> {
     }
 
     fn get_node(&self, id: TemplateIrNodeId) -> Result<&TemplateIrNode, CompilerError> {
-        self.store.get_node(id).ok_or_else(|| {
+        self.current_view().store().get_node(id).ok_or_else(|| {
             CompilerError::compiler_error(
                 "TIR HIR handoff materialization referenced a missing node.",
             )
@@ -714,11 +704,15 @@ impl<'store> RuntimeHandoffMaterializer<'store> {
             return Ok(child_handoff);
         };
 
-        let wrapper_set = self.store.get_wrapper_set(wrapper_set_ref).ok_or_else(|| {
-            CompilerError::compiler_error(
-                "TIR HIR handoff: inherited wrapper set referenced by overlay is missing.",
-            )
-        })?;
+        let wrapper_set = self
+            .current_view()
+            .store()
+            .get_wrapper_set(wrapper_set_ref)
+            .ok_or_else(|| {
+                CompilerError::compiler_error(
+                    "TIR HIR handoff: inherited wrapper set referenced by overlay is missing.",
+                )
+            })?;
 
         let wrapper_references: Vec<TemplateWrapperReference> = wrapper_set.wrappers.clone();
 
@@ -828,7 +822,7 @@ impl<'store> RuntimeHandoffMaterializer<'store> {
         wrapper_reference: TemplateWrapperReference,
         child_handoff: OwnedRuntimeTemplateNode,
     ) -> Result<OwnedRuntimeTemplateNode, CompilerError> {
-        let wrapper_store = self.store;
+        let wrapper_store = self.current_view().store();
 
         let (wrapper_root, has_runtime_slot_plan) = wrapper_store
             .get_template(wrapper_reference.root)
@@ -862,10 +856,13 @@ impl<'store> RuntimeHandoffMaterializer<'store> {
     }
 
     fn get_slot_plan(&self, id: TemplateSlotPlanId) -> Result<&TemplateSlotPlan, CompilerError> {
-        self.store.get_slot_plan(id).ok_or_else(|| {
-            CompilerError::compiler_error(
-                "TIR HIR handoff materialization referenced a missing slot plan.",
-            )
-        })
+        self.current_view()
+            .store()
+            .get_slot_plan(id)
+            .ok_or_else(|| {
+                CompilerError::compiler_error(
+                    "TIR HIR handoff materialization referenced a missing slot plan.",
+                )
+            })
     }
 }

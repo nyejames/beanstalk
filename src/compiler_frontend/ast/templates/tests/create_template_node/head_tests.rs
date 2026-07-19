@@ -1992,6 +1992,7 @@ fn const_required_template_loop_reports_expansion_limit() {
         .expect("test context should include fold dependencies");
     let error = fold_template_with_fold_context(
         &template,
+        &context.template_ir_store,
         &mut fold_context,
         crate::compiler_frontend::ast::templates::tir::TemplatePreparationMode::ConstRequired,
     )
@@ -2021,6 +2022,7 @@ fn const_required_template_loop_uses_configured_expansion_limit() {
 
     let folded = fold_template_with_fold_context(
         &template,
+        &context.template_ir_store,
         &mut fold_context,
         crate::compiler_frontend::ast::templates::tir::TemplatePreparationMode::ConstRequired,
     )
