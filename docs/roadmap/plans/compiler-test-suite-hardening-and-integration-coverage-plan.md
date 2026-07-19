@@ -29,17 +29,17 @@ This ordering is mandatory. Do not begin broad pruning while the harness can sti
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 2B7 — migrate the function/struct construction success family
-LAST_ACCEPTED_COMMIT: `195253f61` — make numeric promotion contracts explicit
-WORKTREE: parent `main` at `195253f61`; Phase 1 worker worktrees were removed after patch-equivalence checks; reuse `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase2a` for subsequent serialized slices
+CURRENT_SLICE: Phase 2B8 — migrate the choice, optional and syntax success family
+LAST_ACCEPTED_COMMIT: `315e16c5d` — assert function and struct outputs
+WORKTREE: parent `main` at `315e16c5d`; Phase 1 worker worktrees were removed after patch-equivalence checks; reuse `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase2a` for subsequent serialized slices
 REQUIRED_RELOADS: startup files, this plan and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: memory access/borrow-validation contracts define the selected cases' semantics; `testing.bd` requires explicit authored assertions for visible behaviour
-- code: Phase 2B6 reduced fallback-backed cases to 19 and backend-baseline-only blocks to 74; the next coherent family has six fallback-backed function/struct construction cases
+- code: Phase 2B7 reduced fallback-backed cases to 13 and backend-baseline-only blocks to 68; the next family has seven unambiguous fallback-backed choice, optional and syntax cases
 ACCEPTANCE_CRITERIA:
-- add authored HTML rendered-output expectations to two function-call cases, three named struct-constructor cases and `struct_using_constant`
-- add no smoke roles or broad contract IDs and leave source inputs, runner enforcement and fallback infrastructure unchanged
-- pass all six exact-case runs, audit, focused harness tests, formatting, diff checks and `just validate`
+- add explicit compile-only smoke expectations for two choice cases, `commas` and `white_space`
+- add rendered-output expectations for the three optional-`none` success cases
+- leave source inputs, runner enforcement and fallback infrastructure unchanged and pass all seven exact cases plus the full gate
 VALIDATION_STATE:
 - final TIR at `dc81f7e53`: `just validate` passed with 3,433 Rust tests, 1,784 integration executions, docs checking and 28 benchmark sanity cases
 - Phase 0A documentation-only gate: `cargo run --quiet -- build docs --release` passed; 72 files built and no generated diff was produced (`bean` was unavailable in `PATH`)
@@ -58,12 +58,13 @@ VALIDATION_STATE:
 - Phase 2B4: all five exact HTML cases, 70 focused runner tests, audit, formatting, diff checks and `just validate` passed; the full gate covered 3,463 Rust tests, 1,784 integration executions, docs checking and 28 benchmark sanity cases
 - Phase 2B5: all five exact HTML cases, 70 focused runner tests, audit, formatting, diff checks and `just validate` passed; audit reported 12 compile-only, 78 backend-baseline-only and 23 fallback-backed cases
 - Phase 2B6: all four exact HTML cases, 70 focused runner tests, audit, formatting, diff checks and `just validate` passed; the full gate covered 3,463 Rust tests, 1,784 integration executions and 28 benchmark sanity cases
+- Phase 2B7: all six exact HTML cases, 70 focused runner tests, audit, formatting, diff checks and `just validate` passed; `struct_using_constant` uses the correct static HTML artifact lane and the full gate passed
 DOCS_IMPACT: Phase 1 workflow docs, generated release output and the deferred code-block highlighting roadmap note are current; fixture outcomes/backend coverage and the progress matrix remain unchanged
 BLOCKERS_OR_OPEN_DECISIONS: diagnostics Phase 4.1c remains serialized at `d7fb3654f`; disk permits at most one additional worktree; before Phase 2 closes, resolve `adversarial_multi_file_helper_chain` using unsupported `@./prefix` and review mutation-during-iteration semantics in `loop_borrow_mutation_conflict`
-DELEGATION_DECISION: codex-cli — reuse the existing dedicated worktree for the user-requested Codex CLI Phase 2B7 implementation slice
-NEXT_WORKER_ORDER: codex-cli only for the Phase 2B7 implementation slice
+DELEGATION_DECISION: codex-cli — reuse the existing dedicated worktree for the user-requested Codex CLI Phase 2B8 implementation slice
+NEXT_WORKER_ORDER: codex-cli only for the Phase 2B8 implementation slice
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit this Phase 2B6 checkpoint, synchronize the reusable worker branch with main and launch the bounded Phase 2B7 fixture slice
+NEXT_RESUME_ACTION: commit this Phase 2B7 checkpoint, synchronize the reusable worker branch with main and launch the bounded Phase 2B8 fixture slice
 
 ## Recommended roadmap placement and activation conditions
 
@@ -105,17 +106,17 @@ ACTIVE_PLAN:
 
 CURRENT_SLICE:
 - Phase: 2
-- Checklist item: 2B7 — migrate the function/struct construction success family
-- Goal: replace the fallback for six function/struct cases with rendered-output contracts
+- Checklist item: 2B8 — migrate the choice, optional and syntax success family
+- Goal: replace the fallback for seven cases with four compile-only smoke contracts and three rendered-output contracts
 - Non-goals: no runner enforcement, fallback removal, unrelated fixture migration, diagnostic changes, exact runtime-event infrastructure or broad role/contract backfill
 
 LAST_GOOD_COMMIT:
-- `195253f61` — accepted Phase 2B6 numeric-promotion expectation migration
+- `315e16c5d` — accepted Phase 2B7 function/struct expectation migration
 
 CURRENT_WORKTREE_STATE:
-- Clean / known changes: parent `main` is at `195253f61`; this Phase 2B6 checkpoint update is parent-owned
+- Clean / known changes: parent `main` is at `315e16c5d`; this Phase 2B7 checkpoint update is parent-owned
 - Branch: local `main`
-- Dedicated worker worktrees: all accepted Phase 1 worktrees were clean and removed after `git cherry` confirmed their patches on main; reuse `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase2a` from worker commit `ad3301cbb`
+- Dedicated worker worktrees: all accepted Phase 1 worktrees were clean and removed after `git cherry` confirmed their patches on main; reuse `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase2a` from worker commit `3ddf0259d`
 
 RELEVANT_DOCS_THIS_SLICE:
 - `AGENTS.md`
@@ -130,16 +131,17 @@ RELEVANT_DOCS_THIS_SLICE:
 - `docs/roadmap/roadmap.md`
 
 RELEVANT_CODE:
-- `tests/cases/{function_call_arg_type_correct,function_call_arg_user_error_kind_struct,struct_constructor_named_args_all_named,struct_constructor_named_args_default_skip,struct_constructor_named_args_mixed,struct_using_constant}/expect.toml`: new explicit rendered-output expectations
+- `tests/cases/{choice_basic_declaration_and_use,choice_import_visibility_exported,commas,none_declaration_success,none_mutation_success,none_return_success,white_space}/expect.toml`: new explicit expectations
+- `tests/cases/manifest.toml`: add smoke role only to the two choice cases, `commas` and `white_space`
 - `tests/cases/adversarial_multi_file_helper_chain/input/helper/compose.bst`: inspect-only design conflict; `@./prefix` is unsupported
 - `tests/cases/loop_borrow_mutation_conflict/input/#page.bst`: inspect-only pending mutation-during-iteration review
 - `tests/fixtures/stubs/expect.toml`: inspect only; fallback removal belongs to 2C after all migrations
 - `justfile::validate`: final code-bearing gate
 
 ACCEPTANCE_CRITERIA:
-- function cases assert `hello` and `something went wrong`; named-constructor cases assert `(10, 20)`, `80` and `(10, 20)`; `struct_using_constant` asserts `struct_using_constant`
-- no manifest metadata or unrelated changes
-- all six exact cases pass on HTML; audit reports 13 total explicit compile-only blocks, 68 remaining backend-baseline-only blocks, 13 remaining fallback-backed cases and zero hard violations; full validation passes
+- `choice_basic_declaration_and_use`, `choice_import_visibility_exported`, `commas` and `white_space` use explicit compile-only intent and are the only entries gaining `role = "smoke"`
+- `none_declaration_success`, `none_mutation_success` and `none_return_success` each assert `ok`
+- all seven exact cases pass on HTML; audit reports 17 total explicit compile-only blocks, 61 remaining backend-baseline-only blocks, six remaining fallback-backed cases and zero hard violations; full validation passes
 
 DECISIONS_ALREADY_MADE:
 - decision: harden the integration harness before pruning
@@ -210,6 +212,7 @@ VALIDATION_STATE:
 - Phase 2B4 worker corrected the nested-catch fallback marker from the explorer's `guest-1.5` guess to source-verified `guest-0`; `just validate` passed with 3,463 Rust tests and 1,784 integration executions; audit reported 11 compile-only, 83 backend-baseline-only, 28 fallback-backed and zero hard violations
 - Phase 2B5 worker `just validate` passed; audit reported 12 compile-only, 78 backend-baseline-only, 23 fallback-backed and zero hard violations
 - Phase 2B6 worker `just validate` passed with 3,463 Rust tests, 1,784 integration executions and 28 benchmark sanity cases; audit reported 13 compile-only, 74 backend-baseline-only, 19 fallback-backed and zero hard violations
+- Phase 2B7 worker changed `struct_using_constant` from an inapplicable runtime assertion to an `index.html` artifact assertion; `just validate` passed and audit reported 13 compile-only, 68 backend-baseline-only, 13 fallback-backed and zero hard violations
 
 DOCS_IMPACT:
 - progress matrix needed: review after every phase that adds, removes, or materially strengthens current coverage; update only when the coverage statement changes
@@ -217,7 +220,7 @@ DOCS_IMPACT:
 - authorized docs updates: this plan explicitly authorizes the documentation changes listed in each phase; do not broaden language or architecture docs without a discovered contradiction or an intentional accepted behaviour change
 
 NEXT_ACTION:
-- commit this Phase 2B6 checkpoint, synchronize the reusable worker branch with main and launch the bounded Phase 2B7 fixture slice
+- commit this Phase 2B7 checkpoint, synchronize the reusable worker branch with main and launch the bounded Phase 2B8 fixture slice
 
 ---
 
@@ -1266,6 +1269,11 @@ Accepted batch 2B6 at `195253f61`: three integer-to-float promotion cases now as
 observable markers and one mixed-literal case is an explicit compile-only smoke test. Audit
 baseline-only findings fell from 78 to 74, fallback use fell from 23 to 19, and full validation
 passed with 3,463 Rust tests, 1,784 integration executions and 28 benchmark sanity cases.
+
+Accepted batch 2B7 at `315e16c5d`: five function and struct cases now assert their rendered
+outputs, while `struct_using_constant` owns a narrow static `index.html` artifact assertion.
+Audit baseline-only findings fell from 74 to 68, fallback use fell from 19 to 13, and full
+validation passed with 3,463 Rust tests and 1,784 integration executions.
 
 ### 2C — Enforce canonical expectations and remove the fallback
 
