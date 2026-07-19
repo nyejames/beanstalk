@@ -3,6 +3,7 @@ entry = "."
 [backends.html]
 mode = "success"
 warnings = "forbid"
+rendered_output_contains = ["module_boundary_same_module_allowed result=hello"]
 
 [backends.html_wasm]
 mode = "failure"
