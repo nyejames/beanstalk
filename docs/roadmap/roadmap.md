@@ -11,16 +11,16 @@ Use the [Progress Matrix](docs/src/docs/progress/#page.bst) as a reference for w
 
 ## Active implementation work
 
-- [Test Suite Hardening](docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md)
-- [Compiler diagnostics improvements](docs/roadmap/plans/compiler-diagnostics-improvement-plan.md)
+- [Test Suite Hardening](./plans/compiler-test-suite-hardening-and-integration-coverage-plan.md)
+- [Compiler diagnostics improvements](./plans/compiler-diagnostics-improvement-plan.md)
 
 ## Queued implementation chain
 
-- [Canonical module compilation and scoped packages](docs/roadmap/plans/canonical-module-compilation-and-scoped-packages-plan.md)
-- [Project config, imported build values and anonymous records](docs/roadmap/plans/import_values_anonymous_records_plan.md)
-- [Entry-local config blocks and runtime title](docs/roadmap/plans/entry-config-blocks-runtime-title-plan.md)
-- [Number and numeric semantics](docs/roadmap/plans/number_type_numeric_plan.md)
-- [HTML mixed JavaScript and Wasm backend](docs/roadmap/plans/html_project_backend_wasm_final_implementation_plan.md)
+- [Canonical module compilation and scoped packages](./plans/canonical-module-compilation-and-scoped-packages-plan.md)
+- [Project config, imported build values and anonymous records](./plans/import_values_anonymous_records_plan.md)
+- [Entry-local config blocks and runtime title](./plans/entry-config-blocks-runtime-title-plan.md)
+- [Number and numeric semantics](./plans/number_type_numeric_plan.md)
+- [HTML mixed JavaScript and Wasm backend](./plans/html_project_backend_wasm_final_implementation_plan.md)
 
 Diagnostics may continue independently. The queued implementation chain remains ordered by hard dependency.
 
@@ -34,7 +34,7 @@ These items are genuinely deferred. They are not current implementation work. Ea
 
 ## Post-TIR template performance follow-ups
 
-The [post-TIR `$md` and template-parser optimisation plan](docs/roadmap/plans/post-tir-template-parser-optimization-plan.md)
+The [post-TIR `$md` and template-parser optimisation plan](./plans/post-tir-template-parser-optimization-plan.md)
 is the single deferred owner for source-span template text, parse and formatter reuse, source-hash
 keys, imported-constant/directive invalidation, incremental template prerequisites, profiling-gated
 parallel folding and cross-owner backend string-assembly investigation. It requires profiles and a
@@ -42,7 +42,7 @@ complete semantic key/invalidation model before any cache or scheduling implemen
 
 The final TIR completion plan remains the historical architecture source. Broad arena and invariant
 work remains in the
-[frontend optimisation plan](docs/roadmap/plans/frontend-arena-semantic-invariant-optimization-plan.md).
+[frontend optimisation plan](./plans/frontend-arena-semantic-invariant-optimization-plan.md).
 
 ## Code-block highlighting follow-ups
 
