@@ -408,9 +408,16 @@ fn parse_tests_command(args: &[String]) -> Result<Command, String> {
                 options.list = true;
                 index += 1;
             }
+            "--audit" => {
+                if options.audit {
+                    return Err(String::from("Tests command accepts --audit at most once."));
+                }
+                options.audit = true;
+                index += 1;
+            }
             _ if arg.starts_with("--") => {
                 return Err(format!(
-                    "Unknown tests flag: '{arg}'. Supported tests flags are --case <id>, --tag <tag>, --contract <id>, --backend <html|html_wasm>, and --list."
+                    "Unknown tests flag: '{arg}'. Supported tests flags are --case <id>, --tag <tag>, --contract <id>, --backend <html|html_wasm>, --list, and --audit."
                 ));
             }
             _ => {
@@ -420,6 +427,8 @@ fn parse_tests_command(args: &[String]) -> Result<Command, String> {
             }
         }
     }
+
+    options.validate()?;
 
     Ok(Command::CompilerTests { options })
 }
@@ -574,6 +583,7 @@ fn print_help() {
     say!("  --contract <id>         (exact contract ID)");
     say!("  --backend <id>          (supported: html, html_wasm)");
     say!("  --list                  (list selected metadata without compiling cases)");
+    say!("  --audit                 (write the full suite inventory without compiling cases)");
     say!("\nCheck command options:");
     say!("  --terse                (compact one-line diagnostics)");
     say!("\nNew command options:");

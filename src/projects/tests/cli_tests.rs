@@ -257,6 +257,21 @@ fn tests_command_parses_backend_filter() {
 }
 
 #[test]
+fn tests_command_parses_audit_mode() {
+    let command = get_command(&args(&["tests", "--audit"])).expect("audit mode should parse");
+    assert_eq!(
+        command,
+        Command::CompilerTests {
+            options: TestRunnerOptions {
+                show_warnings: true,
+                audit: true,
+                ..TestRunnerOptions::default()
+            },
+        }
+    );
+}
+
+#[test]
 fn tests_command_parses_composable_selection_options() {
     let command = get_command(&args(&[
         "tests",
@@ -284,6 +299,7 @@ fn tests_command_parses_composable_selection_options() {
                 contract: Some(String::from("language.operator_precedence")),
                 backend_filter: Some(BackendId::Html),
                 list: true,
+                ..TestRunnerOptions::default()
             },
         }
     );
@@ -305,6 +321,31 @@ fn tests_command_rejects_duplicate_singleton_options() {
             "{error}"
         );
     }
+}
+
+#[test]
+fn tests_command_rejects_audit_filters_in_any_argument_order() {
+    for values in [
+        vec!["tests", "--audit", "--case", "case"],
+        vec!["tests", "--case", "case", "--audit"],
+        vec!["tests", "--audit", "--tag", "language"],
+        vec!["tests", "--contract", "language.case", "--audit"],
+        vec!["tests", "--audit", "--backend", "html"],
+        vec!["tests", "--list", "--audit"],
+    ] {
+        let error = get_command(&args(&values)).expect_err("audit filter should fail");
+        assert!(
+            error.contains("--audit") && error.contains("cannot be combined"),
+            "{error}"
+        );
+    }
+}
+
+#[test]
+fn tests_command_rejects_duplicate_audit() {
+    let error = get_command(&args(&["tests", "--audit", "--audit"]))
+        .expect_err("duplicate audit should fail");
+    assert!(error.contains("--audit") && error.contains("at most once"));
 }
 
 #[test]

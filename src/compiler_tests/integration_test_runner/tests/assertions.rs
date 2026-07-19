@@ -229,6 +229,7 @@ fn absence_expectation(forbidden: Vec<String>) -> SuccessExpectation {
         warnings: WarningExpectation::Forbid,
         artifact_assertions: Vec::new(),
         golden_mode: GoldenMode::Strict,
+        has_golden: false,
         rendered_output_contains: Vec::new(),
         rendered_output_not_contains: Vec::new(),
         artifacts_must_not_exist: forbidden,
@@ -239,6 +240,7 @@ fn absence_test_case(expectation: SuccessExpectation) -> TestCaseSpec {
     TestCaseSpec {
         display_name: "absence-contract".to_string(),
         case_id: "absence-contract".to_string(),
+        manifest_relative_path: "absence-contract".to_string(),
         tags: Vec::new(),
         contract: None,
         role: None,

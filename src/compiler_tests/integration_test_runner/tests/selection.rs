@@ -20,6 +20,7 @@ fn case(
     TestCaseSpec {
         display_name: display_name.to_owned(),
         case_id: case_id.to_owned(),
+        manifest_relative_path: case_id.to_owned(),
         tags: tags.iter().map(|tag| (*tag).to_owned()).collect(),
         contract: contract.map(str::to_owned),
         role: None,
@@ -31,6 +32,7 @@ fn case(
             warnings: WarningExpectation::Ignore,
             artifact_assertions: Vec::new(),
             golden_mode: GoldenMode::Strict,
+            has_golden: false,
             rendered_output_contains: Vec::new(),
             rendered_output_not_contains: Vec::new(),
             artifacts_must_not_exist: Vec::new(),

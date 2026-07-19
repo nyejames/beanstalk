@@ -149,6 +149,16 @@ pub(crate) fn load_canonical_case_specs(
     };
     validate_fixture_contract(fixture_root, &parsed_expectation)?;
     let entry_path = resolve_case_entry_path(&input_root, parsed_expectation.entry.as_deref())?;
+    let manifest_relative_path = manifest_case
+        .as_ref()
+        .map(|case| normalize_manifest_relative_path(&case.path))
+        .unwrap_or_else(|| {
+            fixture_root
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("unnamed_case")
+                .to_owned()
+        });
     let (case_id, tags, contract, role) = match manifest_case {
         Some(manifest_case) => (
             manifest_case.id,
@@ -170,11 +180,13 @@ pub(crate) fn load_canonical_case_specs(
 
     let mut case_specs = Vec::new();
     for backend_expectation in parsed_expectation.backend_expectations {
+        let golden_dir = golden_dir_for_backend(fixture_root, backend_expectation.backend_id);
         let expected = match backend_expectation.mode {
             ExpectationMode::Success => ExpectedOutcome::Success(SuccessExpectation {
                 warnings: backend_expectation.warnings,
                 artifact_assertions: backend_expectation.artifact_assertions,
                 golden_mode: backend_expectation.golden_mode,
+                has_golden: golden_dir_has_files(&golden_dir),
                 rendered_output_contains: backend_expectation.rendered_output_contains,
                 rendered_output_not_contains: backend_expectation.rendered_output_not_contains,
                 artifacts_must_not_exist: backend_expectation.artifacts_must_not_exist,
@@ -191,11 +203,11 @@ pub(crate) fn load_canonical_case_specs(
             backend_expectation.flags,
         );
         let backend_name = backend_expectation.backend_id.as_str();
-        let golden_dir = golden_dir_for_backend(fixture_root, backend_expectation.backend_id);
 
         case_specs.push(TestCaseSpec {
             display_name: format!("{case_id} [{backend_name}]"),
             case_id: case_id.clone(),
+            manifest_relative_path: manifest_relative_path.clone(),
             tags: tags.clone(),
             contract: contract.clone(),
             role,
@@ -208,6 +220,10 @@ pub(crate) fn load_canonical_case_specs(
     }
 
     Ok(case_specs)
+}
+
+fn normalize_manifest_relative_path(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "/")
 }
 
 fn merge_flags(default_flags: Vec<Flag>, extra_flags: Vec<Flag>) -> Vec<Flag> {

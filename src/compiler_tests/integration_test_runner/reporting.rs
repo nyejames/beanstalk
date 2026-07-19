@@ -1,22 +1,27 @@
 //! Terminal output and triage report writing for the integration test suite.
 //!
-//! WHAT: renders per-case results, the final summary, and the machine-readable triage report.
-//! WHY: keeping all formatted output here means the orchestrator only knows about counts and
-//!      outcomes — not how to render them — so the output format can evolve independently.
+//! WHAT: renders case results, writes machine-readable triage/inventory reports, and owns their
+//!       stable output shapes.
+//! WHY: keeping reporting here means the runner only coordinates loading, selection and execution.
 
 use super::{
-    BackendId, CaseExecutionResult, ExpectedOutcome, FailureKind, FailureTriageEntry,
-    FailureTriageReport, SEPARATOR_LINE_LENGTH, SummaryCounts, TestCaseSpec,
+    BackendId, CaseExecutionResult, CaseRole, ExpectedOutcome, FailureExpectation, FailureKind,
+    FailureTriageEntry, FailureTriageReport, SEPARATOR_LINE_LENGTH, SuccessExpectation,
+    SummaryCounts, TestCaseSpec, WarningExpectation,
 };
 use crate::compiler_frontend::compiler_messages::render::{terminal, terse};
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, DiagnosticCategory, DiagnosticSeverity,
 };
 use saying::say;
+use serde::Serialize;
 use std::collections::BTreeMap;
 use std::fmt::Write;
 use std::fs;
 use std::path::Path;
+use std::process::Command;
+
+const SUITE_INVENTORY_SCHEMA_VERSION: u32 = 1;
 
 pub(crate) fn format_case_listing(cases: &[TestCaseSpec]) -> String {
     if cases.is_empty() {
@@ -64,6 +69,261 @@ pub(crate) fn format_case_listing(cases: &[TestCaseSpec]) -> String {
     }
 
     listing
+}
+
+/// Stable machine-readable inventory for the canonical integration suite.
+///
+/// WHAT: records manifest metadata and the current typed expectation facts without executing a
+///       case.
+/// WHY: audit output is a review input for later policy phases, not a second test runner.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct SuiteInventoryReport {
+    pub schema_version: u32,
+    pub repository_commit: Option<String>,
+    pub manifest_case_count: usize,
+    pub expanded_backend_execution_count: usize,
+    pub cases: Vec<InventoryCase>,
+    pub hard_policy_violations: Vec<AuditFinding>,
+    pub advisory_findings: Vec<AuditFinding>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct InventoryCase {
+    pub canonical_id: String,
+    pub manifest_relative_path: String,
+    pub tags: Vec<String>,
+    pub contract: Option<String>,
+    pub role: Option<CaseRole>,
+    pub backends: Vec<InventoryBackend>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct InventoryBackend {
+    pub backend: String,
+    pub mode: &'static str,
+    pub compile_only: bool,
+    pub warning_mode: &'static str,
+    pub diagnostic_match: Option<&'static str>,
+    pub structured_diagnostic_assertions: bool,
+    pub assertion_kinds: Vec<&'static str>,
+    pub golden_mode: Option<&'static str>,
+    pub golden_present: bool,
+    pub artifact_assertion_count: usize,
+    pub rendered_output_assertion_count: usize,
+    pub artifact_absence_assertion_count: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct AuditFinding {
+    pub code: String,
+    pub case_id: Option<String>,
+    pub message: String,
+}
+
+pub(crate) fn build_suite_inventory_report(
+    cases: &[TestCaseSpec],
+    repository_commit: Option<String>,
+) -> SuiteInventoryReport {
+    let mut inventory_cases = Vec::<InventoryCase>::new();
+
+    for case in cases {
+        if let Some(inventory_case) = inventory_cases.last_mut()
+            && inventory_case.canonical_id == case.case_id
+        {
+            inventory_case.backends.push(build_backend_inventory(case));
+            continue;
+        }
+
+        inventory_cases.push(InventoryCase {
+            canonical_id: case.case_id.clone(),
+            manifest_relative_path: case.manifest_relative_path.clone(),
+            tags: case.tags.clone(),
+            contract: case.contract.clone(),
+            role: case.role,
+            backends: vec![build_backend_inventory(case)],
+        });
+    }
+
+    let mut hard_policy_violations = Vec::new();
+    let mut advisory_findings = Vec::new();
+    let mut primary_contracts = BTreeMap::<String, String>::new();
+
+    for inventory_case in &inventory_cases {
+        if inventory_case.contract.is_none() {
+            advisory_findings.push(AuditFinding {
+                code: "missing_contract_classification".to_owned(),
+                case_id: Some(inventory_case.canonical_id.clone()),
+                message: "Case has no manifest contract classification.".to_owned(),
+            });
+        }
+
+        if inventory_case.role.is_none() {
+            advisory_findings.push(AuditFinding {
+                code: "missing_role_classification".to_owned(),
+                case_id: Some(inventory_case.canonical_id.clone()),
+                message: "Case has no manifest role classification.".to_owned(),
+            });
+        }
+
+        if inventory_case.role == Some(CaseRole::Primary) {
+            if let Some(contract) = inventory_case.contract.as_ref()
+                && let Some(previous_case_id) =
+                    primary_contracts.insert(contract.clone(), inventory_case.canonical_id.clone())
+            {
+                hard_policy_violations.push(AuditFinding {
+                    code: "duplicate_primary_contract".to_owned(),
+                    case_id: Some(inventory_case.canonical_id.clone()),
+                    message: format!(
+                        "Primary contract '{contract}' is also owned by case '{previous_case_id}'."
+                    ),
+                });
+            } else if inventory_case.contract.is_none() {
+                hard_policy_violations.push(AuditFinding {
+                    code: "primary_missing_contract".to_owned(),
+                    case_id: Some(inventory_case.canonical_id.clone()),
+                    message: "Primary case has no manifest contract classification.".to_owned(),
+                });
+            }
+        }
+    }
+
+    SuiteInventoryReport {
+        schema_version: SUITE_INVENTORY_SCHEMA_VERSION,
+        repository_commit,
+        manifest_case_count: inventory_cases.len(),
+        expanded_backend_execution_count: cases.len(),
+        cases: inventory_cases,
+        hard_policy_violations,
+        advisory_findings,
+    }
+}
+
+fn build_backend_inventory(case: &TestCaseSpec) -> InventoryBackend {
+    match &case.expected {
+        ExpectedOutcome::Success(expectation) => InventoryBackend {
+            backend: case.backend_id.as_str().to_owned(),
+            mode: "success",
+            compile_only: false,
+            warning_mode: warning_mode_label(expectation.warnings),
+            diagnostic_match: None,
+            structured_diagnostic_assertions: false,
+            assertion_kinds: success_assertion_kinds(case, expectation),
+            golden_mode: Some(golden_mode_label(expectation.golden_mode)),
+            golden_present: expectation.has_golden,
+            artifact_assertion_count: expectation.artifact_assertions.len(),
+            rendered_output_assertion_count: expectation.rendered_output_contains.len()
+                + expectation.rendered_output_not_contains.len(),
+            artifact_absence_assertion_count: expectation.artifacts_must_not_exist.len(),
+        },
+        ExpectedOutcome::Failure(expectation) => InventoryBackend {
+            backend: case.backend_id.as_str().to_owned(),
+            mode: "failure",
+            compile_only: false,
+            warning_mode: warning_mode_label(expectation.warnings),
+            diagnostic_match: Some("contains"),
+            structured_diagnostic_assertions: false,
+            assertion_kinds: failure_assertion_kinds(expectation),
+            golden_mode: None,
+            golden_present: false,
+            artifact_assertion_count: 0,
+            rendered_output_assertion_count: 0,
+            artifact_absence_assertion_count: 0,
+        },
+    }
+}
+
+fn success_assertion_kinds(
+    case: &TestCaseSpec,
+    expectation: &SuccessExpectation,
+) -> Vec<&'static str> {
+    let mut kinds = Vec::new();
+
+    if matches!(case.backend_id, BackendId::Html | BackendId::HtmlWasm) {
+        kinds.push("backend_baseline");
+    }
+
+    if !expectation.artifact_assertions.is_empty() {
+        kinds.push("artifact_assertions");
+    }
+    if expectation.has_golden {
+        kinds.push("golden");
+    }
+    if !expectation.rendered_output_contains.is_empty()
+        || !expectation.rendered_output_not_contains.is_empty()
+    {
+        kinds.push("rendered_output");
+    }
+    if !expectation.artifacts_must_not_exist.is_empty() {
+        kinds.push("artifact_absence");
+    }
+    kinds
+}
+
+fn failure_assertion_kinds(expectation: &FailureExpectation) -> Vec<&'static str> {
+    let mut kinds = Vec::new();
+    if !expectation.diagnostic_codes.is_empty() {
+        kinds.push("diagnostic_codes");
+    }
+    if !expectation.message_contains.is_empty() {
+        kinds.push("message_contains");
+    }
+    kinds
+}
+
+fn warning_mode_label(expectation: WarningExpectation) -> &'static str {
+    match expectation {
+        WarningExpectation::Ignore => "ignore",
+        WarningExpectation::Forbid => "forbid",
+        WarningExpectation::Exact(_) => "exact",
+    }
+}
+
+fn golden_mode_label(mode: super::GoldenMode) -> &'static str {
+    match mode {
+        super::GoldenMode::Strict => "strict",
+        super::GoldenMode::Normalized => "normalized",
+    }
+}
+
+/// Discovers the current repository revision without making audit depend on Git.
+pub(crate) fn discover_repository_commit() -> Option<String> {
+    let output = Command::new("git")
+        .args(["rev-parse", "HEAD"])
+        .output()
+        .ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    let commit = String::from_utf8(output.stdout).ok()?.trim().to_owned();
+    (!commit.is_empty()).then_some(commit)
+}
+
+pub(crate) fn write_suite_inventory_report(
+    report_path_str: &str,
+    report: &SuiteInventoryReport,
+) -> Result<(), String> {
+    let report_path = Path::new(report_path_str);
+    if let Some(parent) = report_path.parent() {
+        fs::create_dir_all(parent).map_err(|error| {
+            format!(
+                "Failed to create suite inventory directory '{}': {error}",
+                parent.display()
+            )
+        })?;
+    }
+
+    let report_json =
+        serde_json::to_string_pretty(report).map_err(|error| format!("JSON error: {error}"))?;
+    fs::write(report_path, report_json).map_err(|error| {
+        format!(
+            "Failed to write suite inventory report '{}': {error}",
+            report_path.display()
+        )
+    })?;
+
+    Ok(())
 }
 
 pub(crate) fn render_case_result(

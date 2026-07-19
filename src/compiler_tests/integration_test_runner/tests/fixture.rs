@@ -162,6 +162,7 @@ fn manifest_metadata_survives_backend_expansion() {
 
     for case in &suite.cases {
         assert_eq!(case.case_id, "case");
+        assert_eq!(case.manifest_relative_path, "case");
         assert_eq!(case.tags, vec!["integration", "maps"]);
         assert_eq!(
             case.contract.as_deref(),

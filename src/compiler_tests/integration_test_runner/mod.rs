@@ -37,4 +37,6 @@ pub(crate) const INPUT_DIR_NAME: &str = "input";
 pub(crate) const GOLDEN_DIR_NAME: &str = "golden";
 pub(crate) const FAILURE_TRIAGE_REPORT_PATH: &str =
     "target/test-reports/integration_failure_triage.json";
+pub(crate) const SUITE_INVENTORY_REPORT_PATH: &str =
+    "target/test-reports/integration_suite_inventory.json";
 pub(crate) const SEPARATOR_LINE_LENGTH: usize = 37;

@@ -25,7 +25,25 @@ pub(crate) fn normalize_relative_path(path: &std::path::Path) -> String {
 pub(crate) fn run_all_test_cases(
     options: TestRunnerOptions,
 ) -> Result<super::IntegrationRunSummary, String> {
+    options.validate()?;
+
     let suite = fixture::load_test_suite()?;
+
+    if options.audit {
+        let report = reporting::build_suite_inventory_report(
+            &suite.cases,
+            reporting::discover_repository_commit(),
+        );
+        reporting::write_suite_inventory_report(super::SUITE_INVENTORY_REPORT_PATH, &report)?;
+        println!(
+            "Wrote integration suite inventory to {} ({} cases, {} backend executions).",
+            super::SUITE_INVENTORY_REPORT_PATH,
+            report.manifest_case_count,
+            report.expanded_backend_execution_count
+        );
+        return Ok(SummaryCounts::default().into());
+    }
+
     let cases = select_cases(suite.cases, &options);
 
     if options.list {
@@ -33,7 +51,7 @@ pub(crate) fn run_all_test_cases(
         return Ok(SummaryCounts::default().into());
     }
 
-    if cases.is_empty() && has_selection_filters(&options) {
+    if cases.is_empty() && options.has_selection_filters() {
         return Err(String::from(
             "No integration test cases matched the requested selection filters.",
         ));
@@ -205,13 +223,6 @@ pub(crate) fn select_cases(
                     .is_none_or(|backend| case.backend_id == backend)
         })
         .collect()
-}
-
-fn has_selection_filters(options: &TestRunnerOptions) -> bool {
-    options.case_id.is_some()
-        || !options.tag_filters.is_empty()
-        || options.contract.is_some()
-        || options.backend_filter.is_some()
 }
 
 fn test_thread_count_from_env() -> Result<Option<usize>, String> {

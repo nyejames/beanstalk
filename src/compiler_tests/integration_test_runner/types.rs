@@ -18,6 +18,26 @@ pub(crate) struct TestRunnerOptions {
     pub contract: Option<String>,
     pub backend_filter: Option<BackendId>,
     pub list: bool,
+    pub audit: bool,
+}
+
+impl TestRunnerOptions {
+    pub(crate) fn validate(&self) -> Result<(), String> {
+        if self.audit && (self.has_selection_filters() || self.list) {
+            return Err(String::from(
+                "Tests command --audit cannot be combined with --case, --tag, --contract, --backend, or --list.",
+            ));
+        }
+
+        Ok(())
+    }
+
+    pub(crate) fn has_selection_filters(&self) -> bool {
+        self.case_id.is_some()
+            || !self.tag_filters.is_empty()
+            || self.contract.is_some()
+            || self.backend_filter.is_some()
+    }
 }
 
 pub(crate) struct TestSuiteSpec {
@@ -28,6 +48,7 @@ pub(crate) struct TestSuiteSpec {
 pub(crate) struct TestCaseSpec {
     pub display_name: String,
     pub case_id: String,
+    pub manifest_relative_path: String,
     pub tags: Vec<String>,
     pub contract: Option<String>,
     pub role: Option<CaseRole>,
@@ -56,6 +77,7 @@ pub(crate) struct SuccessExpectation {
     pub warnings: WarningExpectation,
     pub artifact_assertions: Vec<ArtifactAssertion>,
     pub golden_mode: GoldenMode,
+    pub has_golden: bool,
     pub rendered_output_contains: Vec<String>,
     pub rendered_output_not_contains: Vec<String>,
     pub artifacts_must_not_exist: Vec<String>,
@@ -244,7 +266,8 @@ pub(crate) struct ManifestCaseSpec {
     pub role: Option<CaseRole>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
 pub(crate) enum CaseRole {
     Primary,
     Boundary,
