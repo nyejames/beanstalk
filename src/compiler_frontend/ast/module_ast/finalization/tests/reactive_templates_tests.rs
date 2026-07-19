@@ -65,7 +65,7 @@ fn template_with_reference(reference: TemplateTirReference, location: SourceLoca
     }
 }
 
-/// Builds a same-store Composed template reference for `template_id`.
+/// Builds a module-local Composed template reference for `template_id`.
 fn composed_reference(template_id: TemplateIrId) -> TemplateTirReference {
     TemplateTirReference {
         root: template_id,
@@ -235,11 +235,11 @@ fn template_from_expression_statement(ast: &[AstNode]) -> &Template {
 }
 
 // -------------------------
-//  Same-store subscription propagation
+//  Module-local subscription propagation
 // -------------------------
 
 #[test]
-fn propagates_metadata_from_a_same_store_template() {
+fn propagates_metadata_from_a_template() {
     let mut strings = StringTable::new();
     let source_path = symbol("count", &mut strings);
     let mut store = TemplateIrStore::new();
@@ -267,7 +267,7 @@ fn propagates_metadata_from_a_same_store_template() {
 }
 
 #[test]
-fn annotates_same_store_linear_tir_root_metadata_through_overlay() {
+fn annotates_linear_tir_root_metadata_through_overlay() {
     let mut strings = StringTable::new();
     let count_path = symbol("count", &mut strings);
     let location = test_location(2);
@@ -575,7 +575,7 @@ fn references_use_metadata_computed_for_prior_declarations() {
 // -------------------------
 
 #[test]
-fn annotates_same_store_branch_body_tir_root_metadata() {
+fn annotates_branch_body_tir_root_metadata() {
     let mut string_table = StringTable::new();
     let count_path = symbol("count", &mut string_table);
     let location = test_location(2);
@@ -634,7 +634,7 @@ fn annotates_same_store_branch_body_tir_root_metadata() {
 }
 
 #[test]
-fn annotates_same_store_fallback_body_tir_root_metadata() {
+fn annotates_fallback_body_tir_root_metadata() {
     let mut string_table = StringTable::new();
     let fallback_path = symbol("fallback_count", &mut string_table);
     let location = test_location(2);
@@ -702,7 +702,7 @@ fn annotates_same_store_fallback_body_tir_root_metadata() {
 }
 
 #[test]
-fn annotates_same_store_loop_body_tir_root_metadata() {
+fn annotates_loop_body_tir_root_metadata() {
     let mut string_table = StringTable::new();
     let count_path = symbol("count", &mut string_table);
     let location = test_location(2);
@@ -1046,7 +1046,7 @@ fn annotates_existing_effective_expression_override_instead_of_structural_payloa
 }
 
 #[test]
-fn annotates_existing_same_store_child_expression_override() {
+fn annotates_existing_child_expression_override() {
     let mut string_table = StringTable::new();
     let count_path = symbol("count", &mut string_table);
     let show_path = symbol("show", &mut string_table);
@@ -1154,7 +1154,7 @@ fn annotates_existing_same_store_child_expression_override() {
         panic!("expected template expression statement at ast[1]");
     };
     let metadata = root_overlay_expression_metadata(&store, template, child_site_id)
-        .expect("same-store child effective override should be annotated on the root overlay");
+        .expect("child effective override should be annotated on the root overlay");
 
     assert_eq!(metadata.subscriptions.len(), 1);
     assert_eq!(metadata.subscriptions[0].source.path, count_path);
@@ -1301,7 +1301,7 @@ fn propagates_metadata_through_runtime_slot_site_render_piece() {
 // -------------------------
 
 #[test]
-fn reactive_annotation_rejects_missing_same_store_root_template() {
+fn reactive_annotation_rejects_missing_root_template() {
     let mut store = TemplateIrStore::new();
     let location = test_location(2);
     let template = template_with_reference(
@@ -1318,13 +1318,13 @@ fn reactive_annotation_rejects_missing_same_store_root_template() {
     )];
 
     let error = propagate_reactive_template_metadata_in_ast(&mut ast, &mut store)
-        .expect_err("missing same-store root template authority must propagate");
+        .expect_err("missing root template authority must propagate");
 
     assert!(format!("{error:?}").contains("root"));
 }
 
 #[test]
-fn reactive_annotation_rejects_missing_same_store_root_view_context() {
+fn reactive_annotation_rejects_missing_root_view_context() {
     let mut store = TemplateIrStore::new();
     let location = test_location(2);
     let root = store.push_node(TemplateIrNode::new(
@@ -1357,13 +1357,13 @@ fn reactive_annotation_rejects_missing_same_store_root_view_context() {
     )];
 
     let error = propagate_reactive_template_metadata_in_ast(&mut ast, &mut store)
-        .expect_err("missing same-store root overlay authority must propagate");
+        .expect_err("missing root overlay authority must propagate");
 
     assert!(format!("{error:?}").contains("expression overlay"));
 }
 
 #[test]
-fn reactive_annotation_rejects_missing_same_store_expression_overlay() {
+fn reactive_annotation_rejects_missing_expression_overlay() {
     let mut store = TemplateIrStore::new();
     let location = test_location(2);
     let root = store.push_node(TemplateIrNode::new(

@@ -19,13 +19,6 @@ pub(crate) struct TemplateTirReference {
     pub(crate) context: TemplateViewContext,
 }
 
-impl TemplateTirReference {
-    #[cfg(test)]
-    pub(crate) fn can_reuse_as_linear_current_state(&self) -> bool {
-        self.phase.is_at_least(TemplateTirPhase::Composed)
-    }
-}
-
 /// Module-local identity for a child-template occurrence.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct TemplateTirChildReference {

@@ -23,9 +23,6 @@ use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::compiler_frontend::value_mode::ValueMode;
-use std::cell::RefCell;
-use std::rc::Rc;
-
 fn invalid_string_expression(location: SourceLocation) -> Expression {
     Expression::new(
         ExpressionKind::Bool(true),
@@ -333,9 +330,4 @@ fn finalized_tir_view_loop_header_payload_validates_effective_overlay_expression
         "error location must point to the effective overlay loop header, not the structural header"
     );
     assert!(error.msg.contains("9999"));
-}
-
-#[allow(dead_code)]
-fn _store_handle_shape_is_shared() -> Rc<RefCell<TemplateIrStore>> {
-    Rc::new(RefCell::new(TemplateIrStore::new()))
 }

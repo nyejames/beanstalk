@@ -1034,9 +1034,9 @@ fn prepared_fold_skips_if_child_emits_wrapper_when_child_has_no_output() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn prepared_fold_applies_same_store_wrapper_expression_overlay() {
+fn prepared_fold_applies_wrapper_expression_overlay() {
     let mut string_table = StringTable::new();
-    let wrapper_text = string_table.intern("same-store-overlay");
+    let wrapper_text = string_table.intern("wrapper-overlay");
     let (fixture, _) = build_expression_wrapper_fixture(
         &mut string_table,
         Expression::string_slice(wrapper_text, empty_location(), ValueMode::ImmutableOwned),
@@ -1048,7 +1048,7 @@ fn prepared_fold_applies_same_store_wrapper_expression_overlay() {
     };
     assert_eq!(
         string_table.resolve(output_id),
-        "same-store-overlaychild",
+        "wrapper-overlaychild",
         "inherited wrappers must fold through their exact expression overlay"
     );
 }
@@ -1135,7 +1135,7 @@ fn preparation_preserves_outer_runtime_expression_override_in_handoff() {
 #[test]
 fn preparation_ignores_runtime_referenced_wrapper_expression_overlay() {
     let mut string_table = StringTable::new();
-    let wrapper_text = string_table.intern("same-store-overlay");
+    let wrapper_text = string_table.intern("wrapper-overlay");
     let (fixture, site_id) = build_expression_wrapper_fixture(
         &mut string_table,
         Expression::string_slice(wrapper_text, empty_location(), ValueMode::ImmutableOwned),

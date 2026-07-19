@@ -1,6 +1,6 @@
 //! TIR fold-cache and view-fold tests.
 //
-// WHAT: protects cache identity, same-store view folding, and overlay-aware
+// WHAT: protects cache identity, module-local view folding, and overlay-aware
 // folding at the owning TIR boundary.
 // WHY: these tests cover module-local cache identity and semantic fold
 // invariants.
@@ -458,7 +458,7 @@ fn fold_view_with_missing_slot_overlay_produces_empty_output() {
 }
 
 #[test]
-fn same_store_child_cycle_is_rejected() {
+fn child_template_cycle_is_rejected() {
     let mut store = TemplateIrStore::new();
     let template_id = TemplateIrId::new(store.template_count());
     let child_reference = TemplateTirChildReference::new(
@@ -629,60 +629,6 @@ fn prepared_fold_rejects_missing_node_in_untaken_branch() {
     assert!(
         format!("{error:?}").contains("node"),
         "error must report the missing node: {error:?}"
-    );
-}
-
-#[test]
-fn prepared_fold_repeated_child_template_folding_hits_cache() {
-    let mut string_table = StringTable::new();
-    let mut store = TemplateIrStore::new();
-    let child_text = string_table.intern("child");
-    let child_template_id = {
-        let mut builder = TemplateIrBuilder::new(&mut store);
-        let node =
-            builder.push_text_node(child_text, 5, TemplateSegmentOrigin::Body, empty_location());
-        let root = builder.push_sequence_node(vec![node], empty_location());
-        builder.finish_template(
-            root,
-            Style::default(),
-            TemplateType::String,
-            TemplateIrSummary::default(),
-            empty_location(),
-        )
-    };
-    let view_context = TemplateViewContext::default();
-    let view = TirView::new(
-        &store,
-        child_template_id,
-        TemplateTirPhase::Composed,
-        view_context,
-    )
-    .expect("child view should construct");
-
-    let mut context = fold_context(&mut string_table);
-    let first = fold_prepared_view(&view, &mut context).expect("first child fold should succeed");
-    let cache_key = TirFoldCacheKey {
-        identity: TirViewIdentity {
-            root: child_template_id,
-            phase: TemplateTirPhase::Composed,
-            context: view_context,
-        },
-        loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
-        bindings_empty: true,
-    };
-    let before_second = context.fold_cache.get(&cache_key).cloned();
-    assert!(
-        before_second.is_some(),
-        "first child fold should populate the cache under its own view identity"
-    );
-    let second =
-        fold_prepared_view(&view, &mut context).expect("second child fold should hit cache");
-    assert_eq!(first, second);
-    assert_eq!(first, TemplateEmission::Output(child_text));
-    assert_eq!(
-        context.fold_cache.get(&cache_key),
-        before_second.as_ref(),
-        "repeated fold should return the cached result without changing output"
     );
 }
 
@@ -1014,7 +960,7 @@ fn prepared_runtime_plan_validates_plan_authority_before_handoff() {
 }
 
 /// Folds an outer template whose dynamic-expression payload is a nested AST
-/// template whose root node is missing, so the fold walker catches the
+/// template whose root node is missing, so fold traversal catches the
 /// malformed nested-template authority on the infrastructure lane.
 fn fold_dynamic_ast_template_with_missing_root_authority() -> TemplateError {
     let mut string_table = StringTable::new();

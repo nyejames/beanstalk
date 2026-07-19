@@ -161,7 +161,7 @@ fn child_template_node_id(
     ))
 }
 
-/// Builds a finalized same-store child reference for a template root.
+/// Builds a finalized module-local child reference for a template root.
 fn child_reference(
     template_id: TemplateIrId,
     context: TemplateViewContext,
@@ -312,7 +312,7 @@ fn build_loop_wrapper_template(
     )
 }
 
-fn build_same_store_child_wrapper_template(
+fn build_child_wrapper_template(
     store: &mut TemplateIrStore,
     string_table: &mut StringTable,
 ) -> TemplateIrId {
@@ -588,7 +588,7 @@ fn owned_handoff_missing_slot_resolution_renders_slot_placeholder() {
 }
 
 #[test]
-fn owned_handoff_preserves_same_store_child_boundary() {
+fn owned_handoff_preserves_child_boundary() {
     let store = Rc::new(RefCell::new(TemplateIrStore::new()));
     let mut strings = StringTable::new();
     let (parent_id, child_id) = {
@@ -637,7 +637,7 @@ fn owned_handoff_preserves_same_store_child_boundary() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn parent_root_expression_overlay_applies_inside_same_store_child() {
+fn parent_root_expression_overlay_applies_inside_child() {
     let store = Rc::new(RefCell::new(TemplateIrStore::new()));
     let mut strings = StringTable::new();
     let (parent_id, _child_site_id, context) = {
@@ -675,7 +675,7 @@ fn parent_root_expression_overlay_applies_inside_same_store_child() {
         template, ..
     }) = body
     else {
-        panic!("expected same-store child template");
+        panic!("expected child template");
     };
     let OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::DynamicExpression {
         expression,
@@ -692,7 +692,7 @@ fn parent_root_expression_overlay_applies_inside_same_store_child() {
 }
 
 #[test]
-fn prepared_handoff_preserves_root_overlay_through_nested_same_store_children() {
+fn prepared_handoff_preserves_root_overlay_through_nested_children() {
     let store = Rc::new(RefCell::new(TemplateIrStore::new()));
     let mut strings = StringTable::new();
     let (root_id, _leaf_site_id, context) = {
@@ -809,7 +809,7 @@ fn runtime_child_reference_uses_structural_handoff() {
         template, ..
     }) = body
     else {
-        panic!("expected same-store child template handoff, got {body:?}");
+        panic!("expected child template handoff, got {body:?}");
     };
     assert!(
         matches!(
@@ -935,14 +935,13 @@ fn inherited_wrapper_handoff_injects_through_loop_body_and_aggregate() {
 }
 
 #[test]
-fn inherited_wrapper_handoff_injects_through_same_store_child_template() {
+fn inherited_wrapper_handoff_injects_through_child_template() {
     let store = Rc::new(RefCell::new(TemplateIrStore::new()));
     let mut strings = StringTable::new();
     let (parent_id, context) = {
         let mut store_ref = store.borrow_mut();
         let empty_context = TemplateViewContext::default();
-        let wrapper_template_id =
-            build_same_store_child_wrapper_template(&mut store_ref, &mut strings);
+        let wrapper_template_id = build_child_wrapper_template(&mut store_ref, &mut strings);
         build_parent_with_inherited_wrapper(
             &mut store_ref,
             wrapper_template_id,
@@ -955,15 +954,12 @@ fn inherited_wrapper_handoff_injects_through_same_store_child_template() {
     let OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::ChildTemplate { template }) =
         body
     else {
-        panic!("expected same-store child wrapper handoff, got {:?}", body);
+        panic!("expected child wrapper handoff, got {:?}", body);
     };
     let OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::Sequence { children }) =
         template.body
     else {
-        panic!(
-            "expected nested same-store child sequence, got {:?}",
-            template.body
-        );
+        panic!("expected nested child sequence, got {:?}", template.body);
     };
 
     assert_eq!(children.len(), 3);
@@ -973,7 +969,7 @@ fn inherited_wrapper_handoff_injects_through_same_store_child_template() {
 }
 
 #[test]
-fn inherited_same_store_wrapper_handoff_applies_wrapper_overlay() {
+fn inherited_wrapper_handoff_applies_wrapper_overlay() {
     let store = Rc::new(RefCell::new(TemplateIrStore::new()));
     let mut strings = StringTable::new();
     let (parent_id, context) = {
@@ -1005,7 +1001,7 @@ fn inherited_same_store_wrapper_handoff_applies_wrapper_overlay() {
     let body = materialize_parent_handoff(store, parent_id, &mut strings, context);
     let OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::Sequence { children }) = body
     else {
-        panic!("expected same-store wrapper sequence, got {:?}", body);
+        panic!("expected wrapper sequence, got {:?}", body);
     };
 
     let OwnedRuntimeTemplateNode::DynamicExpression { expression, .. } = &children[0] else {
@@ -1013,7 +1009,7 @@ fn inherited_same_store_wrapper_handoff_applies_wrapper_overlay() {
     };
     assert!(
         matches!(expression.kind, ExpressionKind::Bool(true)),
-        "same-store wrapper overlay should override the wrapper expression"
+        "wrapper overlay should override the wrapper expression"
     );
     let OwnedRuntimeTemplateNode::ChildTemplate { template } = &children[1] else {
         panic!("expected child handoff, got {:?}", children[1]);
@@ -1163,7 +1159,7 @@ fn missing_wrapper_tree_node_propagates_schema_extraction_error() {
 }
 
 #[test]
-fn missing_same_store_child_in_wrapper_propagates_schema_extraction_error() {
+fn missing_child_in_wrapper_propagates_schema_extraction_error() {
     let store = Rc::new(RefCell::new(TemplateIrStore::new()));
     let mut strings = StringTable::new();
     let (parent_id, context) = {
@@ -1188,7 +1184,7 @@ fn missing_same_store_child_in_wrapper_propagates_schema_extraction_error() {
     };
 
     let error = materialize_parent_handoff_result(store, parent_id, &mut strings, context)
-        .expect_err("missing same-store child in wrapper should produce a CompilerError");
+        .expect_err("missing child in wrapper should produce a CompilerError");
 
     assert!(
         error

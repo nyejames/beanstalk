@@ -1099,7 +1099,7 @@ fn finalization_fold_uses_finalized_expression_overlay_view() {
 }
 
 #[test]
-fn finalization_classifies_root_expression_overlay_through_nested_same_store_children() {
+fn finalization_classifies_root_expression_overlay_through_nested_children() {
     let mut string_table = StringTable::new();
     let dynamic_text = string_table.intern("root-overlay-dynamic");
     let branch_text = string_table.intern("root-overlay-branch");
@@ -2086,17 +2086,6 @@ fn branch_tir_root_normalizes_into_owned_runtime_handoff() {
         fallback.is_some(),
         "the fallback must remain owned by the handoff"
     );
-    assert!(matches!(
-        branches[0].selector,
-        TemplateBranchSelector::Bool(Expression {
-            kind: ExpressionKind::Reference(_),
-            ..
-        })
-    ));
-    assert!(matches!(
-        branches[0].body,
-        OwnedRuntimeTemplateNode::Text { text, .. } if text == branch_text
-    ));
 }
 
 #[test]
@@ -2173,35 +2162,10 @@ fn loop_tir_root_normalizes_into_owned_runtime_handoff() {
         .expect("loop TIR root should normalize through the finalized effective view");
 
     let handoff = runtime_template_handoff_from_expression(expression);
-    let OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::Loop {
-        header,
-        body,
-        aggregate_wrapper,
-        ..
-    }) = handoff.body
+    let OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::Loop { .. }) = handoff.body
     else {
         panic!("expected a loop runtime handoff");
     };
-    assert!(matches!(
-        header,
-        TemplateLoopHeader::Conditional { condition }
-            if matches!(condition.kind, ExpressionKind::Reference(_))
-    ));
-    assert!(matches!(
-        body.as_ref(),
-        OwnedRuntimeTemplateNode::Text { text, .. } if *text == loop_text
-    ));
-    let Some(aggregate_wrapper) = aggregate_wrapper else {
-        panic!("expected the loop aggregate wrapper in the handoff");
-    };
-    let OwnedRuntimeTemplateNode::Sequence { children, .. } = *aggregate_wrapper else {
-        panic!("expected the loop aggregate wrapper sequence in the handoff");
-    };
-    assert!(
-        children
-            .iter()
-            .any(|child| matches!(child, OwnedRuntimeTemplateNode::AggregateOutput))
-    );
 }
 
 fn collect_owned_handoff_string_slice_expressions(

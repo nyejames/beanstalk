@@ -29,19 +29,18 @@ TIR remains AST-local. No TIR store, ID, view, overlay or preparation type may c
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/final-tir-completion-plan.md
 STATUS: active
-CURRENT_SLICE: R5A accepted and ready to commit; R5C primary-owner test cleanup is next
-LAST_ACCEPTED_COMMIT: a8bfdb213 (R5B; R5A accepted on the current pre-commit worktree)
-WORKTREE: main at a8bfdb213 with the accepted R5A source and plan diff; concurrent user documentation remains untouched
+CURRENT_SLICE: R5C accepted and ready to commit; R6A source/module-map hygiene is next
+LAST_ACCEPTED_COMMIT: c649e0ea8 (R5A exact-view reactive metadata reducer)
+WORKTREE: main at c649e0ea8 with the accepted R5C test-ownership and parent-owned plan diff; concurrent user documentation remains untouched
 REQUIRED_RELOADS: startup files, this plan, and current TIR source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: compiler-design-overview.md exact-view transition and AST-to-HIR contracts; testing.bd primary-owner rules; this plan's R5C ownership matrix
-- code: reactive_template_metadata.rs now owns one exact-view reducer; collector.rs supplies a Composed view, normalize_ast.rs supplies a Finalized view, annotation.rs remains the distinct flow-aware overlay mutator and owned runtime handoff remains a distinct post-TIR reducer
+- docs: compiler-design-overview.md exact-view transition and AST-to-HIR contracts; testing.bd primary-owner rules; this plan's R6A-R6B documentation and hard-grep contracts
+- code: R5C deleted the obsolete test-only linear-current-state helper and consolidated parser, TirView, preparation/cache, finalization, handoff, wrapper and reactive coverage under their semantic owners
 ACCEPTANCE_CRITERIA:
-- commit the accepted R5A exact-view metadata consolidation without unrelated files
-- use the accepted R5 ownership/test map to assign one primary owner per R5C behavior
-- remove only redundant, obsolete or implementation-shaped tests and helpers while preserving distinct semantic, stage-boundary and backend coverage
-- record final production/test inventory and run the common code gate before accepting R5
-- do not begin R6 documentation, benchmark recording or roadmap handoff work
+- commit the accepted R5C cleanup without unrelated or concurrent user-owned documentation changes
+- refresh this state with the accepted R5 commit before launching R6
+- launch one bounded Codex CLI R6A-R6B source/module-map and hard-grep hygiene slice; parent retains compiler-design and plan ownership
+- do not record benchmarks or begin the downstream roadmap handoff until R6A-R6B is reviewed
 VALIDATION_STATE:
 - R2C just validate: passed; cross-target Clippy, 3421 unit tests, 1784 integration cases, docs check and 28 benchmark sanity cases; -7ms average, 23 faster and 0 slower
 - R3 ownership map: passed through Codex CLI simple-exploration; no repeated preparation proving a cache, new preparation.rs is the required final owner, and classification/control-flow predicates remain only where they answer earlier-stage questions
@@ -61,12 +60,15 @@ VALIDATION_STATE:
 - R5A focused validation: passed; formatting, cargo check, 9 reactive metadata tests, 19 flow-aware collector tests, 27 normalization tests and git diff checks
 - R5A just validate: passed; cross-target Clippy, 3438 unit tests, 1784 integration cases, docs check and 28 benchmark sanity cases; -7ms average, 22 faster and 0 slower
 - TIR inventory: 18,861 production and 17,739 test lines (R5B: 18,858 and 17,739; 069a29acb: 24,274 and 27,231)
+- R5C Codex implementation and parent-review correction slices: accepted; the obsolete test-only linear-current-state helper, its implementation-shaped assertions and five redundant tests are deleted, while the distinct normalization-to-runtime reactive metadata boundary remains covered
+- R5C just validate after the parent-review correction: passed; cross-target Clippy, 3433 unit tests, 1784 integration cases, docs check and 28 benchmark sanity cases; -7ms average, 23 faster and 0 slower
+- final R5 TIR inventory: 18,854 production and 17,681 test lines (R5A: 18,861 and 17,739; 069a29acb: 24,274 and 27,231)
 DOCS_IMPACT: index.md locator updated for preparation.rs; progress matrix unchanged because user-visible support did not change
 BLOCKERS_OR_OPEN_DECISIONS: none
-DELEGATION_DECISION: codex-cli implementation - user requires Codex CLI for worker slices and R5C is a bounded test-ownership cleanup
+DELEGATION_DECISION: parent checkpoint, then codex-cli implementation - user requires Codex CLI for worker slices and R6A-R6B has a bounded source/module-map hygiene owner
 NEXT_WORKER_ORDER: codex-cli (user-required provider)
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit the accepted R5A checkpoint, refresh this state with its commit and launch bounded R5C test cleanup
+NEXT_RESUME_ACTION: commit the accepted R5C checkpoint, refresh this state with its commit and launch bounded R6A-R6B source/module-map hygiene
 ```
 
 Use `069a29acb` as the implementation and regression base. Do not continue extending `FoldAuthorityWalk`, foreign-store traversal, external expression-overlay stacks or prepared foreign-wrapper proofs.
@@ -810,6 +812,18 @@ Then:
 - delete cross-store, owner-collision, foreign-proxy and removed-API fixtures
 - delete broad shared fixture helpers that hide the exact invariant
 - record final production and test line reductions from `069a29acb`
+
+R5C accepted on the pre-commit `c649e0ea8` worktree. The obsolete test-only
+`can_reuse_as_linear_current_state` accessor and its parser assertions are deleted rather than
+replaced by another compatibility surface. Parser output and phase, exact-view transitions,
+prepared fold caching and cycles, wrapper and slot semantics, owned HIR handoff, normalization,
+reactive metadata and finalized type validation retain distinct primary owners. Five redundant
+parser/cache tests and duplicate deep payload assertions are removed; parent review restored the
+normalization test that protects reactive metadata preservation across the runtime-handoff
+boundary. The final tracked TIR inventory is 18,854 production and 17,681 test lines versus
+24,274 and 27,231 at `069a29acb`. `just validate` passed after the correction with cross-target
+Clippy, 3,433 unit tests, 1,784 integration cases, docs checking and all 28 benchmark sanity
+cases. The progress matrix is unchanged because this slice changes test ownership only.
 
 #### R5 acceptance
 

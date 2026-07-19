@@ -1902,7 +1902,7 @@ fn const_required_template_if_validates_from_body_tir_roots() {
 
     let store = context.template_ir_store.borrow();
     validate_const_required_template_control_flow(&template, &store)
-        .expect("const-required branch validation should use same-store TIR body roots");
+        .expect("const-required branch validation should use module-local TIR body roots");
 }
 
 #[test]
@@ -1915,7 +1915,7 @@ fn const_required_template_loop_validates_from_body_tir_root() {
 
     let store = context.template_ir_store.borrow();
     validate_const_required_template_control_flow(&template, &store)
-        .expect("const-required loop validation should use same-store TIR body roots");
+        .expect("const-required loop validation should use module-local TIR body roots");
 }
 
 #[test]
@@ -2211,7 +2211,7 @@ fn imported_const_template_context(
 }
 
 /// Builds a const-required option-capture template fixture directly as a
-/// same-store TIR branch-chain root in the context's module store.
+/// module-local TIR branch-chain root in the context's module store.
 ///
 /// WHAT: constructs the branch body (text "Hello " plus the capture reference)
 ///       and fallback body (text "Guest") as TIR nodes, wraps them in a

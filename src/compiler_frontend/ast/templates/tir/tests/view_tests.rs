@@ -1160,7 +1160,7 @@ fn build_template_with_slot(
 }
 
 /// Builds a template whose root is a `Sequence` containing one `ChildTemplate`
-/// node referencing a second empty template in the same store.
+/// node referencing a second empty template in the module-local store.
 ///
 /// WHAT: returns the parent template ID, the child template ID, and the
 ///       child-template occurrence ID so tests can verify the occurrence location
