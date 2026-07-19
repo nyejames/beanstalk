@@ -30,8 +30,8 @@ This ordering is mandatory. Do not begin broad pruning while the harness can sti
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
 CURRENT_SLICE: Phase 2B11d correction — make HTML-Wasm trait-facade parity explicitly compile-only
-LAST_ACCEPTED_COMMIT: `a3dcc580c` — queue trait and package contracts
-WORKTREE: parent `main` has only this Phase 2B11d correction plan diff atop `a3dcc580c`; reusable worker branch is clean at merge commit `119138639` after reverting the blocked attempt; do not create another worktree
+LAST_ACCEPTED_COMMIT: `e31100868` — correct the HTML-Wasm parity contract and record the clean stop
+WORKTREE: parent `main` has only this final state refresh diff atop `e31100868`; reusable worker branch is clean and synchronized through merge commit `155dc204a`; do not create another worktree
 REQUIRED_RELOADS: startup files, this plan and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: backend matrices need the strongest supported backend-local contract, not artificial runtime symmetry; HTML-Wasm compilation parity may be explicit compile-only when its current `index.html` does not expose the HTML marker
@@ -125,12 +125,12 @@ CURRENT_SLICE:
 - Non-goals: no source edits, warning-only fixtures, `method_receiver_this_success`, backend outcome changes, schema enforcement, assertion-module split, diagnostic multiplicity work, role/contract backfill or later phases
 
 LAST_GOOD_COMMIT:
-- `a3dcc580c` — accepted corrected Phase 2B11c checkpoint and Phase 2B11d launch state
+- `e31100868` — accepted Phase 2B11d correction and clean resume state
 
 CURRENT_WORKTREE_STATE:
-- Clean / known changes: parent `main` has only this Phase 2B11d correction plan diff atop `a3dcc580c`; the reusable worker branch is clean at merge commit `119138639` after reverting the blocked attempt
+- Clean / known changes: parent `main` has only this final state refresh diff atop `e31100868`; the reusable worker branch is clean and synchronized through merge commit `155dc204a`
 - Branch: local `main`
-- Dedicated worker worktrees: reuse `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase2a`, currently clean at merge commit `119138639`; do not create another worktree
+- Dedicated worker worktrees: reuse `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase2a`, currently clean at merge commit `155dc204a`; do not create another worktree
 
 RELEVANT_DOCS_THIS_SLICE:
 - `AGENTS.md`
