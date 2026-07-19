@@ -29,17 +29,17 @@ This ordering is mandatory. Do not begin broad pruning while the harness can sti
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 2B11 exploration — classify the remaining 55 explicit backend-baseline-only success blocks
-LAST_ACCEPTED_COMMIT: `e4d70489b` — require case-owned expectations and delete the fallback
-WORKTREE: parent `main` has only this Phase 2B11 plan checkpoint diff atop `e4d70489b`; reusable worker branch is clean at `a600ed1fc` in `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase2a`; do not create another worktree
+CURRENT_SLICE: Phase 2B11a — make seven choice payload-match results observable
+LAST_ACCEPTED_COMMIT: `40156ccb0` — restore the remaining explicit success-contract migration
+WORKTREE: parent `main` has only this Phase 2B11a plan checkpoint diff atop `40156ccb0`; reusable worker branch is clean at merge commit `55e2f994b` in `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase2a`; do not create another worktree
 REQUIRED_RELOADS: startup files, this plan and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: Phase 2 requires both case-owned expectation files and explicit success intent; the backend baseline cannot remain the sole success contract at phase acceptance
-- code: all 1,651 canonical cases own `expect.toml` and fallback infrastructure is deleted, but audit still reports 55 explicitly authored success blocks whose only assertion kind is `backend_baseline`
+- docs: behavior-visible cases need observable assertions; `io.line` output is assertable through the existing rendered-output harness when console behavior is the fixture's authored output lane
+- code: seven choice payload-match cases have direct source-derived results (`bad` or `forty-two`) but currently rely only on the HTML backend baseline
 ACCEPTANCE_CRITERIA:
-- inventory the 55 remaining baseline-only blocks by semantic family and observable contract
-- distinguish behavior/artifact/warning assertions from genuine compile-only smoke intent without blanket classification
-- return bounded implementation batches; do not edit fixtures during exploration
+- add only the seven exact `rendered_output_contains` contracts identified by exploration
+- preserve sources, backend matrices and warning policy; do not convert these behavior-visible cases to compile-only
+- all seven exact HTML cases, focused runner tests, audit, diff checks and full gate pass
 VALIDATION_STATE:
 - final TIR at `dc81f7e53`: `just validate` passed with 3,433 Rust tests, 1,784 integration executions, docs checking and 28 benchmark sanity cases
 - Phase 0A documentation-only gate: `cargo run --quiet -- build docs --release` passed; 72 files built and no generated diff was produced (`bean` was unavailable in `PATH`)
@@ -66,13 +66,14 @@ VALIDATION_STATE:
 - Phase 2B10b exploration: Codex CLI traced the defect to linear expiry in `is_local_active_for_alias_conflict`; HIR aliasing is correct and existing CFG future-use facts own the fix; no files changed
 - Phase 2B10b: three focused borrow-loop tests, exact loop-conflict case, 70 runner tests, audit, formatting and diff checks passed in worker and parent review; worker `just validate` passed with 3,466 Rust tests and 1,784 integration executions; audit reported 17 compile-only, 55 backend-baseline-only, zero fallback-backed and zero hard violations
 - Phase 2C1: missing expectations now fail with a case-owned error and the fallback parser path, constant and stub expectation are deleted; 70 runner tests, audit, formatting and diff checks passed in worker and parent review; worker `just validate` passed with 3,466 Rust tests and 1,784 integration executions; audit still reports 55 baseline-only blocks that must be migrated before final success-contract enforcement
+- Phase 2B11 exploration: Codex CLI accounted for all 55 remaining blocks in nine bounded batches; corrected detailed totals are 38 rendered-output, one artifact, two warning, 13 compile-only and one design-conflict investigation; no files changed
 - Phase 2B9 launch: both the optional `beanstalk-spark-explorer` and required `beanstalk-plan-worker` Codex CLI profiles selected `gpt-5.6-luna` but returned the account usage-limit error before repository edits; the service reported retry availability at 2026-07-25 11:08 AM
 DOCS_IMPACT: Phase 1 workflow docs, generated release output and the deferred code-block highlighting roadmap note are current; fixture outcomes/backend coverage and the progress matrix remain unchanged
 BLOCKERS_OR_OPEN_DECISIONS: none for this slice; diagnostics Phase 4.1c remains serialized at `d7fb3654f`; disk permits at most one additional worktree
-DELEGATION_DECISION: codex-cli simple exploration — explicit user-requested provider and the remaining 55 blocks need evidence-based family partitioning before edits
+DELEGATION_DECISION: codex-cli implementation — explicit user-requested provider and the first seven-case choice batch has direct source-derived outputs with no design ambiguity
 NEXT_WORKER_ORDER: codex-cli only for this run
 STOP_REASON: none
-NEXT_RESUME_ACTION: launch the bounded Phase 2B11 read-only classification in the existing reusable worktree
+NEXT_RESUME_ACTION: launch the bounded Phase 2B11a choice-match expectation migration in the existing reusable worktree
 
 ## Recommended roadmap placement and activation conditions
 
@@ -114,17 +115,17 @@ ACTIVE_PLAN:
 
 CURRENT_SLICE:
 - Phase: 2
-- Checklist item: 2B11 exploration — classify the remaining explicit backend-baseline-only blocks
-- Goal: partition all 55 blocks into reviewable semantic batches with source-backed observable, artifact, warning or compile-only contracts
-- Non-goals: no fixture edits, schema enforcement, assertion-module split, diagnostic multiplicity work, role/contract backfill or later phases
+- Checklist item: 2B11a — make seven choice payload-match results observable
+- Goal: replace backend-baseline-only acceptance with direct rendered-output contracts for the selected choice match/capture cases
+- Non-goals: no source edits, other choice constructors/constants/imports, schema enforcement, assertion-module split, diagnostic multiplicity work, role/contract backfill or later phases
 
 LAST_GOOD_COMMIT:
-- `e4d70489b` — accepted Phase 2C1 explicit expectation ownership and fallback deletion
+- `40156ccb0` — accepted Phase 2C1 plan correction and remaining migration state
 
 CURRENT_WORKTREE_STATE:
-- Clean / known changes: parent `main` has only this Phase 2B11 plan checkpoint diff atop `e4d70489b`; the reusable worker branch is clean at `a600ed1fc`
+- Clean / known changes: parent `main` has only this Phase 2B11a plan checkpoint diff atop `40156ccb0`; the reusable worker branch is clean at merge commit `55e2f994b`
 - Branch: local `main`
-- Dedicated worker worktrees: reuse `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase2a`, currently clean at worker commit `a600ed1fc`; do not create another worktree
+- Dedicated worker worktrees: reuse `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase2a`, currently clean at merge commit `55e2f994b`; do not create another worktree
 
 RELEVANT_DOCS_THIS_SLICE:
 - `AGENTS.md`
@@ -139,14 +140,18 @@ RELEVANT_DOCS_THIS_SLICE:
 - `docs/roadmap/roadmap.md`
 
 RELEVANT_CODE:
-- `target/test-reports/integration_suite_inventory.json`: authoritative list of 55 `backend_baseline`-only success blocks
-- the owning `tests/cases/*/input/**` and `expect.toml` files: inspect authored behavior and current weak contract
-- nearby stronger fixtures in the same semantic family: compare existing assertion patterns without creating duplicate owners
+- `tests/cases/choice_payload_match_capture_success/expect.toml`: assert `bad`
+- `tests/cases/choice_payload_match_qualified_capture_success/expect.toml`: assert `bad`
+- `tests/cases/choice_payload_match_guard_uses_capture_success/expect.toml`: assert `bad`
+- `tests/cases/choice_payload_match_exhaustive_tag_level_success/expect.toml`: assert `bad`
+- `tests/cases/choice_payload_match_rename_success/expect.toml`: assert `bad`
+- `tests/cases/choice_payload_match_rename_guard_success/expect.toml`: assert `forty-two`
+- `tests/cases/choice_payload_match_rename_self_alias_success/expect.toml`: assert `bad`
 
 ACCEPTANCE_CRITERIA:
-- all 55 baseline-only blocks are accounted for exactly once
-- each recommendation cites the source or emitted behavior supporting output, artifact, warning or compile-only intent
-- batches are small enough for exact-case validation and avoid mixing likely compiler defects with fixture-only edits
+- each selected HTML backend owns the exact source-derived rendered-output marker
+- no input source, manifest metadata, other backend or other fixture changes
+- exact cases, 70 runner tests, audit, formatting, diff checks and `just validate` pass; baseline-only falls from 55 to 48
 
 DECISIONS_ALREADY_MADE:
 - decision: harden the integration harness before pruning
@@ -179,6 +184,9 @@ DECISIONS_ALREADY_MADE:
 - decision: fix loop-source alias preservation separately from fixture migration
   - reason: stronger coverage exposed a real borrow-analysis defect and the plan forbids combining semantic compiler fixes with unrelated fixture migration
   - source/user/date: Phase 2B10 Codex CLI exploration and current plan bug policy, 2026-07-19
+- decision: isolate `choice_import_visibility_non_exported` from expectation migration
+  - reason: its current success conflicts with documented private cross-module import rejection and must not be silently encoded
+  - source/user/date: Phase 2B11 Codex CLI exploration, 2026-07-19
 
 BLOCKERS / RISKS:
 - final TIR is accepted and is no longer a blocker; do not reopen it during suite hardening
@@ -235,7 +243,7 @@ DOCS_IMPACT:
 - authorized docs updates: this plan explicitly authorizes the documentation changes listed in each phase; do not broaden language or architecture docs without a discovered contradiction or an intentional accepted behaviour change
 
 NEXT_ACTION:
-- launch the bounded Phase 2B11 Codex CLI read-only classification task in the existing reusable worktree
+- launch the bounded Phase 2B11a Codex CLI choice-match expectation migration in the existing reusable worktree
 
 ---
 
@@ -1310,6 +1318,12 @@ loop-carried aliases active without changing HIR, mutation of the active iterabl
 `BST-BORROW-0003`, and focused tests preserve unrelated and copied roots. Audit baseline-only
 findings fell from 56 to 55, fallback use reached zero, and the worker's full validation plus the
 parent's focused tests, exact cases, audit, formatting and diff checks passed.
+
+Phase 2B11 exploration accounted for the remaining 55 explicit baseline-only blocks in nine
+bounded batches. Its detailed classification, corrected against the full list, is 38 rendered-output
+contracts, one artifact contract, two warning contracts, 13 intentional compile-only candidates and
+one isolated design-conflict investigation. `choice_import_visibility_non_exported` must be reviewed
+against private cross-module import rejection before any expectation migration. No files changed.
 
 ### 2C — Enforce canonical expectations and remove the fallback
 
