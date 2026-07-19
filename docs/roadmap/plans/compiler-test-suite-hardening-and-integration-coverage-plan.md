@@ -30,27 +30,27 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 2D3e — close final baseline-only borrow and receiver success contracts
-LAST_ACCEPTED_COMMIT: `b537bee80` (Phase 2D3c)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 2D3d const-record fixture contracts ready to commit; unrelated docs work remains user-owned
+CURRENT_SLICE: Phase 2E — enforce authored success completeness
+LAST_ACCEPTED_COMMIT: `b7a60487d` (Phase 2D3d)
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 2D3e final baseline fixture contracts ready to commit; unrelated docs work remains user-owned
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: workflow guidance now matches acceptance-only, baseline, golden, path-containment, audit-policy, and contract-filter behavior; progress coverage uses future-use/final-use terminology
-- code: Phase 2D3d leaves 3 baseline-only advisories: `borrow_conflict_resolved_by_copy`, `method_receiver_this_success`, and `valid_receiver_method`
+- code: Phase 2D3e leaves zero baseline-only success blocks; Phase 2E owns removal of the temporary baseline-only allowance and its self-tests
 ACCEPTANCE_CRITERIA:
-- assert the existing copy-independence marker with both independent and mutated values
-- make the mutable `this` reset and immutable receiver getter cases emit context-rich observed results
-- preserve copy/access semantics, receiver mutability, source shapes, manifest metadata, and backend outcomes
-- exact cases, focused harness tests, audit, `git diff --check`, and the full code-bearing gate pass
+- remove the temporary backend-baseline completeness exception so baseline-only success is invalid
+- retain every authored success form and prove default `warnings = "forbid"` does not satisfy completeness
+- make normal loading/execution and audit enforcement share the existing policy owner without duplicate taxonomy
+- focused harness/CLI tests, audit with zero baseline-only blocks, `git diff --check`, and the full code-bearing gate pass
 VALIDATION_STATE:
-- `just validate`: passed for Phase 2D3d; cross-target Clippy, 3,505 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
-- `cargo run --quiet -- tests --audit`: passed; 1,645 cases, 1,778 executions, 13 acceptance-only, 3 baseline-only, 545 rendered-output, 267 artifact, and zero hard findings
-DOCS_IMPACT: Phase 2D3d changes assertion coverage only; unrelated docs work remains outside this plan slice
-BLOCKERS_OR_OPEN_DECISIONS: none; the three remaining source outcomes are directly observable
+- `just validate`: passed for Phase 2D3e; cross-target Clippy, 3,505 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
+- `cargo run --quiet -- tests --audit`: passed; 1,645 cases, 1,778 executions, 13 acceptance-only, zero baseline-only, 548 rendered-output, 267 artifact, and zero hard findings
+DOCS_IMPACT: Phase 2D3e changes assertion coverage only; Phase 2E may require testing-workflow wording review after implementation
+BLOCKERS_OR_OPEN_DECISIONS: none; inspect the existing completeness and suite-policy owners before assigning Phase 2E
 DELEGATION_DECISION: codex-cli implementation — explicit user-selected provider
 NEXT_WORKER_ORDER: codex-cli only for this run-local override
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit accepted Phase 2D3d, refresh its hash, then launch bounded Phase 2D3e through `codex-cli-beanstalk`
+NEXT_RESUME_ACTION: commit accepted Phase 2D3e, refresh its hash, then inspect and launch bounded Phase 2E through `codex-cli-beanstalk`
 
 ---
 
@@ -146,7 +146,8 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 2D3a2 module-boundary contracts | `12c23040c` | Accepted | 13 acceptance-only; 16 baseline-only; 541 rendered-output; 258 artifact; zero hard findings |
 | Phase 2D3b canvas package contracts | `747e8436d` | Accepted | 13 acceptance-only; 13 baseline-only; 541 rendered-output; 261 artifact; zero hard findings |
 | Phase 2D3c HTML-Wasm content parity contracts | `b537bee80` | Accepted | 13 acceptance-only; 7 baseline-only; 541 rendered-output; 267 artifact; zero hard findings |
-| Phase 2D3d const-record contracts | pending acceptance commit | Accepted | 13 acceptance-only; 3 baseline-only; 545 rendered-output; 267 artifact; zero hard findings |
+| Phase 2D3d const-record contracts | `b7a60487d` | Accepted | 13 acceptance-only; 3 baseline-only; 545 rendered-output; 267 artifact; zero hard findings |
+| Phase 2D3e final baseline contracts | pending acceptance commit | Accepted | 13 acceptance-only; zero baseline-only; 548 rendered-output; 267 artifact; zero hard findings |
 
 ---
 
@@ -590,16 +591,16 @@ Regenerate the audit after 2R. Do not rely on the stale count of 35 or the old p
 
 For every remaining baseline-only success backend:
 
-- [ ] determine the user-visible, artifact, warning, absence, backend-parity, or acceptance-only contract
-- [ ] use rendered output for executed behavior
-- [ ] use artifact assertions for static/folded output or target structure
-- [ ] use goldens only where exact emitted text is contractual
-- [ ] use absence assertions for explicit non-emission contracts
-- [ ] use acceptance-only only when no stronger observable contract exists
-- [ ] classify whole-case acceptance-only fixtures as smoke
-- [ ] preserve backend-specific success or structured rejection rather than forcing symmetry
-- [ ] use context-rich markers until Phase 5 exact output is available
-- [ ] validate one semantic family per slice
+- [x] determine the user-visible, artifact, warning, absence, backend-parity, or acceptance-only contract
+- [x] use rendered output for executed behavior
+- [x] use artifact assertions for static/folded output or target structure
+- [x] use goldens only where exact emitted text is contractual
+- [x] use absence assertions for explicit non-emission contracts
+- [x] use acceptance-only only when no stronger observable contract exists
+- [x] classify whole-case acceptance-only fixtures as smoke
+- [x] preserve backend-specific success or structured rejection rather than forcing symmetry
+- [x] use context-rich markers until Phase 5 exact output is available
+- [x] validate one semantic family per slice
 
 ### 2D1 — Trait, ordering, package-alias, and config-package batch
 
@@ -633,10 +634,10 @@ Process the fresh audit list in this order:
 
 After each family:
 
-- [ ] run exact selected cases
-- [ ] run focused harness tests
-- [ ] run audit and record new counts
-- [ ] run the full gate
+- [x] run exact selected cases
+- [x] run focused harness tests
+- [x] run audit and record new counts
+- [x] run the full gate
 
 ## 2E — Enforce authored success completeness
 

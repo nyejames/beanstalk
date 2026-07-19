@@ -10,4 +10,4 @@ get_x |this Point| -> Int:
 p = Point(1, 2)
 result = p.get_x()
 
-#[: result ]
+[: valid_receiver_method result=[result]]

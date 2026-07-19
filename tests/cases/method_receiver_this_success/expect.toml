@@ -3,3 +3,4 @@ entry = "."
 [backends.html]
 mode = "success"
 warnings = "forbid"
+rendered_output_contains = ["method_receiver_this_success x=0 y=0"]

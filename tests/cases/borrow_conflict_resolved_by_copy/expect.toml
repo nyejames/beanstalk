@@ -3,3 +3,4 @@ entry = "."
 [backends.html]
 mode = "success"
 warnings = "forbid"
+rendered_output_contains = ["borrow_conflict_resolved_by_copy result=42 mutable=7"]
