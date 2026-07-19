@@ -29,17 +29,17 @@ TIR remains AST-local. No TIR store, ID, view, overlay or preparation type may c
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/final-tir-completion-plan.md
 STATUS: active
-CURRENT_SLICE: R6C record and review six current performance samples
-LAST_ACCEPTED_COMMIT: 4a1b80b26 (R6A-R6B final architecture maps, hard-grep hygiene and dead-surface deletion)
-WORKTREE: main at 4a1b80b26; clean before this parent-owned plan refresh; concurrent user documentation remains untouched
+CURRENT_SLICE: R6D downstream roadmap handoff and dedicated post-TIR optimisation plan
+LAST_ACCEPTED_COMMIT: e4aef3987 (R6C exact const-required preparation handoff and one-attempt regression coverage)
+WORKTREE: main at e4aef3987; clean before this parent-owned benchmark-state refresh; concurrent user documentation remains untouched
 REQUIRED_RELOADS: startup files, this plan, and current TIR source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: this plan's R6C counter, caller-multiplicity and recorded-benchmark requirements
-- code: retained preparation/fold/wrapper/reservation/handoff instrumentation and the accepted one-preparation const-template handoff; benchmark history/report tooling owns the six recorded samples
+- docs: roadmap and queued plans touching templates, AST finalization, HIR handoff, module compilation, diagnostics or performance
+- code: final one-store/exact-view/prepared fold and owned runtime-handoff owners established by accepted R0-R6C checkpoints
 ACCEPTANCE_CRITERIA:
-- run six recorded `just bench` samples followed by `just bench-report`
-- compare representative template, wrapper, slot, control-flow, Beandown and docs workloads against `c1ecc2c58` and `069a29acb`; attribute any consistent regression without restoring deleted architecture
-- do not begin the R6D downstream roadmap handoff until R6C evidence is reviewed
+- review every queued plan against final TIR owners and remove stale multi-store, fallback, duplicate-preparation and deleted-API assumptions
+- create one dedicated post-TIR `$md` and template-parser optimisation plan owning source-slice text, formatter allocation, incremental caching, parallel folding and backend string-build work
+- refresh queued dependency/current-state capsules against the accepted repository checkpoint and update roadmap sequencing without reopening final TIR architecture
 VALIDATION_STATE:
 - R2C just validate: passed; cross-target Clippy, 3421 unit tests, 1784 integration cases, docs check and 28 benchmark sanity cases; -7ms average, 23 faster and 0 slower
 - R3 ownership map: passed through Codex CLI simple-exploration; no repeated preparation proving a cache, new preparation.rs is the required final owner, and classification/control-flow predicates remain only where they answer earlier-stage questions
@@ -70,12 +70,16 @@ VALIDATION_STATE:
 - R6C Codex CLI preparation-handoff slice: accepted after parent review; const-required construction returns the immediate Template plus PreparedTemplate result, emitter folding consumes it without a second preparation, expression parsing preserves the intentional ConstRequired-to-Value boundary and focused benchmark-counter coverage records one preparation attempt
 - R6C preparation-handoff just validate: passed; cross-target Clippy, 3433 unit tests, 1784 integration cases, docs check and 28 benchmark sanity cases; -7ms average, 22 faster and 0 slower
 - R6C benchmark-tooling review: ordinary recorded runs exercise representative end-to-end workloads with counters disabled; exact raw samples for `c1ecc2c58` and `069a29acb` are unavailable locally, so historical comparison must use the tracked summaries and record that attribution limit explicitly
+- R6C six recorded just bench samples: passed; suite averages 14.628, 14.662, 14.674, 14.848, 14.782 and 14.794ms, with one -6ms comparison followed by five 0ms comparisons and 28/28 cases throughout
+- R6C representative current workload means/ranges: template 9.010ms (8.858-9.109), wrapper/slot 6.745ms (6.552-6.911), control-flow 4.056ms (3.991-4.187), collection/control 14.953ms (14.846-15.023), Beandown/docs 199.144ms (196.023-204.026)
+- R6C historical summary comparison: both c1ecc2c58 and 069a29acb carry the same July baseline of all/core/docs/stress/module/borrow ~21/5/228/16/13/10ms; the current summary is ~15/5/201/8/8/6ms, with no raw per-commit samples available for exact individual-case attribution
+- R6C just bench-report: latest comparison 0ms with 28/28 cases, no counters, ratios or investigation candidates; the six samples show no consistent stage regression, so no profiling or architectural restoration is warranted
 DOCS_IMPACT: compiler-design-overview.md and Rust module maps updated for the final architecture; index.md locator already names preparation.rs; progress matrix unchanged because user-visible support did not change
 BLOCKERS_OR_OPEN_DECISIONS: none
-DELEGATION_DECISION: parent-direct evidence recording - benchmark history and the final report are parent-owned; no implementation worker is needed for the six prescribed samples
+DELEGATION_DECISION: codex-cli read-only roadmap review - user requires Codex CLI for worker slices and R6D needs a bounded cross-plan stale-assumption/dependency map before parent documentation edits
 NEXT_WORKER_ORDER: codex-cli (user-required provider for the next worker slice)
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit the accepted preparation-handoff checkpoint, then run six recorded `just bench` samples and `just bench-report`
+NEXT_RESUME_ACTION: commit accepted R6C benchmark evidence, then launch the bounded Codex CLI R6D queued-plan review
 ```
 
 Use `069a29acb` as the implementation and regression base. Do not continue extending `FoldAuthorityWalk`, foreign-store traversal, external expression-overlay stacks or prepared foreign-wrapper proofs.
@@ -930,6 +934,23 @@ field was added. Focused benchmark-counter coverage observes one preparation att
 construction and folding. `just validate` passed with cross-target Clippy, 3,433 unit tests, 1,784
 integration cases, docs checking and all 28 benchmark sanity cases; the sanity result was `-7ms`
 average with 22 faster and no slower cases.
+
+R6C recorded performance evidence is accepted at `e4aef3987`. Six end-to-end samples on the same
+macOS Apple Silicon system recorded suite averages of 14.628, 14.662, 14.674, 14.848, 14.782 and
+14.794ms. The first was 6ms faster than the preceding local baseline and each subsequent comparison
+was 0ms, with all 28 cases passing throughout. Representative means and ranges were: template
+9.010ms (8.858-9.109), wrapper/slot 6.745ms (6.552-6.911), control flow 4.056ms
+(3.991-4.187), collection/control flow 14.953ms (14.846-15.023), and Beandown/docs
+199.144ms (196.023-204.026). `just bench-report` found no counters, ratios or investigation
+candidates and no consistent stage regression.
+
+The required historical comparison has an explicit evidence limit: local raw history contains no
+samples for `c1ecc2c58` or `069a29acb`, and ordinary recorded runs intentionally disable detailed
+counters. Both commits carry the same tracked July summary baseline of approximately 21/5/228/16/13/10ms
+for all/core/docs/stress/module/borrow, versus the current 15/5/201/8/8/6ms summary. That supports
+no aggregate regression, but it cannot prove an exact individual-case delta against either commit.
+The stable six-run current ranges therefore close R6C without speculative profiling or restoring
+deleted architecture.
 
 Compare representative template, wrapper, slot, control-flow, Beandown and docs workloads against `c1ecc2c58` and `069a29acb`. Attribute consistent regressions with counters or profiling. Do not restore deleted architecture to hide a regression.
 
