@@ -1,0 +1,10 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = [
+    "Before config initialization",
+    "Loading configuration...",
+    "Configuration loaded",
+    "After config initialization",
+    "Database URL: postgresql://localhost:5432/mydb",
+]

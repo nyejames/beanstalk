@@ -1,0 +1,9 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = [
+    "Hello\nWorld!",
+    "Tab\tSeparated",
+    "Quote: \"Hello\"",
+    "Backslash: \\",
+]
