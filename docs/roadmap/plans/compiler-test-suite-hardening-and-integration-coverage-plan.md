@@ -29,26 +29,28 @@ This ordering is mandatory. Do not begin broad pruning while the harness can sti
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 0B — produce the baseline inventory
-LAST_ACCEPTED_COMMIT: `691f3338d` — final TIR closure and current repository anchor; Phase 0A is ready for its documentation-only checkpoint
-WORKTREE: `main` at `691f3338d`, clean and aligned with `origin/main`; only the primary worktree exists
+CURRENT_SLICE: Phase 1A — split harness self-tests before expansion
+LAST_ACCEPTED_COMMIT: `b4503794e` — Phase 0A repository-anchor refresh
+WORKTREE: `main` at `b4503794e` with the Phase 0B/0C documentation-only checkpoint ready; only the primary worktree exists
 REQUIRED_RELOADS: startup files, this plan and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: testing and validation standards own inventory classification and the documentation-only Phase 0 gate; the deleted final-TIR plan remains historical evidence in commit `691f3338d^`
-- code: canonical manifest, integration runner and test CLI are unchanged from `144568587`; post-anchor test changes are confined to accepted TIR ownership and final-audit cleanup
+- docs: `testing.bd` requires tests to live outside production files with helpers local to their owner; `validation.bd` requires formatting and `just validate` for this code-bearing slice
+- code: `src/compiler_tests/integration_test_runner/tests.rs` contains 39 self-tests and shared helpers across manifest, expectations, fixture, assertions and execution; `mod.rs` currently wires the monolithic module
 ACCEPTANCE_CRITERIA:
-- record exact unit/integration counts, repeatable timing evidence, fixture assertion strengths, tags, goldens, artifact assertions and source-shaped unit candidates at `691f3338d`
-- commit no temporary inventory scripts and change no tests or implementation
-- leave the first Phase 1 slice bounded by the refreshed inventory
+- split the monolithic integration-runner self-tests by existing owner without changing behaviour
+- delete the old monolithic test path after module wiring and keep helpers local to the narrowest owner
+- pass focused harness tests, formatting, diff checks and `just validate`
 VALIDATION_STATE:
 - final TIR at `dc81f7e53`: `just validate` passed with 3,433 Rust tests, 1,784 integration executions, docs checking and 28 benchmark sanity cases
 - Phase 0A documentation-only gate: `cargo run --quiet -- build docs --release` passed; 72 files built and no generated diff was produced (`bean` was unavailable in `PATH`)
-DOCS_IMPACT: this plan only for Phase 0A; roadmap already activates this plan before canonical module work; progress matrix unchanged
+- Phase 0B operational evidence: three Rust and three integration runs passed; median wall times were 1.53s and 7.89s respectively
+- Phase 0B/0C documentation-only gate: `cargo run --quiet -- build docs --release` passed; 72 files built and no generated diff was produced
+DOCS_IMPACT: Phase 0 changed this plan only; roadmap already activates it before canonical module work and the progress matrix remains unchanged
 BLOCKERS_OR_OPEN_DECISIONS: diagnostics Phase 4.1c remains incomplete but is explicitly serialized at clean accepted commit `d7fb3654f`; no diagnostics, manifest or runner worker may overlap this plan
-DELEGATION_DECISION: parent-direct — Phase 0B is analysis-only; the requested Codex CLI simple-exploration profile hit its usage limit before work and changed no files
-NEXT_WORKER_ORDER: codex-cli for the first implementation slice; no provider substitution is authorized
+DELEGATION_DECISION: codex-cli — the refreshed simple-exploration profile completed Phase 0B read-only classification; use the requested Codex CLI implementation profile for Phase 1A
+NEXT_WORKER_ORDER: codex-cli only for the Phase 1A implementation slice
 STOP_REASON: none
-NEXT_RESUME_ACTION: run the Phase 0B baseline inventory at `691f3338d`
+NEXT_RESUME_ACTION: create the dedicated Phase 1A worker worktree and launch the bounded Codex CLI implementation slice
 
 ## Recommended roadmap placement and activation conditions
 
@@ -72,10 +74,10 @@ Activation prerequisites:
 
 - [x] `docs/roadmap/plans/final-tir-completion-plan.md` completed its final architecture, test-ownership, documentation, validation and recorded-performance phases at the `1298da468` review anchor.
 - [x] The mandatory post-TIR roadmap review refreshed all queued plans against the final one-store, exact-`TirView` architecture at `1298da468`.
-- [ ] `docs/roadmap/plans/compiler-diagnostics-improvement-plan.md` is complete or explicitly parked at a clean accepted commit.
-- [ ] No concurrent worker is changing `tests/cases/manifest.toml`, the integration expectation schema, diagnostic payload identity, or the integration runner.
-- [ ] The repository is on a clean branch/worktree and the current head is recorded in the capsule below.
-- [ ] The current implementation and progress matrix have been re-read; future end-state design must not be mistaken for current support.
+- [x] `docs/roadmap/plans/compiler-diagnostics-improvement-plan.md` is complete or explicitly parked at a clean accepted commit.
+- [x] No concurrent worker is changing `tests/cases/manifest.toml`, the integration expectation schema, diagnostic payload identity, or the integration runner.
+- [x] The repository is on a clean branch/worktree and the current head is recorded in the capsule below.
+- [x] The current implementation and progress matrix have been re-read; future end-state design must not be mistaken for current support.
 
 The harness-only phases may technically be independent of later compiler architecture, but the fixture and unit-test inventory is moving during TIR and diagnostics work. Starting before those plans reach clean checkpoints would create avoidable churn and merge conflicts.
 
@@ -89,16 +91,16 @@ ACTIVE_PLAN:
 - `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 
 CURRENT_SLICE:
-- Phase: 0
-- Checklist item: 0B — produce the baseline inventory
-- Goal: record the exact post-TIR/post-diagnostics test-suite baseline before changing the harness or deleting tests
-- Non-goals: no compiler behaviour changes, no fixture deletion, no unit-test pruning, no expectation-schema migration
+- Phase: 1
+- Checklist item: 1A — split harness self-tests before expansion
+- Goal: give manifest, expectation, fixture, assertion, execution and reporting self-tests narrow file owners before the harness grows
+- Non-goals: no behaviour, schema, CLI, fixture, manifest, diagnostic or assertion-policy changes
 
 LAST_GOOD_COMMIT:
-- `691f3338d` — final TIR closure and refreshed test-hardening repository anchor; no test-suite implementation slice has been accepted yet
+- `b4503794e` — accepted Phase 0A anchor refresh; Phase 0B/0C is ready for its documentation-only checkpoint
 
 CURRENT_WORKTREE_STATE:
-- Clean / known changes: `main` is clean at `691f3338d` and matches `origin/main`
+- Clean / known changes: `main` at `b4503794e` has only this accepted Phase 0B/0C plan update
 - Branch: local `main`
 - Dedicated worker worktrees: none; create and record one before the first implementation worker
 
@@ -137,10 +139,9 @@ RELEVANT_CODE:
 - `src/compiler_frontend/ast/templates/tir/tests/`: accepted post-TIR hidden-invariant inventory; later suite-wide ownership review belongs to this plan and must not reopen final TIR architecture
 
 ACCEPTANCE_CRITERIA:
-- baseline test counts, suite wall times, fixture strengths, and candidate overlaps are recorded
-- every known overlapping active plan remains explicitly serialized
-- no test is deleted before its primary replacement owner is identified
-- the roadmap places this plan before canonical module implementation
+- the monolithic harness self-tests are split by existing owner with no test or behaviour change
+- the old `tests.rs` path is removed and helpers stay local to the narrowest test owner
+- focused harness tests, formatting, diff checks and `just validate` pass
 
 DECISIONS_ALREADY_MADE:
 - decision: harden the integration harness before pruning
@@ -177,6 +178,7 @@ VALIDATION_STATE:
 - result: passed with cross-target Clippy, 3,433 Rust unit tests, 1,784 integration executions, docs checking, and 28 benchmark sanity cases
 - known unrelated failures: none recorded
 - Phase 0A `cargo run --quiet -- build docs --release`: passed, 72 files built and no generated diff produced; direct `bean` invocation was unavailable in `PATH`
+- Phase 0B/0C `cargo run --quiet -- build docs --release`: passed, 72 files built and no generated diff produced
 
 DOCS_IMPACT:
 - progress matrix needed: review after every phase that adds, removes, or materially strengthens current coverage; update only when the coverage statement changes
@@ -184,7 +186,7 @@ DOCS_IMPACT:
 - authorized docs updates: this plan explicitly authorizes the documentation changes listed in each phase; do not broaden language or architecture docs without a discovered contradiction or an intentional accepted behaviour change
 
 NEXT_ACTION:
-- run the Phase 0B inventory at `691f3338d`, using temporary scripts only under `/tmp`
+- create a dedicated Phase 1A worker worktree and launch the bounded Codex CLI implementation slice
 
 ---
 
@@ -787,9 +789,9 @@ This phase is documentation and analysis only. Temporary inventory scripts belon
 
 - [x] Final TIR completion is accepted at the `1298da468` review anchor.
 - [x] The mandatory post-TIR plan refresh is complete.
-- [ ] Diagnostics work is complete or parked cleanly.
-- [ ] No fixture/harness worker is active.
-- [ ] Local worktree state is known.
+- [x] Diagnostics work is complete or parked cleanly.
+- [x] No fixture/harness worker is active.
+- [x] Local worktree state is known.
 
 ## Recommended slices
 
@@ -829,49 +831,128 @@ Accepted Phase 0A record at `691f3338d`:
 
 Use temporary scripts or shell commands only.
 
-- [ ] Record `cargo test --quiet -- --list` output in `/tmp`.
-- [ ] Record total Rust test count and counts by major test directory.
-- [ ] Record full `bean tests` execution count by backend.
-- [ ] Record median unit and integration wall time from three equivalent runs on the same machine; mark as operational evidence, not correctness.
-- [ ] Count manifest case folders and backend expansions.
-- [ ] List canonical cases missing `expect.toml`.
-- [ ] List success blocks with no explicit runtime/artifact/golden/absence assertion.
-- [ ] List failure blocks using only code-presence assertions.
-- [ ] List uses of `message_contains`.
-- [ ] List warning-count expectations.
-- [ ] List strict and normalized goldens by backend.
-- [ ] List cases with artifact assertions.
-- [ ] List current tags and tag frequencies.
-- [ ] List duplicate or near-duplicate expectation fingerprints.
-- [ ] Search Rust tests for full-source helpers such as `parse_single_file_ast`, full frontend construction, `build_project`, and direct backend execution.
-- [ ] Classify each source-shaped unit as hidden invariant, stage boundary, or migration candidate.
-- [ ] Refresh the known candidate map.
-- [ ] Record likely high-conflict manifest regions.
+- [x] Record `cargo test --quiet -- --list` output in `/tmp`.
+- [x] Record total Rust test count and counts by major test directory.
+- [x] Record full `bean tests` execution count by backend.
+- [x] Record median unit and integration wall time from three equivalent runs on the same machine; mark as operational evidence, not correctness.
+- [x] Count manifest case folders and backend expansions.
+- [x] List canonical cases missing `expect.toml`.
+- [x] List success blocks with no explicit runtime/artifact/golden/absence assertion.
+- [x] List failure blocks using only code-presence assertions.
+- [x] List uses of `message_contains`.
+- [x] List warning-count expectations.
+- [x] List strict and normalized goldens by backend.
+- [x] List cases with artifact assertions.
+- [x] List current tags and tag frequencies.
+- [x] List duplicate or near-duplicate expectation fingerprints.
+- [x] Search Rust tests for full-source helpers such as `parse_single_file_ast`, full frontend construction, `build_project`, and direct backend execution.
+- [x] Classify each source-shaped unit as hidden invariant, stage boundary, or migration candidate.
+- [x] Refresh the known candidate map.
+- [x] Record likely high-conflict manifest regions.
+
+Accepted Phase 0B inventory at `b4503794e`:
+
+- `cargo test --quiet -- --list > /tmp/beanstalk-rust-tests-b4503794e.txt` listed
+  3,433 tests. Major owners are compiler frontend 2,519, projects 388, backends 227,
+  build system 211, compiler integration-runner units 52, builder surface 33 and benchmarking 3.
+  Within the frontend, AST owns 1,340, HIR 217, headers 185, paths 118, datatypes 97,
+  compiler messages 87, tokenizer 86, declaration syntax 73 and analysis 47.
+- Three `/usr/bin/time -p cargo test --quiet -- --format terse` runs passed with real wall
+  times 1.53s, 1.43s and 1.71s. The median is 1.53s.
+- Three `/usr/bin/time -p cargo run --quiet -- tests` runs passed with real wall times
+  8.66s, 7.89s and 7.75s. The median is 7.89s. Each run executed 1,784 contracts:
+  1,642 HTML and 142 HTML-Wasm, comprising 805 successful compilations and 979 expected failures.
+  These timings are same-machine operational evidence, not correctness or performance proof.
+- The manifest declares 1,651 cases and exactly 1,651 canonical input folders. Explicit
+  expectations contribute 1,589 HTML plus 142 HTML-Wasm blocks. The fallback stub adds 53 HTML
+  blocks, yielding the runner's authoritative 1,784 executions.
+- The 53 missing `expect.toml` cases are: `adversarial_borrow_after_result_handler`,
+  `adversarial_borrow_nested_loop_aliases`, `adversarial_loop_match_result_chain`,
+  `adversarial_multi_bind_in_loops`, `adversarial_multi_file_helper_chain`,
+  `adversarial_nested_catch_handlers`, `adversarial_struct_collection_result_interop`,
+  `borrow_checker_basic_variables`, `borrow_checker_function_calls`, `borrow_checker_string_memory`,
+  `branch_reborrow_after_last_use`, `choice_basic_declaration_and_use`,
+  `choice_import_visibility_exported`, `commas`, `complex_borrowing_scenarios`,
+  `consistent_borrow_outcomes`, `consistent_ownership_outcomes`, `disjoint_field_borrows`,
+  `error_field_access_in_handler`, `function_call_arg_type_correct`,
+  `function_call_arg_user_error_kind_struct`, `struct_constructor_named_args_all_named`,
+  `struct_constructor_named_args_mixed`, `struct_constructor_named_args_default_skip`,
+  `immutable_alias_while_borrowed`, `implicit_main_call`, `last_use_precision`,
+  `lifetime_inference_control_flow`, `lifetime_inference_drop_insertion`,
+  `lifetime_inference_error_precision`, `lifetime_inference_integration_basic`,
+  `lifetime_inference_move_refinement`, `loop_borrow_mutation_conflict`, `mixed_numeric_literals`,
+  `multi_bind_explicit_types_and_mutability`, `multi_bind_mixed_existing_and_new_targets`,
+  `multi_bind_optional_slots`, `multi_bind_plain_multi_return`,
+  `multi_file_fixture_only_counts_entry_case`, `nested_borrowing_patterns`,
+  `none_declaration_success`, `none_mutation_success`, `none_return_success`,
+  `path_dependent_reborrow`, `print_special_chars`, `result_catch_handler_scope_bubbles_error`,
+  `struct_field_borrowing`, `struct_using_constant`, `white_space`,
+  `int_promotion_to_float_declaration`, `int_promotion_to_float_return`,
+  `int_promotion_to_float_via_function_call` and `external_package_import_selects_correct_package`.
+- Authored-contract analysis, which deliberately does not count the implicit backend baseline,
+  finds 110 weak success blocks: the 53 fallback blocks plus 57 explicit blocks. The explicit set
+  clusters around borrow/lifetime success, choice construction and matching, config/module/facade
+  smoke, HTML-Wasm parity, const-record access and Markdown/Beandown parity. Phase 2C must classify
+  each as observable behaviour, artifact contract or intentional compile-only smoke rather than
+  blanket-marking it compile-only.
+- All 979 failure blocks assert diagnostic codes. Of those, 739 use code presence alone and 240
+  additionally use `message_contains`. Twenty-one backend blocks assert warning counts. Exact
+  diagnostic multiplicity, structured reasons and warning identity do not yet exist.
+- Golden ownership consists of 38 normalized HTML blocks/files and no strict or HTML-Wasm goldens.
+  Artifact ownership consists of 250 backend blocks across 245 cases with 287 assertions. One
+  backend block uses `artifacts_must_not_exist`.
+- The manifest has 155 unique tags. Highest frequencies are integration 1,629, diagnostics 884,
+  language 361, imports 245, templates 203, generics 150, choices 133, functions 128, results 94,
+  traits 89, control-flow 83, collections 78, aliases 72, receiver-methods 66, JS-backend 64,
+  cast 61, pattern-matching and value-blocks 60 each, external-packages 57, config 56, HTML 52,
+  structs 49, constants 46, facades 45, facade 44, fixed-collections 41, borrows 40,
+  reactivity 37, namespace-imports 33 and hashmaps 32. Thirty-one tags are singletons. Phase 14
+  must normalize visible spelling families including facade/facades, cast/casts,
+  optionals/options/optional, receiver-methods/receivers, struct/structs, function/functions,
+  import/imports, namespace/namespaces, choice/choices and loop/loops.
+- Exact expectation fingerprints form 152 repeated groups containing 1,087 backend blocks. The
+  largest groups contain 100, 47, 44, 38, 35, 34, 31, 24, 22 and 22 blocks. Shape-only fingerprints
+  form 23 groups containing 1,773 blocks, led by code-only failures, unordered rendered-output
+  success and artifact-only success. These are review candidates, not automatic merge evidence.
+- Source-shaped helper search found 364 hits. `parse_single_file_ast` appears in 23 frontend test
+  files. Full frontend construction appears in the borrow-checker pipeline suite. `build_project`
+  is concentrated in build-system policy tests.
+- Retain hidden-invariant owners for borrow facts, malformed HIR, parser shape and locations,
+  canonical type identity, TIR exact-view/preparation/handoff facts and backend ABI/helper contracts.
+  Retain minimal stage-boundary owners for borrow-pipeline propagation and build/check orchestration.
+  Migration candidates remain `borrow_checker_map_tests.rs`, ordinary source scenarios in the
+  beginning of `borrow_checker_scope_tests.rs`, selected whole-program cases in
+  `function_call_tests.rs` and `type_resolution_tests.rs`, rendered-diagnostic cases in
+  `generics_tests.rs` and JavaScript emission tests acting as semantic substitutes. The broad
+  source-shaped AST statement suites require case-by-case later ownership review, not Phase 0 deletion.
+- Serialized manifest conflict regions are adversarial lines 2-37, choice equality 532-567,
+  fixed collections 1,632-1,727, hashmaps 2,662-2,727, diagnostics 5,558-5,628,
+  value blocks 7,323-7,358 and reactivity 7,763-7,833.
 
 ### 0C — Activate in the roadmap
 
-- [ ] Add this plan to `docs/roadmap/plans/`.
-- [ ] Link it from `docs/roadmap/roadmap.md` before canonical module compilation.
-- [ ] Record whether this plan is queued or active.
-- [ ] Record that canonical module implementation is blocked until this plan closes.
-- [ ] Refresh the capsule with the first Phase 1 slice.
-- [ ] Commit the documentation-only activation checkpoint.
+- [x] Add this plan to `docs/roadmap/plans/`.
+- [x] Link it from `docs/roadmap/roadmap.md` before canonical module compilation.
+- [x] Record whether this plan is queued or active.
+- [x] Record that canonical module implementation is blocked until this plan closes.
+- [x] Refresh the capsule with the first Phase 1 slice.
+- [x] Commit the documentation-only activation checkpoint.
 
 ## Phase 0 audit
 
-- [ ] Every count names the exact commit and command.
-- [ ] TIR-specific facts come from the final accepted TIR state.
-- [ ] Diagnostics facts come from the final/parked diagnostics state.
-- [ ] No temporary inventory script was committed without a permanent owner.
-- [ ] No test was changed or deleted.
-- [ ] No implementation claim is inferred from end-state design alone.
+- [x] Every count names the exact commit and command.
+- [x] TIR-specific facts come from the final accepted TIR state.
+- [x] Diagnostics facts come from the final/parked diagnostics state.
+- [x] No temporary inventory script was committed without a permanent owner.
+- [x] No test was changed or deleted.
+- [x] No implementation claim is inferred from end-state design alone.
 
 ## Style-guide review
 
-- [ ] Plan language distinguishes current implementation from accepted end state.
-- [ ] Paths name current owners.
-- [ ] No obsolete compatibility or migration owner is carried forward.
-- [ ] The next slice is small and exact.
+- [x] Plan language distinguishes current implementation from accepted end state.
+- [x] Paths name current owners.
+- [x] No obsolete compatibility or migration owner is carried forward.
+- [x] The next slice is small and exact.
 
 ## Validation
 
@@ -900,10 +981,10 @@ No progress-matrix change is required for inventory alone.
 
 ## Phase 0 acceptance
 
-- [ ] The plan is current, active/queued correctly, and points at the exact repository head.
-- [ ] The baseline inventory is recorded.
-- [ ] All active-plan conflicts are resolved.
-- [ ] Phase 1 can begin without relying on the original review's stale TIR paths.
+- [x] The plan is current, active/queued correctly, and points at the exact repository head.
+- [x] The baseline inventory is recorded.
+- [x] All active-plan conflicts are resolved.
+- [x] Phase 1 can begin without relying on the original review's stale TIR paths.
 
 ---
 
