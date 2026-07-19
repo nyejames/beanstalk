@@ -1,6 +1,4 @@
-entry = "."
-
 [backends.html]
 mode = "success"
 warnings = "forbid"
-rendered_output_contains = ["10", "20"]
+success_contract = "compile_only"

@@ -2898,16 +2898,19 @@ tags = ["integration","borrows", "diagnostics"]
 id = "lifetime_inference_control_flow"
 path = "lifetime_inference_control_flow"
 tags = ["integration","borrows"]
+role = "smoke"
 
 [[case]]
 id = "lifetime_inference_drop_insertion"
 path = "lifetime_inference_drop_insertion"
 tags = ["integration","borrows"]
+role = "smoke"
 
 [[case]]
 id = "lifetime_inference_error_precision"
 path = "lifetime_inference_error_precision"
 tags = ["integration","borrows","diagnostics"]
+role = "smoke"
 
 [[case]]
 id = "lifetime_inference_integration_basic"
@@ -2918,6 +2921,7 @@ tags = ["integration","borrows"]
 id = "lifetime_inference_move_refinement"
 path = "lifetime_inference_move_refinement"
 tags = ["integration","borrows"]
+role = "smoke"
 
 [[case]]
 id = "lifetime_inference_use_after_move"
@@ -3158,6 +3162,7 @@ tags = ["integration","language"]
 id = "nested_borrowing_patterns"
 path = "nested_borrowing_patterns"
 tags = ["integration","borrows"]
+role = "smoke"
 
 [[case]]
 id = "none_declaration_success"
