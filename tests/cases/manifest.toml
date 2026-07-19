@@ -240,6 +240,7 @@ tags = ["integration","results","structs"]
 id = "choice_basic_declaration_and_use"
 path = "choice_basic_declaration_and_use"
 tags = ["integration","language","choices"]
+role = "smoke"
 
 [[case]]
 id = "choice_payload_record_declaration_success"
@@ -1390,6 +1391,7 @@ tags = ["integration","diagnostics","choices"]
 id = "choice_import_visibility_exported"
 path = "choice_import_visibility_exported"
 tags = ["integration","language","choices"]
+role = "smoke"
 
 [[case]]
 id = "choice_match_exhaustive_success"
@@ -1810,6 +1812,7 @@ tags = ["integration","collections","diagnostics"]
 id = "commas"
 path = "commas"
 tags = ["integration","language"]
+role = "smoke"
 
 [[case]]
 id = "comparison_and_logical"
@@ -4891,6 +4894,7 @@ tags = ["integration","language","wasm"]
 id = "white_space"
 path = "white_space"
 tags = ["integration","language"]
+role = "smoke"
 
 [[case]]
 id = "int_promotion_to_float_declaration"
