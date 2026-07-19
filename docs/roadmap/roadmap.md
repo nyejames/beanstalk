@@ -12,6 +12,7 @@ Use the [Progress Matrix](docs/src/docs/progress/#page.bst) as a reference for w
 ## Active implementation work
 
 - [Test Suite Hardening](./plans/compiler-test-suite-hardening-and-integration-coverage-plan.md)
+- [Diagnostics and tokens optimised memory layout plan](docs/roadmap/plans/compiler-source-token-and-diagnostic-data-layout-plan.md)
 - [Compiler diagnostics improvements](./plans/compiler-diagnostics-improvement-plan.md)
 
 ## Queued implementation chain
