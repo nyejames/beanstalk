@@ -281,13 +281,13 @@ tags = ["integration","language","choices"]
 id = "choice_payload_constructor_positional_success"
 path = "choice_payload_constructor_positional_success"
 tags = ["integration","language","choices"]
-role = "smoke"
+role = "boundary"
 
 [[case]]
 id = "choice_payload_constructor_named_success"
 path = "choice_payload_constructor_named_success"
 tags = ["integration","language","choices"]
-role = "smoke"
+role = "boundary"
 
 [[case]]
 id = "choice_equality_positional_constructor_success"
@@ -303,7 +303,7 @@ tags = ["integration","language","choices","equality","js-backend"]
 id = "choice_payload_constructor_mixed_success"
 path = "choice_payload_constructor_mixed_success"
 tags = ["integration","language","choices"]
-role = "smoke"
+role = "boundary"
 
 [[case]]
 id = "choice_payload_capture_reassignment_rejected"
@@ -494,13 +494,13 @@ tags = ["integration","diagnostics","choices"]
 id = "choice_const_unit_success"
 path = "choice_const_unit_success"
 tags = ["integration","language","choices"]
-role = "smoke"
+role = "boundary"
 
 [[case]]
 id = "choice_const_payload_success"
 path = "choice_const_payload_success"
 tags = ["integration","language","choices"]
-role = "smoke"
+role = "boundary"
 
 [[case]]
 id = "choice_payload_const_non_const_field_rejected"
@@ -1376,7 +1376,7 @@ tags = ["integration","language","choices","pattern-matching"]
 id = "choice_imported_payload_constructor_success"
 path = "choice_imported_payload_constructor_success"
 tags = ["integration","language","choices"]
-role = "smoke"
+role = "boundary"
 
 [[case]]
 id = "choice_default_decl_deferred"

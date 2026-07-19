@@ -2,4 +2,7 @@ Status :: Ready, Busy;
 
 ready #= Status::Ready
 
-io.line("ok")
+if ready is:
+    Ready => io.line("choice_const_unit_success variant=Ready")
+    Busy => io.line("choice_const_unit_success variant=Busy")
+;

@@ -1,4 +1,4 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
-success_contract = "acceptance_only"
+rendered_output_contains = ["choice_payload_constructor_named_success err_variant=Err err_message=bad pending_variant=Pending pending_retry_count=3 pending_message=waiting"]

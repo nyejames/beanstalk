@@ -30,28 +30,28 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 2R5a — correct choice-construction fixture contracts
-LAST_ACCEPTED_COMMIT: pending Phase 2R4 acceptance commit (previous plan commit `7f9078329`)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 2R4 changes ready to commit
+CURRENT_SLICE: Phase 2R5b — correct the three explicitly named non-choice fixtures
+LAST_ACCEPTED_COMMIT: pending Phase 2R5a acceptance commit (previous plan commit `5e39b34aa`)
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 2R5a changes ready to commit
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: `testing.bd`, `validation.bd`, compiler/build-system overviews, and progress matrix govern runner contracts and gates
-- code: six named choice-construction fixtures, their expectations and manifest roles/contracts, plus nearby stronger choice-pattern owners
+- code: `struct_using_constant`, `html_wasm_bool_conditional`, and `config_current_keys_success` source/expectation contracts
 ACCEPTANCE_CRITERIA:
-- each reviewed case observes its constructed variant and payload through a context-rich marker, or becomes a truthful no-output smoke case
-- imported-constructor and local-constructor coverage remain distinct only where binding/visibility differs
-- no behavior-visible reviewed backend remains mislabeled acceptance-only
+- `struct_using_constant` omits the constant-backed default field and observes `Hello World!`
+- the boolean conditional requires the true marker and forbids the false marker without changing backend outcomes
+- the current-config case removes backward-compatibility vocabulary from source and artifact assertions
 - exact case runs, canonical audit, and `just validate` pass
 VALIDATION_STATE:
 - `cargo test --quiet integration_test_runner -- --format terse`: passed; 100 tests
-- `cargo run --quiet -- tests --audit`: passed; 1,651 cases, 1,784 backend executions, 23 acceptance-only, 33 baseline-only, zero hard findings
+- `cargo run --quiet -- tests --audit`: passed; 1,651 cases, 1,784 backend executions, 17 acceptance-only, 33 baseline-only, zero hard findings
 - `just validate`: passed; cross-target Clippy, 3,496 Rust tests, 1,784 integration executions, docs check, and 28 benchmark cases
 DOCS_IMPACT: progress matrix unchanged; workflow prose remains scheduled for Phase 2R8
 BLOCKERS_OR_OPEN_DECISIONS: none; compiler diagnostics Phase 4.1c remains serialized and untouched
 DELEGATION_DECISION: codex-cli — explicit user-selected provider for implementation workers
 NEXT_WORKER_ORDER: codex-cli only for this run-local override
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit accepted Phase 2R4, refresh its hash, then launch bounded Phase 2R5a through `codex-cli-beanstalk`
+NEXT_RESUME_ACTION: commit accepted Phase 2R5a, refresh its hash, then launch bounded Phase 2R5b through `codex-cli-beanstalk`
 
 ---
 
@@ -128,7 +128,8 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 2R1 success intent and inventory | `5dc811a7c` | Accepted | 3,475 Rust tests; 1,784 integration executions; 23 acceptance-only; 33 baseline-only; zero hard findings |
 | Phase 2R2 golden inventory | `ca2d013ee` | Accepted | 3,480 Rust tests; 1,784 integration executions; 38 file-backed golden blocks; 17 orphaned modes removed; zero hard findings |
 | Phase 2R3 suite policy owner | `7f9078329` | Accepted | 3,486 Rust tests; 1,784 integration executions; 33 baseline-only advisories; zero hard findings |
-| Phase 2R4 path containment | pending acceptance commit | Accepted | 3,496 Rust tests; 1,784 integration executions; canonical fixture/input/entry containment enforced; zero hard findings |
+| Phase 2R4 path containment | `5e39b34aa` | Accepted | 3,496 Rust tests; 1,784 integration executions; canonical fixture/input/entry containment enforced; zero hard findings |
+| Phase 2R5a choice-construction contracts | pending acceptance commit | Accepted | 17 acceptance-only; 526 rendered-output blocks; six choice cases now observe variants/payloads; zero hard findings |
 
 ---
 
@@ -394,10 +395,10 @@ The following cases currently contain runtime output but were classified as acce
 
 For each:
 
-- [ ] Prefer observing the constructed variant and payload through pattern matching and a contract-specific output marker.
-- [ ] If the case genuinely owns syntax acceptance only, remove unrelated runtime output and mark the whole case `role = "smoke"`.
-- [ ] Do not keep runtime output while declaring acceptance-only.
-- [ ] Keep imported-constructor and local-constructor contracts distinct only where visibility/binding is the reason.
+- [x] Prefer observing the constructed variant and payload through pattern matching and a contract-specific output marker.
+- [x] If the case genuinely owns syntax acceptance only, remove unrelated runtime output and mark the whole case `role = "smoke"`.
+- [x] Do not keep runtime output while declaring acceptance-only.
+- [x] Keep imported-constructor and local-constructor contracts distinct only where visibility/binding is the reason.
 
 ### `struct_using_constant`
 
