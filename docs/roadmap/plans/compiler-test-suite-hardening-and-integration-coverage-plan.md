@@ -29,16 +29,16 @@ This ordering is mandatory. Do not begin broad pruning while the harness can sti
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 2B11a — make seven choice payload-match results observable
-LAST_ACCEPTED_COMMIT: `40156ccb0` — restore the remaining explicit success-contract migration
-WORKTREE: parent `main` has only this Phase 2B11a plan checkpoint diff atop `40156ccb0`; reusable worker branch is clean at merge commit `55e2f994b` in `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase2a`; do not create another worktree
+CURRENT_SLICE: Phase 2B11b — classify choice constructors, constants and imported payload use
+LAST_ACCEPTED_COMMIT: `f3e10466a` — assert seven choice payload-match results
+WORKTREE: parent `main` has only this Phase 2B11b plan checkpoint diff atop `f3e10466a`; reusable worker branch is clean at `4e095cc68` in `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase2a`; do not create another worktree
 REQUIRED_RELOADS: startup files, this plan and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: behavior-visible cases need observable assertions; `io.line` output is assertable through the existing rendered-output harness when console behavior is the fixture's authored output lane
-- code: seven choice payload-match cases have direct source-derived results (`bad` or `forty-two`) but currently rely only on the HTML backend baseline
+- docs: acceptance-only constructors and compile-time choice constants need explicit compile-only intent; behavior-visible imported payload matching needs an observable result
+- code: six choice constructor/constant/import cases only prove legal compilation, while `choice_imported_alias_payload_capture_success` emits `captured`; all seven still use only the HTML backend baseline
 ACCEPTANCE_CRITERIA:
-- add only the seven exact `rendered_output_contains` contracts identified by exploration
-- preserve sources, backend matrices and warning policy; do not convert these behavior-visible cases to compile-only
+- mark the six acceptance-only cases `success_contract = "compile_only"` and assert only `captured` for the imported alias match
+- preserve sources, backend matrices and warning policy; keep `choice_import_visibility_non_exported` isolated
 - all seven exact HTML cases, focused runner tests, audit, diff checks and full gate pass
 VALIDATION_STATE:
 - final TIR at `dc81f7e53`: `just validate` passed with 3,433 Rust tests, 1,784 integration executions, docs checking and 28 benchmark sanity cases
@@ -67,13 +67,14 @@ VALIDATION_STATE:
 - Phase 2B10b: three focused borrow-loop tests, exact loop-conflict case, 70 runner tests, audit, formatting and diff checks passed in worker and parent review; worker `just validate` passed with 3,466 Rust tests and 1,784 integration executions; audit reported 17 compile-only, 55 backend-baseline-only, zero fallback-backed and zero hard violations
 - Phase 2C1: missing expectations now fail with a case-owned error and the fallback parser path, constant and stub expectation are deleted; 70 runner tests, audit, formatting and diff checks passed in worker and parent review; worker `just validate` passed with 3,466 Rust tests and 1,784 integration executions; audit still reports 55 baseline-only blocks that must be migrated before final success-contract enforcement
 - Phase 2B11 exploration: Codex CLI accounted for all 55 remaining blocks in nine bounded batches; corrected detailed totals are 38 rendered-output, one artifact, two warning, 13 compile-only and one design-conflict investigation; no files changed
+- Phase 2B11a: all seven choice payload-match cases, 70 runner tests, audit and diff checks passed in worker and parent review; worker `just validate` passed with 3,466 Rust tests and 1,784 integration executions; audit reported 17 compile-only, 48 baseline-only, zero fallback and zero hard violations
 - Phase 2B9 launch: both the optional `beanstalk-spark-explorer` and required `beanstalk-plan-worker` Codex CLI profiles selected `gpt-5.6-luna` but returned the account usage-limit error before repository edits; the service reported retry availability at 2026-07-25 11:08 AM
 DOCS_IMPACT: Phase 1 workflow docs, generated release output and the deferred code-block highlighting roadmap note are current; fixture outcomes/backend coverage and the progress matrix remain unchanged
 BLOCKERS_OR_OPEN_DECISIONS: none for this slice; diagnostics Phase 4.1c remains serialized at `d7fb3654f`; disk permits at most one additional worktree
-DELEGATION_DECISION: codex-cli implementation — explicit user-requested provider and the first seven-case choice batch has direct source-derived outputs with no design ambiguity
+DELEGATION_DECISION: codex-cli implementation — explicit user-requested provider and the next seven choice contracts are source-bounded without the isolated visibility conflict
 NEXT_WORKER_ORDER: codex-cli only for this run
 STOP_REASON: none
-NEXT_RESUME_ACTION: launch the bounded Phase 2B11a choice-match expectation migration in the existing reusable worktree
+NEXT_RESUME_ACTION: launch the bounded Phase 2B11b choice constructor/constant/import expectation migration in the existing reusable worktree
 
 ## Recommended roadmap placement and activation conditions
 
@@ -115,17 +116,17 @@ ACTIVE_PLAN:
 
 CURRENT_SLICE:
 - Phase: 2
-- Checklist item: 2B11a — make seven choice payload-match results observable
-- Goal: replace backend-baseline-only acceptance with direct rendered-output contracts for the selected choice match/capture cases
-- Non-goals: no source edits, other choice constructors/constants/imports, schema enforcement, assertion-module split, diagnostic multiplicity work, role/contract backfill or later phases
+- Checklist item: 2B11b — classify choice constructors, constants and imported payload use
+- Goal: give six acceptance-only choice cases explicit compile-only intent and one imported alias match an observable output contract
+- Non-goals: no source edits, `choice_import_visibility_non_exported`, schema enforcement, assertion-module split, diagnostic multiplicity work, role/contract backfill or later phases
 
 LAST_GOOD_COMMIT:
-- `40156ccb0` — accepted Phase 2C1 plan correction and remaining migration state
+- `f3e10466a` — accepted Phase 2B11a choice payload-match output contracts
 
 CURRENT_WORKTREE_STATE:
-- Clean / known changes: parent `main` has only this Phase 2B11a plan checkpoint diff atop `40156ccb0`; the reusable worker branch is clean at merge commit `55e2f994b`
+- Clean / known changes: parent `main` has only this Phase 2B11b plan checkpoint diff atop `f3e10466a`; the reusable worker branch is clean at `4e095cc68`
 - Branch: local `main`
-- Dedicated worker worktrees: reuse `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase2a`, currently clean at merge commit `55e2f994b`; do not create another worktree
+- Dedicated worker worktrees: reuse `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase2a`, currently clean at `4e095cc68`; do not create another worktree
 
 RELEVANT_DOCS_THIS_SLICE:
 - `AGENTS.md`
@@ -140,18 +141,15 @@ RELEVANT_DOCS_THIS_SLICE:
 - `docs/roadmap/roadmap.md`
 
 RELEVANT_CODE:
-- `tests/cases/choice_payload_match_capture_success/expect.toml`: assert `bad`
-- `tests/cases/choice_payload_match_qualified_capture_success/expect.toml`: assert `bad`
-- `tests/cases/choice_payload_match_guard_uses_capture_success/expect.toml`: assert `bad`
-- `tests/cases/choice_payload_match_exhaustive_tag_level_success/expect.toml`: assert `bad`
-- `tests/cases/choice_payload_match_rename_success/expect.toml`: assert `bad`
-- `tests/cases/choice_payload_match_rename_guard_success/expect.toml`: assert `forty-two`
-- `tests/cases/choice_payload_match_rename_self_alias_success/expect.toml`: assert `bad`
+- `tests/cases/choice_payload_constructor_{positional,named,mixed}_success/expect.toml`: explicit compile-only constructor acceptance
+- `tests/cases/choice_const_{unit,payload}_success/expect.toml`: explicit compile-only folded choice acceptance
+- `tests/cases/choice_imported_payload_constructor_success/expect.toml`: explicit compile-only imported constructor acceptance
+- `tests/cases/choice_imported_alias_payload_capture_success/expect.toml`: assert source-derived `captured`
 
 ACCEPTANCE_CRITERIA:
-- each selected HTML backend owns the exact source-derived rendered-output marker
+- six selected HTML backends own explicit compile-only intent and the imported alias match owns `rendered_output_contains = ["captured"]`
 - no input source, manifest metadata, other backend or other fixture changes
-- exact cases, 70 runner tests, audit, formatting, diff checks and `just validate` pass; baseline-only falls from 55 to 48
+- exact cases, 70 runner tests, audit, formatting, diff checks and `just validate` pass; compile-only rises to 23 and baseline-only falls to 41
 
 DECISIONS_ALREADY_MADE:
 - decision: harden the integration harness before pruning
@@ -243,7 +241,7 @@ DOCS_IMPACT:
 - authorized docs updates: this plan explicitly authorizes the documentation changes listed in each phase; do not broaden language or architecture docs without a discovered contradiction or an intentional accepted behaviour change
 
 NEXT_ACTION:
-- launch the bounded Phase 2B11a Codex CLI choice-match expectation migration in the existing reusable worktree
+- launch the bounded Phase 2B11b Codex CLI choice constructor/constant/import expectation migration in the existing reusable worktree
 
 ---
 
@@ -1324,6 +1322,11 @@ bounded batches. Its detailed classification, corrected against the full list, i
 contracts, one artifact contract, two warning contracts, 13 intentional compile-only candidates and
 one isolated design-conflict investigation. `choice_import_visibility_non_exported` must be reviewed
 against private cross-module import rejection before any expectation migration. No files changed.
+
+Accepted batch 2B11a at `f3e10466a`: seven choice payload-match cases now assert their executed
+branch results, including six `bad` payloads and the `forty-two` guard result. Audit baseline-only
+findings fell from 55 to 48, and the worker's full validation plus the parent's exact cases, focused
+tests, audit, formatting and diff checks passed.
 
 ### 2C — Enforce canonical expectations and remove the fallback
 
