@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light dark">
-    <title>Compiler design: source to page | Beanstalk</title>
-    <meta name="description" content="A chronological educational outline of Beanstalk's compiler and build pipeline.">
+    <title>07. AST semantics and types | Beanstalk</title>
+    <meta name="description" content="How parsed syntax becomes typed semantic structure.">
     <style>
 /*!
   BS CSS CORE (absolute basics CSS reset)
@@ -388,91 +388,9 @@ body {
             </a>
         </div>
     </nav>
-    <section class="container"><p><a href="../">Codebase</a> / Compiler design</p><h1>Compiler design: source to page</h1><p>One chronological route follows a Beanstalk project from source files to generated HTML. The outline marks accepted architecture, current implementation and roadmap gaps for the later writing pass.</p></section>
-    <section class="container"><h1>From Beanstalk source to a webpage</h1><p>This series provides educational scaffolding for a later writing pass. It explains compiler concepts through one Beanstalk project. It does not define compiler behaviour or current implementation status.</p><h2>Reader promise</h2><ul><li>Follow one project from source files to generated HTML.</li><li>Learn each compiler term when the running example needs it.</li><li>Track which owner creates each representation.</li><li>Separate accepted design from current, queued and deferred work.</li></ul><h2>Running example</h2><p>Project tree:</p><pre style=""><code class='codeblock'>
-    compiler_walkthrough<span class='bst-code-operator'>/</span>
-    ├── config.bst
-    └── src<span class='bst-code-operator'>/</span>
-        ├── <span class='bst-code-operator'>#</span>page.bst
-        └── greeting.bst
-    </code></pre><p>Keep these source shapes stable across the series:</p><pre style=""><code class='codeblock'>
-    <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span> greeting.bst
-
-    greeting_prefix <span class='bst-code-operator'>#</span><span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Hello&quot;</span>
-
-    greet <span class='bst-code-operator'>|</span>name <span class='bst-code-struct'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>String</span><span class='bst-code-operator'>:</span>
-        return <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>greeting_prefix<span class='bst-code-parenthesis'>]</span>, <span class='bst-code-parenthesis'>[</span>name<span class='bst-code-parenthesis'>]</span><span class='bst-code-operator'>!</span><span class='bst-code-parenthesis'>]</span>
-    ;
-    </code></pre><pre style=""><code class='codeblock'>
-    <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span> <span class='bst-code-operator'>#</span>page.bst
-
-    import <span class='bst-code-operator'>@</span>greeting <span class='bst-code-parenthesis'>{</span> greet <span class='bst-code-parenthesis'>}</span>
-
-    visitor <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Priya&quot;</span>
-
-    <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>html<span class='bst-code-operator'>:</span>
-        <span class='bst-code-operator'>&lt;</span>p<span class='bst-code-operator'>&gt;</span><span class='bst-code-parenthesis'>[</span>greet<span class='bst-code-parenthesis'>(</span>visitor<span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-operator'>&lt;</span><span class='bst-code-operator'>/</span>p<span class='bst-code-operator'>&gt;</span>
-    <span class='bst-code-parenthesis'>]</span>
-    </code></pre><p>Final relevant fragment:</p><pre style=""><code class='codeblock'>
-    <span class='bst-code-operator'>&lt;</span>p<span class='bst-code-operator'>&gt;</span><span class='bst-code-struct'>Hello,</span> <span class='bst-code-struct'>Priya</span><span class='bst-code-operator'>!</span><span class='bst-code-operator'>&lt;</span><span class='bst-code-operator'>/</span>p<span class='bst-code-operator'>&gt;</span>
-    </code></pre><h2>Pipeline position</h2><p>Plan one reusable strip with these checkpoints:</p><pre style=""><code class='codeblock'>
-    project tree
-    <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> command and config
-    <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> canonical source graph
-    <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> located tokens
-    <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> prepared shells
-    <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> bound interfaces and ordered declarations
-    <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> typed <span class='bst-code-struct'>AST</span> and semantic identities
-    <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> folded constants, generated requests and <span class='bst-code-struct'>TIR</span> handoff
-    <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> structured diagnostics
-    <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> validated <span class='bst-code-struct'>HIR</span>
-    <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> borrow and ownership side<span class='bst-code-operator'>-</span>table facts
-    <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> immutable module artefacts and fingerprints
-    <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> entry assembly and reachable function union
-    <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> deterministic target assignment
-    <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>JavaScript</span> and <span class='bst-code-struct'>Wasm</span> outputs
-    <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>HTML,</span> runtime assets and output manifest
-    </code></pre><p>Outline each article around the current checkpoint. Show both the incoming representation and the outgoing representation.</p><h2>Owners to introduce</h2><ul><li><strong>Build system:</strong> selects commands, discovers source, constructs graphs, schedules modules, plans entries and owns output writing.</li><li><strong>Compiler frontend and analysis:</strong> prepares syntax, binds interfaces, checks semantics, lowers HIR and validates access.</li><li><strong>Artefact builder:</strong> assembles selected compiler facts into an output plan.</li><li><strong>Target backends:</strong> lower validated functions and runtime requirements into JavaScript, Wasm and glue artefacts.</li></ul><h2>Chronological reading path</h2><p>Use one primary route. Do not group these pages by internal subsystem.</p><ol><li><a href="./what-a-compiler-does">01. What a compiler does</a></li><li><a href="./beanstalk-design-choices">02. Why Beanstalk makes different choices</a></li><li><a href="./starting-a-build">03. Starting a build</a></li><li><a href="./project-graphs-and-modules">04. Project graphs and modules</a></li><li><a href="./tokenization">05. Tokenization</a></li><li><a href="./declarations-imports-and-ordering">06. Declarations, imports and ordering</a></li><li><a href="./ast-semantics-and-types">07. AST semantics and types</a></li><li><a href="./compile-time-semantics">08. Compile-time semantics</a></li><li><a href="./templates-and-tir">09. Templates and TIR</a></li><li><a href="./diagnostics">10. Diagnostics</a></li><li><a href="./hir">11. HIR</a></li><li><a href="./memory-management-and-gc">12. Memory management and GC</a></li><li><a href="./borrow-validation-and-drops">13. Borrow validation and drops</a></li><li><a href="./module-artefacts-and-reuse">14. Module artefacts and reuse</a></li><li><a href="./linking-entries-and-reachability">15. Linking, entries and reachability</a></li><li><a href="./target-planning-and-validation">16. Target planning and validation</a></li><li><a href="./backend-lowering">17. Backend lowering</a></li><li><a href="./html-assembly-and-output">18. HTML assembly and output</a></li></ol><p>The landing page itself acts as article 00.</p><h2>Status language</h2><p>Every later article must label:</p><ul><li><strong>Accepted design:</strong> canonical architecture or language contract</li><li><strong>Current implementation:</strong> behaviour recorded by the progress matrix</li><li><strong>Queued or active implementation:</strong> named roadmap work</li><li><strong>Deferred or outside scope:</strong> intentionally postponed or rejected design</li></ul><p>Link to the progress matrix and roadmap. Do not copy either document into the articles. Keep accepted architecture as the main teaching path.</p><h2>Migration map</h2><table style="">
-            
-            <tr style="">
-                
-                <th scope="col" style=""><p> Current area</p></th><th scope="col" style=""><p> New chronological home</p></th>
-            
-    </tr>
-
-
-
-                <tr style="">
-                 <td style=""><p> Root compiler-design overview</p></td> <td style=""><p> This landing outline</p></td>
-            </tr><tr style="">
-                 <td style=""><p> Project structure and frontend boundary</p></td> <td style=""><p> Starting a build, project graphs and modules</p></td>
-            </tr><tr style="">
-                 <td style=""><p> Tokenization</p></td> <td style=""><p> Tokenization</p></td>
-            </tr><tr style="">
-                 <td style=""><p> Header parsing and dependency sorting</p></td> <td style=""><p> Declarations, imports and ordering</p></td>
-            </tr><tr style="">
-                 <td style=""><p> AST pages and type identity</p></td> <td style=""><p> AST semantics and types</p></td>
-            </tr><tr style="">
-                 <td style=""><p> Constants, generics, traits and casts</p></td> <td style=""><p> Compile-time semantics</p></td>
-            </tr><tr style="">
-                 <td style=""><p> Templates and reactivity</p></td> <td style=""><p> Templates and TIR</p></td>
-            </tr><tr style="">
-                 <td style=""><p> Diagnostics, paths and symbols</p></td> <td style=""><p> Diagnostics</p></td>
-            </tr><tr style="">
-                 <td style=""><p> HIR generation</p></td> <td style=""><p> HIR</p></td>
-            </tr><tr style="">
-                 <td style=""><p> Memory-management pages</p></td> <td style=""><p> Memory management and GC, borrow validation and drops</p></td>
-            </tr><tr style="">
-                 <td style=""><p> Parallelism and determinism</p></td> <td style=""><p> Project graphs and module artefacts and reuse</p></td>
-            </tr><tr style="">
-                 <td style=""><p> Entry start and page fragments</p></td> <td style=""><p> Linking, entries and reachability</p></td>
-            </tr><tr style="">
-                 <td style=""><p> Backend validation and lowering</p></td> <td style=""><p> Target planning and validation, backend lowering</p></td>
-            </tr><tr style="">
-                 <td style=""><p> HTML assembly, external assets and tracked assets</p></td> <td style=""><p> HTML assembly and output</p></td>
-            </tr>
-            
-    </table><p>Search inbound links before removing an old route. Keep one teaching owner for each concept. Link the memory and language authorities instead of duplicating their full references.</p><h2>Cross-page audit</h2><p>The final review must verify:</p><ul><li>terminology remains distinct for module, package, binding, AST, TIR, HIR, access, borrowing, ownership and allocation</li><li>owners remain consistent from Stage 0 through output writing</li><li>accepted, current, queued and deferred status labels remain accurate</li><li>Priya, the file names and the final fragment never change</li><li>each page consumes the previous checkpoint and produces the next one</li><li>each page has three to five visual briefs with alt text, caption, question and simplification status</li><li>side examples return to the greeting project</li><li>diagnostics, memory, target and output topics do not duplicate another page</li></ul><h2>Authority links for the later writing pass</h2><ul><li><code>docs/compiler-design-overview.md</code></li><li><code>docs/build-system-design.md</code></li><li><code>docs/src/docs/codebase/language/overview.bd</code></li><li><code>docs/src/docs/codebase/memory-management/overview.bd</code></li><li><code>docs/src/docs/progress/#page.bst</code></li><li><code>docs/roadmap/roadmap.md</code></li></ul><p>The later writer must read these authorities again immediately before drafting each article.</p></section>
+    <section class="container"><p><a href="../">Compiler design</a> / 07. AST semantics and types</p><h1>Giving syntax checked meaning</h1><p>Outline for the later educational writing pass. The canonical architecture remains in the linked authority documents.</p></section>
+    <section class="container"><h1>Giving syntax checked meaning</h1><h2>Reader promise</h2><ul><li>Distinguish parsed syntax from typed semantic structure.</li><li>Follow name resolution, type identity, coercion, calls and terminality through the running example.</li></ul><h2>Entry state</h2><ul><li>Bound interfaces and ordered declarations.</li><li>Reader knows the AST owns source meaning, but not yet its sub-responsibilities.</li></ul><h2>Opening problem</h2><ul><li>Parsed <code>greet(visitor)</code> still lacks resolved symbol, argument type and return contract.</li><li>Running checkpoint: bind <code>visitor</code> and <code>greet</code> in <code>#page.bst</code>.</li></ul><h2>Section sequence</h2><h3>Syntax tree versus semantic tree</h3><ul><li>Show the parsed call and the checked call.</li><li>Define name resolution, type checking and semantic identity.</li></ul><h3>Environments and visibility</h3><ul><li>Explain scopes, strict no-shadowing and one collision policy.</li><li>Distinguish local declarations, imports and reserved interfaces.</li></ul><h3>Type identity</h3><ul><li>Introduce module-local <code>TypeEnvironment</code> and <code>TypeId</code>.</li><li>Explain canonical cross-module identity without donor-local indexes.</li></ul><h3>Receiving boundaries and coercion</h3><ul><li>Cover calls, assignments, returns and field construction as receiving boundaries.</li><li>Contrast natural expression typing with contextual coercion and explicit casts.</li></ul><h3>Bodies, blocks and terminality</h3><ul><li>Introduce value-producing blocks, statements and terminal expressions.</li><li>State that HIR later makes runtime control flow explicit.</li></ul><h2>What can fail here</h2><ul><li>Unknown name, collision, type mismatch, invalid return or non-terminal block.</li><li>Cross-module type identity mismatch.</li><li>Keep diagnostic data ownership in the diagnostics article.</li></ul><h2>Why Beanstalk does it this way</h2><ul><li>Alternative: infer meaning from rendered type names or allow broad implicit conversion and shadowing.</li><li>Choice: stable identities, strict names and narrow receiving-boundary rules.</li><li>Benefit: later stages consume facts rather than rediscovering source meaning.</li><li>Cost: source needs explicit disambiguation and casts in more cases.</li></ul><h2>Roadmap and current status</h2><ul><li>Accepted design: AST resolves source meaning and emits typed semantic facts.</li><li>Current implementation: check progress rows for type, coercion and language coverage.</li><li>Queued work: anonymous record and numeric plans may alter examples of type identity, not the ownership boundary.</li><li>Deferred or outside scope: HIR and backend type reconstruction.</li></ul><h2>Visual plan</h2><ul><li>Parsed call versus typed call. Alt text: unresolved names gain symbol, argument and return facts. Caption: teaching simplification. Question: what does type checking add?</li><li>Local <code>TypeId</code> to canonical identity map. Alt text: local handles point to stable semantic identities. Caption: exact identity principle, simplified storage. Question: why not share donor indexes?</li><li>Natural type to receiving context. Alt text: a contextual boundary permits a documented coercion or requires a cast. Caption: simplified typing flow. Question: where does conversion happen?</li><li>Scope and collision map. Alt text: two visible declarations trigger one collision result. Caption: accepted visibility policy. Question: who owns a name?</li></ul><h2>Exit state</h2><ul><li>Output: typed AST, semantic identities and checked executable bodies.</li><li>Next question: which static computations disappear before HIR?</li></ul><h2>Links to include</h2><ul><li><code>docs/compiler-design-overview.md</code> AST and type sections</li><li><code>src/compiler_frontend/ast/</code></li><li><code>src/compiler_frontend/datatypes/</code></li><li><code>src/compiler_frontend/type_coercion/</code></li><li><code>docs/src/docs/codebase/language/overview.bd</code></li></ul></section>
+    <section class="container"><p><a href="../">Compiler design</a> / <a href="../declarations-imports-and-ordering">Previous</a> / <a href="../compile-time-semantics">Next</a></p></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;

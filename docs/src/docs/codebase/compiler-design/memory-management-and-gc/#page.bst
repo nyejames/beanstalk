@@ -1,0 +1,23 @@
+import @./memory-management-and-gc {content as reference_content}
+import @styles/docs {navbar, section, codebase_theme_head}
+
+page_title #= "12. Memory management and GC"
+page_description #= "Why GC and access validation solve different memory problems."
+page_head #= codebase_theme_head
+
+#[navbar]
+
+#[section, $md:
+    @../ (Compiler design) / 12. Memory management and GC
+
+    # Automatic memory management before the borrow checker
+
+    Outline for the later educational writing pass. The canonical architecture remains in the linked authority documents.
+]
+
+#[section, reference_content]
+
+#[section, $md:
+    @../ (Compiler design) / @../hir (Previous) / @../borrow-validation-and-drops (Next)
+]
+

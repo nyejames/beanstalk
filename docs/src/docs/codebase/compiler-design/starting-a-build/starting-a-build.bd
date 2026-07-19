@@ -1,0 +1,93 @@
+# A build starts before source compilation
+
+## Reader promise
+
+- Trace command selection, builder capabilities, project config and the
+  build-system versus frontend boundary.
+
+## Entry state
+
+- The reader knows Beanstalk keeps build and language design together.
+- Running example: project tree and source shapes from the landing page.
+
+## Opening problem
+
+- Question: which command, builder, profile and inputs should interpret this
+  project?
+- Running checkpoint: `bean build` begins before `#page.bst` enters the
+  compiler.
+
+## Section sequence
+
+### Command and capability surface
+
+- Show command selection of builder, profile, tooling overlays and target
+  intent.
+- Introduce builder capabilities, source kinds and binding providers.
+
+### Self-contained project config
+
+- Outline `config.bst`, the required project record and active builder
+  sections.
+- Explain that config folds without a source import graph or runtime HIR.
+
+### Build inputs and `@project`
+
+- Introduce direct project `#Import` fields and the resolved immutable
+  `@project` interface.
+- Running checkpoint: record the values needed for entry discovery.
+
+### The ownership boundary
+
+- Build system discovers and schedules.
+- Compiler prepares syntax and compiles semantic modules.
+- Builder later assembles successful artefacts.
+
+## What can fail here
+
+- Unknown command or unsupported builder capability.
+- Invalid config shape, forbidden config import or missing required input.
+- Queued config syntax must receive a current-versus-accepted callout.
+
+## Why Beanstalk does it this way
+
+- Alternative: an unrestricted host-language build script.
+- Choice: command-selected capabilities and typed compile-time config.
+- Benefit: the project contract stays visible and bounded before discovery.
+- Cost: users lose general host-code build hooks and must fit builder schemas.
+
+## Roadmap and current status
+
+- Accepted design: one self-contained `config.bst` and specialised
+  `ProjectGlobalsInterface`.
+- Current implementation: label legacy flat config only where it changes the
+  walkthrough.
+- Queued work: `import_values_anonymous_records_plan.md` and
+  `entry-config-blocks-runtime-title-plan.md`.
+- Deferred or outside scope: config imports and a general Beanstalk build script.
+
+## Visual plan
+
+- Command-to-capability flow. Alt text: command selection feeds builder,
+  profile, overlays and target intent. Caption: accepted bootstrap order.
+  Question: what becomes known before config?
+- Config bootstrap boundary. Alt text: one config source stops at folded values
+  and does not enter HIR. Caption: exact design boundary. Question: what does
+  config produce?
+- `@project` value flow. Alt text: resolved project fields enter ordinary
+  module compilation through an immutable interface. Caption: simplified
+  interface view. Question: how do build values reach source?
+
+## Exit state
+
+- Output: validated command, capability surface, folded project values and
+  `@project`.
+- Next question: which files become semantic modules?
+
+## Links to include
+
+- `docs/build-system-design.md` sections on command and project bootstrap
+- `docs/src/docs/codebase/language/overview.bd`
+- `docs/src/docs/progress/#page.bst`
+- `docs/roadmap/plans/import_values_anonymous_records_plan.md`
+- `docs/roadmap/plans/entry-config-blocks-runtime-title-plan.md`

@@ -1,0 +1,92 @@
+# From characters to located tokens
+
+## Reader promise
+
+- Understand lexical analysis, token kinds, source spans and source-kind entry
+  modes.
+- Know what tokenization must leave for later stages.
+
+## Entry state
+
+- Stage 0 selected a semantic source set.
+- Running checkpoint: raw text in `#page.bst` and `greeting.bst`.
+
+## Opening problem
+
+- A parser cannot reliably infer boundaries from an undifferentiated character
+  stream.
+- Running example: tokenise `import @greeting { greet }`.
+
+## Section sequence
+
+### Token boundaries and spelling
+
+- Define token kind, authored spelling and source location.
+- Annotate identifiers, delimiters, operators and literals.
+
+### Source locations
+
+- Show spans attached to the running example.
+- Explain how locations support later diagnostics without deciding meaning.
+
+### Code and document source kinds
+
+- Contrast `.bst` code mode, `.bd` implicit template body and `.md`
+  preparation.
+- Show their convergence on ordinary later declarations.
+
+### Lexical failures
+
+- Cover invalid escapes, symbolic spacing and malformed delimiters.
+- Keep numeric text grammar separate from numeric semantic types.
+
+### Boundary of ownership
+
+- Tokenization recognises spelling, locations and delimiter context.
+- It does not resolve imports, types, constants or templates.
+
+## What can fail here
+
+- Invalid character, escape, delimiter or lexical spacing.
+- Source-kind preparation failure.
+- Defer import, type and template semantic errors to their owning stages.
+
+## Why Beanstalk does it this way
+
+- Alternative: give each source kind a separate parser and backend pipeline.
+- Choice: adapt source kinds before shared declaration and semantic stages.
+- Benefit: one semantic owner for ordinary declarations and runtime lowering.
+- Cost: source-kind adapters must preserve locations and clear boundaries.
+
+## Roadmap and current status
+
+- Accepted design: located tokens and retained source preparation.
+- Current implementation: use progress rows for source-kind coverage.
+- Queued work: numeric roadmap may change later semantic ownership, not lexical
+  token boundaries.
+- Deferred or outside scope: tokenization does not infer target support or type identity.
+
+## Visual plan
+
+- Character stream to token cards. Alt text: source characters become located
+  token kinds. Caption: simplified lexer view. Question: where do boundaries
+  enter?
+- Source-span overlay. Alt text: token cards point back to exact source
+  ranges. Caption: exact diagnostic principle, simplified data shape.
+  Question: how can later stages point to authored text?
+- Three source-kind paths converging on prepared declarations. Alt text:
+  `.bst`, `.bd` and `.md` use different entry preparation then converge.
+  Caption: teaching simplification. Question: why avoid duplicate pipelines?
+
+## Exit state
+
+- Output: located tokens and source-kind prepared payloads.
+- Next question: which declarations and import relationships do those tokens
+  describe?
+
+## Links to include
+
+- `docs/compiler-design-overview.md` source-preparation sections
+- `src/compiler_frontend/tokenizer/`
+- `src/compiler_frontend/numeric_text/`
+- `docs/src/docs/codebase/language/overview.bd`

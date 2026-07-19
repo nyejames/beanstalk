@@ -1,0 +1,100 @@
+# Constants, generics, traits and casts before HIR
+
+## Reader promise
+
+- Follow AST-owned static work until it becomes folded data, concrete requests
+  or explicit semantic evidence.
+
+## Entry state
+
+- Typed AST and semantic identities.
+- Running checkpoint: `greeting_prefix`, the call to `greet` and the template
+  input are checked.
+
+## Opening problem
+
+- HIR and backends should not solve compile-time questions repeatedly.
+- Ask what can disappear before runtime and what must remain as explicit data.
+
+## Section sequence
+
+### Folding constants
+
+- Fold `greeting_prefix` to a backend-neutral string value.
+- Cover const records and imported build values as ordinary folded constants.
+
+### Generic requests
+
+- Explain generic templates, call-site inference and concrete generated
+  function requests.
+- Keep generated functions as later immutable sidecars.
+
+### Static trait evidence
+
+- Show a static bound becoming concrete evidence and a call target.
+- Contrast this with a trait-object dispatch path that Beanstalk does not use.
+
+### Coercion and explicit casts
+
+- Separate contextual coercion from compiler-owned explicit conversion.
+- State where casts become typed operations and where failure belongs.
+
+### Numeric ownership
+
+- Introduce checked numeric semantics and the `NumberN` roadmap example.
+- Keep current `Number` and `Byte` status separate from accepted ownership.
+
+## What can fail here
+
+- Non-foldable constant, unresolved generic request, missing static evidence or
+  invalid cast.
+- Numeric overflow or unsupported conversion.
+- Do not repeat general diagnostic transport from the diagnostics article.
+
+## Why Beanstalk does it this way
+
+- Alternative: dynamic trait objects, broad implicit conversion and runtime
+  generic interpretation.
+- Choice: static evidence, compiler-owned casts and concrete requests.
+- Benefit: HIR and backends receive fewer open-ended semantic questions.
+- Cost: less runtime dynamism and more compile-time rejection.
+
+## Roadmap and current status
+
+- Accepted design: AST owns constants, generic inference, traits, casts and
+  concrete requests.
+- Current implementation: label numeric and anonymous-record support from the
+  progress matrix.
+- Queued work: `number_type_numeric_plan.md` and
+  `import_values_anonymous_records_plan.md`.
+- Deferred or outside scope: trait objects and broad runtime reflection.
+
+## Visual plan
+
+- Source constant to folded value. Alt text: authored string becomes a
+  backend-neutral compile-time value. Caption: exact semantic handoff,
+  simplified storage. Question: what leaves the program?
+- Generic template to request to concrete sidecar. Alt text: one call creates
+  a named request which later materialises beside the base module. Caption:
+  accepted architecture. Question: when does generic code become concrete?
+- Static evidence to call target. Alt text: a trait bound resolves before HIR.
+  Caption: simplified static dispatch. Question: what replaces a trait object?
+- Coercion versus cast fork. Alt text: contextual acceptance and explicit
+  conversion take separate paths. Caption: teaching distinction. Question:
+  who requests conversion?
+
+## Exit state
+
+- Output: folded constants, concrete requests, static evidence and finalised
+  cast operations.
+- Next question: why does the HTML template need a temporary structural IR?
+
+## Links to include
+
+- `docs/compiler-design-overview.md` AST, constants and generated-function
+  sections
+- `src/compiler_frontend/ast/`
+- `src/compiler_frontend/type_coercion/`
+- `docs/roadmap/plans/number_type_numeric_plan.md`
+- `docs/roadmap/plans/import_values_anonymous_records_plan.md`
+

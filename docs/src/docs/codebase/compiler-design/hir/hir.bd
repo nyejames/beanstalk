@@ -1,0 +1,93 @@
+# Lowering meaning into explicit control flow
+
+## Reader promise
+
+- Understand IR, lowering, control-flow graphs, temporaries, places and HIR
+  validation.
+
+## Entry state
+
+- Typed AST, folded static data, finalised TIR handoff and no diagnostics.
+- Running checkpoint: checked `greet(visitor)` and template runtime work.
+
+## Opening problem
+
+- Nested expressions hide evaluation order and control-flow exits from later
+  analyses.
+- Running checkpoint: turn the greeting call into explicit operations.
+
+## Section sequence
+
+### Lowering without changing meaning
+
+- Define IR and lowering as a representation change.
+- Compare nested AST with ordered runtime statements.
+
+### HIR building blocks
+
+- Introduce functions, blocks, statements, terminators, locals, places and
+  regions.
+- Show expression preludes and terminal control flow.
+
+### Runtime template work
+
+- Lower neutral template handoff into ordinary string and control-flow
+  operations.
+- Keep compile-time fragments and TIR out of HIR.
+
+### Call targets and link facts
+
+- Distinguish local, imported, generated and binding-backed calls.
+- Introduce per-function link facts beside HIR.
+
+### Validation boundary
+
+- Explain HIR validation before borrow validation.
+- Preview structured derived views for Wasm without creating a second semantic
+  authority.
+
+## What can fail here
+
+- Invalid terminality, unsupported operation, missing local or broken lowering
+  invariant.
+- Keep internal compiler failures separate from source diagnostics.
+
+## Why Beanstalk does it this way
+
+- Alternative: lower AST directly into JavaScript or Wasm.
+- Choice: backend-neutral HIR with explicit control flow and side facts.
+- Benefit: analyses and targets share one validated runtime representation.
+- Cost: lowering must materialise temporaries and preserve more explicit state.
+
+## Roadmap and current status
+
+- Accepted design: HIR forms the first backend-facing semantic IR.
+- Current implementation: use progress rows for HIR and backend handoff.
+- Queued work: mixed backend plan may add structured derived Wasm views.
+- Deferred or outside scope: TIR, generic solving and source imports in HIR.
+
+## Visual plan
+
+- AST call to HIR statements. Alt text: one nested call becomes ordered
+  locals, operations and a terminator. Caption: teaching simplification.
+  Question: what does lowering make explicit?
+- Small control-flow graph. Alt text: blocks connect through branch and exit
+  edges. Caption: conceptual CFG. Question: where do analyses walk?
+- HIR and side-fact lanes. Alt text: HIR remains unchanged while link facts
+  sit beside it. Caption: exact side-data boundary, simplified shape.
+  Question: what may analysis write?
+- Call-target classes. Alt text: local, imported, generated and binding-backed
+  calls point to explicit identities. Caption: simplified link facts. Question:
+  how does a backend know its dependencies?
+
+## Exit state
+
+- Output: validated HIR and per-function link facts.
+- Next question: what memory guarantees can analysis derive from that control flow?
+
+## Links to include
+
+- `docs/compiler-design-overview.md` HIR contract
+- `src/compiler_frontend/hir/`
+- `src/compiler_frontend/ast/`
+- `docs/roadmap/plans/html_project_backend_wasm_final_implementation_plan.md`

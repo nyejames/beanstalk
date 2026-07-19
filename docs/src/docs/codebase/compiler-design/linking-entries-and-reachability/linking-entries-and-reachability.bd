@@ -1,0 +1,99 @@
+# Choosing what runs
+
+## Reader promise
+
+- Separate compilation from activation.
+- Follow dormant root work, entry assembly, page fragments and reachable
+  functions into an explicit link plan.
+
+## Entry state
+
+- Successful module artefacts and fingerprints.
+- Running checkpoint: `#page.bst` contains root work and a page fragment while
+  `greeting.bst` remains an imported module.
+
+## Opening problem
+
+- A compiled module should not execute merely because another module imports it.
+- The builder needs exact roots and reachable functions for one entry.
+
+## Section sequence
+
+### Compile versus activate
+
+- Introduce the compiler-synthesised non-exported, non-importable and
+  infallible `start`.
+- Show dormant root work in the normal root.
+
+### Page fragments and root order
+
+- Separate folded compile-time fragments, runtime fragments and insertion
+  indexes.
+- Explain why imported modules do not run root work.
+
+### Entry assembly
+
+- Select entry candidates and build `EntryAssembly` from existing facts.
+- Contrast with `ProjectPackageAssembly`.
+
+### Reachable function union
+
+- Build a call graph from `start`, `greet`, helpers, bindings and generated
+  functions.
+- Include capabilities and assets in the link facts.
+
+### No deferred compilation
+
+- State that linking consumes compiled facts and never triggers source
+  compilation.
+
+## What can fail here
+
+- Invalid root activity, missing entry candidate, fragment order conflict or
+  unresolved reachable call.
+- A module diagnosis blocks required assembly.
+- Keep target capability failures for the next article.
+
+## Why Beanstalk does it this way
+
+- Alternative: activate imported module initialisers or parse only the active
+  root.
+- Choice: compile dormant work once, activate selected roots explicitly.
+- Benefit: imports remain predictable and entry planning stays data-driven.
+- Cost: the builder must carry explicit root and fragment metadata.
+
+## Roadmap and current status
+
+- Accepted design: active-root `start`, entry assembly and exact reachable
+  union.
+- Current implementation: label transitional entry activation where the
+  progress matrix differs.
+- Queued work: entry-config plan changes root metadata and must remain labelled.
+- Deferred or outside scope: link-time deferred source compilation.
+
+## Visual plan
+
+- Compilation versus activation timeline. Alt text: all modules compile before
+  one selected root activates. Caption: exact conceptual distinction.
+  Question: when does root work run?
+- Dormant `start` selection. Alt text: `#page.bst` owns a dormant start
+  selected by one entry. Caption: simplified root map. Question: why do
+  imported roots stay dormant?
+- Reachable call graph. Alt text: reachable nodes are highlighted from
+  `start`, with an unreachable helper left aside. Caption: teaching graph.
+  Question: what reaches the backend?
+- Fragment merge timeline. Alt text: folded and runtime fragments preserve
+  source indexes. Caption: exact ordering principle simplified. Question: where
+  does the paragraph enter?
+
+## Exit state
+
+- Output: explicit roots, fragment metadata and reachable function union.
+- Next question: which target can host each reachable function?
+
+## Links to include
+
+- `docs/compiler-design-overview.md` root and link-fact sections
+- `docs/build-system-design.md` entry assembly sections
+- `src/compiler_frontend/ast/module_ast/finalization/`
+- `docs/roadmap/plans/entry-config-blocks-runtime-title-plan.md`

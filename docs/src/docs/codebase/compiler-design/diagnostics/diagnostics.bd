@@ -1,0 +1,94 @@
+# Compiler errors as structured data
+
+## Reader promise
+
+- Follow one source mistake through its owning stage.
+- Distinguish user-facing diagnostics from internal and infrastructure errors.
+
+## Entry state
+
+- Successful AST-owned work from the template article.
+- Reader knows each stage creates facts for the next owner.
+
+## Opening problem
+
+- A source error needs location, semantic context, stable identity and a useful
+  rendered message.
+- Running checkpoint: introduce one deliberate unresolved name or type error
+  in the greeting project.
+
+## Section sequence
+
+### The stage with the best context
+
+- Follow tokenizer, header, AST, borrow and target failure ownership.
+- Avoid one global parser-style error path.
+
+### Diagnostic data lanes
+
+- Introduce `CompilerDiagnostic` for user failures.
+- Introduce `CompilerError` for internal and infrastructure failures.
+- Show codes, descriptors, reasons, locations and secondary labels.
+
+### Semantic identities in messages
+
+- Explain why type diagnostics carry semantic identity and render later.
+- Keep source spelling, canonical paths and human wording distinct.
+
+### Carrying and rendering
+
+- Show stage-local accumulation, deterministic merge and deferred CLI or
+  tooling rendering.
+- Explain diagnosed modules and blocked consumers.
+
+### Parallel failures
+
+- Show canonical module order independent of worker completion order.
+- Link per-stage failure pages without repeating their contracts.
+
+## What can fail here
+
+- User syntax, type, import, borrow or target failure.
+- Internal invariant, filesystem or backend failure.
+- Outline note: do not invent exact diagnostic wording before the later prose
+  pass checks current constructors and codes.
+
+## Why Beanstalk does it this way
+
+- Alternative: construct final prose inside each parser or checker branch.
+- Choice: structured diagnostic payloads with deferred rendering.
+- Benefit: CLI, dev server and tooling can render the same semantic event.
+- Cost: diagnostic descriptors and render contexts become maintained data.
+
+## Roadmap and current status
+
+- Accepted design: separate diagnostic and error lanes plus deterministic
+  rendering order.
+- Current implementation: link the progress matrix and current diagnostics
+  owner.
+- Queued work: `compiler-diagnostics-improvement-plan.md`.
+- Deferred or outside scope: this page does not catalogue every diagnostic code.
+
+## Visual plan
+
+- Source mistake to payload to two renderers. Alt text: one structured event
+  feeds CLI and tooling views. Caption: exact data-lane principle, simplified
+  renderer shape. Question: why defer wording?
+- Diagnostic versus internal error lanes. Alt text: user failure and compiler
+  failure take separate paths. Caption: accepted ownership map. Question: who
+  can continue?
+- Failed provider and blocked consumer graph. Alt text: one diagnosed module
+  exposes no partial interface and a dependent waits. Caption: graph failure
+  simplification. Question: what does the build publish?
+
+## Exit state
+
+- Output: structured diagnostics or a trusted successful semantic result.
+- Next question: how does successful meaning become explicit runtime control flow?
+
+## Links to include
+
+- `docs/compiler-design-overview.md` diagnostic contracts
+- `src/compiler_frontend/diagnostics/`
+- `docs/roadmap/plans/compiler-diagnostics-improvement-plan.md`
+- `docs/src/docs/progress/#page.bst`

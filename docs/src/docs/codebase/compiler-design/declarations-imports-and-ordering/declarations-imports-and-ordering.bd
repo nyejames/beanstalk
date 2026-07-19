@@ -1,0 +1,100 @@
+# Finding the program's shape
+
+## Reader promise
+
+- Understand declaration shells, retained import syntax, interface binding and
+  local topological ordering.
+
+## Entry state
+
+- Located tokens and source-kind prepared payloads.
+- Running example: import shell, constant shell, function shell and page
+  fragment metadata.
+
+## Opening problem
+
+- The compiler needs a module's top-level shape before it can check bodies.
+- It also needs provider interfaces before imported names can become stable
+  bindings.
+
+## Section sequence
+
+### Prepared shells
+
+- Extract declaration, import and root-activity shells.
+- Mark source locations and local ordering hints.
+
+### Three relationship classes
+
+- Structural provider references for Stage 0.
+- Imported symbol bindings for visibility and AST.
+- Local declaration-ordering edges for Stage 3.
+
+### Binding retained imports
+
+- Show prepared syntax before provider completion.
+- Show bound interfaces after `@greeting` compiles.
+- Explain stable imported identities and canonical type facts.
+
+### Local declaration ordering
+
+- Build the declaration dependency DAG.
+- Sort with stable tie-breaking.
+- Explain why function-body references do not create ordering edges.
+
+### Cycles and visibility
+
+- Show a cycle diagnostic.
+- Explain same-file source order, no-shadowing and imported declarations not
+  becoming local graph nodes.
+
+## What can fail here
+
+- Malformed declaration shell, import shape, visibility collision or missing
+  provider symbol.
+- Local declaration cycle or invalid forward reference.
+- Leave final prose and diagnostic rendering to the diagnostics article.
+
+## Why Beanstalk does it this way
+
+- Alternative: reparse source after providers compile or copy declarations into
+  each consumer.
+- Choice: parse and retain syntax once, then bind immutable provider interfaces.
+- Benefit: source locations, identities and graph scheduling remain aligned.
+- Cost: prepared syntax carries more metadata across the build boundary.
+
+## Roadmap and current status
+
+- Accepted design: `PreparedHeaderSyntax`, `BoundModuleHeaders` and distinct
+  relationship classes.
+- Current implementation: link current header and dependency progress rows.
+- Queued work: canonical module and imported-value plans where they affect
+  source contracts.
+- Deferred or outside scope: this page does not teach body type checking.
+
+## Visual plan
+
+- Three-edge-class diagram. Alt text: structural, imported and local-ordering
+  edges use separate arrows. Caption: exact ownership distinction. Question:
+  which graph is being built?
+- Prepared shell before and after interface binding. Alt text: import shell
+  gains stable provider identity and visible type facts. Caption: simplified
+  retained syntax flow. Question: what waits for the provider?
+- Declaration DAG and sorted sequence. Alt text: dependencies flow into a
+  stable declaration order. Caption: conceptual topological sort. Question:
+  why does order matter?
+- Cycle diagnostic example. Alt text: two declarations point at each other
+  and a red callout marks the cycle. Caption: failure-path teaching visual.
+  Question: what stops the sort?
+
+## Exit state
+
+- Output: bound visibility, stable imported facts and ordered declarations.
+- Next question: how does syntax acquire checked semantic meaning?
+
+## Links to include
+
+- `docs/compiler-design-overview.md` prepared syntax and interface sections
+- `src/compiler_frontend/headers/`
+- `src/compiler_frontend/dependency_sorting/`
+- `docs/build-system-design.md` prepared-source orchestration

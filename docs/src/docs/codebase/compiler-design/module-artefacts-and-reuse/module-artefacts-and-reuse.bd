@@ -1,0 +1,98 @@
+# Packaging a module once
+
+## Reader promise
+
+- Understand immutable module artefacts, separate data lanes, fingerprints,
+  generated sidecars and deterministic reuse.
+
+## Entry state
+
+- Validated HIR, borrow facts, folded metadata and static requests.
+- Running checkpoint: place `greeting.bst` facts into an artefact.
+
+## Opening problem
+
+- Later stages need coherent facts, not a loose mutable AST or repeated source
+  scans.
+- One shared module must serve every entry without entry-specific recompilation.
+
+## Section sequence
+
+### Four artefact lanes
+
+- Public semantic interface.
+- Executable HIR and borrow facts.
+- Per-function link facts.
+- Compiler and builder metadata.
+
+### Fingerprints and identity
+
+- Introduce base fingerprints, stable origin identities and export bindings.
+- Put the greeting constant and function in their lanes.
+
+### Success, diagnosed and blocked
+
+- Show success-only public interfaces.
+- Explain diagnosed modules and blocked consumers.
+
+### Generated sidecars
+
+- Show concrete generic functions beside the base module.
+- Explain a project-wide fixed-point request worklist.
+
+### Parallelism and reuse
+
+- Canonical identity before workers.
+- Canonical merge order after workers.
+- Separate semantic, implementation, root, link and documentation changes.
+
+## What can fail here
+
+- Missing fingerprint input, inconsistent identity or a generated request that
+  cannot be materialised.
+- A diagnosed provider cannot expose partial linkable data.
+- Keep source diagnostics distinct from internal artefact failures.
+
+## Why Beanstalk does it this way
+
+- Alternative: recompile each module for every entry or let backends inspect
+  mutable frontend state.
+- Choice: immutable canonical artefacts with explicit lanes and fingerprints.
+- Benefit: reuse and parallel scheduling preserve one semantic result.
+- Cost: invalidation and sidecar ownership need precise contracts.
+
+## Roadmap and current status
+
+- Accepted design: immutable `CompiledModuleArtifact` lanes and fingerprints.
+- Current implementation: compare progress rows for current reuse and generated
+  function support.
+- Queued work: canonical module compilation and future persistent reuse plans.
+- Deferred or outside scope: a backend-owned source cache.
+
+## Visual plan
+
+- Four-lane artefact box. Alt text: interface, executable, link and metadata
+  lanes sit beside fingerprints. Caption: accepted artefact shape simplified.
+  Question: where does each fact live?
+- Fingerprint invalidation matrix. Alt text: semantic and implementation
+  changes invalidate different lanes. Caption: conceptual matrix. Question:
+  what can be reused?
+- Generated sidecar diagram. Alt text: a concrete function sidecar points to
+  its base module request. Caption: accepted sidecar relation. Question: how
+  does generic reuse avoid mutation?
+- First and second build wave. Alt text: the second build reuses unchanged
+  module artefacts and recompiles affected consumers. Caption: teaching
+  schedule. Question: what does deterministic reuse mean?
+
+## Exit state
+
+- Output: successful immutable module artefacts and fingerprints.
+- Next question: which compiled roots and functions form one entry?
+
+## Links to include
+
+- `docs/compiler-design-overview.md` compiled module artefact contract
+- `docs/build-system-design.md` scheduling and reuse sections
+- `src/compiler_frontend/`
+- `docs/roadmap/plans/canonical-module-compilation-and-scoped-packages-plan.md`
+

@@ -1,0 +1,96 @@
+# Turning folders into a compiler graph
+
+## Reader promise
+
+- Distinguish files, modules, packages, roots, providers, consumers, ownership
+  and semantic reachability.
+- See why Stage 0 schedules one physical module once.
+
+## Entry state
+
+- Folded command and project values.
+- Running tree with `src/#page.bst` and `src/greeting.bst`.
+
+## Opening problem
+
+- A directory does not say which files form one semantic unit.
+- Running checkpoint: map the tree to a canonical source index.
+
+## Section sequence
+
+### Nodes and edges
+
+- Define graph nodes, directed edges, providers and consumers.
+- Show `@greeting` as a provider relationship, not a copied declaration.
+
+### Roots, packages and ownership
+
+- Introduce normal `#*.bst` roots, scoped `+*.bst` support roots, the
+  project facade and ordinary owned source files.
+- Distinguish source-backed and binding-backed packages.
+
+### Owned and semantic source sets
+
+- Place `OwnedSourceSet`, `SemanticSourceSet` and check-only orphan units.
+- Explain why ownership does not inject disconnected declarations.
+
+### Provider-first scheduling
+
+- Show graph finalisation, provider interfaces and compile waves.
+- Explain one canonical module compilation per project or package boundary.
+
+### Deterministic identity
+
+- Introduce stable source, module and declaration identities without naming
+  implementation details too early.
+
+## What can fail here
+
+- Illegal root topology, path collisions, unsupported source kinds and missing
+  providers.
+- Import cycles and orphan source diagnostics.
+- Mark current entry-closure compilation as transitional if the module plan
+  remains queued.
+
+## Why Beanstalk does it this way
+
+- Alternative: global search paths, nearest-match resolution or package-folder
+  scanning.
+- Choice: structural roots, explicit package identity and canonical ownership.
+- Benefit: graph scheduling and diagnostics use the same source facts.
+- Cost: filesystem layout carries semantic constraints.
+
+## Roadmap and current status
+
+- Accepted design: canonical graph, provider-first waves and immutable module
+  compilation.
+- Current implementation: compare the progress matrix with the canonical
+  module plan.
+- Queued work: `canonical-module-compilation-and-scoped-packages-plan.md`.
+- Deferred or outside scope: old flat module handoff and default package-folder scanning.
+
+## Visual plan
+
+- Filesystem tree to graph nodes. Alt text: roots own files while imports
+  create provider edges. Caption: exact running-example identities simplified.
+  Question: what does a folder mean to the compiler?
+- Provider graph for `#page.bst` and `greeting.bst`. Alt text: page consumes
+  the greeting interface. Caption: teaching graph, not a complete package
+  graph. Question: who must compile first?
+- Ownership and reachability lanes. Alt text: owned files can remain outside
+  the semantic source set. Caption: conceptual distinction. Question: why
+  does ownership not imply import visibility?
+- Compile-wave sequence. Alt text: providers finish before consumers bind.
+  Caption: deterministic schedule. Question: when can interface binding start?
+
+## Exit state
+
+- Output: canonical source graph, source sets and ordered compile waves.
+- Next question: how does the compiler prepare each selected source file once?
+
+## Links to include
+
+- `docs/build-system-design.md` source-index and source-set sections
+- `docs/compiler-design-overview.md`
+- `docs/roadmap/plans/canonical-module-compilation-and-scoped-packages-plan.md`
+- `docs/src/docs/codebase/progress/#page.bst`

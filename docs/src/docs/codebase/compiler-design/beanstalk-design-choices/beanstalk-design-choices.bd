@@ -1,0 +1,98 @@
+# Why Beanstalk makes different choices
+
+## Reader promise
+
+- Recognise the design bias behind unfamiliar syntax and compiler boundaries.
+- Weigh each choice's benefit against its cost instead of treating it as a
+  universal improvement.
+
+## Entry state
+
+- Representation ladder and owner map from the previous article.
+- Reader knows that Beanstalk separates source meaning from target output.
+
+## Opening problem
+
+- Question: why does Beanstalk not copy the usual Rust, JavaScript or C-family
+  feature set?
+- Running example: a template, compile-time constant and imported function
+  already cross language and build boundaries.
+
+## Section sequence
+
+### Put complexity in the compiler
+
+- Frame the small source language and compiler-owned complexity.
+- Compare constrained source features with general metaprogramming.
+
+### Language and build system together
+
+- Introduce source-backed Builder packages, binding-backed platform packages
+  and command-selected capabilities.
+- Running checkpoint: the project needs a builder before source discovery.
+
+### Templates and static evidence
+
+- Preview first-class templates, TIR, static traits, choices and concrete
+  generated requests.
+- Contrast a constrained feature with a general macro or trait-object system.
+
+### Access, errors and memory
+
+- Preview shared access, explicit `copy`, exclusive `~place`, inferred moves,
+  `Error!` and `catch`.
+- Preview GC correctness with optional ownership-aware lowering.
+
+### Boundaries the language does not promise
+
+- Mark no shadowing, no source lifetimes, no general closures, no inheritance,
+  no trait objects and no broad reflection as accepted boundaries or outside
+  scope where the authority says so.
+
+## What can fail here
+
+- A proposed example can accidentally present a deferred syntax feature as
+  current.
+- A comparison can imply that Beanstalk's choice wins in every language.
+- Later pages must label accepted syntax and current syntax separately.
+
+## Why Beanstalk does it this way
+
+- Alternative: expose more general source mechanisms and move complexity to
+  users and libraries.
+- Choice: constrain source mechanisms and keep semantic facts compiler-owned.
+- Benefit: fewer competing paths through the frontend and backends.
+- Cost: less metaprogramming flexibility and fewer familiar escape hatches.
+
+## Roadmap and current status
+
+- Accepted design: link design-scope, compiler and memory authorities.
+- Current implementation: use the progress matrix for syntax and backend
+  coverage.
+- Queued work: config, canonical modules, numeric semantics and mixed backend
+  plans remain labelled by plan status.
+- Deferred or outside scope: do not call rejected language families missing features.
+
+## Visual plan
+
+- Choice map pairing mainstream alternatives with Beanstalk choices. Alt
+  text: six rows compare where complexity lives. Caption: conceptual trade-off
+  map. Question: what does each choice move?
+- Complexity placement diagram for source language and compiler. Alt text:
+  source surface shrinks while compiler responsibilities grow. Caption:
+  teaching simplification. Question: who pays for the constraint?
+- Annotated template example replacing a separate markup or string layer. Alt
+  text: source template contains the final paragraph structure. Caption:
+  running-example preview. Question: why keep templates in the language?
+
+## Exit state
+
+- Output: design lens and status vocabulary.
+- Next question: what must the build command decide before source compilation?
+
+## Links to include
+
+- `docs/src/docs/codebase/design-scope/overview.bd`
+- `docs/compiler-design-overview.md`
+- `docs/build-system-design.md`
+- `docs/src/docs/codebase/memory-management/overview.bd`

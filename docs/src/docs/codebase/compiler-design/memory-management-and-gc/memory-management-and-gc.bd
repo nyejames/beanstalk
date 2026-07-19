@@ -1,0 +1,109 @@
+# Automatic memory management before the borrow checker
+
+## Reader promise
+
+- Compare manual memory, reference counting, tracing GC, ownership and region
+  allocation.
+- Understand why GC and access validation solve different problems in Beanstalk.
+
+## Entry state
+
+- Validated HIR and runtime operations.
+- Reader understands that HIR makes places and control flow explicit.
+
+## Opening problem
+
+- Heap values must remain usable while observable and must release resources
+  without unsafe access.
+- Running checkpoint: the greeting string and template values cross runtime
+  operations.
+
+## Section sequence
+
+### Five memory strategies
+
+- Compare manual allocation, reference counting, tracing GC, ownership and
+  region or arena support.
+- Use timelines rather than a feature list.
+
+### Failure modes
+
+- Cover use after free, double free, leaks, invalid aliasing and conflicting
+  mutation.
+- Mark data races as a general or future-concurrency concern.
+
+### What GC solves
+
+- Explain reachability and reclamation.
+- State that GC does not make conflicting mutation or invalid source access
+  safe.
+
+### What ownership adds
+
+- Explain deterministic destruction and source complexity.
+- Avoid introducing source lifetimes or a move keyword as Beanstalk syntax.
+
+### Beanstalk's semantic baseline
+
+- GC-backed correctness.
+- Mandatory access and borrow validation.
+- Shared access, explicit `copy`, exclusive `~place` and inferred moves.
+- Optional ownership-aware lowering.
+
+### Backend choices
+
+- Compare host GC, Wasm GC, linear memory, handles and hybrid runtime paths.
+- Keep ownership optimisation subordinate to language semantics.
+
+## What can fail here
+
+- Unsafe aliasing remains invalid even when GC preserves allocation lifetime.
+- Conservative ownership evidence may retain values under GC.
+- Do not imply deterministic destruction as a correctness requirement.
+
+## Why Beanstalk does it this way
+
+- Alternative: expose Rust-style lifetimes, references and owned or borrowed
+  signatures in every API.
+- Choice: keep GC as the semantic fallback and validate access separately.
+- Benefit: safer source rules with a backend escape route.
+- Cost: collector work remains and ownership-aware destruction cannot always
+  prove a transfer.
+
+## Roadmap and current status
+
+- Accepted design: GC is the semantic baseline for all backends.
+- Current implementation: link memory and progress authorities for current
+  runtime coverage.
+- Queued work: ownership-aware backend work follows the mixed backend plan.
+- Deferred or outside scope: current concurrency syntax and deterministic
+  destruction as a source guarantee.
+
+## Visual plan
+
+- Memory-strategy timeline. Alt text: five strategies show when values become
+  reachable and reclaimable. Caption: teaching comparison. Question: who
+  decides when storage ends?
+- Liveness versus access safety. Alt text: GC tracks lifetime while borrow
+  rules track conflicting access. Caption: exact conceptual separation.
+  Question: why need both?
+- Layered Beanstalk model. Alt text: source access rules flow through HIR and
+  validation into GC or ownership-aware lowering. Caption: accepted architecture
+  simplified. Question: where can optimisation change?
+- Host and Wasm runtime options. Alt text: JavaScript host GC and Wasm runtime
+  choices meet one semantic contract. Caption: backend design space, not a
+  final implementation matrix. Question: what stays invariant?
+
+## Exit state
+
+- Output: a memory model where GC preserves correctness and analysis enforces
+  access rules.
+- Next question: how does borrow validation compute those rules over HIR?
+
+## Links to include
+
+- `docs/src/docs/codebase/memory-management/overview.bd`
+- `docs/src/docs/codebase/memory-management/access-and-aliasing/access-and-aliasing.bd`
+- `docs/src/docs/codebase/memory-management/ownership-and-drops/ownership-and-drops.bd`
+- `docs/src/docs/codebase/memory-management/runtime-and-backend-lowering/runtime-and-backend-lowering.bd`
+

@@ -1,0 +1,107 @@
+# Building and writing the final page
+
+## Reader promise
+
+- Finish the walkthrough by combining compiler artefacts, runtime code, builder
+  policy and output ownership.
+- End with the exact fragment `<p>Hello, Priya!</p>`.
+
+## Entry state
+
+- Entry assembly, target-labelled functions, JavaScript and Wasm outputs,
+  runtime helpers, external glue and tracked assets.
+- Running checkpoint: all compiler and backend facts are explicit records.
+
+## Opening problem
+
+- The builder must turn many selected artefacts into one working document and
+  a safe output set.
+- It must not rediscover source structure or let each backend write files.
+
+## Section sequence
+
+### Assembly inputs
+
+- List entry assembly, folded fragments, runtime slots, selected functions,
+  Wasm variants, helpers, glue, assets and entry config.
+
+### Document shell and fragments
+
+- Plan route and document metadata.
+- Insert compile-time fragments at recorded indexes.
+- Invoke `start` once and hydrate runtime fragments in source order.
+
+### Reactive and external work
+
+- Mark reactive mount work as a target-specific extension.
+- Explain demand-driven external JavaScript assets and import maps.
+
+### Tracked assets and records
+
+- Connect path usages and builder-owned asset decisions.
+- Introduce output records, output-root validation and manifests.
+
+### Writing and ownership
+
+- Explain skip-unchanged writes, stale cleanup and builder ownership.
+- State that one builder cannot delete another builder's files.
+
+### Final checkpoint
+
+- Show the conceptual output tree.
+- Return to `<p>Hello, Priya!</p>` and stop the primary series here.
+
+## What can fail here
+
+- Invalid route or output path, missing asset, duplicate output, failed target
+  record or stale-file ownership conflict.
+- Keep backend generation failures in the backend article.
+
+## Why Beanstalk does it this way
+
+- Alternative: let each backend write files or let builders rescan source.
+- Choice: central output records, validation, manifests and stale cleanup.
+- Benefit: output ownership stays auditable and repeatable.
+- Cost: builders must declare every produced file and ownership transition.
+
+## Roadmap and current status
+
+- Accepted design: build-system-owned output writing and manifests.
+- Current implementation: link current HTML, asset and backend progress rows.
+- Queued work: `html_project_backend_wasm_final_implementation_plan.md` and
+  `entry-config-blocks-runtime-title-plan.md`.
+- Deferred or outside scope: backend-owned output directories and hidden
+  stale-file deletion.
+
+## Visual plan
+
+- Final assembly funnel. Alt text: compiler and backend records converge on a
+  document and output plan. Caption: accepted ownership map simplified.
+  Question: what does the builder consume?
+- Fragment insertion and hydration timeline. Alt text: folded content enters
+  first while runtime fragments hydrate in source order. Caption: conceptual
+  sequence. Question: when does the paragraph appear?
+- Final document anatomy. Alt text: HTML shell contains paragraph, scripts and
+  runtime references. Caption: article-specific shell details remain
+  illustrative. Question: what makes the page runnable?
+- Output tree. Alt text: HTML, JavaScript, Wasm, runtime assets and manifest
+  sit under one owned output root. Caption: conceptual output tree. Question:
+  which files belong together?
+- Manifest and stale cleanup diagram. Alt text: current records define writes
+  and safe removal of stale owned files. Caption: exact output principle
+  simplified. Question: who may remove a file?
+
+## Exit state
+
+- Output: generated HTML, runtime assets and an owned output manifest on disk.
+- Final fragment: `<p>Hello, Priya!</p>`.
+- No later primary tutorial page.
+
+## Links to include
+
+- `docs/build-system-design.md` HTML builder, output and manifest sections
+- `docs/compiler-design-overview.md`
+- `src/project_builder/`
+- `docs/src/docs/progress/#page.bst`
+- `docs/roadmap/plans/html_project_backend_wasm_final_implementation_plan.md`
+

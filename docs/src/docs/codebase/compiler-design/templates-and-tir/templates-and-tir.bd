@@ -1,0 +1,100 @@
+# Why templates need their own temporary IR
+
+## Reader promise
+
+- Understand first-class templates, AST-local TIR, compile-time folding,
+  runtime handoff and constrained reactivity.
+
+## Entry state
+
+- Typed AST with folded constants and static evidence.
+- Running checkpoint: the `[$html: ...]` fragment in `#page.bst`.
+
+## Opening problem
+
+- A template contains slots, wrappers, child templates and placement order.
+- A plain string concatenation loses structure needed for checking and
+  reactivity.
+
+## Section sequence
+
+### Template structure
+
+- Annotate the paragraph, interpolation and child values.
+- Explain why the compiler needs a structural form.
+
+### TIR phases
+
+- Plan `Parsed -> Composed -> Formatted -> Finalized`.
+- Name slots, wrappers and control-flow edges as teaching concepts.
+
+### Folded and runtime paths
+
+- Fold the greeting fragment where possible.
+- Preserve neutral runtime handoff data where values remain dynamic.
+- Keep compile-time fragments out of HIR.
+
+### Source-kind adapters
+
+- Show `.bd` and `.md` producing ordinary synthetic `content #String`
+  declarations.
+- Return to the greeting project after the side example.
+
+### Reactivity boundary
+
+- Introduce stable source and subscription metadata.
+- State that reactivity does not create a general closure or second semantic IR.
+
+## What can fail here
+
+- Invalid template structure, slot type, formatting operation or reactive
+  subscription.
+- TIR ownership must remain distinct from AST finalisation and HIR validation.
+- Link post-TIR optimisation only as queued or deferred work.
+
+## Why Beanstalk does it this way
+
+- Alternative: general macros, JSX-style external transforms or a separate
+  markup compiler.
+- Choice: first-class constrained templates with AST-local TIR.
+- Benefit: template structure gains semantic checks without a second backend
+  language.
+- Cost: TIR needs strict lifetime and handoff rules and does not serve as a
+  public interface.
+
+## Roadmap and current status
+
+- Accepted design: TIR remains AST-local and hands off folded strings or neutral
+  runtime data.
+- Current implementation: link template and reactivity progress rows.
+- Queued work: `post-tir-template-parser-optimization-plan.md`, marked
+  queued and deferred when discussing performance.
+- Deferred or outside scope: a general macro system or public TIR.
+
+## Visual plan
+
+- Template source to TIR phases. Alt text: one template passes through four
+  structural phases. Caption: accepted phase names, simplified records.
+  Question: where does template structure live?
+- Slot and wrapper diagram. Alt text: paragraph wrapper contains a dynamic name
+  slot. Caption: teaching structure. Question: what does interpolation mean?
+- Folded versus runtime fork. Alt text: static content becomes a string while
+  dynamic content becomes neutral runtime handoff data. Caption: exact boundary,
+  simplified shape. Question: what reaches HIR?
+- Three source-kind adapters converging on synthetic declarations. Alt text:
+  `.bst`, `.bd` and `.md` reach one ordinary semantic path. Caption:
+  simplified source-kind map. Question: how does document content enter the
+  compiler?
+
+## Exit state
+
+- Output: finalised TIR handoff, folded fragments and neutral runtime template
+  data.
+- Next question: how should a failure travel through all these owners?
+
+## Links to include
+
+- `docs/compiler-design-overview.md` TIR and template sections
+- `src/compiler_frontend/ast/templates/`
+- `docs/src/docs/codebase/memory-management/overview.bd`
+- `docs/roadmap/plans/post-tir-template-parser-optimization-plan.md`

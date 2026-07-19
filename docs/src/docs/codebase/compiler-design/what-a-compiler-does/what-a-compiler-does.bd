@@ -1,0 +1,93 @@
+# What a compiler actually does
+
+## Reader promise
+
+- Distinguish compiler, interpreter, transpiler, linker, build system,
+  frontend, backend and intermediate representation.
+- See why a compiler creates several representations instead of one large
+  syntax tree.
+
+## Entry state
+
+- Raw project files from the landing page.
+- Reader knows Rust functions, enums, structs and ownership.
+- Reader does not yet need compiler terminology.
+
+## Opening problem
+
+- Question: what happens between source text and `<p>Hello, Priya!</p>`?
+- Challenge the shortcut that a compiler only emits machine instructions.
+- Running example: mark `config.bst`, `#page.bst` and `greeting.bst` as source
+  rather than meaning.
+
+## Section sequence
+
+### Meaning versus representation
+
+- Define source meaning, target representation and transformation.
+- Running checkpoint: project tree enters as authored text.
+
+### A compiler vocabulary
+
+- Explain compiler, interpreter and transpiler by responsibility.
+- Introduce linker and build system as adjacent owners.
+- Keep the examples small and return to Beanstalk.
+
+### Frontend, analysis and backend
+
+- Explain frontend, middle analysis and backend as responsibilities.
+- Avoid requiring a fixed universal phase diagram.
+- Place Beanstalk's compiler library and project tool.
+
+### Why intermediate representations exist
+
+- Show raw text, tokens, typed AST, HIR and target output as a ladder.
+- Explain that each representation removes ambiguity for its consumer.
+- State the one-fact, one-owner rule.
+
+## What can fail here
+
+- Outline only: malformed source, unsupported target capability and missing
+  project input as distinct failure families.
+- Defer exact diagnostic ownership to the diagnostics article.
+
+## Why Beanstalk does it this way
+
+- Alternative: one target-specific compiler path.
+- Choice: backend-neutral compiler facts with build-system orchestration.
+- Benefit: multiple builders and targets consume the same semantic work.
+- Cost: explicit boundaries and more intermediate data to maintain.
+
+## Roadmap and current status
+
+- Accepted design: staged compiler library and build-owned project pipeline.
+- Current implementation: link to the progress matrix without freezing
+  transitional backend handoff details.
+- Queued work: canonical module and mixed-target plans where relevant.
+- Deferred or outside scope: this article does not teach a universal compiler taxonomy.
+
+## Visual plan
+
+- Responsibility diagram: compiler, interpreter and transpiler. Alt text:
+  three routes from source to execution with overlapping responsibilities.
+  Caption: teaching simplification, not a complete taxonomy. Question:
+  where does execution happen?
+- Representation ladder from source text to target code. Alt text: each stage
+  removes one class of ambiguity. Caption: simplified Beanstalk walkthrough.
+  Question: why retain multiple forms?
+- Owner map for build system, frontend, analysis and backend. Alt text:
+  arrows show ownership and handoff. Caption: exact ownership categories from
+  the canonical authorities. Question: who decides what?
+
+## Exit state
+
+- Output: vocabulary and a representation ladder.
+- Next question: why does Beanstalk place language and build-system choices
+  together?
+
+## Links to include
+
+- `docs/compiler-design-overview.md`
+- `docs/build-system-design.md`
+- `docs/src/docs/codebase/design-scope/overview.bd`
+- `src/compiler_frontend/`

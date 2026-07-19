@@ -1,0 +1,110 @@
+# Borrow checking, race prevention and inferred destruction
+
+## Reader promise
+
+- Follow shared and exclusive access through HIR data-flow.
+- Understand future-use analysis, inferred moves and advisory drops without
+  introducing source lifetime syntax.
+
+## Entry state
+
+- Validated HIR plus the memory model from the previous article.
+- Running checkpoint: add a side example with two aliases and one mutation,
+  then return to the greeting project.
+
+## Opening problem
+
+- Two aliases can read safely, but an overlapping mutation can invalidate the
+  reasoning of every reader.
+- Label the two-worker race example as general or future-concurrency context.
+
+## Section sequence
+
+### Access modes and roots
+
+- Many shared reads, one exclusive access and no overlap.
+- Introduce places, storage roots and alias root sets.
+
+### Data-flow facts
+
+- Show uninitialised, slot, alias and conservative join states as internal
+  analysis facts.
+- Walk a branch and loop to a fixed point.
+
+### Cross-function access
+
+- Introduce function access and return-alias summaries.
+- Explain stable summaries across module boundaries.
+
+### Future use and inferred moves
+
+- Show a value consumed only when no later valid use is lost.
+- Contrast inferred transfer with an explicit move keyword.
+
+### Drops and backend use
+
+- Introduce advisory drop sites, `drop_if_owned` and the unified ownership
+  ABI.
+- Show GC erasing ownership operations without changing validation.
+
+### Reactive liveness
+
+- Explain why observable state stays live while a template subscription can
+  observe it.
+- Return to the greeting example.
+
+## What can fail here
+
+- Conflicting shared and exclusive access, invalid mutation, use after inferred
+  move and unsafe return alias.
+- Conservative joins can reject or retain more than an ideal analysis.
+- Do not claim current threaded or async execution.
+
+## Why Beanstalk does it this way
+
+- Alternative: expose source lifetimes and move syntax.
+- Choice: mandatory HIR analysis, inferred transfers and GC fallback.
+- Benefit: source APIs stay small while access safety remains explicit to the
+  compiler.
+- Cost: analysis precision limits ownership optimisation and can reject
+  ambiguous programs.
+
+## Roadmap and current status
+
+- Accepted design: borrow validation reads HIR and writes side tables.
+- Current implementation: link memory and progress pages for supported checks.
+- Queued work: ownership-aware drops and backend ABI work remain roadmap work.
+- Deferred or outside scope: current concurrency syntax, trait objects and
+  source-visible references.
+
+## Visual plan
+
+- Shared versus exclusive timeline. Alt text: shared reads overlap while an
+  exclusive interval excludes them. Caption: exact access rule simplified.
+  Question: which overlap invalidates the program?
+- Future-concurrency race example. Alt text: two labelled workers access one
+  mutable place, with a red rejected overlap. Caption: general teaching
+  example, not current runtime support. Question: why prevent the pattern?
+- Branch and loop fixed-point graph. Alt text: facts flow around a loop until
+  the join stabilises. Caption: analysis simplification. Question: why revisit
+  earlier blocks?
+- Future-use decision tree. Alt text: last valid use permits inferred transfer
+  and later use forbids it. Caption: teaching rule. Question: when can ownership
+  move?
+- HIR side tables to backends. Alt text: analysis facts sit beside unchanged
+  HIR and feed optional drop lowering. Caption: exact side-table boundary.
+  Question: what may a GC backend ignore?
+
+## Exit state
+
+- Output: validated access facts, inferred ownership facts and advisory drop
+  sites.
+- Next question: how do these facts become one immutable module artefact?
+
+## Links to include
+
+- `docs/src/docs/codebase/memory-management/borrow-validation/borrow-validation.bd`
+- `docs/src/docs/codebase/memory-management/ownership-and-drops/ownership-and-drops.bd`
+- `src/compiler_frontend/analysis/borrow_checker/`
+- `docs/src/docs/codebase/memory-management/overview.bd`
+
