@@ -30,27 +30,27 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 2D3c — migrate remaining HTML-Wasm content parity success contracts
-LAST_ACCEPTED_COMMIT: `12c23040c` (Phase 2D3a2)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 2D3b canvas fixture contracts ready to commit; unrelated docs work is already isolated in `1d4a4cc44`
+CURRENT_SLICE: Phase 2D3d — migrate remaining const-record success contracts
+LAST_ACCEPTED_COMMIT: `747e8436d` (Phase 2D3b)
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 2D3c HTML-Wasm content expectations ready to commit; unrelated docs work remains user-owned
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: workflow guidance now matches acceptance-only, baseline, golden, path-containment, audit-policy, and contract-filter behavior; progress coverage uses future-use/final-use terminology
-- code: Phase 2D3b leaves 13 baseline-only advisories; the next HTML-Wasm parity family is `beandown_namespace_import_html_parity`, `html_markdown_import_basic`, `html_markdown_grouped_import_alias`, `html_markdown_plain_not_beanstalk`, `html_markdown_facade_reexport`, and `template_head_namespace_member_access`
+- code: Phase 2D3c leaves 7 baseline-only advisories; the next const-record family is `const_record_field_access_success`, `const_record_nested_field_access_success`, `const_record_constant_copy_success`, and `const_record_body_local_field_access_success`
 ACCEPTANCE_CRITERIA:
-- inspect each HTML-Wasm baseline-only block against its existing HTML contract and generated target artifacts
-- use the strongest truthful backend-local rendered-output, artifact, or explicit acceptance-only contract without inventing output symmetry
-- preserve authored Beandown/Markdown content, namespace and grouped aliases, facade visibility, template-head member access, manifest metadata, and backend outcomes
+- make each fixture observe context-rich field, nested-field, copied-constant, or body-local const-record values through the strongest runtime/static lane
+- preserve compile-time field-access-only semantics and each case's distinct declaration/body ownership reason
+- preserve manifest metadata, backend outcomes, and nearby negative const-record owners without adding runtime-record behavior
 - exact cases, focused harness tests, audit, `git diff --check`, and the full code-bearing gate pass
 VALIDATION_STATE:
-- `just validate`: passed for Phase 2D3b; cross-target Clippy, 3,505 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
-- `cargo run --quiet -- tests --audit`: passed; 1,645 cases, 1,778 executions, 13 acceptance-only, 13 baseline-only, 541 rendered-output, 261 artifact, and zero hard findings
-DOCS_IMPACT: Phase 2D3b changes assertion coverage only; unrelated docs work remains outside this plan slice
-BLOCKERS_OR_OPEN_DECISIONS: none; inspect the six HTML-Wasm content cases before assigning backend-local assertions
+- `just validate`: passed for Phase 2D3c; cross-target Clippy, 3,505 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
+- `cargo run --quiet -- tests --audit`: passed; 1,645 cases, 1,778 executions, 13 acceptance-only, 7 baseline-only, 541 rendered-output, 267 artifact, and zero hard findings
+DOCS_IMPACT: Phase 2D3c changes assertion coverage only; unrelated docs work remains outside this plan slice
+BLOCKERS_OR_OPEN_DECISIONS: none; inspect the four const-record cases before assigning exact value markers
 DELEGATION_DECISION: codex-cli implementation — explicit user-selected provider
 NEXT_WORKER_ORDER: codex-cli only for this run-local override
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit accepted Phase 2D3b, refresh its hash, then inspect and launch bounded Phase 2D3c through `codex-cli-beanstalk`
+NEXT_RESUME_ACTION: commit accepted Phase 2D3c, refresh its hash, then inspect and launch bounded Phase 2D3d through `codex-cli-beanstalk`
 
 ---
 
@@ -144,7 +144,8 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 2D2 same-module choice visibility | `4e0b4ca7b` | Accepted | 13 acceptance-only; 25 baseline-only; 533 rendered-output; 257 artifact; zero hard findings |
 | Phase 2D3a1 package/facade/import contracts | `7597f5106` | Accepted | 13 acceptance-only; 19 baseline-only; 538 rendered-output; 258 artifact; zero hard findings |
 | Phase 2D3a2 module-boundary contracts | `12c23040c` | Accepted | 13 acceptance-only; 16 baseline-only; 541 rendered-output; 258 artifact; zero hard findings |
-| Phase 2D3b canvas package contracts | pending acceptance commit | Accepted | 13 acceptance-only; 13 baseline-only; 541 rendered-output; 261 artifact; zero hard findings |
+| Phase 2D3b canvas package contracts | `747e8436d` | Accepted | 13 acceptance-only; 13 baseline-only; 541 rendered-output; 261 artifact; zero hard findings |
+| Phase 2D3c HTML-Wasm content parity contracts | pending acceptance commit | Accepted | 13 acceptance-only; 7 baseline-only; 541 rendered-output; 267 artifact; zero hard findings |
 
 ---
 

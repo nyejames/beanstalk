@@ -8,3 +8,8 @@ rendered_output_contains = ["html_markdown_import_basic body", "Basic import", "
 [backends.html_wasm]
 mode = "success"
 warnings = "forbid"
+
+[[backends.html_wasm.artifact_assertions]]
+path = "page.js"
+kind = "js"
+must_contain = ["html_markdown_import_basic body", "Basic import", "<em>emphasis</em>", "<li>first item</li>"]

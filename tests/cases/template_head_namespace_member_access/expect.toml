@@ -12,3 +12,8 @@ must_contain = ["Hello from overview"]
 [backends.html_wasm]
 mode = "success"
 warnings = "forbid"
+
+[[backends.html_wasm.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = ["Hello from overview"]

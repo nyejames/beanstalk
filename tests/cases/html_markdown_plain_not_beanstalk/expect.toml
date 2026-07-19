@@ -9,3 +9,9 @@ rendered_output_not_contains = ["should not compile"]
 [backends.html_wasm]
 mode = "success"
 warnings = "forbid"
+
+[[backends.html_wasm.artifact_assertions]]
+path = "page.js"
+kind = "js"
+must_contain = ["This costs $100 -- not a comment.", "[not_a_template]", "[: <p>not parsed</p>]"]
+must_not_contain = ["should not compile"]
