@@ -1,10 +1,8 @@
--- Resolves a shared/mutable access conflict by using the shared alias before
--- creating the mutable alias. The shared alias is no longer live once the
--- mutable access begins, so this must compile (BST-BORROW-0003 is avoided).
+-- The shared alias reaches its final use before mutation-capable rebinding.
 
 data ~= 42
 shared = data
-io.line([: [shared]])
-mutable_ref ~= data
-mutable_ref = 7
-io.line([: [mutable_ref]])
+io.line([: borrow_conflict_resolved_by_reordering shared-alias=[shared]])
+mutable_alias ~= data
+mutable_alias = 7
+io.line([: borrow_conflict_resolved_by_reordering mutable-alias=[mutable_alias]])

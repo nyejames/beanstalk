@@ -1,4 +1,7 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
-rendered_output_contains = ["branch_reborrow_after_last_use executed-first-reference=shared_data"]
+rendered_output_contains = [
+    "branch_reborrow_after_last_use first-alias=shared_data",
+    "branch_reborrow_after_last_use second-alias=shared_data",
+]

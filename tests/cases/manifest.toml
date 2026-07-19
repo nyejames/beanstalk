@@ -143,7 +143,9 @@ tags = ["integration","borrows","diagnostics"]
 [[case]]
 id = "borrow_conflict_resolved_by_reordering"
 path = "borrow_conflict_resolved_by_reordering"
-tags = ["integration","borrows","diagnostics"]
+tags = ["integration", "borrows"]
+contract = "language.bindings.alias_final_use_allows_mutable_rebinding"
+role = "primary"
 
 [[case]]
 id = "function_call_mutable_param_requires_explicit_tilde"
@@ -202,9 +204,11 @@ tags = ["integration","borrows"]
 role = "smoke"
 
 [[case]]
-id = "borrow_checker_use_after_move"
-path = "borrow_checker_use_after_move"
-tags = ["integration","borrows", "diagnostics"]
+id = "mutable_alias_blocks_later_source_access"
+path = "mutable_alias_blocks_later_source_access"
+tags = ["integration", "borrows", "diagnostics"]
+contract = "language.bindings.mutable_alias_blocks_later_source_access"
+role = "primary"
 
 [[case]]
 id = "branch_inconsistent_ownership_merge"
@@ -214,7 +218,9 @@ tags = ["integration","borrows", "diagnostics"]
 [[case]]
 id = "branch_reborrow_after_last_use"
 path = "branch_reborrow_after_last_use"
-tags = ["integration","borrows"]
+tags = ["integration", "borrows", "control-flow"]
+contract = "language.bindings.branch_alias_final_use_allows_mutable_rebinding"
+role = "primary"
 
 [[case]]
 id = "builtin_error_reserved_symbol_rejected"
@@ -2895,49 +2901,11 @@ path = "async_keyword_declaration_rejected"
 tags = ["integration","diagnostics"]
 
 [[case]]
-id = "last_use_precision"
-path = "last_use_precision"
-tags = ["integration","language"]
-role = "smoke"
-
-[[case]]
-id = "lifetime_inference_conflict_detection"
-path = "lifetime_inference_conflict_detection"
-tags = ["integration","borrows", "diagnostics"]
-
-[[case]]
-id = "lifetime_inference_control_flow"
-path = "lifetime_inference_control_flow"
-tags = ["integration","borrows"]
-role = "smoke"
-
-[[case]]
-id = "lifetime_inference_drop_insertion"
-path = "lifetime_inference_drop_insertion"
-tags = ["integration","borrows"]
-role = "smoke"
-
-[[case]]
-id = "lifetime_inference_error_precision"
-path = "lifetime_inference_error_precision"
-tags = ["integration","borrows","diagnostics"]
-role = "smoke"
-
-[[case]]
-id = "lifetime_inference_integration_basic"
-path = "lifetime_inference_integration_basic"
-tags = ["integration","borrows"]
-
-[[case]]
-id = "lifetime_inference_move_refinement"
-path = "lifetime_inference_move_refinement"
-tags = ["integration","borrows"]
-role = "smoke"
-
-[[case]]
-id = "lifetime_inference_use_after_move"
-path = "lifetime_inference_use_after_move"
-tags = ["integration","borrows", "diagnostics"]
+id = "live_shared_alias_blocks_mutable_rebinding"
+path = "live_shared_alias_blocks_mutable_rebinding"
+tags = ["integration", "borrows", "diagnostics"]
+contract = "language.bindings.live_shared_alias_blocks_mutable_rebinding"
+role = "primary"
 
 [[case]]
 id = "literal_match_requires_else_failure"

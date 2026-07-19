@@ -30,29 +30,29 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 2R7c — consolidate lifetime and final-use fixture ownership atomically
-LAST_ACCEPTED_COMMIT: pending Phase 2R7b acceptance commit (previous plan commit `8dc9f6049`)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 2R7b changes ready to commit
+CURRENT_SLICE: Phase 2R8 — correct workflow documentation and re-anchor Phase 2R
+LAST_ACCEPTED_COMMIT: `26a707729` (Phase 2R7b)
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 2R7c fixture consolidation ready to commit
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: borrow-validation, access-and-aliasing, ownership, testing, validation, compiler overview, and progress matrix govern the semantic fix and gates
-- code: the accepted Phase 2R7 disposition table owns seven lifetime-prefixed cases plus `last_use_precision`; manifest IDs/paths and case folders must change atomically; strengthened source-semantic owners need exact contracts and labeled output
+- docs: `testing.bd` and `CONTRIBUTING.md` still need current acceptance-only, baseline, golden, path-containment, audit-policy, and contract-filter examples; the progress matrix still says `lifetime`
+- code: the fresh audit is authoritative for current counts; Phase 2R7 leaves four source-semantic primary owners and no `lifetime_inference_` canonical fixtures
 ACCEPTANCE_CRITERIA:
-- no canonical integration ID, path, comment, tag, contract, or expectation claims to observe source lifetimes or hidden move/drop facts
-- the unique `BST-BORROW-0007` case and existing `BST-BORROW-0003` owner use source-semantic names with one primary contract each
-- final-use/reborrow success owners emit context-rich labeled values before and after mutation-capable rebinding
-- every deletion/rename is atomic, recorded in the pruning ledger, and exact cases, audit, focused tests, `cargo fmt`, `git diff --check`, and `just validate` pass
+- workflow docs describe acceptance-only beside the universal backend baseline, file-backed goldens, contained fixture/entry paths, and hard-policy behavior
+- examples use `acceptance_only` and `--contract <contract-id>` rather than removed or nonexistent spellings
+- progress coverage uses future-use/final-use terminology and the plan records fresh counts without claiming feature breadth changed
+- documentation is rebuilt from source; `git diff --check` and the required mixed/code-bearing full gate pass before acceptance
 VALIDATION_STATE:
-- inferred-assignment-move mutation probe: passed; disabling the move transition makes the new unit fail with source `SLOT` and target `ALIAS`
-- `cargo test --quiet borrow_checker_fact_tests -- --format terse`: passed; 4 tests
+- four exact Phase 2R7c HTML cases: passed
 - `cargo test --quiet borrow_checker -- --format terse`: passed; 59 tests
-- `just validate`: passed; cross-target Clippy, 3,505 Rust tests, 1,785 integration executions, docs check, and 28 benchmark cases
-DOCS_IMPACT: progress support is unchanged; stale `lifetime` coverage wording is scheduled for the authorized Phase 2R8 documentation pass
+- `cargo run --quiet -- tests --audit`: passed; 1,645 cases, 1,778 executions, 12 acceptance-only, 32 baseline-only, 529 rendered-output, zero hard findings
+- `just validate`: passed; cross-target Clippy, 3,505 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
+DOCS_IMPACT: Phase 2R8 explicitly authorizes workflow and strengthened coverage wording corrections; supported feature breadth remains unchanged
 BLOCKERS_OR_OPEN_DECISIONS: none; compiler diagnostics Phase 4.1c remains serialized and untouched
-DELEGATION_DECISION: codex-cli — explicit user-selected provider for the bounded atomic fixture consolidation
-NEXT_WORKER_ORDER: codex-cli only for this run-local override
+DELEGATION_DECISION: parent-direct — documentation and active-plan edits are parent-owned by the orchestrator
+NEXT_WORKER_ORDER: none for the parent-owned documentation slice
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit accepted Phase 2R7b, refresh its hash, then launch bounded Phase 2R7c through `codex-cli-beanstalk`
+NEXT_RESUME_ACTION: commit accepted Phase 2R7c, refresh its hash, then apply the bounded Phase 2R8 documentation corrections
 
 ---
 
@@ -139,7 +139,8 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 2R5c5 marker/role closure | `bd070da33` | Accepted | 17 acceptance-only smoke cases; two HTML-Wasm parity cases are backend-role; 528 rendered-output blocks; zero hard findings |
 | Phase 2R6a CFG/projected actors | `a6a1ad0a9` | Accepted | 3,499 Rust tests; CFG-accurate naming; projected user/compiler origin distinction; 1,784 integration executions |
 | Phase 2R6b loop-borrow edge matrix | `8dc9f6049` | Accepted | 3,504 Rust tests; 1,652 cases and 1,785 executions; one primary plus one boundary integration owner; zero hard findings |
-| Phase 2R7b inferred assignment-move fact | pending acceptance commit | Accepted | 3,505 Rust tests; source `UNINIT`, target `SLOT`, and empty target aliases protected by one focused snapshot test |
+| Phase 2R7b inferred assignment-move fact | `26a707729` | Accepted | 3,505 Rust tests; source `UNINIT`, target `SLOT`, and empty target aliases protected by one focused snapshot test |
+| Phase 2R7c lifetime/final-use ownership | pending acceptance commit | Accepted | 1,645 cases and 1,778 executions; 12 acceptance-only; 32 baseline-only; 529 rendered-output; zero hard findings |
 
 ---
 
@@ -511,9 +512,9 @@ Beanstalk has no source-level lifetime system. Integration IDs and comments must
 ### Required review
 
 - [x] Audit every canonical case with the `lifetime_inference_` prefix.
-- [ ] Do not retain a canonical integration case whose only claimed contract is a hidden drop site, move decision, or diagnostic precision fact.
-- [ ] Rename retained user-visible cases and paths to source-semantic terminology.
-- [ ] Update manifest IDs, paths, tags, expectations, and references atomically.
+- [x] Do not retain a canonical integration case whose only claimed contract is a hidden drop site, move decision, or diagnostic precision fact.
+- [x] Rename retained user-visible cases and paths to source-semantic terminology.
+- [x] Update manifest IDs, paths, tags, expectations, and references atomically.
 
 ### Accepted audit disposition
 
@@ -530,18 +531,18 @@ Beanstalk has no source-level lifetime system. Integration IDs and comments must
 
 ### Mandatory dispositions
 
-- [ ] `lifetime_inference_drop_insertion`: verify the focused drop-site fact owner; remove the canonical case when replacement evidence exists.
-- [ ] `lifetime_inference_error_precision`: remove the misleading success case; add a real structured location owner in Phase 4 if that gap remains.
+- [x] `lifetime_inference_drop_insertion`: verify the focused drop-site fact owner; remove the canonical case when replacement evidence exists.
+- [x] `lifetime_inference_error_precision`: remove the misleading success case; add a real structured location owner in Phase 4 if that gap remains.
 - [x] `lifetime_inference_move_refinement`: verify the focused move-decision owner; retain or add an integration case only for an observable final-use transfer consequence, under a source-semantic name.
-- [ ] Review `lifetime_inference_control_flow` and other remaining prefixed cases for the same naming/ownership drift.
-- [ ] Record every removal or rename in the pruning ledger.
+- [x] Review `lifetime_inference_control_flow` and other remaining prefixed cases for the same naming/ownership drift.
+- [x] Record every removal or rename in the pruning ledger.
 
 ### Acceptance
 
-- [ ] No integration case claims to observe an internal lifetime/drop/move fact that it cannot inspect.
-- [ ] Hidden facts remain covered by focused units.
-- [ ] User-visible access behavior remains covered end to end.
-- [ ] Focused tests, exact cases, audit, and the full gate pass.
+- [x] No integration case claims to observe an internal lifetime/drop/move fact that it cannot inspect.
+- [x] Hidden facts remain covered by focused units.
+- [x] User-visible access behavior remains covered end to end.
+- [x] Focused tests, exact cases, audit, and the full gate pass.
 
 ---
 
@@ -1245,7 +1246,15 @@ Do not present lower counts or faster time as proof of correctness.
 
 | Removed or renamed test/case | Previous intended contract | Replacement primary owner | Retained secondary owner | Commit |
 |---|---|---|---|---|
-| _none recorded in replacement plan yet_ |  |  |  |  |
+| `lifetime_inference_conflict_detection` → `live_shared_alias_blocks_mutable_rebinding` | Live shared alias prevents mutation-capable rebinding | `live_shared_alias_blocks_mutable_rebinding` | none | pending Phase 2R7c |
+| `lifetime_inference_control_flow` | Branch-local alias final use permits mutation-capable rebinding | `branch_reborrow_after_last_use` | none | pending Phase 2R7c |
+| `lifetime_inference_drop_insertion` | Hidden advisory drop-site placement | `borrow_checker_drop_site_tests::{emits_advisory_return_drop_sites, emits_advisory_break_and_region_exit_drop_sites}` | none | pending Phase 2R7c |
+| `lifetime_inference_error_precision` | Claimed precise diagnostics without a negative or location assertion | none; Phase 4 owns the real structured path/line gap | none | pending Phase 2R7c |
+| `lifetime_inference_integration_basic` | Basic end-to-end borrow acceptance and pipeline report storage | `borrow_checker_basic_variables` | `borrow_checker_pipeline_tests::successful_borrow_report_can_be_stored_on_module` | pending Phase 2R7c |
+| `lifetime_inference_move_refinement` | Hidden inferred-assignment move transition | `borrow_checker_fact_tests::statement_entry_state_marks_source_uninitialized_after_inferred_assignment_move` | none | pending Phase 2R7c |
+| `lifetime_inference_use_after_move` | Mutable alias blocks later source access | `mutable_alias_blocks_later_source_access` | none | pending Phase 2R7c |
+| `last_use_precision` | Alias final use permits mutation-capable rebinding | `borrow_conflict_resolved_by_reordering` | none | pending Phase 2R7c |
+| `borrow_checker_use_after_move` → `mutable_alias_blocks_later_source_access` | Mutable alias blocks later source access | `mutable_alias_blocks_later_source_access` | none | pending Phase 2R7c |
 
 ### Coverage gap and handoff ledger
 
