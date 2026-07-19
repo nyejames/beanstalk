@@ -76,7 +76,6 @@ fn empty_context_is_the_default_value() {
             wrapper_context: None,
         }
     );
-    assert!(TemplateViewContext::default().is_empty());
 }
 
 #[test]

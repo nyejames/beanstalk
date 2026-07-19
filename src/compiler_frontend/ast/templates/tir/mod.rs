@@ -117,7 +117,7 @@ mod construction_context;
 mod fold;
 mod preparation;
 
-// Fold-cache types are production plumbing for `fold_tir_view`.
+// Fold-cache types are production plumbing for prepared exact-view folds.
 mod fold_cache;
 
 mod parser_builder_state;
@@ -240,13 +240,12 @@ pub(crate) use classification::{
     refresh_kind_from_classification, tir_node_is_const_evaluable_value,
     tir_subtree_has_unresolved_slots,
 };
-// TirView-aware fold entrypoint is used internally by recursive child folding
-// and by production template folding paths.
-pub(crate) use fold::fold_tir_view;
-pub(crate) use fold::fold_tir_view_prepared;
-pub(crate) use preparation::tir_view_is_empty_overlay_linear;
+// The sole fold entry consumes a completed preparation proof and the exact
+// view that produced it.
+pub(crate) use fold::fold_prepared_template;
 pub(crate) use preparation::{
-    PreparedTemplate, TemplateHelperKind, TemplatePreparationMode, prepare_tir_view,
+    PreparedRuntime, PreparedTemplate, RuntimeTemplateReason, TemplateHelperKind,
+    TemplatePreparationMode, prepare_tir_view,
 };
 
 // Fold cache: AST-phase-local cache for TIR fold results. The primary cache is

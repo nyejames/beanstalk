@@ -13,10 +13,9 @@ use crate::compiler_frontend::ast::templates::formatter_contract::{
 };
 use crate::compiler_frontend::ast::templates::styles::whitespace::TemplateWhitespacePassProfile;
 use crate::compiler_frontend::ast::templates::tir::{
-    TemplateIrStore, TemplateTirReference, TemplateWrapperReference, TirTemplateClassification,
-    refresh_kind_from_classification,
+    TemplateIrStore, TemplateTirReference, TemplateWrapperReference,
 };
-use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
+use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
@@ -284,13 +283,11 @@ impl Style {
 ///
 /// ## Metadata lifecycle invariants
 ///
-/// - **`kind`** is a cached boundary marker. Construction initializes it once
-///   alongside `TemplateIr.kind`. Post-construction refresh goes through
-///   [`Template::synchronize_kind_from_classification`], the single owner that
-///   writes both copies so they cannot drift. The cache is read at parser
-///   boundaries before the shared module store is borrowed. Callers that already
-///   hold the module store or `TirView` read the authoritative `TemplateIr.kind`
-///   instead.
+/// - **`kind`** is a cached construction-boundary marker. Construction
+///   initializes it alongside `TemplateIr.kind`. The cache is read only at
+///   parser boundaries before the shared module store is borrowed. Callers that
+///   already hold the module store or `TirView` read the authoritative
+///   `TemplateIr.kind` instead.
 /// - **`style`** is owned by `TemplateIr` and read through the module-store
 ///   TIR view after construction.
 #[derive(Debug)]
@@ -331,42 +328,6 @@ impl Clone for Template {
 // -------------------------
 
 impl Template {
-    /// Synchronizes the durable cache and the authoritative TIR kind from a
-    /// classification result.
-    ///
-    /// WHAT: reads the current kind from the owning TIR store entry, applies
-    ///       the generic `String` / `StringFunction` refresh rule while
-    ///       preserving semantic markers (`SlotInsert`, `SlotDefinition`,
-    ///       `Comment`), and writes the result to both `TemplateIr.kind` and
-    ///       the durable `Template.kind`.
-    /// WHY: this is the single post-construction synchronization owner.
-    ///      Construction initializes both copies once; all later refresh goes
-    ///      through here so the cache and the authoritative TIR entry cannot
-    ///      drift through scattered writes.
-    pub(crate) fn synchronize_kind_from_classification(
-        &mut self,
-        store: &mut TemplateIrStore,
-        classification: &TirTemplateClassification,
-    ) -> Result<(), CompilerError> {
-        let mut kind = self.tir_kind_from_store(store).ok_or_else(|| {
-            CompilerError::compiler_error(
-                "Template kind synchronization requires the reference's owning TIR store.",
-            )
-        })?;
-
-        refresh_kind_from_classification(&mut kind, classification);
-
-        if !store.set_template_kind(self.tir_reference.root, kind.clone()) {
-            return Err(CompilerError::compiler_error(
-                "Template TIR entry was missing during kind synchronization write-back.",
-            ));
-        }
-
-        self.kind = kind;
-
-        Ok(())
-    }
-
     /// Returns the authoritative template kind from the owning TIR store entry.
     ///
     /// WHAT: reads `TemplateIr.kind` from the module-local store.

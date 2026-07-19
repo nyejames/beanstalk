@@ -2,8 +2,10 @@ use super::*;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::templates::template::TemplateSegmentOrigin;
+use crate::compiler_frontend::ast::templates::template_folding::TemplateEmission;
 use crate::compiler_frontend::ast::templates::tir::{
-    TemplateIrNodeId, TemplateIrNodeKind, TemplateIrStore, TirView,
+    PreparedTemplate, TemplateIrNodeId, TemplateIrNodeKind, TemplateIrStore,
+    TemplatePreparationMode, TemplateTirPhase, TirView, fold_prepared_template, prepare_tir_view,
 };
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationTable};
 use crate::compiler_frontend::compiler_messages::render::{
@@ -162,9 +164,42 @@ fn fold_template_in_context(
     let mut fold_context = context
         .new_template_fold_context(string_table, "template tests fold")
         .expect("test context should include fold dependencies");
-    template
-        .fold_into_stringid(&mut fold_context)
+    fold_template_with_fold_context(template, &mut fold_context, TemplatePreparationMode::Value)
         .expect("template should fold")
+}
+
+fn fold_template_with_fold_context(
+    template: &Template,
+    fold_context: &mut crate::compiler_frontend::ast::templates::template_folding::TemplateFoldContext<'_>,
+    preparation_mode: TemplatePreparationMode,
+) -> Result<StringId, crate::compiler_frontend::ast::templates::error::TemplateError> {
+    let store_handle = fold_context
+        .template_ir_store
+        .as_ref()
+        .expect("test fold context should carry the module TIR store")
+        .clone();
+    let store = store_handle.borrow();
+    let reference = &template.tir_reference;
+    let view = TirView::with_minimum_phase(
+        &store,
+        reference.root,
+        reference.phase,
+        TemplateTirPhase::Composed,
+        reference.context,
+    )?;
+    let prepared = match prepare_tir_view(&view, &store, preparation_mode)? {
+        PreparedTemplate::Foldable(prepared) => prepared,
+        PreparedTemplate::Runtime(_) | PreparedTemplate::Helper(_) => {
+            panic!("test template expected to be foldable")
+        }
+    };
+    match fold_prepared_template(&prepared, view, fold_context)? {
+        TemplateEmission::Output(output) => Ok(output),
+        TemplateEmission::NoOutput => Ok(fold_context.string_table.intern("")),
+        TemplateEmission::Break(_) | TemplateEmission::Continue(_) => {
+            panic!("test template fold signal escaped its loop")
+        }
+    }
 }
 
 fn effective_tir_style(template: &Template, context: &ScopeContext) -> Style {

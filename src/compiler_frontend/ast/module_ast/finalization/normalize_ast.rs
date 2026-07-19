@@ -39,8 +39,7 @@
 
 use super::finalizer::AstFinalizer;
 use super::template_helpers::{
-    TemplateFinalizationFoldDisposition, TemplateFinalizationFoldInputs, make_fold_context,
-    try_fold_template_to_string,
+    FinalizedTemplateValue, TemplateValueFinalizationInputs, finalize_template_value,
 };
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, LoopBindings, NodeKind};
 use crate::compiler_frontend::ast::expressions::call_argument::CallArgument;
@@ -59,11 +58,10 @@ use crate::compiler_frontend::ast::templates::runtime_handoff::{
     OwnedRuntimeSlotApplicationHandoff, OwnedRuntimeTemplateHandoff, OwnedRuntimeTemplateNode,
 };
 use crate::compiler_frontend::ast::templates::template::Template;
-use crate::compiler_frontend::ast::templates::template::{TemplateConstValueKind, TemplateType};
 use crate::compiler_frontend::ast::templates::tir::{
-    ExpressionSiteId, TemplateIrStore, TemplateTirPhase, TemplateTirReference, TemplateViewContext,
-    TirExpressionOverlay, TirTemplateClassification, TirView, classify_effective_tir_view_template,
-    collect_effective_tir_expression_overlay_payloads, finalized_tir_view_for_template,
+    ExpressionSiteId, PreparedRuntime, TemplateIrStore, TemplateTirPhase, TemplateTirReference,
+    TemplateViewContext, TirExpressionOverlay, collect_effective_tir_expression_overlay_payloads,
+    finalized_tir_view_for_template,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_messages::{
@@ -553,9 +551,9 @@ fn normalize_expression_templates_with_context(
         ExpressionKind::Template(template) => {
             normalize_template_for_hir(template, context)?;
 
-            let fold_result = try_fold_template_to_string(
+            let finalization = finalize_template_value(
                 template,
-                TemplateFinalizationFoldInputs {
+                TemplateValueFinalizationInputs {
                     source_file_scope: context.source_file_scope,
                     path_format_config: context.path_format_config,
                     project_path_resolver: context.project_path_resolver,
@@ -564,36 +562,28 @@ fn normalize_expression_templates_with_context(
                         .template_const_loop_iteration_limit,
                     template_ir_store: &context.template_ir_store,
                 },
+                crate::compiler_frontend::ast::templates::tir::TemplatePreparationMode::Value,
             )?;
 
-            match fold_result.disposition {
-                TemplateFinalizationFoldDisposition::Folded => {
-                    let folded = fold_result.folded.ok_or_else(|| {
-                        CompilerError::compiler_error(
-                            "Renderable template folding completed without folded output.",
-                        )
-                    })?;
+            match finalization {
+                FinalizedTemplateValue::Folded(folded) => {
                     Some(NormalizedTemplateExpression::Folded(folded))
                 }
 
-                TemplateFinalizationFoldDisposition::RuntimeHandoffRequired => {
-                    let final_classification =
-                        classify_final_effective_template_view(template, context)?;
+                FinalizedTemplateValue::Runtime(prepared) => {
                     materialize_runtime_template_handoff_for_hir(
                         template,
                         context,
-                        &final_classification,
+                        &prepared,
                         reactive_template_metadata_from_current_store(template, context)?,
                     )?
                 }
 
-                TemplateFinalizationFoldDisposition::NotFoldable => {
-                    let final_classification =
-                        classify_final_effective_template_view(template, context)?;
+                FinalizedTemplateValue::Helper(kind) => {
                     if helper_artifact_policy == HelperArtifactPolicy::RejectFinalHelperValue
-                        && is_illegal_final_template_helper_value(
-                            effective_template_kind(template, context)?,
-                            fold_result.const_value_kind,
+                        && matches!(
+                            kind,
+                            crate::compiler_frontend::ast::templates::tir::TemplateHelperKind::SlotInsert
                         )
                     {
                         return Err(CompilerDiagnostic::invalid_template_structure(
@@ -603,12 +593,7 @@ fn normalize_expression_templates_with_context(
                         .into());
                     }
 
-                    materialize_runtime_template_handoff_for_hir(
-                        template,
-                        context,
-                        &final_classification,
-                        reactive_template_metadata_from_current_store(template, context)?,
-                    )?
+                    None
                 }
             }
         }
@@ -794,62 +779,6 @@ fn reactive_template_metadata_from_store(
     Ok(Some(metadata))
 }
 
-/// Classifies the finalized effective `TirView` of `template`.
-///
-/// WHAT: requires the module-owned finalized root and classifies its effective
-///       expression, slot-resolution and wrapper-context overlays against the
-///       live module store.
-/// WHY: finalization must make fold and runtime-handoff decisions from the same
-///      authoritative TIR identity. Reconstructing source content here would
-///      ignore overlay semantics immediately before the AST/HIR boundary.
-fn classify_final_effective_template_view(
-    template: &mut Template,
-    context: &TemplateNormalizationContext<'_, '_>,
-) -> Result<TirTemplateClassification, TemplateNormalizationError> {
-    let reference = template.tir_reference;
-
-    if !reference.phase.is_at_least(TemplateTirPhase::Finalized) {
-        return Err(CompilerError::compiler_error(format!(
-            "Template HIR normalization requires Finalized TIR, but root {} is at phase {}.",
-            reference.root, reference.phase
-        ))
-        .into());
-    }
-
-    let initial_classification = {
-        let store = context.template_ir_store.borrow();
-        let view = TirView::with_minimum_phase(
-            &store,
-            reference.root,
-            reference.phase,
-            TemplateTirPhase::Finalized,
-            reference.context,
-        )?;
-        classify_effective_tir_view_template(&view, &store)?
-    };
-
-    let mut store = context.template_ir_store.borrow_mut();
-
-    // The authoritative kind lives in `TemplateIr.kind`. The first classification
-    // may refresh the generic String/StringFunction classification; the single
-    // synchronization owner writes both `TemplateIr.kind` and the durable
-    // `Template.kind` cache so they cannot drift.
-    template
-        .synchronize_kind_from_classification(&mut store, &initial_classification)
-        .map_err(TemplateNormalizationError::from)?;
-
-    drop(store);
-    let store = context.template_ir_store.borrow();
-    let view = TirView::with_minimum_phase(
-        &store,
-        reference.root,
-        reference.phase,
-        TemplateTirPhase::Finalized,
-        reference.context,
-    )?;
-    classify_effective_tir_view_template(&view, &store).map_err(Into::into)
-}
-
 fn expression_reactive_template_metadata_from_store(
     expression: &Expression,
     store: &TemplateIrStore,
@@ -994,39 +923,21 @@ fn normalize_runtime_slot_template_expression_for_hir(
     )
 }
 
-/// Materializes the neutral AST-to-HIR payload from the final effective TIR view.
-///
-/// WHAT: consumes the classification already derived from the store-backed
-///       final view, rejects escaped insert helpers and then builds either the
-///       specialized slot-application handoff or the general owned runtime
-///       handoff from that same view.
-/// WHY: normalization has already finalized the module-owned TIR reference.
-///      Rebuilding a fresh tree here could discard effective overlays and
-///      revive stale source data at the AST/HIR boundary.
+/// Materializes the neutral AST-to-HIR payload from one prepared runtime view.
 fn materialize_runtime_template_handoff_for_hir(
     template: &Template,
     context: &mut TemplateNormalizationContext<'_, '_>,
-    classification: &TirTemplateClassification,
+    prepared: &PreparedRuntime,
     reactive_template: Option<ReactiveTemplateMetadata>,
 ) -> Result<Option<NormalizedTemplateExpression>, TemplateNormalizationError> {
     let store_handle = Rc::clone(&context.template_ir_store);
     let store = store_handle.borrow();
     let view = finalized_tir_view_for_template(template, &store)?;
 
-    // Const-foldable templates and helper artifacts are lowered by AST folding,
-    // not by the HIR runtime-template path.
     if matches!(
-        classification.const_value_kind,
-        TemplateConstValueKind::LoopControlSignal | TemplateConstValueKind::SlotInsertHelper
+        prepared.reason,
+        crate::compiler_frontend::ast::templates::tir::RuntimeTemplateReason::SlotContribution
     ) {
-        return Ok(None);
-    }
-
-    // Slot placeholders that survived composition are now represented in the
-    // owned handoff as no-output structural nodes. Escaped `$insert(...)`
-    // helpers are invalid outside wrapper-slot composition and must be rejected
-    // at the AST/HIR boundary instead of reaching HIR as ordinary content.
-    if classification.has_slot_insertions {
         return Err(CompilerDiagnostic::invalid_template_slot(
             InvalidTemplateSlotReason::InsertOutsideParentSlot,
             None,
@@ -1035,7 +946,9 @@ fn materialize_runtime_template_handoff_for_hir(
         .into());
     }
 
-    if let Some(handoff) = store.owned_runtime_slot_handoff_for_tir_view(&view)? {
+    if let Some(handoff) =
+        store.owned_runtime_slot_handoff_for_prepared_view(prepared, view.clone())?
+    {
         increment_ast_counter(AstCounter::RuntimeTemplateHandoffsMaterialized);
         return Ok(Some(NormalizedTemplateExpression::RuntimeSlotApplication(
             handoff,
@@ -1043,20 +956,7 @@ fn materialize_runtime_template_handoff_for_hir(
         )));
     }
 
-    let handoff = {
-        let mut fold_context = make_fold_context(
-            context.source_file_scope,
-            context.path_format_config,
-            context.project_path_resolver,
-            context.string_table,
-            context.template_const_loop_iteration_limit,
-            Some(Rc::clone(&context.template_ir_store)),
-        );
-        store.owned_runtime_template_handoff_for_tir_view_with_fold_context(
-            &view,
-            &mut fold_context,
-        )?
-    };
+    let handoff = store.owned_runtime_template_handoff_for_prepared_view(prepared, view)?;
 
     increment_ast_counter(AstCounter::RuntimeTemplateHandoffsMaterialized);
     Ok(Some(NormalizedTemplateExpression::RuntimeTemplate(
@@ -1129,33 +1029,3 @@ fn normalize_owned_runtime_template_node_for_hir(
 #[cfg(test)]
 #[path = "tests/normalize_ast_tests.rs"]
 mod normalize_ast_tests;
-
-/// Checks whether a template's final value is an illegal helper artifact.
-///
-/// WHAT: `$insert(...)` helpers and `SlotInsert` template types are only valid
-/// during wrapper composition; they must not survive as standalone values.
-fn is_illegal_final_template_helper_value(
-    template_kind: TemplateType,
-    const_kind: TemplateConstValueKind,
-) -> bool {
-    matches!(template_kind, TemplateType::SlotInsert(_))
-        || matches!(const_kind, TemplateConstValueKind::SlotInsertHelper)
-}
-
-/// Reads the authoritative template kind from the owning TIR store entry.
-///
-/// WHAT: resolves the template's TIR reference through the module store and
-///       returns `TemplateIr.kind`.
-/// WHY: `TemplateIr.kind` is the sole post-construction kind owner.
-fn effective_template_kind(
-    template: &Template,
-    context: &TemplateNormalizationContext<'_, '_>,
-) -> Result<TemplateType, TemplateNormalizationError> {
-    let store = context.template_ir_store.borrow();
-    template.tir_kind_from_store(&store).ok_or_else(|| {
-        CompilerError::compiler_error(
-            "AST finalization template kind was not found in the module TIR store.",
-        )
-        .into()
-    })
-}

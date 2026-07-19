@@ -12,9 +12,7 @@ use crate::compiler_frontend::ast::templates::template::{
 use crate::compiler_frontend::ast::templates::template_control_flow::{
     TemplateBranchSelector, TemplateLoopHeader,
 };
-use crate::compiler_frontend::ast::templates::template_folding::TemplateFoldContext;
 use crate::compiler_frontend::ast::templates::tir::builder::TemplateIrBuilder;
-use crate::compiler_frontend::ast::templates::tir::fold_cache::TirFoldCache;
 use crate::compiler_frontend::ast::templates::tir::ids::{
     ExpressionSiteId, SlotOccurrenceId, TemplateIrId, TemplateIrNodeId,
 };
@@ -33,19 +31,17 @@ use crate::compiler_frontend::ast::templates::tir::summary::{
     TemplateIrSummary, summarize_existing_root,
 };
 use crate::compiler_frontend::ast::templates::tir::view::{TemplateTirPhase, TirView};
+use crate::compiler_frontend::ast::templates::tir::{PreparedRuntime, RuntimeTemplateReason};
 use crate::compiler_frontend::ast::templates::{
     OwnedRuntimeTemplateBody, OwnedRuntimeTemplateNode,
 };
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::datatype::DataType;
 use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
-use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
-use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::compiler_frontend::value_mode::ValueMode;
-use crate::projects::settings::DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -53,33 +49,19 @@ fn empty_location() -> SourceLocation {
     SourceLocation::default()
 }
 
-fn fold_context<'a>(
-    strings: &'a mut StringTable,
-    store: &Rc<RefCell<TemplateIrStore>>,
-) -> TemplateFoldContext<'a> {
-    let cwd = std::env::temp_dir();
-    let resolver = Box::leak(Box::new(
-        ProjectPathResolver::new(
-            cwd.clone(),
-            cwd,
-            crate::compiler_frontend::source_packages::root_file::PreparedSourcePackageRoots::empty(
-            ),
-            &crate::builder_surface::SourceFileKindRegistry::default(),
-        )
-        .expect("test path resolver should be valid"),
-    ));
-    let path_format = Box::leak(Box::new(PathStringFormatConfig::default()));
-    let source_scope = Box::leak(Box::new(InternedPath::new()));
-    TemplateFoldContext {
-        string_table: strings,
-        project_path_resolver: resolver,
-        path_format_config: path_format,
-        source_file_scope: source_scope,
-        template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
-        template_ir_store: Some(Rc::clone(store)),
-        bindings: vec![],
-        fold_cache: TirFoldCache::new(),
+fn prepared_runtime(view: &TirView<'_>) -> PreparedRuntime {
+    PreparedRuntime {
+        identity: view.identity(),
+        reason: RuntimeTemplateReason::RuntimeExpression,
     }
+}
+
+fn handoff_for_view(
+    store: &TemplateIrStore,
+    view: TirView<'_>,
+) -> Result<crate::compiler_frontend::ast::templates::OwnedRuntimeTemplateHandoff, CompilerError> {
+    let prepared = prepared_runtime(&view);
+    store.owned_runtime_template_handoff_for_prepared_view(&prepared, view)
 }
 
 /// Pushes a literal text node into the store and returns its ID.
@@ -208,15 +190,12 @@ fn view_for(
 fn materialize_parent_handoff_result(
     store: Rc<RefCell<TemplateIrStore>>,
     parent_template_id: TemplateIrId,
-    string_table: &mut StringTable,
+    _string_table: &mut StringTable,
     view_context: TemplateViewContext,
 ) -> Result<OwnedRuntimeTemplateBody, CompilerError> {
-    let mut fold_context = fold_context(string_table, &store);
     let store_ref = store.borrow();
     let view = view_for(&store_ref, parent_template_id, view_context);
-    store_ref
-        .owned_runtime_template_handoff_for_tir_view_with_fold_context(&view, &mut fold_context)
-        .map(|handoff| handoff.body)
+    handoff_for_view(&store_ref, view).map(|handoff| handoff.body)
 }
 
 /// Convenience wrapper for success-path tests that expect materialization to
@@ -236,10 +215,18 @@ fn assert_owned_text_node(
     expected: &str,
     string_table: &StringTable,
 ) {
-    let OwnedRuntimeTemplateNode::Text { text, .. } = node else {
-        panic!("expected owned text node, got {:?}", node);
-    };
-    assert_eq!(string_table.resolve(*text), expected);
+    match node {
+        OwnedRuntimeTemplateNode::Text { text, .. } => {
+            assert_eq!(string_table.resolve(*text), expected);
+        }
+        OwnedRuntimeTemplateNode::ChildTemplate { template, .. } => {
+            let OwnedRuntimeTemplateBody::Render(child) = &template.body else {
+                panic!("expected rendered child handoff, got {:?}", template.body);
+            };
+            assert_owned_text_node(child, expected, string_table);
+        }
+        _ => panic!("expected owned text or child node, got {:?}", node),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -485,13 +472,10 @@ fn owned_handoff_materializes_text_from_the_shared_store() {
     let store = Rc::new(RefCell::new(TemplateIrStore::new()));
     let mut strings = StringTable::new();
     let template_id = text_template(&mut store.borrow_mut(), &mut strings, "hello");
-    let mut context = fold_context(&mut strings, &store);
     let handoff = {
         let store_ref = store.borrow();
         let view = view_for(&store_ref, template_id, TemplateViewContext::default());
-        store_ref
-            .owned_runtime_template_handoff_for_tir_view_with_fold_context(&view, &mut context)
-            .expect("text handoff should succeed")
+        handoff_for_view(&store_ref, view).expect("text handoff should succeed")
     };
 
     let OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::Text { text, .. }) =
@@ -542,13 +526,10 @@ fn owned_handoff_resolves_slot_overlay_to_a_child_template() {
         };
         (parent_id, source_id, occurrence_id, context)
     };
-    let mut fold_context = fold_context(&mut strings, &store);
     let handoff = {
         let store_ref = store.borrow();
         let view = view_for(&store_ref, parent_id, view_context);
-        store_ref
-            .owned_runtime_template_handoff_for_tir_view_with_fold_context(&view, &mut fold_context)
-            .expect("slot handoff should succeed")
+        handoff_for_view(&store_ref, view).expect("slot handoff should succeed")
     };
 
     let OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::ChildTemplate {
@@ -570,7 +551,6 @@ fn owned_handoff_resolves_slot_overlay_to_a_child_template() {
 #[test]
 fn owned_handoff_missing_slot_resolution_renders_slot_placeholder() {
     let store = Rc::new(RefCell::new(TemplateIrStore::new()));
-    let mut strings = StringTable::new();
     let (parent_id, _occurrence_id, view_context) = {
         let mut store_ref = store.borrow_mut();
         let occurrence_id = store_ref.next_slot_occurrence_id();
@@ -591,13 +571,10 @@ fn owned_handoff_missing_slot_resolution_renders_slot_placeholder() {
         );
         (parent_id, occurrence_id, context)
     };
-    let mut fold_context = fold_context(&mut strings, &store);
     let handoff = {
         let store_ref = store.borrow();
         let view = view_for(&store_ref, parent_id, view_context);
-        store_ref
-            .owned_runtime_template_handoff_for_tir_view_with_fold_context(&view, &mut fold_context)
-            .expect("handoff materialization should succeed")
+        handoff_for_view(&store_ref, view).expect("handoff materialization should succeed")
     };
 
     assert!(
@@ -639,13 +616,10 @@ fn owned_handoff_preserves_same_store_child_boundary() {
         ));
         (parent_id, child_id)
     };
-    let mut context = fold_context(&mut strings, &store);
     let handoff = {
         let store_ref = store.borrow();
         let view = view_for(&store_ref, parent_id, TemplateViewContext::default());
-        store_ref
-            .owned_runtime_template_handoff_for_tir_view_with_fold_context(&view, &mut context)
-            .expect("child handoff should succeed")
+        handoff_for_view(&store_ref, view).expect("child handoff should succeed")
     };
 
     let OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::ChildTemplate {
@@ -659,7 +633,7 @@ fn owned_handoff_preserves_same_store_child_boundary() {
 }
 
 // ---------------------------------------------------------------------------
-//  Expression-overlay and folded-child handoff
+//  Expression-overlay and child handoff
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -718,7 +692,7 @@ fn parent_root_expression_overlay_applies_inside_same_store_child() {
 }
 
 #[test]
-fn folded_child_shortcut_preserves_root_overlay_through_nested_same_store_children() {
+fn prepared_handoff_preserves_root_overlay_through_nested_same_store_children() {
     let store = Rc::new(RefCell::new(TemplateIrStore::new()));
     let mut strings = StringTable::new();
     let (root_id, _leaf_site_id, context) = {
@@ -802,7 +776,7 @@ fn folded_child_shortcut_preserves_root_overlay_through_nested_same_store_childr
 }
 
 #[test]
-fn folded_child_runtime_reference_falls_back_to_structural_handoff() {
+fn runtime_child_reference_uses_structural_handoff() {
     let store = Rc::new(RefCell::new(TemplateIrStore::new()));
     let mut strings = StringTable::new();
     let (parent_id, context) = {
@@ -847,7 +821,7 @@ fn folded_child_runtime_reference_falls_back_to_structural_handoff() {
 }
 
 #[test]
-fn folded_child_infrastructure_error_propagates_through_hir_handoff() {
+fn child_infrastructure_error_propagates_through_hir_handoff() {
     let store = Rc::new(RefCell::new(TemplateIrStore::new()));
     let mut strings = StringTable::new();
     let (parent_id, context) = {
@@ -873,7 +847,7 @@ fn folded_child_infrastructure_error_propagates_through_hir_handoff() {
         .expect_err("malformed child authority must reach the HIR handoff caller");
 
     assert!(
-        error.msg.contains("TIR preparation: node"),
+        error.msg.contains("missing node"),
         "expected a stable infrastructure lane, got: {}",
         error.msg
     );

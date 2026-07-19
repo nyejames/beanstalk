@@ -1,10 +1,9 @@
 //! Final-view TIR folding tests.
 //!
-//! WHAT: exercises `fold_tir_view` for final effective views rooted at
+//! WHAT: exercises prepared exact-view folding for final effective views rooted at
 //!       control-flow bodies, aggregate wrappers, formatted text, and runtime
 //!       slot application rejection. These tests prove the store-backed fold
-//!       path handles the shapes that `try_classify_final_effective_template_view`
-//!       deems sufficient.
+//!       path handles the supported final-view shapes.
 //!
 //! WHY: production finalization folds through stable store-backed `TirView`s,
 //!      so the final-view entry point needs focused coverage for those surfaces.
@@ -23,7 +22,7 @@ use crate::compiler_frontend::ast::templates::template_folding::{
     TemplateEmission, TemplateFoldContext,
 };
 use crate::compiler_frontend::ast::templates::tir::builder::TemplateIrBuilder;
-use crate::compiler_frontend::ast::templates::tir::fold::fold_tir_view;
+use crate::compiler_frontend::ast::templates::tir::fold::fold_prepared_template;
 use crate::compiler_frontend::ast::templates::tir::fold_cache::{TirFoldCache, TirFoldCacheKey};
 use crate::compiler_frontend::ast::templates::tir::node::{
     TemplateIrBranch, TemplateIrNode, TemplateIrNodeKind,
@@ -32,9 +31,13 @@ use crate::compiler_frontend::ast::templates::tir::overlays::TemplateViewContext
 use crate::compiler_frontend::ast::templates::tir::store::TemplateIrStore;
 use crate::compiler_frontend::ast::templates::tir::summary::TemplateIrSummary;
 use crate::compiler_frontend::ast::templates::tir::view::{TemplateTirPhase, TirView};
+use crate::compiler_frontend::ast::templates::tir::{
+    PreparedTemplate, TemplatePreparationMode, prepare_tir_view,
+};
 use crate::compiler_frontend::ast::templates::{
     OwnedRuntimeSlotApplicationHandoff, OwnedRuntimeTemplateNode,
 };
+use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
@@ -100,7 +103,7 @@ fn emission_to_string(emission: TemplateEmission, string_table: &StringTable) ->
 }
 
 /// Builds a shared store and a view over a freshly constructed template,
-/// then folds it through `fold_tir_view`.
+/// then folds it through the prepared exact-view entry point.
 struct FinalViewFoldFixture {
     store: Rc<RefCell<TemplateIrStore>>,
     template_id: crate::compiler_frontend::ast::templates::tir::ids::TemplateIrId,
@@ -153,7 +156,15 @@ fn fold_final_view_fixture(
         &fixture.store,
     );
 
-    fold_tir_view(&view, &store, &mut fold_context)
+    let prepared = match prepare_tir_view(&view, &store, TemplatePreparationMode::Value)? {
+        PreparedTemplate::Foldable(prepared) => prepared,
+        PreparedTemplate::Runtime(_) | PreparedTemplate::Helper(_) => {
+            return Err(TemplateError::Infrastructure(Box::new(
+                CompilerError::compiler_error("test view was not foldable"),
+            )));
+        }
+    };
+    fold_prepared_template(&prepared, view, &mut fold_context)
 }
 
 // -------------------------
@@ -607,7 +618,7 @@ fn final_view_fold_formatted_markdown_text() {
 // -------------------------
 
 #[test]
-fn final_view_fold_runtime_slot_application_is_no_output() {
+fn final_view_runtime_slot_application_requires_handoff() {
     let mut string_table = StringTable::new();
     let fixture = build_final_view_fixture(&mut string_table, |string_table, store| {
         let mut builder = TemplateIrBuilder::new(store);
@@ -652,7 +663,7 @@ fn final_view_fold_runtime_slot_application_is_no_output() {
         fixture.context,
     )
     .expect("final view should construct");
-    let mut fold_context = build_test_fold_context(
+    let fold_context = build_test_fold_context(
         &mut string_table,
         &resolver,
         &path_format,
@@ -660,9 +671,9 @@ fn final_view_fold_runtime_slot_application_is_no_output() {
         &fixture.store,
     );
 
-    let first = fold_tir_view(&view, &store, &mut fold_context)
-        .expect_err("runtime slot application must not enter the fold walker");
-    assert!(matches!(first, TemplateError::Diagnostic(_)));
+    let first = prepare_tir_view(&view, &store, TemplatePreparationMode::Value)
+        .expect("runtime slot application should prepare as runtime");
+    assert!(matches!(first, PreparedTemplate::Runtime(_)));
 
     let key = TirFoldCacheKey {
         identity: view.identity(),
@@ -674,8 +685,8 @@ fn final_view_fold_runtime_slot_application_is_no_output() {
         "runtime slot application must not populate the fold cache"
     );
 
-    let second = fold_tir_view(&view, &store, &mut fold_context)
-        .expect_err("runtime slot application must remain outside the fold cache");
-    assert!(matches!(second, TemplateError::Diagnostic(_)));
+    let second = prepare_tir_view(&view, &store, TemplatePreparationMode::Value)
+        .expect("runtime slot application should remain a runtime result");
+    assert!(matches!(second, PreparedTemplate::Runtime(_)));
     assert!(fold_context.fold_cache.get(&key).is_none());
 }

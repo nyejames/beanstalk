@@ -7,9 +7,12 @@ use super::error::ExpressionParseError;
 use super::expression::{Expression, ExpressionValueShape};
 use crate::ast_log;
 use crate::compiler_frontend::ast::ScopeContext;
-use crate::compiler_frontend::ast::const_values::resolver::classify_template_effective_tir;
 use crate::compiler_frontend::ast::templates::template::Template;
 use crate::compiler_frontend::ast::templates::template::{TemplateConstValueKind, TemplateType};
+use crate::compiler_frontend::ast::templates::tir::{
+    PreparedTemplate, TemplatePreparationMode, TemplateTirPhase, TirView, fold_prepared_template,
+    prepare_tir_view,
+};
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, InvalidTemplateSlotReason};
@@ -71,18 +74,20 @@ pub(super) fn parse_template_expression(
         TemplateType::String => {
             maybe_consume_closing_parenthesis(token_stream, consume_closing_parenthesis);
 
-            // Construction leaves foldable templates on the shared module store's
-            // Composed-or-later effective root. Classify that exact view so
-            // slot, wrapper and expression overlays match the following fold.
-            let classification =
-                classify_template_effective_tir(&template, &template_context.template_ir_store)?;
-            let const_value_kind = if classification.has_unresolved_slots {
-                TemplateConstValueKind::WrapperTemplate
-            } else {
-                classification.const_value_kind
+            let store = template_context.template_ir_store.borrow();
+            let reference = template.tir_reference;
+            let view = TirView::with_minimum_phase(
+                &store,
+                reference.root,
+                reference.phase,
+                TemplateTirPhase::Composed,
+                reference.context,
+            )?;
+            let preparation = prepare_tir_view(&view, &store, TemplatePreparationMode::Value)?;
+            let PreparedTemplate::Foldable(prepared) = preparation else {
+                return Ok(Some(Expression::template(template, value_mode.to_owned())));
             };
-
-            if !matches!(const_value_kind, TemplateConstValueKind::RenderableString) {
+            if matches!(prepared.value_kind, TemplateConstValueKind::WrapperTemplate) {
                 return Ok(Some(Expression::template(template, value_mode.to_owned())));
             }
 
@@ -90,7 +95,26 @@ pub(super) fn parse_template_expression(
 
             let mut fold_context = template_context
                 .new_template_fold_context(string_table, "expression parsing template fold")?;
-            let folded_string = template.fold_into_stringid(&mut fold_context)?;
+            let folded_emission = fold_prepared_template(&prepared, view, &mut fold_context)?;
+            let folded_string = match folded_emission {
+                crate::compiler_frontend::ast::templates::template_folding::TemplateEmission::Output(
+                    value,
+                ) => value,
+                crate::compiler_frontend::ast::templates::template_folding::TemplateEmission::NoOutput => {
+                    fold_context.string_table.intern("")
+                }
+                crate::compiler_frontend::ast::templates::template_folding::TemplateEmission::Break(
+                    _,
+                )
+                | crate::compiler_frontend::ast::templates::template_folding::TemplateEmission::Continue(
+                    _,
+                ) => {
+                    return Err(CompilerError::compiler_error(
+                        "Template loop-control signal escaped the nearest template loop during folding.",
+                    )
+                    .into());
+                }
+            };
 
             let mut folded_expression = Expression::string_slice(
                 folded_string,

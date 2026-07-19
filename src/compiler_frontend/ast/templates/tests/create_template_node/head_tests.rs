@@ -1926,10 +1926,13 @@ fn const_required_template_loop_reports_expansion_limit() {
     let mut fold_context = context
         .new_template_fold_context(&mut string_table, "template tests fold limit")
         .expect("test context should include fold dependencies");
-    let error = template
-        .fold_into_stringid(&mut fold_context)
-        .expect_err("const loop should enforce expansion limit")
-        .into_diagnostic();
+    let error = fold_template_with_fold_context(
+        &template,
+        &mut fold_context,
+        crate::compiler_frontend::ast::templates::tir::TemplatePreparationMode::ConstRequired,
+    )
+    .expect_err("const loop should enforce expansion limit")
+    .into_diagnostic();
 
     assert_invalid_template_structure(
         &error,
@@ -1952,9 +1955,12 @@ fn const_required_template_loop_uses_configured_expansion_limit() {
         .expect("test context should include fold dependencies");
     fold_context.template_const_loop_iteration_limit = 10_001;
 
-    let folded = template
-        .fold_into_stringid(&mut fold_context)
-        .expect("configured const loop limit should allow the loop");
+    let folded = fold_template_with_fold_context(
+        &template,
+        &mut fold_context,
+        crate::compiler_frontend::ast::templates::tir::TemplatePreparationMode::ConstRequired,
+    )
+    .expect("configured const loop limit should allow the loop");
     drop(fold_context);
 
     assert_eq!(string_table.resolve(folded), "");

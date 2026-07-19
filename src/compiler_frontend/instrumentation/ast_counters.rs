@@ -102,41 +102,11 @@ pub(crate) enum AstCounter {
     // answer which current-state call sites or fold paths drove that volume.
     // These counters add call-site and path attribution without changing fold
     // behavior.
-    /// Total current-state materialization calls that actually built a TIR
-    /// tree (excludes the simple formatted-reference shortcut).
-
     /// TIR templates created by current-state materialization only.
     TirCurrentStateTemplatesCreated,
 
     /// TIR nodes created by current-state materialization only.
     TirCurrentStateNodesCreated,
-
-    /// Current-state materialization called from the finalization fallback
-    /// fold path in `template_helpers`.
-
-    /// Current-state materialization called from `Template::fold_to_emission`.
-
-    /// Current-state materialization called from TIR classification helpers.
-
-    /// Current-state materialization called while refreshing a template's
-    /// generic kind from TIR.
-
-    /// Current-state materialization called while building runtime-template HIR
-    /// handoffs during AST finalization.
-
-    /// Recursive current-state child materialization performed by the
-    /// materializer itself after a root caller has already entered. This counts
-    /// child templates that still require a fresh current-state rebuild.
-
-    /// Recursive current-state child materialization skipped because the child
-    /// already owns an authoritative same-store formatted TIR root and no active
-    /// runtime slot plan needs to be threaded through it.
-
-    /// Recursive child formatted-root shortcut missed because the current TIR
-    /// reference has not reached the formatted phase.
-
-    /// Recursive child formatted-root shortcut missed because `ContentMirror`
-    /// authority only admits narrow text/direct-dynamic shapes.
 
     /// Finalization view fold attempt that passed reference and store
     /// validation and reached view construction.
@@ -146,30 +116,30 @@ pub(crate) enum AstCounter {
     /// non-renderable through the view path, without falling back).
     TirFinalizationFoldSuccesses,
 
-    /// Total `fold_tir_view` entries (module-store view folds from any
-    /// caller: finalization, doc fragments, HIR handoff).
+    /// Prepared exact-view fold entries from AST finalization, expression
+    /// emission, and documentation-fragment callers.
     TirViewFoldsAttempted,
 
-    /// `fold_tir_view` ran with neither an expression nor a slot overlay.
+    /// A prepared exact-view fold ran with neither an expression nor a slot overlay.
     TirViewFoldOverlayEmpty,
 
-    /// `fold_tir_view` ran with an expression overlay but no slot overlay.
+    /// A prepared exact-view fold ran with an expression overlay but no slot overlay.
     TirViewFoldOverlayExpressionOnly,
 
-    /// `fold_tir_view` ran with a slot overlay but no expression overlay.
+    /// A prepared exact-view fold ran with a slot overlay but no expression overlay.
     TirViewFoldOverlaySlotOnly,
 
-    /// `fold_tir_view` ran with both an expression and a slot overlay.
+    /// A prepared exact-view fold ran with both an expression and a slot overlay.
     TirViewFoldOverlayExpressionAndSlot,
 
-    /// `fold_tir_view` ran with a wrapper-context overlay present
+    /// A prepared exact-view fold ran with a wrapper-context overlay present
     /// (orthogonal to the expression/slot shape).
     TirViewFoldWrapperContextPresent,
 
-    /// `fold_tir_view` cache lookups that returned a previously cached emission.
+    /// Prepared exact-view fold cache lookups that returned a cached emission.
     TirFoldCacheHits,
 
-    /// `fold_tir_view` cache lookups that missed and recomputed the fold.
+    /// Prepared exact-view fold cache lookups that missed and recomputed the fold.
     TirFoldCacheMisses,
 
     /// Full `TemplateIrStore` clones in AST finalization

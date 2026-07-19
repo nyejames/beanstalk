@@ -15,13 +15,10 @@ use crate::compiler_frontend::ast::expressions::expression_rpn::{
 };
 use crate::compiler_frontend::ast::statements::match_patterns::MatchPattern;
 use crate::compiler_frontend::ast::templates::error::TemplateError;
-use crate::compiler_frontend::ast::templates::template::Template;
 use crate::compiler_frontend::ast::templates::template_control_flow::{
     TemplateFoldBinding, TemplateLoopControlKind,
 };
-use crate::compiler_frontend::ast::templates::tir::{
-    TemplateIrStore, TemplateTirPhase, TirFoldCache, TirView, fold_tir_view,
-};
+use crate::compiler_frontend::ast::templates::tir::{TemplateIrStore, TirFoldCache};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, InvalidTemplateStructureReason,
@@ -51,15 +48,11 @@ pub struct TemplateFoldContext<'a> {
     pub source_file_scope: &'a InternedPath,
     pub template_const_loop_iteration_limit: usize,
 
-    /// Module-local TIR store used to resolve root and child view identity.
+    /// Module-local TIR store used by nested constant-expression folding.
     ///
-    /// WHAT: provides the store authority needed to construct precise
-    ///       [`TirView`](crate::compiler_frontend::ast::templates::tir::TirView)
-    ///       instances for child-template references during recursive folding.
-    /// WHY: top-level and child templates carry module-local
-    ///      root/phase/overlay identity. `Template::fold_to_emission` requires
-    ///      this authority, while low-level store-local walkers may omit it only
-    ///      when their caller already owns the exact store and root.
+    /// The final template-value boundary owns preparation and exact-view
+    /// construction. This handle remains available only for nested expression
+    /// constant evaluation inside an already active fold.
     pub(crate) template_ir_store: Option<Rc<RefCell<TemplateIrStore>>>,
 
     pub(crate) bindings: Vec<TemplateFoldBinding>,
@@ -142,90 +135,6 @@ impl TemplateFoldContext<'_> {
 // -------------------------
 //  Folding Implementation
 // -------------------------
-
-impl Template {
-    /// Folds a fully-resolved template into an interned string ID.
-    ///
-    /// WHAT: folds the template's authoritative store-backed TIR view through
-    /// the TIR-native folder.
-    /// WHY: compile-time folding should consume the same TIR shape that runtime
-    /// handoff materialization uses.
-    pub(crate) fn fold_into_stringid(
-        &self,
-        fold_context: &mut TemplateFoldContext<'_>,
-    ) -> Result<StringId, TemplateError> {
-        // Keep resolver/path/scope in the fold contract even when a specific template
-        // only needs string interning today. Callers must propagate full project context.
-        let _required_project_context = (
-            fold_context.project_path_resolver,
-            fold_context.path_format_config,
-            fold_context.source_file_scope,
-        );
-
-        match self.fold_to_emission(fold_context)? {
-            TemplateEmission::NoOutput => {
-                let empty_id = fold_context.string_table.intern("");
-                record_fold_output_intern(0);
-                Ok(empty_id)
-            }
-            TemplateEmission::Output(output) => Ok(output),
-            TemplateEmission::Break(_) | TemplateEmission::Continue(_) => Err(
-                CompilerError::compiler_error(
-                    "Template loop-control signal escaped the nearest template loop during folding.",
-                )
-                .into(),
-            ),
-        }
-    }
-
-    /// Folds a fully-resolved template into a `TemplateEmission`.
-    ///
-    /// WHAT: resolves the template's authoritative store-backed TIR view and
-    ///       folds it against the module store.
-    /// WHY: compile-time folding should consume the same final TIR authority as
-    ///      finalization and HIR-handoff paths.
-    pub(crate) fn fold_to_emission(
-        &self,
-        fold_context: &mut TemplateFoldContext<'_>,
-    ) -> Result<TemplateEmission, TemplateError> {
-        fold_to_emission_from_view(self, fold_context)
-    }
-}
-
-/// Folds a template through its stable store-backed `TirView`.
-///
-/// WHAT: resolves the `Composed`-or-later TIR reference through the module store
-///       and folds the view directly through `fold_tir_view`.
-/// WHY: compile-time folding consumes the same final TIR authority as
-///      finalization and HIR-handoff paths. A missing root, overlay or minimum
-///      phase is an AST invariant failure rather than permission to reconstruct
-///      the template from compatibility content.
-fn fold_to_emission_from_view(
-    template: &Template,
-    fold_context: &mut TemplateFoldContext<'_>,
-) -> Result<TemplateEmission, TemplateError> {
-    let reference = &template.tir_reference;
-
-    let store_handle = fold_context
-        .template_ir_store
-        .as_ref()
-        .map(Rc::clone)
-        .ok_or_else(|| {
-            CompilerError::compiler_error("Template folding requires the module-local TIR store.")
-        })?;
-
-    let store = store_handle.borrow();
-
-    let view = TirView::with_minimum_phase(
-        &store,
-        reference.root,
-        reference.phase,
-        TemplateTirPhase::Composed,
-        reference.context,
-    )?;
-
-    fold_tir_view(&view, &store, fold_context)
-}
 
 pub(crate) fn selected_option_capture_payload(
     scrutinee: &Expression,
@@ -549,9 +458,4 @@ fn fold_runtime_expression_with_bindings<'a>(
             })))
         }
     }
-}
-
-fn record_fold_output_intern(byte_len: usize) {
-    add_ast_counter(AstCounter::TemplateFoldStringInternCalls, 1);
-    add_ast_counter(AstCounter::TemplateFoldOutputBytes, byte_len);
 }

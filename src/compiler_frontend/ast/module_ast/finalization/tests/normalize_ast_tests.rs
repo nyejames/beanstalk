@@ -1,5 +1,8 @@
 //! Tests for AST template normalization at the HIR boundary.
 
+use super::super::template_helpers::{
+    FinalizedTemplateValue, TemplateValueFinalizationInputs, finalize_template_value,
+};
 use super::*;
 use crate::compiler_frontend::ast::expressions::expression::{
     ExpressionKind, ReactiveSource, ReactiveSourceKind,
@@ -13,6 +16,9 @@ use crate::compiler_frontend::ast::templates::template_control_flow::{
 };
 use crate::compiler_frontend::ast::templates::tir::TirExpressionOverlayId;
 use crate::compiler_frontend::ast::templates::tir::refs::TemplateTirChildReference;
+use crate::compiler_frontend::ast::templates::tir::{
+    PreparedRuntime, RuntimeTemplateReason, TemplatePreparationMode,
+};
 use crate::compiler_frontend::ast::templates::tir::{
     TemplateIr, TemplateIrBranch, TemplateIrBuilder, TemplateIrNode, TemplateIrNodeKind,
     TemplateIrStore, TemplateIrSummary, TemplateLoopHeaderExpressionSites, TemplateSlotPlan,
@@ -31,7 +37,7 @@ use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
-use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::compiler_frontend::value_mode::ValueMode;
 use crate::projects::settings::DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS;
@@ -52,6 +58,13 @@ fn test_project_path_resolver() -> ProjectPathResolver {
         &crate::builder_surface::SourceFileKindRegistry::default(),
     )
     .expect("test path resolver should be valid")
+}
+
+fn finalized_folded(value: FinalizedTemplateValue) -> StringId {
+    let FinalizedTemplateValue::Folded(value) = value else {
+        panic!("test expected a folded finalization value");
+    };
+    value
 }
 
 /// Constructs a `Template` directly from a real module-local TIR reference.
@@ -427,20 +440,21 @@ fn finalization_fold_composed_tir_root_folds_view_text() {
 
     let template = registered_text_template(view_text, context, &template_ir_store, &string_table);
 
-    let folded = try_fold_template_to_string(
-        &template,
-        TemplateFinalizationFoldInputs {
-            source_file_scope: &source_file_scope,
-            path_format_config: &path_format_config,
-            project_path_resolver: &project_path_resolver,
-            string_table: &mut string_table,
-            template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
-            template_ir_store: &template_ir_store,
-        },
-    )
-    .expect("composed TIR root fold should succeed")
-    .folded
-    .expect("composed template should fold");
+    let folded = finalized_folded(
+        finalize_template_value(
+            &template,
+            TemplateValueFinalizationInputs {
+                source_file_scope: &source_file_scope,
+                path_format_config: &path_format_config,
+                project_path_resolver: &project_path_resolver,
+                string_table: &mut string_table,
+                template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
+                template_ir_store: &template_ir_store,
+            },
+            TemplatePreparationMode::Value,
+        )
+        .expect("composed TIR root fold should succeed"),
+    );
 
     assert_eq!(
         folded, view_text,
@@ -1068,20 +1082,21 @@ fn finalization_fold_uses_finalized_expression_overlay_view() {
     #[cfg(feature = "benchmark_counters")]
     reset_ast_counters();
 
-    let folded = try_fold_template_to_string(
-        &template,
-        TemplateFinalizationFoldInputs {
-            source_file_scope: &source_file_scope,
-            path_format_config: &path_format_config,
-            project_path_resolver: &project_path_resolver,
-            string_table: &mut string_table,
-            template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
-            template_ir_store: &template_ir_store,
-        },
-    )
-    .expect("expression-overlay view fold should succeed")
-    .folded
-    .expect("finalized expression-overlay view should fold");
+    let folded = finalized_folded(
+        finalize_template_value(
+            &template,
+            TemplateValueFinalizationInputs {
+                source_file_scope: &source_file_scope,
+                path_format_config: &path_format_config,
+                project_path_resolver: &project_path_resolver,
+                string_table: &mut string_table,
+                template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
+                template_ir_store: &template_ir_store,
+            },
+            TemplatePreparationMode::Value,
+        )
+        .expect("expression-overlay view fold should succeed"),
+    );
 
     assert_eq!(
         folded, overlay_text,
@@ -1292,20 +1307,21 @@ fn finalization_classifies_root_expression_overlay_through_nested_same_store_chi
         SourceLocation::default(),
     );
 
-    let folded = try_fold_template_to_string(
-        &template,
-        TemplateFinalizationFoldInputs {
-            source_file_scope: &source_file_scope,
-            path_format_config: &path_format_config,
-            project_path_resolver: &project_path_resolver,
-            string_table: &mut string_table,
-            template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
-            template_ir_store: &template_ir_store,
-        },
-    )
-    .expect("root overlay should classify and fold through nested descendants")
-    .folded
-    .expect("root overlay should produce a folded string");
+    let folded = finalized_folded(
+        finalize_template_value(
+            &template,
+            TemplateValueFinalizationInputs {
+                source_file_scope: &source_file_scope,
+                path_format_config: &path_format_config,
+                project_path_resolver: &project_path_resolver,
+                string_table: &mut string_table,
+                template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
+                template_ir_store: &template_ir_store,
+            },
+            TemplatePreparationMode::Value,
+        )
+        .expect("root overlay should classify and fold through nested descendants"),
+    );
 
     assert_eq!(
         string_table.resolve(folded),
@@ -1432,20 +1448,21 @@ fn finalization_ignores_parsed_child_overlay_before_later_composed_descendant() 
         SourceLocation::default(),
     );
 
-    let folded = try_fold_template_to_string(
-        &template,
-        TemplateFinalizationFoldInputs {
-            source_file_scope: &source_file_scope,
-            path_format_config: &path_format_config,
-            project_path_resolver: &project_path_resolver,
-            string_table: &mut string_table,
-            template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
-            template_ir_store: &template_ir_store,
-        },
-    )
-    .expect("a Parsed child must not consume its missing overlay during finalization")
-    .folded
-    .expect("the composed descendant should remain foldable");
+    let folded = finalized_folded(
+        finalize_template_value(
+            &template,
+            TemplateValueFinalizationInputs {
+                source_file_scope: &source_file_scope,
+                path_format_config: &path_format_config,
+                project_path_resolver: &project_path_resolver,
+                string_table: &mut string_table,
+                template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
+                template_ir_store: &template_ir_store,
+            },
+            TemplatePreparationMode::Value,
+        )
+        .expect("a Parsed child must not consume its missing overlay during finalization"),
+    );
 
     assert_eq!(
         folded, override_text,
@@ -1462,9 +1479,9 @@ fn finalization_rejects_nested_runtime_wrapper_in_exact_wrapper_overlay() {
     let path_format_config = PathStringFormatConfig::default();
     let source_file_scope = InternedPath::new();
 
-    let result = try_fold_template_to_string(
+    let result = finalize_template_value(
         &template,
-        TemplateFinalizationFoldInputs {
+        TemplateValueFinalizationInputs {
             source_file_scope: &source_file_scope,
             path_format_config: &path_format_config,
             project_path_resolver: &project_path_resolver,
@@ -1472,11 +1489,12 @@ fn finalization_rejects_nested_runtime_wrapper_in_exact_wrapper_overlay() {
             template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
             template_ir_store: &template_ir_store,
         },
+        TemplatePreparationMode::Value,
     )
     .expect("runtime nested wrapper should be a valid non-foldable shape");
 
     assert!(
-        result.folded.is_none(),
+        matches!(result, FinalizedTemplateValue::Runtime(_)),
         "the production safety gate must not fold through a runtime nested wrapper hidden in the exact wrapper overlay"
     );
 }
@@ -1503,9 +1521,9 @@ fn finalization_keeps_valid_runtime_slot_plan_out_of_folded_string() {
     let project_path_resolver = test_project_path_resolver();
     let path_format_config = PathStringFormatConfig::default();
     let source_file_scope = InternedPath::new();
-    let result = try_fold_template_to_string(
+    let result = finalize_template_value(
         &template,
-        TemplateFinalizationFoldInputs {
+        TemplateValueFinalizationInputs {
             source_file_scope: &source_file_scope,
             path_format_config: &path_format_config,
             project_path_resolver: &project_path_resolver,
@@ -1513,11 +1531,12 @@ fn finalization_keeps_valid_runtime_slot_plan_out_of_folded_string() {
             template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
             template_ir_store: &template_ir_store,
         },
+        TemplatePreparationMode::Value,
     )
     .expect("valid runtime slot plan should use the handoff path");
 
     assert!(
-        result.folded.is_none(),
+        matches!(result, FinalizedTemplateValue::Runtime(_)),
         "a valid runtime slot plan must not become a folded empty string"
     );
     assert!(
@@ -1579,6 +1598,64 @@ fn finalization_replaces_renderable_runtime_slot_plan_with_owned_handoff() {
 }
 
 #[test]
+fn runtime_handoff_shape_uses_root_slot_plan_not_preparation_reason() {
+    let mut string_table = StringTable::new();
+    let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
+    let context = TemplateViewContext::default();
+    let text = string_table.intern("runtime slot root");
+    let mut template = registered_text_template(text, context, &template_ir_store, &string_table);
+    template.tir_reference.phase = TemplateTirPhase::Finalized;
+    let template_id = template.tir_reference.root;
+
+    {
+        let mut store = template_ir_store.borrow_mut();
+        let slot_plan_id = store.push_slot_plan(TemplateSlotPlan {
+            location: SourceLocation::default(),
+            contribution_sources: Vec::new(),
+            slot_sites: Vec::new(),
+        });
+        store.templates[template_id.index()].runtime_slot_plan = Some(slot_plan_id);
+    }
+
+    let project_path_resolver = test_project_path_resolver();
+    let path_format_config = PathStringFormatConfig::default();
+    let source_file_scope = InternedPath::new();
+    let mut context = TemplateNormalizationContext {
+        source_file_scope: &source_file_scope,
+        path_format_config: &path_format_config,
+        project_path_resolver: &project_path_resolver,
+        template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
+        string_table: &mut string_table,
+        template_ir_store: Rc::clone(&template_ir_store),
+    };
+    let prepared = PreparedRuntime {
+        identity: crate::compiler_frontend::ast::templates::tir::TirViewIdentity {
+            root: template_id,
+            phase: TemplateTirPhase::Finalized,
+            context: TemplateViewContext::default(),
+        },
+        reason: RuntimeTemplateReason::RuntimeExpression,
+    };
+
+    let normalized = super::materialize_runtime_template_handoff_for_hir(
+        &template,
+        &mut context,
+        &prepared,
+        None,
+    )
+    .expect("prepared runtime handoff should materialize")
+    .expect("runtime template should produce a normalized handoff");
+
+    assert!(
+        matches!(
+            normalized,
+            NormalizedTemplateExpression::RuntimeSlotApplication(..)
+        ),
+        "the actual root slot plan must select the specialized runtime-slot handoff shape"
+    );
+}
+
+#[test]
 fn module_constant_normalization_rejects_runtime_slot_plan_with_structured_diagnostic() {
     let mut string_table = StringTable::new();
     let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
@@ -1607,7 +1684,7 @@ fn module_constant_normalization_rejects_runtime_slot_plan_with_structured_diagn
     let result = super::super::normalize_constants::normalize_module_constant_template_expression(
         &expression,
         template,
-        TemplateFinalizationFoldInputs {
+        TemplateValueFinalizationInputs {
             source_file_scope: &source_file_scope,
             path_format_config: &path_format_config,
             project_path_resolver: &project_path_resolver,
@@ -1645,20 +1722,21 @@ fn finalization_accepts_supported_nested_wrapper_exact_view() {
     let path_format_config = PathStringFormatConfig::default();
     let source_file_scope = InternedPath::new();
 
-    let folded = try_fold_template_to_string(
-        &template,
-        TemplateFinalizationFoldInputs {
-            source_file_scope: &source_file_scope,
-            path_format_config: &path_format_config,
-            project_path_resolver: &project_path_resolver,
-            string_table: &mut string_table,
-            template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
-            template_ir_store: &template_ir_store,
-        },
-    )
-    .expect("supported nested wrapper should fold through the exact views")
-    .folded
-    .expect("supported nested wrapper should produce const output");
+    let folded = finalized_folded(
+        finalize_template_value(
+            &template,
+            TemplateValueFinalizationInputs {
+                source_file_scope: &source_file_scope,
+                path_format_config: &path_format_config,
+                project_path_resolver: &project_path_resolver,
+                string_table: &mut string_table,
+                template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
+                template_ir_store: &template_ir_store,
+            },
+            TemplatePreparationMode::Value,
+        )
+        .expect("supported nested wrapper should fold through the exact views"),
+    );
 
     assert_eq!(
         string_table.resolve(folded),
@@ -1758,20 +1836,21 @@ fn finalization_fold_uses_resolved_slot_view_context() {
     let template =
         template_with_reference(reference, TemplateType::String, SourceLocation::default());
 
-    let folded = try_fold_template_to_string(
-        &template,
-        TemplateFinalizationFoldInputs {
-            source_file_scope: &source_file_scope,
-            path_format_config: &path_format_config,
-            project_path_resolver: &project_path_resolver,
-            string_table: &mut string_table,
-            template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
-            template_ir_store: &template_ir_store,
-        },
-    )
-    .expect("resolved slot-overlay fold should succeed")
-    .folded
-    .expect("resolved slot-overlay view should fold");
+    let folded = finalized_folded(
+        finalize_template_value(
+            &template,
+            TemplateValueFinalizationInputs {
+                source_file_scope: &source_file_scope,
+                path_format_config: &path_format_config,
+                project_path_resolver: &project_path_resolver,
+                string_table: &mut string_table,
+                template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
+                template_ir_store: &template_ir_store,
+            },
+            TemplatePreparationMode::Value,
+        )
+        .expect("resolved slot-overlay fold should succeed"),
+    );
 
     let expected = string_table.intern("beforefilledafter");
     assert_eq!(
@@ -1823,20 +1902,21 @@ fn finalization_fold_composed_root_with_unfilled_slot_emits_no_slot_output() {
     let template =
         template_with_reference(reference, TemplateType::String, SourceLocation::default());
 
-    let folded = try_fold_template_to_string(
-        &template,
-        TemplateFinalizationFoldInputs {
-            source_file_scope: &source_file_scope,
-            path_format_config: &path_format_config,
-            project_path_resolver: &project_path_resolver,
-            string_table: &mut string_table,
-            template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
-            template_ir_store: &template_ir_store,
-        },
-    )
-    .expect("composed slot-root fold should succeed")
-    .folded
-    .expect("unfilled slot template should fold");
+    let folded = finalized_folded(
+        finalize_template_value(
+            &template,
+            TemplateValueFinalizationInputs {
+                source_file_scope: &source_file_scope,
+                path_format_config: &path_format_config,
+                project_path_resolver: &project_path_resolver,
+                string_table: &mut string_table,
+                template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
+                template_ir_store: &template_ir_store,
+            },
+            TemplatePreparationMode::Value,
+        )
+        .expect("composed slot-root fold should succeed"),
+    );
 
     assert_eq!(
         folded, text_id,
@@ -1895,20 +1975,21 @@ fn finalization_fold_formatted_root_with_unfilled_slot_emits_no_slot_output() {
     #[cfg(feature = "benchmark_counters")]
     reset_ast_counters();
 
-    let folded = try_fold_template_to_string(
-        &template,
-        TemplateFinalizationFoldInputs {
-            source_file_scope: &source_file_scope,
-            path_format_config: &path_format_config,
-            project_path_resolver: &project_path_resolver,
-            string_table: &mut string_table,
-            template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
-            template_ir_store: &template_ir_store,
-        },
-    )
-    .expect("formatted slot-root fold should succeed")
-    .folded
-    .expect("unfilled formatted slot template should fold");
+    let folded = finalized_folded(
+        finalize_template_value(
+            &template,
+            TemplateValueFinalizationInputs {
+                source_file_scope: &source_file_scope,
+                path_format_config: &path_format_config,
+                project_path_resolver: &project_path_resolver,
+                string_table: &mut string_table,
+                template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
+                template_ir_store: &template_ir_store,
+            },
+            TemplatePreparationMode::Value,
+        )
+        .expect("formatted slot-root fold should succeed"),
+    );
 
     assert_eq!(
         folded, text_id,
@@ -2644,20 +2725,21 @@ fn nested_const_template_folds_through_final_view() {
         SourceLocation::default(),
     );
 
-    let folded = try_fold_template_to_string(
-        &template,
-        TemplateFinalizationFoldInputs {
-            source_file_scope: &source_file_scope,
-            path_format_config: &path_format_config,
-            project_path_resolver: &project_path_resolver,
-            string_table: &mut string_table,
-            template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
-            template_ir_store: &template_ir_store,
-        },
-    )
-    .expect("fold through final view should succeed")
-    .folded
-    .expect("composed template with const child should fold");
+    let folded = finalized_folded(
+        finalize_template_value(
+            &template,
+            TemplateValueFinalizationInputs {
+                source_file_scope: &source_file_scope,
+                path_format_config: &path_format_config,
+                project_path_resolver: &project_path_resolver,
+                string_table: &mut string_table,
+                template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
+                template_ir_store: &template_ir_store,
+            },
+            TemplatePreparationMode::Value,
+        )
+        .expect("fold through final view should succeed"),
+    );
 
     assert_eq!(
         folded, child_text,

@@ -8,13 +8,13 @@
 
 use crate::compiler_frontend::ast::module_ast::finalization::normalize_ast::TemplateNormalizationError;
 use crate::compiler_frontend::ast::templates::template::Template;
-use crate::compiler_frontend::ast::templates::template::TemplateConstValueKind;
 use crate::compiler_frontend::ast::templates::template_folding::{
     TemplateEmission, TemplateFoldContext,
 };
 use crate::compiler_frontend::ast::templates::tir::{
-    PreparedTemplate, TemplateHelperKind, TemplateIrStore, TemplatePreparationMode,
-    TemplateTirPhase, TirFoldCache, TirView, fold_tir_view_prepared, prepare_tir_view,
+    PreparedRuntime, PreparedTemplate, TemplateHelperKind, TemplateIrStore,
+    TemplatePreparationMode, TemplateTirPhase, TirFoldCache, TirView, fold_prepared_template,
+    prepare_tir_view,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::instrumentation::{AstCounter, increment_ast_counter};
@@ -25,47 +25,23 @@ use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable}
 use std::cell::RefCell;
 use std::rc::Rc;
 
-/// Folds a compile-time template into a `StringSlice` expression.
+/// Exclusive finalization result for one prepared template value.
 ///
-/// WHAT: Checks if the template is foldable (RenderableString or WrapperTemplate),
-/// folds it using `TemplateFoldContext`, and returns a `StringId`.
-///
-/// WHY: This pattern is repeated in both AST node and module constant
-/// normalization. Consolidating it ensures consistent folding behavior.
-///
-/// The result explicitly records when preparation found semantic runtime
-/// dependence. Callers must route that disposition through the owned handoff
-/// materializer instead of inferring it from `TemplateConstValueKind`.
-pub(super) fn try_fold_template_to_string(
-    template: &Template,
-    mut fold_inputs: TemplateFinalizationFoldInputs<'_, '_>,
-) -> Result<TemplateFinalizationFoldResult, TemplateNormalizationError> {
-    fold_template_view_to_string(template, &mut fold_inputs, TemplatePreparationMode::Value)
+/// WHAT: pairs exactly one semantic outcome with the data needed by its owner.
+/// WHY: a folded value, runtime proof and helper artifact must never be represented
+///      as independent optional/disposition fields that can contradict each other.
+pub(super) enum FinalizedTemplateValue {
+    Folded(StringId),
+    Runtime(PreparedRuntime),
+    Helper(TemplateHelperKind),
 }
 
-pub(super) fn try_fold_const_required_template_to_string(
+/// Prepares and finalizes one exact template value for its owning boundary.
+pub(super) fn finalize_template_value(
     template: &Template,
-    mut fold_inputs: TemplateFinalizationFoldInputs<'_, '_>,
-) -> Result<TemplateFinalizationFoldResult, TemplateNormalizationError> {
-    fold_template_view_to_string(
-        template,
-        &mut fold_inputs,
-        TemplatePreparationMode::ConstRequired,
-    )
-}
-
-/// Folds through the authoritative module-store `TirView`.
-///
-/// WHAT: validates the template's module-local root and overlay identity, classifies
-///       the effective view and folds that exact root when it is const-renderable.
-/// WHY: AST finalization always owns the module store. Missing or mismatched
-///      identity is an internal invariant failure, not permission to reconstruct
-///      template semantics outside the exact view.
-fn fold_template_view_to_string(
-    template: &Template,
-    fold_inputs: &mut TemplateFinalizationFoldInputs<'_, '_>,
+    fold_inputs: TemplateValueFinalizationInputs<'_, '_>,
     preparation_mode: TemplatePreparationMode,
-) -> Result<TemplateFinalizationFoldResult, TemplateNormalizationError> {
+) -> Result<FinalizedTemplateValue, TemplateNormalizationError> {
     let reference = &template.tir_reference;
 
     if !reference.phase.is_at_least(TemplateTirPhase::Composed) {
@@ -80,9 +56,9 @@ fn fold_template_view_to_string(
 
     increment_ast_counter(AstCounter::TirFinalizationFoldAttempts);
 
-    let store_borrow = store_handle.borrow();
+    let store = store_handle.borrow();
     let view = TirView::with_minimum_phase(
-        &store_borrow,
+        &store,
         reference.root,
         reference.phase,
         TemplateTirPhase::Composed,
@@ -91,35 +67,18 @@ fn fold_template_view_to_string(
 
     // Preparation validates and classifies the exact view before cache lookup
     // or folding. Its compact result is the sole final-value decision source.
-    let preparation = {
-        let store_borrow = fold_inputs.template_ir_store.borrow();
-        prepare_tir_view(&view, &store_borrow, preparation_mode)?
-    };
-
-    let (fold_preparation, template_const_kind) = match preparation {
+    let preparation = prepare_tir_view(&view, &store, preparation_mode)?;
+    let fold_preparation = match preparation {
         PreparedTemplate::Helper(kind) => {
             increment_ast_counter(AstCounter::TirFinalizationFoldSuccesses);
-            let const_value_kind = match kind {
-                TemplateHelperKind::LoopControl => TemplateConstValueKind::LoopControlSignal,
-                TemplateHelperKind::SlotInsert => TemplateConstValueKind::SlotInsertHelper,
-            };
-            return Ok(TemplateFinalizationFoldResult {
-                folded: None,
-                const_value_kind,
-                disposition: TemplateFinalizationFoldDisposition::NotFoldable,
-            });
+            return Ok(FinalizedTemplateValue::Helper(kind));
         }
-        PreparedTemplate::Runtime(_) => {
-            return Ok(TemplateFinalizationFoldResult {
-                folded: None,
-                const_value_kind: TemplateConstValueKind::NonConst,
-                disposition: TemplateFinalizationFoldDisposition::RuntimeHandoffRequired,
-            });
+        PreparedTemplate::Runtime(prepared) => {
+            return Ok(FinalizedTemplateValue::Runtime(prepared));
         }
-        PreparedTemplate::Foldable(prepared) => (prepared, prepared.value_kind),
+        PreparedTemplate::Foldable(prepared) => prepared,
     };
 
-    let store = fold_inputs.template_ir_store.borrow();
     let mut fold_context = make_fold_context(
         fold_inputs.source_file_scope,
         fold_inputs.path_format_config,
@@ -128,39 +87,11 @@ fn fold_template_view_to_string(
         fold_inputs.template_const_loop_iteration_limit,
         Some(Rc::clone(&store_handle)),
     );
-    let result = fold_tir_view_prepared(&view, &store, &mut fold_context, fold_preparation)?;
+    let result = fold_prepared_template(&fold_preparation, view, &mut fold_context)?;
     let folded = template_emission_to_string_id(result, &mut fold_context)?;
     increment_ast_counter(AstCounter::TemplatesFoldedDuringFinalization);
     increment_ast_counter(AstCounter::TirFinalizationFoldSuccesses);
-    Ok(TemplateFinalizationFoldResult {
-        folded: Some(folded),
-        const_value_kind: template_const_kind,
-        disposition: TemplateFinalizationFoldDisposition::Folded,
-    })
-}
-
-/// Semantic outcome of finalization-time folding preparation.
-///
-/// WHAT: distinguishes a folded string from a valid runtime template that
-///       needs owned HIR handoff materialization and from non-foldable helper
-///       or runtime shapes.
-/// WHY: `TemplateConstValueKind` describes template shape, while preparation
-///      owns the decision about whether the fold proof is semantically usable.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum TemplateFinalizationFoldDisposition {
-    Folded,
-    RuntimeHandoffRequired,
-    NotFoldable,
-}
-
-/// Classification and optional folded output from one authoritative TIR view.
-///
-/// Returning both facts keeps module-constant finalization from rebuilding the
-/// effective value after a non-foldable result.
-pub(super) struct TemplateFinalizationFoldResult {
-    pub(super) folded: Option<StringId>,
-    pub(super) const_value_kind: TemplateConstValueKind,
-    pub(super) disposition: TemplateFinalizationFoldDisposition,
+    Ok(FinalizedTemplateValue::Folded(folded))
 }
 
 fn template_emission_to_string_id(
@@ -186,7 +117,7 @@ fn template_emission_to_string_id(
 /// WHY: finalization folds need the shared module-store handle. Keeping these
 /// values together avoids long signatures as TIR authority is passed into the
 /// fold path.
-pub(super) struct TemplateFinalizationFoldInputs<'a, 'strings> {
+pub(super) struct TemplateValueFinalizationInputs<'a, 'strings> {
     pub(super) source_file_scope: &'a InternedPath,
     pub(super) path_format_config: &'a PathStringFormatConfig,
     pub(super) project_path_resolver: &'a ProjectPathResolver,

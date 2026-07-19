@@ -19,7 +19,7 @@ use crate::compiler_frontend::ast::templates::template_folding::{
 };
 use crate::compiler_frontend::ast::templates::tir::TemplateSlotPlan;
 use crate::compiler_frontend::ast::templates::tir::builder::TemplateIrBuilder;
-use crate::compiler_frontend::ast::templates::tir::fold::{fold_tir_view, fold_tir_view_prepared};
+use crate::compiler_frontend::ast::templates::tir::fold::fold_prepared_template;
 use crate::compiler_frontend::ast::templates::tir::fold_cache::TirFoldCache;
 use crate::compiler_frontend::ast::templates::tir::ids::{
     ChildTemplateOccurrenceId, ExpressionSiteId, SlotOccurrenceId, TemplateIrId,
@@ -31,7 +31,9 @@ use crate::compiler_frontend::ast::templates::tir::overlays::{
     TirSlotResolutionOverlay, TirWrapperApplicationMode, TirWrapperContext,
     TirWrapperContextOverlay,
 };
-use crate::compiler_frontend::ast::templates::tir::preparation::RuntimeTemplateReason;
+use crate::compiler_frontend::ast::templates::tir::preparation::{
+    PreparedRuntime, RuntimeTemplateReason,
+};
 use crate::compiler_frontend::ast::templates::tir::refs::{
     TemplateTirChildReference, TemplateWrapperReference,
 };
@@ -771,11 +773,7 @@ fn fold_fixture_result(
     fixture: &WrapperContextFixture,
     string_table: &mut StringTable,
 ) -> Result<TemplateEmission, TemplateError> {
-    let (phase, store) = fixture_parent_view(fixture);
-    let view = TirView::new(&store, fixture.parent, phase, fixture.context)
-        .expect("test view should construct");
-    let mut context = fold_context(string_table, &fixture.store);
-    fold_tir_view(&view, &store, &mut context)
+    prepared_fold_fixture_result(fixture, string_table)
 }
 
 fn fold_fixture(
@@ -809,18 +807,23 @@ fn prepared_fold_fixture_result(
         }
     };
     let mut context = fold_context(string_table, &fixture.store);
-    fold_tir_view_prepared(&view, &store, &mut context, preparation)
+    fold_prepared_template(&preparation, view, &mut context)
 }
 
 fn handoff_fixture_result(
     fixture: &WrapperContextFixture,
-    string_table: &mut StringTable,
-) -> Result<OwnedRuntimeTemplateHandoff, CompilerError> {
+    _string_table: &mut StringTable,
+) -> Result<OwnedRuntimeTemplateHandoff, TemplateError> {
     let (phase, store) = fixture_parent_view(fixture);
     let view = TirView::new(&store, fixture.parent, phase, fixture.context)
         .expect("test view should construct");
-    let mut context = fold_context(string_table, &fixture.store);
-    store.owned_runtime_template_handoff_for_tir_view_with_fold_context(&view, &mut context)
+    let prepared = PreparedRuntime {
+        identity: view.identity(),
+        reason: RuntimeTemplateReason::RuntimeExpression,
+    };
+    store
+        .owned_runtime_template_handoff_for_prepared_view(&prepared, view)
+        .map_err(Into::into)
 }
 
 fn handoff_fixture(
@@ -885,20 +888,6 @@ fn expect_single_render_child(body: &OwnedRuntimeTemplateBody) -> &OwnedRuntimeT
     }
 }
 
-fn assert_slot_insert_fold_error(result: Result<TemplateEmission, TemplateError>) {
-    let error = result.expect_err("escaped slot insertion should fail folding");
-    let TemplateError::Infrastructure(error) = error else {
-        panic!("escaped slot insertion should produce an infrastructure fold error");
-    };
-    assert!(
-        error
-            .msg
-            .contains("unresolved slot insertions cannot be rendered directly"),
-        "slot insertion should preserve the fold-specific diagnostic, got: {}",
-        error.msg
-    );
-}
-
 fn text_child_builder(
     text: &str,
 ) -> impl FnOnce(&mut TemplateIrStore, &mut StringTable) -> TemplateIrId {
@@ -930,7 +919,7 @@ fn wrapper_context_overlay_folds_inherited_wrapper() {
 }
 
 #[test]
-fn fold_tir_view_keeps_parent_expression_authority_through_nested_wrappers() {
+fn prepared_fold_keeps_parent_expression_authority_through_nested_wrappers() {
     let mut string_table = StringTable::new();
     let fixture = build_nested_virtual_wrapper_fixture(&mut string_table);
 
@@ -998,7 +987,7 @@ fn wrapper_context_overlay_honors_fresh_suppression() {
 }
 
 #[test]
-fn fold_tir_view_applies_if_child_emits_wrapper_when_child_outputs() {
+fn prepared_fold_applies_if_child_emits_wrapper_when_child_outputs() {
     let mut string_table = StringTable::new();
     let fixture = build_wrapper_context_fixture(
         &mut string_table,
@@ -1021,7 +1010,7 @@ fn fold_tir_view_applies_if_child_emits_wrapper_when_child_outputs() {
 }
 
 #[test]
-fn fold_tir_view_skips_if_child_emits_wrapper_when_child_has_no_output() {
+fn prepared_fold_skips_if_child_emits_wrapper_when_child_has_no_output() {
     let mut string_table = StringTable::new();
     let fixture = build_wrapper_context_fixture(
         &mut string_table,
@@ -1045,7 +1034,7 @@ fn fold_tir_view_skips_if_child_emits_wrapper_when_child_has_no_output() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn fold_tir_view_applies_same_store_wrapper_expression_overlay() {
+fn prepared_fold_applies_same_store_wrapper_expression_overlay() {
     let mut string_table = StringTable::new();
     let wrapper_text = string_table.intern("same-store-overlay");
     let (fixture, _) = build_expression_wrapper_fixture(
@@ -1220,7 +1209,7 @@ fn preparation_ignores_runtime_referenced_wrapper_expression_overlay() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn fold_tir_view_injects_child_before_resolving_other_wrapper_slots() {
+fn prepared_fold_injects_child_before_resolving_other_wrapper_slots() {
     let mut string_table = StringTable::new();
     let (fixture, _) = build_slot_resolution_wrapper_fixture(&mut string_table);
     let emission = fold_fixture(&fixture, &mut string_table);
@@ -1340,7 +1329,7 @@ fn below_composed_wrapper_reference_uses_structural_root_without_overlay_lookup(
 // ---------------------------------------------------------------------------
 
 #[test]
-fn fold_tir_view_rejects_slot_insert_from_wrapper_context_set() {
+fn prepared_fold_rejects_slot_insert_from_wrapper_context_set() {
     let mut string_table = StringTable::new();
     let fixture = build_wrapper_context_fixture(
         &mut string_table,
@@ -1358,11 +1347,16 @@ fn fold_tir_view_rejects_slot_insert_from_wrapper_context_set() {
             )
         );
     }
-    assert_slot_insert_fold_error(fold_fixture_result(&fixture, &mut string_table));
+    let (phase, store) = fixture_parent_view(&fixture);
+    let view = TirView::new(&store, fixture.parent, phase, fixture.context)
+        .expect("test view should construct");
+    let preparation = prepare_tir_view(&view, &store, TemplatePreparationMode::Value)
+        .expect("slot insert helper should prepare without folding");
+    assert!(!matches!(preparation, PreparedTemplate::Foldable(_)));
 }
 
 #[test]
-fn fold_tir_view_rejects_slot_insert_from_effective_slot_source() {
+fn prepared_fold_rejects_slot_insert_from_effective_slot_source() {
     let mut string_table = StringTable::new();
     let store = Rc::new(RefCell::new(TemplateIrStore::new()));
     let (wrapper_template_id, source_template_id, context) = {
@@ -1393,8 +1387,9 @@ fn fold_tir_view_rejects_slot_insert_from_effective_slot_source() {
         context,
     )
     .expect("slot-overlay view should construct");
-    let mut context = fold_context(&mut string_table, &store);
-    assert_slot_insert_fold_error(fold_tir_view(&view, &store_ref, &mut context));
+    let preparation = prepare_tir_view(&view, &store_ref, TemplatePreparationMode::Value)
+        .expect("slot insert source should prepare without folding");
+    assert!(!matches!(preparation, PreparedTemplate::Foldable(_)));
 }
 
 // ---------------------------------------------------------------------------
@@ -1507,7 +1502,7 @@ fn preparation_terminates_for_cyclic_nested_wrapper_contexts() {
 }
 
 // ---------------------------------------------------------------------------
-//  Handoff: inherited wrapper, $fresh, conditional wrapper, folded child text
+//  Handoff: inherited wrapper, $fresh, and conditional wrapper
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -1548,7 +1543,7 @@ fn handoff_tir_view_honors_fresh_suppression_in_wrapper_context_overlay() {
     );
     let handoff = handoff_fixture(&fixture, &mut string_table);
     let child_node = expect_single_render_child(&handoff.body);
-    assert_text_node(child_node, "child", &string_table);
+    assert_child_or_text_node(child_node, "child", &string_table);
 }
 
 #[test]
@@ -1579,34 +1574,6 @@ fn handoff_tir_view_materializes_if_child_emits_as_conditional_wrapper() {
         children[1],
         OwnedRuntimeTemplateNode::AggregateOutput
     ));
-    assert_text_node(&children[2], "after", &string_table);
-}
-
-#[test]
-fn handoff_tir_view_folded_child_text_still_fires_under_wrapper_context_overlay() {
-    let mut string_table = StringTable::new();
-    let fixture = build_wrapper_context_fixture(
-        &mut string_table,
-        TirWrapperContext::default(),
-        text_child_builder("child"),
-    );
-    let handoff = handoff_fixture(&fixture, &mut string_table);
-
-    let wrapped = expect_single_render_child(&handoff.body);
-    let OwnedRuntimeTemplateNode::Sequence { children, .. } = wrapped else {
-        panic!("expected Sequence wrapper root, got {:?}", wrapped);
-    };
-    assert_eq!(
-        children.len(),
-        3,
-        "folded child should still be wrapped as before + text + after"
-    );
-    assert_text_node(&children[0], "before", &string_table);
-    assert_text_node(&children[1], "child", &string_table);
-    assert!(
-        !matches!(children[1], OwnedRuntimeTemplateNode::ChildTemplate { .. }),
-        "folded child shortcut should fire; found ChildTemplate"
-    );
     assert_text_node(&children[2], "after", &string_table);
 }
 

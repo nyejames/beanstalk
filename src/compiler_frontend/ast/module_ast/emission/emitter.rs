@@ -11,7 +11,6 @@
 //! Struct node emission reads the resolved field table produced by environment construction.
 
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind, SourceLocation};
-use crate::compiler_frontend::ast::const_values::resolver::classify_template_from_effective_tir;
 use crate::compiler_frontend::ast::function_body_to_ast;
 use crate::compiler_frontend::ast::generic_functions::{
     GenericFunctionBodyValidationInput, GenericFunctionInstance, GenericFunctionInstanceKey,
@@ -33,7 +32,11 @@ use crate::compiler_frontend::ast::statements::terminality::{
 };
 use crate::compiler_frontend::ast::templates::error::TemplateError;
 use crate::compiler_frontend::ast::templates::template::Template;
-use crate::compiler_frontend::ast::templates::template::TemplateConstValueKind;
+use crate::compiler_frontend::ast::templates::template_folding::TemplateEmission;
+use crate::compiler_frontend::ast::templates::tir::{
+    PreparedTemplate, TemplatePreparationMode, TemplateTirPhase, TirView, fold_prepared_template,
+    prepare_tir_view,
+};
 use crate::compiler_frontend::ast::templates::top_level_templates::FoldedConstTemplateResult;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages, ErrorType};
@@ -1103,42 +1106,6 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
         let template =
             template_result.map_err(|error| self.diagnostic_messages(*error, string_table))?;
 
-        // Construction leaves const-required templates on the shared module store's
-        // Composed-or-later effective root. Classify that exact root so slot,
-        // wrapper and expression overlays stay aligned with the following fold.
-        let template_const_kind =
-            classify_template_from_effective_tir(&template, &context.template_ir_store)
-                .map_err(|error| self.template_error_messages(error, string_table))?;
-
-        match template_const_kind {
-            // WHAT: top-level const templates can be direct strings or wrapper
-            // templates with optional, unfilled slots.
-            // WHY: unfilled slots are rendered as empty strings at compile time.
-            // Nested helper-owned contribution structure is legal while composing a
-            // wrapper, but the final top-level const value itself cannot be a raw
-            // `$insert(...)` helper artifact.
-            TemplateConstValueKind::RenderableString | TemplateConstValueKind::WrapperTemplate => {}
-            TemplateConstValueKind::LoopControlSignal
-            | TemplateConstValueKind::SlotInsertHelper => {
-                return Err(self.diagnostic_messages(
-                    CompilerDiagnostic::invalid_template_structure(
-                        InvalidTemplateStructureReason::HelperInConstTemplate,
-                        template.location,
-                    ),
-                    string_table,
-                ));
-            }
-            TemplateConstValueKind::NonConst => {
-                return Err(self.diagnostic_messages(
-                    CompilerDiagnostic::invalid_template_structure(
-                        InvalidTemplateStructureReason::NonFoldableConstTemplate,
-                        template.location,
-                    ),
-                    string_table,
-                ));
-            }
-        }
-
         Ok(template)
     }
 
@@ -1148,6 +1115,39 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
         context: &ScopeContext,
         string_table: &mut StringTable,
     ) -> Result<FoldedConstTemplateResult, CompilerMessages> {
+        let reference = template.tir_reference;
+        let store = context.template_ir_store.borrow();
+        let view = TirView::with_minimum_phase(
+            &store,
+            reference.root,
+            reference.phase,
+            TemplateTirPhase::Composed,
+            reference.context,
+        )
+        .map_err(|error| self.error_messages(error, string_table))?;
+        let preparation = prepare_tir_view(&view, &store, TemplatePreparationMode::ConstRequired)
+            .map_err(|error| self.template_error_messages(error, string_table))?;
+        let prepared = match preparation {
+            PreparedTemplate::Foldable(prepared) => prepared,
+            PreparedTemplate::Helper(_) => {
+                return Err(self.diagnostic_messages(
+                    CompilerDiagnostic::invalid_template_structure(
+                        InvalidTemplateStructureReason::HelperInConstTemplate,
+                        template.location,
+                    ),
+                    string_table,
+                ));
+            }
+            PreparedTemplate::Runtime(_) => {
+                return Err(self.diagnostic_messages(
+                    CompilerDiagnostic::invalid_template_structure(
+                        InvalidTemplateStructureReason::NonFoldableConstTemplate,
+                        template.location,
+                    ),
+                    string_table,
+                ));
+            }
+        };
         let mut fold_context = match context
             .new_template_fold_context(string_table, "top-level const template folding")
         {
@@ -1156,10 +1156,26 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
                 return Err(self.error_messages(error, string_table));
             }
         };
-
-        let value = template
-            .fold_into_stringid(&mut fold_context)
-            .map_err(|error| self.template_error_messages(error, string_table))?;
+        let emission = match fold_prepared_template(&prepared, view, &mut fold_context) {
+            Ok(emission) => emission,
+            Err(error) => {
+                drop(fold_context);
+                return Err(self.template_error_messages(error, string_table));
+            }
+        };
+        let value = match emission {
+            TemplateEmission::Output(value) => value,
+            TemplateEmission::NoOutput => fold_context.string_table.intern(""),
+            TemplateEmission::Break(_) | TemplateEmission::Continue(_) => {
+                drop(fold_context);
+                return Err(self.error_messages(
+                    CompilerError::compiler_error(
+                        "Template loop-control signal escaped the nearest template loop during folding.",
+                    ),
+                    string_table,
+                ));
+            }
+        };
 
         let result = FoldedConstTemplateResult::new(value);
 

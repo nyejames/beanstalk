@@ -18,7 +18,8 @@ use crate::compiler_frontend::ast::expressions::expression::{
 };
 use crate::compiler_frontend::ast::templates::error::TemplateError;
 use crate::compiler_frontend::ast::templates::template::{
-    ReactiveSubscription, SlotKey, Style, Template, TemplateSegmentOrigin, TemplateType,
+    ReactiveSubscription, SlotKey, Style, Template, TemplateConstValueKind, TemplateSegmentOrigin,
+    TemplateType,
 };
 use crate::compiler_frontend::ast::templates::template_control_flow::{
     TemplateBranchSelector, TemplateLoopControlKind, TemplateLoopHeader,
@@ -118,6 +119,25 @@ fn preparation_modes_return_one_identity_bound_foldable_result() {
             "simple text must be exclusively foldable in both modes: {value:?} / {const_required:?}"
         ),
     }
+}
+
+#[test]
+fn preparation_preserves_structural_wrapper_shape_for_value_callers() {
+    let (prepared, _) = prepare_root(
+        TemplateType::String,
+        |builder, _| {
+            let slot = builder.push_slot_node(SlotKey::Default, empty_location());
+            builder.push_sequence_node(vec![slot], empty_location())
+        },
+        TemplatePreparationMode::Value,
+    )
+    .expect("unfilled wrapper preparation should succeed");
+
+    assert!(matches!(
+        prepared,
+        PreparedTemplate::Foldable(prepared)
+            if prepared.value_kind == TemplateConstValueKind::WrapperTemplate
+    ));
 }
 
 #[test]

@@ -30,13 +30,12 @@
 use super::finalizer::AstFinalizer;
 use super::normalize_ast::TemplateNormalizationError;
 use super::template_helpers::{
-    TemplateFinalizationFoldDisposition, TemplateFinalizationFoldInputs,
-    try_fold_const_required_template_to_string,
+    FinalizedTemplateValue, TemplateValueFinalizationInputs, finalize_template_value,
 };
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::templates::template::Template;
-use crate::compiler_frontend::ast::templates::template::{TemplateConstValueKind, TemplateType};
+use crate::compiler_frontend::ast::templates::template::TemplateType;
 use crate::compiler_frontend::ast::templates::tir::{
     PreparedTemplate, TemplateHelperKind, TemplateIrStore, TemplatePreparationMode,
     TemplateTirPhase, TirView, prepare_tir_view,
@@ -133,7 +132,7 @@ impl AstFinalizer<'_, '_> {
             return normalize_module_constant_template_expression(
                 expression,
                 template,
-                TemplateFinalizationFoldInputs {
+                TemplateValueFinalizationInputs {
                     source_file_scope,
                     path_format_config: &self.context.path_format_config,
                     project_path_resolver,
@@ -198,49 +197,31 @@ impl AstFinalizer<'_, '_> {
 
 /// Normalizes one template-valued module constant through the shared fold owner.
 ///
-/// WHAT: converts a folded template to `StringSlice` and rejects a valid runtime
-///       runtime dependence before it can be mistaken for HIR constant metadata.
+/// WHAT: converts a folded template to `StringSlice` and rejects valid runtime
+///       dependence before it can be mistaken for HIR constant metadata.
 /// WHY: HIR's module-constant pool stores only `HirConstValue`; runtime handoffs
 ///      are executable AST expressions and therefore cannot cross this boundary.
 pub(super) fn normalize_module_constant_template_expression(
     expression: &Expression,
     template: &Template,
-    fold_inputs: TemplateFinalizationFoldInputs<'_, '_>,
+    fold_inputs: TemplateValueFinalizationInputs<'_, '_>,
 ) -> Result<Expression, TemplateNormalizationError> {
-    let fold_result = try_fold_const_required_template_to_string(template, fold_inputs)?;
+    let finalization = finalize_template_value(
+        template,
+        fold_inputs,
+        TemplatePreparationMode::ConstRequired,
+    )?;
     let mut normalized = expression.to_owned();
 
-    match fold_result.disposition {
-        TemplateFinalizationFoldDisposition::Folded => {
-            let folded = fold_result.folded.ok_or_else(|| {
-                CompilerError::compiler_error(
-                    "Folded module-constant template did not produce folded output.",
-                )
-            })?;
+    match finalization {
+        FinalizedTemplateValue::Folded(folded) => {
             normalized.diagnostic_type = DataType::StringSlice;
             normalized.kind = ExpressionKind::StringSlice(folded);
         }
 
-        TemplateFinalizationFoldDisposition::NotFoldable => match fold_result.const_value_kind {
-            TemplateConstValueKind::LoopControlSignal
-            | TemplateConstValueKind::SlotInsertHelper => {}
+        FinalizedTemplateValue::Helper(_) => {}
 
-            TemplateConstValueKind::RenderableString | TemplateConstValueKind::WrapperTemplate => {
-                return Err(CompilerError::compiler_error(
-                    "Foldable module-constant template did not produce a folded string.",
-                )
-                .into());
-            }
-
-            TemplateConstValueKind::NonConst => {
-                return Err(CompilerError::compiler_error(
-                    "Non-constant template reached AST finalization in module constant metadata.",
-                )
-                .into());
-            }
-        },
-
-        TemplateFinalizationFoldDisposition::RuntimeHandoffRequired => {
+        FinalizedTemplateValue::Runtime(_) => {
             // Runtime handoffs are valid executable AST values, but HIR module
             // constants are compile-time metadata and accept only HirConstValue.
             return Err(CompilerDiagnostic::invalid_template_structure(

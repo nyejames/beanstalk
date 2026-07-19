@@ -20,7 +20,7 @@ use crate::compiler_frontend::ast::templates::tir::ids::{
 };
 use crate::compiler_frontend::ast::templates::tir::node::{TemplateIrNodeKind, TirSlotPlaceholder};
 use crate::compiler_frontend::ast::templates::tir::overlays::{
-    TemplateViewContext, TirSlotResolutionKind, TirWrapperContext,
+    TemplateViewContext, TirSlotResolutionKind,
 };
 use crate::compiler_frontend::ast::templates::tir::refs::TemplateTirReference;
 use crate::compiler_frontend::ast::templates::tir::slot_composition::collect_tir_slot_schema;
@@ -42,44 +42,6 @@ use std::collections::HashSet;
 type PreparationTemplateKey = (TemplateIrId, TirViewIdentity);
 type PreparationNodeKey = (TemplateIrNodeId, TirViewIdentity);
 type PreparationSlotPlanKey = (TemplateSlotPlanId, TirViewIdentity);
-type ShortcutTemplateKey = (TemplateIrId, Option<TirViewIdentity>);
-
-/// Reports whether the narrow handoff fold shortcut can consume an exact view.
-pub(crate) fn tir_view_is_empty_overlay_linear(
-    view: &TirView<'_>,
-    store: &TemplateIrStore,
-) -> Result<bool, CompilerError> {
-    let root = view.root_ref();
-
-    let view_context = view.context();
-
-    if view_context.is_empty() {
-        let mut visiting = HashSet::new();
-        return template_root_is_linear_foldable(view, store, root, &mut visiting);
-    }
-
-    if view_context.expression_overlay.is_none()
-        && view_context.slot_resolution.is_none()
-        && view_context.wrapper_context.is_some()
-    {
-        let mut walk = HandoffShortcutWalk {
-            visiting_templates: HashSet::new(),
-            slot_resolution_active: false,
-        };
-        return Ok(check_template_root_view_native_fold_shape(
-            store,
-            Some(view),
-            view,
-            root,
-            false,
-            &mut walk,
-        )?
-        .is_none());
-    }
-
-    Ok(false)
-}
-
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub(crate) enum RuntimeTemplateReason {
     InheritedWrapperApplication,
@@ -136,13 +98,9 @@ struct PreparationWalk {
     const_diagnostic: Option<Box<CompilerDiagnostic>>,
 }
 
-struct HandoffShortcutWalk {
-    visiting_templates: HashSet<ShortcutTemplateKey>,
-    slot_resolution_active: bool,
-}
-
 struct PreparationFacts {
     const_evaluable: bool,
+    has_unresolved_slots: bool,
     has_resolved_slot_sources: bool,
     has_slot_insertions: bool,
     wrapper_foldable: bool,
@@ -157,6 +115,7 @@ impl Default for PreparationFacts {
     fn default() -> Self {
         Self {
             const_evaluable: false,
+            has_unresolved_slots: false,
             has_resolved_slot_sources: false,
             has_slot_insertions: false,
             wrapper_foldable: true,
@@ -191,6 +150,7 @@ impl PreparationFacts {
 
     fn merge(&mut self, other: Self) {
         self.const_evaluable &= other.const_evaluable;
+        self.has_unresolved_slots |= other.has_unresolved_slots;
         self.has_resolved_slot_sources |= other.has_resolved_slot_sources;
         self.has_slot_insertions |= other.has_slot_insertions;
         self.wrapper_foldable &= other.wrapper_foldable;
@@ -280,7 +240,7 @@ pub(crate) fn prepare_tir_view(
         }
     } else if matches!(template.kind, TemplateType::SlotDefinition(_)) {
         TemplateConstValueKind::NonConst
-    } else if facts.has_resolved_slot_sources {
+    } else if facts.has_unresolved_slots || facts.has_resolved_slot_sources {
         TemplateConstValueKind::WrapperTemplate
     } else if facts.has_slot_insertions {
         TemplateConstValueKind::NonConst
@@ -312,9 +272,12 @@ pub(crate) fn prepare_tir_view(
         }
         TemplateConstValueKind::NonConst => Ok(PreparedTemplate::Runtime(PreparedRuntime {
             identity: view.identity(),
-            reason: walk
-                .runtime_reason
-                .unwrap_or(RuntimeTemplateReason::RuntimeExpression),
+            reason: if facts.has_slot_insertions {
+                RuntimeTemplateReason::SlotContribution
+            } else {
+                walk.runtime_reason
+                    .unwrap_or(RuntimeTemplateReason::RuntimeExpression)
+            },
         })),
     }
 }
@@ -505,6 +468,7 @@ impl PreparationWalk {
 
                 TemplateIrNodeKind::Slot { placeholder } => {
                     let mut facts = PreparationFacts::const_value();
+                    facts.has_unresolved_slots = true;
                     for wrapper_set_id in [
                         placeholder.applied_child_wrapper_set,
                         placeholder.child_wrapper_set,
@@ -1078,310 +1042,6 @@ impl PreparationWalk {
     }
 }
 
-fn template_root_is_linear_foldable(
-    view: &TirView<'_>,
-    store: &TemplateIrStore,
-    template_id: TemplateIrId,
-    visiting: &mut HashSet<PreparationTemplateKey>,
-) -> Result<bool, CompilerError> {
-    let traversal_key = (template_id, view.identity());
-    if !visiting.insert(traversal_key) {
-        return Ok(false);
-    }
-
-    let template_ir = store
-        .get_template(template_id)
-        .ok_or_else(|| missing_template_error(template_id))?;
-    let is_linear = tir_node_is_linear_foldable(view, store, template_ir.root, visiting);
-    visiting.remove(&traversal_key);
-    is_linear
-}
-
-fn tir_node_is_linear_foldable(
-    view: &TirView<'_>,
-    store: &TemplateIrStore,
-    node_id: TemplateIrNodeId,
-    visiting: &mut HashSet<PreparationTemplateKey>,
-) -> Result<bool, CompilerError> {
-    let node = store
-        .get_node(node_id)
-        .ok_or_else(|| missing_node_error(node_id))?;
-
-    let is_linear = match &node.kind {
-        TemplateIrNodeKind::Sequence { children } => {
-            let mut is_linear = true;
-            for child in children {
-                is_linear &= tir_node_is_linear_foldable(view, store, *child, visiting)?;
-            }
-            is_linear
-        }
-
-        TemplateIrNodeKind::Text { .. } => store.node_reactive_subscription(node_id).is_none(),
-
-        TemplateIrNodeKind::DynamicExpression {
-            reactive_subscription,
-            ..
-        } => reactive_subscription.is_none(),
-
-        TemplateIrNodeKind::AggregateOutput | TemplateIrNodeKind::LoopControl { .. } => false,
-
-        TemplateIrNodeKind::BranchChain { branches, fallback } => {
-            for branch in branches {
-                tir_node_is_linear_foldable(view, store, branch.body, visiting)?;
-            }
-            if let Some(fallback) = fallback {
-                tir_node_is_linear_foldable(view, store, *fallback, visiting)?;
-            }
-            false
-        }
-
-        TemplateIrNodeKind::Loop {
-            body,
-            aggregate_wrapper,
-            ..
-        } => {
-            tir_node_is_linear_foldable(view, store, *body, visiting)?;
-            if let Some(aggregate_wrapper) = aggregate_wrapper {
-                tir_node_is_linear_foldable(view, store, *aggregate_wrapper, visiting)?;
-            }
-            false
-        }
-
-        TemplateIrNodeKind::ChildTemplate { reference, .. } => {
-            template_root_is_linear_foldable(view, store, reference.root, visiting)?;
-            false
-        }
-
-        TemplateIrNodeKind::InsertContribution { template } => {
-            template_root_is_linear_foldable(view, store, *template, visiting)?;
-            false
-        }
-
-        TemplateIrNodeKind::Slot { .. } => false,
-
-        TemplateIrNodeKind::RuntimeSlotSite { .. } => false,
-    };
-
-    Ok(is_linear)
-}
-
-/// Checks one template root for the narrow view-native fold shortcut.
-fn check_template_root_view_native_fold_shape(
-    store: &TemplateIrStore,
-    view: Option<&TirView<'_>>,
-    module_view: &TirView<'_>,
-    template_id: TemplateIrId,
-    in_aggregate_wrapper: bool,
-    walk: &mut HandoffShortcutWalk,
-) -> Result<Option<RuntimeTemplateReason>, CompilerError> {
-    let template_ref = (template_id, view.map(TirView::identity));
-    if !walk.visiting_templates.insert(template_ref) {
-        return Ok(Some(RuntimeTemplateReason::ChildTemplateCycle));
-    }
-
-    let result = (|| {
-        let template = store
-            .get_template(template_id)
-            .ok_or_else(|| missing_template_error(template_id))?;
-
-        if template.runtime_slot_plan.is_some() {
-            return Ok(Some(RuntimeTemplateReason::RuntimeSlotPlan));
-        }
-
-        if let Some(wrapper_set_id) = template.conditional_child_wrapper_set
-            && !wrapper_set_is_virtual_foldable(store, view, module_view, wrapper_set_id, walk)?
-        {
-            return Ok(Some(RuntimeTemplateReason::WrapperApplication));
-        }
-
-        if walk.slot_resolution_active && template.summary.wrapper_count > 0 {
-            return Ok(Some(RuntimeTemplateReason::SlotWrapperApplication));
-        }
-
-        check_tir_node_view_native_fold_shape(
-            store,
-            view,
-            module_view,
-            template.root,
-            in_aggregate_wrapper,
-            walk,
-        )
-    })();
-    walk.visiting_templates.remove(&template_ref);
-    result
-}
-
-/// Checks one TIR subtree for the narrow view-native fold shortcut.
-fn check_tir_node_view_native_fold_shape(
-    store: &TemplateIrStore,
-    view: Option<&TirView<'_>>,
-    module_view: &TirView<'_>,
-    node_id: TemplateIrNodeId,
-    in_aggregate_wrapper: bool,
-    walk: &mut HandoffShortcutWalk,
-) -> Result<Option<RuntimeTemplateReason>, CompilerError> {
-    let node = store
-        .get_node(node_id)
-        .ok_or_else(|| missing_node_error(node_id))?;
-
-    match &node.kind {
-        TemplateIrNodeKind::Sequence { children } => {
-            for child in children {
-                if let Some(reason) = check_tir_node_view_native_fold_shape(
-                    store,
-                    view,
-                    module_view,
-                    *child,
-                    in_aggregate_wrapper,
-                    walk,
-                )? {
-                    return Ok(Some(reason));
-                }
-            }
-            Ok(None)
-        }
-
-        TemplateIrNodeKind::Text { .. } => {
-            if store.node_reactive_subscription(node_id).is_some() {
-                Ok(Some(RuntimeTemplateReason::ReactiveContent))
-            } else {
-                Ok(None)
-            }
-        }
-
-        TemplateIrNodeKind::DynamicExpression {
-            reactive_subscription,
-            ..
-        } => {
-            if reactive_subscription.is_some() {
-                Ok(Some(RuntimeTemplateReason::ReactiveContent))
-            } else {
-                Ok(None)
-            }
-        }
-
-        TemplateIrNodeKind::Slot { placeholder } => {
-            if !walk.slot_resolution_active {
-                return Ok(Some(RuntimeTemplateReason::SlotResolution));
-            }
-
-            if slot_placeholder_has_wrapper_context(placeholder) {
-                Ok(Some(RuntimeTemplateReason::SlotWrapperApplication))
-            } else {
-                Ok(None)
-            }
-        }
-
-        TemplateIrNodeKind::BranchChain { branches, fallback } => {
-            for branch in branches {
-                if let Some(reason) = check_tir_node_view_native_fold_shape(
-                    store,
-                    view,
-                    module_view,
-                    branch.body,
-                    in_aggregate_wrapper,
-                    walk,
-                )? {
-                    return Ok(Some(reason));
-                }
-            }
-            if let Some(fallback_id) = fallback
-                && let Some(reason) = check_tir_node_view_native_fold_shape(
-                    store,
-                    view,
-                    module_view,
-                    *fallback_id,
-                    in_aggregate_wrapper,
-                    walk,
-                )?
-            {
-                return Ok(Some(reason));
-            }
-            Ok(None)
-        }
-
-        TemplateIrNodeKind::Loop {
-            body,
-            aggregate_wrapper,
-            ..
-        } => {
-            if let Some(reason) =
-                check_tir_node_view_native_fold_shape(store, view, module_view, *body, false, walk)?
-            {
-                return Ok(Some(reason));
-            }
-            if let Some(wrapper_id) = aggregate_wrapper
-                && let Some(reason) = check_tir_node_view_native_fold_shape(
-                    store,
-                    view,
-                    module_view,
-                    *wrapper_id,
-                    true,
-                    walk,
-                )?
-            {
-                return Ok(Some(reason));
-            }
-            Ok(None)
-        }
-
-        TemplateIrNodeKind::ChildTemplate {
-            reference,
-            occurrence_id,
-            ..
-        } => {
-            let effective_wrapper_context = view
-                .map(|view| view.effective_wrapper_context(*occurrence_id))
-                .transpose()?
-                .flatten();
-            if let Some(view) = view
-                && let Some(context) = effective_wrapper_context
-                && !wrapper_context_is_view_native_foldable(store, view, context, walk)?
-            {
-                return Ok(Some(RuntimeTemplateReason::InheritedWrapperApplication));
-            }
-
-            let child_template_id = reference.root;
-
-            let child_view = match view {
-                Some(view) => view.structural_child(*reference)?,
-                None => module_view.structural_child(*reference)?,
-            };
-            let child_has_slot_resolution = child_view.slot_resolution_overlay()?.is_some();
-            let saved_slot_resolution_active = walk.slot_resolution_active;
-            walk.slot_resolution_active = child_has_slot_resolution;
-            let result = check_template_root_view_native_fold_shape(
-                store,
-                Some(&child_view),
-                module_view,
-                child_template_id,
-                in_aggregate_wrapper,
-                walk,
-            );
-            walk.slot_resolution_active = saved_slot_resolution_active;
-            result
-        }
-
-        TemplateIrNodeKind::LoopControl { .. } => Ok(None),
-
-        TemplateIrNodeKind::AggregateOutput => {
-            if in_aggregate_wrapper {
-                Ok(None)
-            } else {
-                Ok(Some(RuntimeTemplateReason::AggregateOutput))
-            }
-        }
-
-        TemplateIrNodeKind::InsertContribution { .. } => {
-            Ok(Some(RuntimeTemplateReason::SlotContribution))
-        }
-
-        TemplateIrNodeKind::RuntimeSlotSite { .. } => {
-            Ok(Some(RuntimeTemplateReason::RuntimeSlotSite))
-        }
-    }
-}
-
 fn slot_placeholder_has_wrapper_context(placeholder: &TirSlotPlaceholder) -> bool {
     placeholder.applied_child_wrapper_set.is_some()
         || placeholder.child_wrapper_set.is_some()
@@ -1472,338 +1132,5 @@ fn condition_location_or_loop_location(
         loop_location.clone()
     } else {
         condition.location.clone()
-    }
-}
-
-struct VirtualWrapperNodeFoldabilityContext<'a> {
-    in_aggregate_wrapper: bool,
-    fill_target_key: Option<&'a SlotKey>,
-    walk: &'a mut HandoffShortcutWalk,
-}
-
-/// Returns whether a wrapper-context overlay is safe for virtual folding.
-fn wrapper_context_is_view_native_foldable(
-    store: &TemplateIrStore,
-    view: &TirView<'_>,
-    context: &TirWrapperContext,
-    walk: &mut HandoffShortcutWalk,
-) -> Result<bool, CompilerError> {
-    // `$fresh` suppresses parent-applied wrappers, so there is nothing to fold.
-    if context.skip_parent_child_wrappers {
-        return Ok(true);
-    }
-
-    let Some(wrapper_set_ref) = context.inherited_wrapper_set else {
-        return Ok(true);
-    };
-
-    wrapper_set_is_virtual_foldable(store, Some(view), view, wrapper_set_ref, walk)
-}
-
-/// Returns whether every wrapper in a set is safe for virtual folding.
-fn wrapper_set_is_virtual_foldable(
-    store: &TemplateIrStore,
-    view: Option<&TirView<'_>>,
-    module_view: &TirView<'_>,
-    wrapper_set_id: TemplateWrapperSetId,
-    walk: &mut HandoffShortcutWalk,
-) -> Result<bool, CompilerError> {
-    let wrapper_set = store
-        .get_wrapper_set(wrapper_set_id)
-        .ok_or_else(|| missing_wrapper_set_error(wrapper_set_id))?;
-    for wrapper in &wrapper_set.wrappers {
-        let wrapper_view = Some(match view {
-            Some(view) => view.wrapper(*wrapper)?,
-            None => module_view.wrapper(*wrapper)?,
-        });
-        let result = wrapper_template_is_virtual_foldable(
-            store,
-            wrapper_view.as_ref(),
-            module_view,
-            wrapper.root,
-            false,
-            walk,
-        );
-        if !result? {
-            return Ok(false);
-        }
-    }
-
-    Ok(true)
-}
-
-fn wrapper_template_is_virtual_foldable(
-    store: &TemplateIrStore,
-    view: Option<&TirView<'_>>,
-    module_view: &TirView<'_>,
-    template_id: TemplateIrId,
-    in_aggregate_wrapper: bool,
-    walk: &mut HandoffShortcutWalk,
-) -> Result<bool, CompilerError> {
-    let template_ref = (template_id, view.map(TirView::identity));
-    if !walk.visiting_templates.insert(template_ref) {
-        return Ok(false);
-    }
-
-    let safe = (|| {
-        let template = store
-            .get_template(template_id)
-            .ok_or_else(|| missing_template_error(template_id))?;
-
-        if template.runtime_slot_plan.is_some()
-            || matches!(
-                template.kind,
-                crate::compiler_frontend::ast::templates::template::TemplateType::SlotInsert(_)
-            )
-        {
-            return Ok(false);
-        }
-
-        if !wrapper_expression_is_const_evaluable(store, view, template_id, template.root)? {
-            return Ok(false);
-        }
-
-        let schema = collect_tir_slot_schema(store, template_id).map_err(|error| {
-            CompilerError::compiler_error(format!(
-                "TIR preparation: wrapper slot schema could not be resolved: {error:?}"
-            ))
-        })?;
-        let fill_target_key = schema.loose_fill_target_key();
-
-        let mut node_context = VirtualWrapperNodeFoldabilityContext {
-            in_aggregate_wrapper,
-            fill_target_key: fill_target_key.as_ref(),
-            walk,
-        };
-        wrapper_node_is_virtual_foldable(store, view, module_view, template.root, &mut node_context)
-    })();
-
-    walk.visiting_templates.remove(&template_ref);
-    safe
-}
-
-fn wrapper_expression_is_const_evaluable(
-    store: &TemplateIrStore,
-    view: Option<&TirView<'_>>,
-    template_id: TemplateIrId,
-    root_node_id: TemplateIrNodeId,
-) -> Result<bool, CompilerError> {
-    use crate::compiler_frontend::ast::templates::tir::classification::tir_view_subtree_is_const_evaluable_value;
-
-    let expression_view = view.ok_or_else(|| {
-        CompilerError::compiler_error(format!(
-            "TIR preparation: wrapper template {template_id} requires an exact view for expression classification."
-        ))
-    })?;
-
-    match tir_view_subtree_is_const_evaluable_value(expression_view, store, root_node_id, &[]) {
-        Ok(is_const) => Ok(is_const),
-        Err(TemplateError::Infrastructure(error)) => Err(*error),
-        Err(TemplateError::Diagnostic(diagnostic)) => Err(CompilerError::compiler_error(format!(
-            "TIR preparation: wrapper expression classification produced a source diagnostic: {diagnostic:?}"
-        ))),
-    }
-}
-
-fn resolved_slot_source_is_foldable(
-    module_view: &TirView<'_>,
-    source: TemplateIrId,
-    walk: &mut HandoffShortcutWalk,
-) -> Result<bool, CompilerError> {
-    let source_store = module_view.store();
-    let source_template = source_store
-        .get_template(source)
-        .ok_or_else(|| missing_template_error(source))?;
-
-    if matches!(
-        source_template.kind,
-        crate::compiler_frontend::ast::templates::template::TemplateType::SlotInsert(_)
-    ) {
-        return Ok(false);
-    }
-
-    let source_view = module_view.resolved_slot_source(source)?;
-    (|| {
-        if !wrapper_expression_is_const_evaluable(
-            source_store,
-            Some(&source_view),
-            source,
-            source_template.root,
-        )? {
-            return Ok(false);
-        }
-        let saved_slot_resolution_active = walk.slot_resolution_active;
-        walk.slot_resolution_active = false;
-        let result = check_template_root_view_native_fold_shape(
-            source_store,
-            Some(&source_view),
-            module_view,
-            source,
-            false,
-            walk,
-        );
-        walk.slot_resolution_active = saved_slot_resolution_active;
-        Ok(result?.is_none())
-    })()
-}
-
-fn wrapper_node_is_virtual_foldable(
-    store: &TemplateIrStore,
-    view: Option<&TirView<'_>>,
-    module_view: &TirView<'_>,
-    node_id: TemplateIrNodeId,
-    context: &mut VirtualWrapperNodeFoldabilityContext<'_>,
-) -> Result<bool, CompilerError> {
-    let in_aggregate_wrapper = context.in_aggregate_wrapper;
-    let fill_target_key = context.fill_target_key;
-    let node = store
-        .get_node(node_id)
-        .ok_or_else(|| missing_node_error(node_id))?;
-
-    match &node.kind {
-        TemplateIrNodeKind::Sequence { children } => {
-            let mut safe = true;
-            for child in children {
-                safe &=
-                    wrapper_node_is_virtual_foldable(store, view, module_view, *child, context)?;
-            }
-            Ok(safe)
-        }
-
-        TemplateIrNodeKind::Text { .. } => Ok(store.node_reactive_subscription(node_id).is_none()),
-
-        TemplateIrNodeKind::DynamicExpression {
-            reactive_subscription,
-            ..
-        } => Ok(reactive_subscription.is_none()),
-
-        TemplateIrNodeKind::Slot { placeholder } => {
-            if in_aggregate_wrapper || slot_placeholder_has_wrapper_context(placeholder) {
-                return Ok(false);
-            }
-
-            if fill_target_key.is_some_and(|key| placeholder.key == *key) {
-                return Ok(true);
-            }
-
-            if let Some(view) = view
-                && let Some(resolution) =
-                    view.effective_slot_resolution(placeholder.occurrence_id)?
-                && let TirSlotResolutionKind::Resolved { sources } = &resolution.kind
-            {
-                for source in sources {
-                    if !resolved_slot_source_is_foldable(module_view, *source, context.walk)? {
-                        return Ok(false);
-                    }
-                }
-            }
-
-            Ok(true)
-        }
-
-        TemplateIrNodeKind::ChildTemplate {
-            reference,
-            occurrence_id,
-            ..
-        } => {
-            let child_template_id = reference.root;
-            if let Some(view) = view
-                && let Some(occurrence_context) = view.effective_wrapper_context(*occurrence_id)?
-                && !wrapper_context_is_view_native_foldable(
-                    store,
-                    view,
-                    occurrence_context,
-                    context.walk,
-                )?
-            {
-                return Ok(false);
-            }
-
-            let child_view = Some(match view {
-                Some(view) => view.structural_child(*reference)?,
-                None => module_view.structural_child(*reference)?,
-            });
-
-            let child_has_slot_resolution = child_view
-                .as_ref()
-                .map(|view| view.slot_resolution_overlay())
-                .transpose()?
-                .flatten()
-                .is_some();
-            let saved_slot_resolution_active = context.walk.slot_resolution_active;
-            context.walk.slot_resolution_active = child_has_slot_resolution;
-
-            let result = wrapper_template_is_virtual_foldable(
-                store,
-                child_view.as_ref(),
-                module_view,
-                child_template_id,
-                in_aggregate_wrapper,
-                context.walk,
-            );
-            context.walk.slot_resolution_active = saved_slot_resolution_active;
-            result
-        }
-
-        TemplateIrNodeKind::BranchChain { branches, fallback } => {
-            if in_aggregate_wrapper {
-                return Ok(false);
-            }
-
-            let mut safe = true;
-            for branch in branches {
-                safe &= wrapper_node_is_virtual_foldable(
-                    store,
-                    view,
-                    module_view,
-                    branch.body,
-                    context,
-                )?;
-            }
-            if let Some(fallback_id) = fallback {
-                safe &= wrapper_node_is_virtual_foldable(
-                    store,
-                    view,
-                    module_view,
-                    *fallback_id,
-                    context,
-                )?;
-            }
-            Ok(safe)
-        }
-
-        TemplateIrNodeKind::Loop {
-            body,
-            aggregate_wrapper,
-            ..
-        } => {
-            if in_aggregate_wrapper {
-                return Ok(false);
-            }
-
-            let original_in_aggregate_wrapper = context.in_aggregate_wrapper;
-            context.in_aggregate_wrapper = false;
-            let mut safe =
-                wrapper_node_is_virtual_foldable(store, view, module_view, *body, context)?;
-            context.in_aggregate_wrapper = original_in_aggregate_wrapper;
-            if let Some(wrapper_id) = aggregate_wrapper {
-                context.in_aggregate_wrapper = true;
-                safe &= wrapper_node_is_virtual_foldable(
-                    store,
-                    view,
-                    module_view,
-                    *wrapper_id,
-                    context,
-                )?;
-                context.in_aggregate_wrapper = original_in_aggregate_wrapper;
-            }
-            Ok(safe)
-        }
-
-        TemplateIrNodeKind::AggregateOutput => Ok(in_aggregate_wrapper),
-
-        TemplateIrNodeKind::InsertContribution { .. }
-        | TemplateIrNodeKind::LoopControl { .. }
-        | TemplateIrNodeKind::RuntimeSlotSite { .. } => Ok(false),
     }
 }

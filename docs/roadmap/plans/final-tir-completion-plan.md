@@ -29,17 +29,17 @@ TIR remains AST-local. No TIR store, ID, view, overlay or preparation type may c
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/final-tir-completion-plan.md
 STATUS: active
-CURRENT_SLICE: R3 accepted; checkpoint ready to commit
-LAST_ACCEPTED_COMMIT: 5823343d4 (R2C exact TirView transitions)
-WORKTREE: main at 5823343d4 with accepted uncommitted R3 source, tests, index locator and plan checkpoint; concurrent user documentation remains untouched
+CURRENT_SLICE: R4 accepted and ready to commit; next slice is the R5 ownership map
+LAST_ACCEPTED_COMMIT: 52f806697 (R3 semantic preparation)
+WORKTREE: main at 52f806697 with accepted uncommitted R4 source/tests plus this parent-owned plan update; concurrent user documentation remains untouched
 REQUIRED_RELOADS: startup files, this plan, and current TIR source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: compiler-design-overview.md one-preparation-owner contract and this plan's R4 prepared fold, handoff, cache and finalization requirements
-- code: preparation.rs is the sole exact-view semantic preparation owner; fold_safety.rs and authority tokens are deleted; finalization still exposes temporary disposition results and runtime handoff still owns a narrow folded-child shortcut for R4 removal
+- docs: compiler-design-overview.md one-preparation-owner and AST-to-HIR handoff contracts; this plan's R5 remaining-consumer, duplicate-state and test-ownership requirements
+- code: fold_prepared_template is the sole fold entry; exact Composed child and slot-source views reuse one cache owner; runtime handoff consumes PreparedRuntime plus the same view; FinalizedTemplateValue exclusively owns folded, runtime or helper outcomes
 ACCEPTANCE_CRITERIA:
-- commit the accepted R3 source, tests, plan and index locator without user-owned documentation
-- preserve the exact Value and ConstRequired preparation semantics, preparation counters, runtime-slot fold/cache rejection and net-negative TIR inventory
-- reload after commit and select the smallest coherent R4 prepared fold/handoff/finalization slice through Codex CLI
+- map every R5 reactive, const-control-flow, final-view, Template.kind and test owner before editing
+- identify the smallest coherent R5 implementation slices without restoring raw-store authority helpers or implementation-shaped test duplication
+- preserve R4's prepared fold, exact cache and owned handoff boundaries
 VALIDATION_STATE:
 - R2C just validate: passed; cross-target Clippy, 3421 unit tests, 1784 integration cases, docs check and 28 benchmark sanity cases; -7ms average, 23 faster and 0 slower
 - R3 ownership map: passed through Codex CLI simple-exploration; no repeated preparation proving a cache, new preparation.rs is the required final owner, and classification/control-flow predicates remain only where they answer earlier-stage questions
@@ -47,12 +47,16 @@ VALIDATION_STATE:
 - R3 just validate: passed; cross-target Clippy, 3434 unit tests, 1784 integration cases, docs check and 28 benchmark sanity cases; -7ms average, 22 faster and 0 slower
 - TIR inventory: 19,948 production and 17,712 test lines (R2C: 19,963 and 17,094; 069a29acb: 24,274 and 27,231)
 - deletion, stale-terminology, HIR/backend TIR-boundary and git diff checks: passed
+- R4 ownership map: passed through Codex CLI simple-exploration; all production callers and cache/handoff/finalization owners mapped; one A-D checkpoint is the smallest state without transitional parallel APIs
+- R4 Codex implementation and correction slices: accepted after parent review and final cache/handoff cleanup
+- R4 just validate: passed; cross-target Clippy, 3435 unit tests, 1784 integration cases, docs check and 28 benchmark sanity cases; -7ms average, 23 faster and 0 slower
+- TIR inventory: 18,851 production and 17,747 test lines (R3: 19,948 and 17,712; 069a29acb: 24,274 and 27,231)
 DOCS_IMPACT: index.md locator updated for preparation.rs; progress matrix unchanged because user-visible support did not change
 BLOCKERS_OR_OPEN_DECISIONS: none
-DELEGATION_DECISION: codex-cli implementation completed and parent corrections accepted
+DELEGATION_DECISION: codex-cli simple-exploration next - user requires Codex CLI for worker slices and R5 needs an ownership/test map before implementation
 NEXT_WORKER_ORDER: codex-cli (user-required provider)
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit the accepted R3 checkpoint, reload, then select the first coherent R4 slice through Codex CLI
+NEXT_RESUME_ACTION: commit the accepted R4 checkpoint, reload, then launch the bounded Codex CLI R5 ownership map
 ```
 
 Use `069a29acb` as the implementation and regression base. Do not continue extending `FoldAuthorityWalk`, foreign-store traversal, external expression-overlay stacks or prepared foreign-wrapper proofs.
@@ -725,6 +729,16 @@ and all 28 benchmark sanity cases.
 - Runtime slot plans cannot disappear as empty output.
 - The fold cache cannot hide malformed authority.
 - Common code gate passes.
+
+R4 accepted on the pre-commit `52f806697` worktree. `fold_prepared_template` is the sole fold
+entry, verifies the preparation/view identity before cache lookup and shares exact-view cache reuse
+with Composed child and resolved-source folds. Runtime handoff consumes `PreparedRuntime` plus that
+same view, selects the specialized slot shape from the actual root plan and no longer folds child
+templates through a shortcut. `FinalizedTemplateValue` now exclusively represents folded, runtime
+or helper outcomes, and all final value boundaries use an explicit preparation mode. The final
+tracked-file inventory is 18,851 production and 17,747 test lines. `just validate` passed with
+cross-target Clippy, 3,435 unit tests, 1,784 integration cases, docs checking and all 28 benchmark
+sanity cases.
 
 ### Phase R5 - Consolidate remaining consumers and tests
 

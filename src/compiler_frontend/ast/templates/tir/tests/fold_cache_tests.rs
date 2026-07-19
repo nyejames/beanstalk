@@ -17,7 +17,7 @@ use crate::compiler_frontend::ast::templates::template_folding::{
     TemplateEmission, TemplateFoldContext,
 };
 use crate::compiler_frontend::ast::templates::tir::builder::TemplateIrBuilder;
-use crate::compiler_frontend::ast::templates::tir::fold::fold_tir_view;
+use crate::compiler_frontend::ast::templates::tir::fold::fold_prepared_template;
 use crate::compiler_frontend::ast::templates::tir::fold_cache::{TirFoldCache, TirFoldCacheKey};
 use crate::compiler_frontend::ast::templates::tir::ids::{
     SlotOccurrenceId, TemplateIrId, TemplateIrNodeId, TemplateSlotPlanId,
@@ -38,7 +38,7 @@ use crate::compiler_frontend::ast::templates::tir::view::{
     TemplateTirPhase, TirView, TirViewIdentity,
 };
 use crate::compiler_frontend::ast::templates::tir::{
-    PreparedTemplate, TemplatePreparationMode, prepare_tir_view,
+    PreparedTemplate, RuntimeTemplateReason, TemplatePreparationMode, prepare_tir_view,
 };
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -169,6 +169,19 @@ fn fold_context<'a>(string_table: &'a mut StringTable) -> TemplateFoldContext<'a
     }
 }
 
+fn fold_prepared_view(
+    view: &TirView<'_>,
+    context: &mut TemplateFoldContext<'_>,
+) -> Result<TemplateEmission, TemplateError> {
+    let prepared = match prepare_tir_view(view, view.store(), TemplatePreparationMode::Value)? {
+        PreparedTemplate::Foldable(prepared) => prepared,
+        PreparedTemplate::Runtime(_) | PreparedTemplate::Helper(_) => {
+            panic!("test view expected to be foldable")
+        }
+    };
+    fold_prepared_template(&prepared, view.clone(), context)
+}
+
 #[test]
 fn fold_view_matches_direct_template_fold_for_simple_text() {
     let mut string_table = StringTable::new();
@@ -182,8 +195,7 @@ fn fold_view_matches_direct_template_fold_for_simple_text() {
     .expect("view should construct");
 
     let mut context = fold_context(&mut string_table);
-    let emission =
-        fold_tir_view(&view, &fixture.store, &mut context).expect("view fold should succeed");
+    let emission = fold_prepared_view(&view, &mut context).expect("view fold should succeed");
 
     assert_eq!(
         emission,
@@ -204,8 +216,7 @@ fn fold_view_caches_empty_binding_result() {
     .expect("view should construct");
 
     let mut context = fold_context(&mut string_table);
-    let first =
-        fold_tir_view(&view, &fixture.store, &mut context).expect("first fold should succeed");
+    let first = fold_prepared_view(&view, &mut context).expect("first fold should succeed");
     let key = TirFoldCacheKey {
         identity: TirViewIdentity {
             root: fixture.template_id,
@@ -217,8 +228,7 @@ fn fold_view_caches_empty_binding_result() {
     };
 
     assert!(context.fold_cache.get(&key).is_some());
-    let second =
-        fold_tir_view(&view, &fixture.store, &mut context).expect("cached fold should succeed");
+    let second = fold_prepared_view(&view, &mut context).expect("cached fold should succeed");
     assert_eq!(first, second);
 }
 
@@ -259,8 +269,7 @@ fn fold_view_does_not_cache_active_bindings() {
         fold_cache: TirFoldCache::new(),
     };
 
-    fold_tir_view(&view, &fixture.store, &mut context)
-        .expect("active-binding fold should still succeed");
+    fold_prepared_view(&view, &mut context).expect("active-binding fold should still succeed");
     let active_binding_key = TirFoldCacheKey {
         identity: TirViewIdentity {
             root: fixture.template_id,
@@ -338,13 +347,8 @@ fn prepared_view_rejects_identity_mismatch() {
         bindings: vec![],
         fold_cache: TirFoldCache::new(),
     };
-    let error = crate::compiler_frontend::ast::templates::tir::fold_tir_view_prepared(
-        &alternate_view,
-        &fixture.store,
-        &mut context,
-        preparation,
-    )
-    .expect_err("prepared identity mismatch should fail");
+    let error = fold_prepared_template(&preparation, alternate_view, &mut context)
+        .expect_err("prepared identity mismatch should fail");
     assert!(format!("{error:?}").contains("root"));
 }
 
@@ -412,7 +416,7 @@ fn fold_view_with_resolved_slot_overlay_produces_filled_output() {
     .expect("view should construct");
     let mut context = fold_context(&mut string_table);
     let emission =
-        fold_tir_view(&view, &store, &mut context).expect("slot overlay fold should succeed");
+        fold_prepared_view(&view, &mut context).expect("slot overlay fold should succeed");
 
     assert_eq!(
         emission,
@@ -448,14 +452,13 @@ fn fold_view_with_missing_slot_overlay_produces_empty_output() {
     )
     .expect("view should construct");
     let mut context = fold_context(&mut string_table);
-    let emission = fold_tir_view(&view, &store, &mut context)
-        .expect("unresolved slot should fold to no output");
+    let emission =
+        fold_prepared_view(&view, &mut context).expect("unresolved slot should fold to no output");
     assert_eq!(emission, TemplateEmission::NoOutput);
 }
 
 #[test]
 fn same_store_child_cycle_is_rejected() {
-    let mut string_table = StringTable::new();
     let mut store = TemplateIrStore::new();
     let template_id = TemplateIrId::new(store.template_count());
     let child_reference = TemplateTirChildReference::new(
@@ -483,9 +486,12 @@ fn same_store_child_cycle_is_rejected() {
         TemplateViewContext::default(),
     )
     .expect("view should construct");
-    let mut context = fold_context(&mut string_table);
-    let result = fold_tir_view(&view, &store, &mut context);
-    assert!(matches!(result, Err(TemplateError::Diagnostic(_))));
+    let result = prepare_tir_view(&view, &store, TemplatePreparationMode::Value);
+    assert!(matches!(
+        result,
+        Ok(PreparedTemplate::Runtime(runtime))
+            if matches!(runtime.reason, RuntimeTemplateReason::ChildTemplateCycle)
+    ));
 }
 
 // -------------------------
@@ -545,7 +551,7 @@ fn text_template(
 }
 
 #[test]
-fn fold_tir_view_rejects_parsed_phase_without_caching() {
+fn fold_prepared_template_rejects_parsed_phase_without_caching() {
     let mut string_table = StringTable::new();
     let mut store = TemplateIrStore::new();
     let template_id = text_template(&mut store, &mut string_table, "parsed");
@@ -554,7 +560,11 @@ fn fold_tir_view_rejects_parsed_phase_without_caching() {
         .expect("view should construct");
     let mut context = fold_context(&mut string_table);
 
-    let error = fold_tir_view(&view, &store, &mut context)
+    let prepared = crate::compiler_frontend::ast::templates::tir::preparation::PreparedFold {
+        identity: view.identity(),
+        value_kind: crate::compiler_frontend::ast::templates::template::TemplateConstValueKind::RenderableString,
+    };
+    let error = fold_prepared_template(&prepared, view, &mut context)
         .expect_err("a Parsed view must not fold or be cached");
 
     assert!(
@@ -564,7 +574,7 @@ fn fold_tir_view_rejects_parsed_phase_without_caching() {
 }
 
 #[test]
-fn fold_tir_view_rejects_missing_node_in_untaken_branch() {
+fn prepared_fold_rejects_missing_node_in_untaken_branch() {
     let mut string_table = StringTable::new();
     let mut store = TemplateIrStore::new();
     let body = store.push_node(TemplateIrNode::new(
@@ -613,7 +623,7 @@ fn fold_tir_view_rejects_missing_node_in_untaken_branch() {
         .expect("view should construct");
     let mut context = fold_context(&mut string_table);
 
-    let error = fold_tir_view(&view, &store, &mut context)
+    let error = fold_prepared_view(&view, &mut context)
         .expect_err("a missing node in an untaken branch must still be rejected");
 
     assert!(
@@ -623,7 +633,7 @@ fn fold_tir_view_rejects_missing_node_in_untaken_branch() {
 }
 
 #[test]
-fn fold_tir_view_repeated_child_template_folding_hits_cache() {
+fn prepared_fold_repeated_child_template_folding_hits_cache() {
     let mut string_table = StringTable::new();
     let mut store = TemplateIrStore::new();
     let child_text = string_table.intern("child");
@@ -650,8 +660,7 @@ fn fold_tir_view_repeated_child_template_folding_hits_cache() {
     .expect("child view should construct");
 
     let mut context = fold_context(&mut string_table);
-    let first =
-        fold_tir_view(&view, &store, &mut context).expect("first child fold should succeed");
+    let first = fold_prepared_view(&view, &mut context).expect("first child fold should succeed");
     let cache_key = TirFoldCacheKey {
         identity: TirViewIdentity {
             root: child_template_id,
@@ -667,7 +676,7 @@ fn fold_tir_view_repeated_child_template_folding_hits_cache() {
         "first child fold should populate the cache under its own view identity"
     );
     let second =
-        fold_tir_view(&view, &store, &mut context).expect("second child fold should hit cache");
+        fold_prepared_view(&view, &mut context).expect("second child fold should hit cache");
     assert_eq!(first, second);
     assert_eq!(first, TemplateEmission::Output(child_text));
     assert_eq!(
@@ -678,7 +687,63 @@ fn fold_tir_view_repeated_child_template_folding_hits_cache() {
 }
 
 #[test]
-fn fold_tir_view_preserves_root_expression_overlay_through_nested_children() {
+fn prepared_fold_reuses_cache_for_repeated_composed_child_views() {
+    let mut string_table = StringTable::new();
+    let mut store = TemplateIrStore::new();
+    let child_template_id = text_template(&mut store, &mut string_table, "child");
+    let child_reference = TemplateTirChildReference::new(
+        child_template_id,
+        TemplateTirPhase::Composed,
+        TemplateViewContext::default(),
+    );
+
+    let parent_template_id = {
+        let mut builder = TemplateIrBuilder::new(&mut store);
+        let first_child =
+            builder.push_child_template_node_with_reference(child_reference, empty_location());
+        let second_child =
+            builder.push_child_template_node_with_reference(child_reference, empty_location());
+        let root = builder.push_sequence_node(vec![first_child, second_child], empty_location());
+        builder.finish_template(
+            root,
+            Style::default(),
+            TemplateType::String,
+            TemplateIrSummary::default(),
+            empty_location(),
+        )
+    };
+
+    let view = TirView::new(
+        &store,
+        parent_template_id,
+        TemplateTirPhase::Composed,
+        TemplateViewContext::default(),
+    )
+    .expect("parent view should construct");
+    let expected_output = string_table.intern("childchild");
+    let mut context = fold_context(&mut string_table);
+
+    let emission = fold_prepared_view(&view, &mut context)
+        .expect("repeated composed child views should fold successfully");
+
+    assert_eq!(emission, TemplateEmission::Output(expected_output));
+    let child_cache_key = TirFoldCacheKey {
+        identity: TirViewIdentity {
+            root: child_template_id,
+            phase: TemplateTirPhase::Composed,
+            context: TemplateViewContext::default(),
+        },
+        loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
+        bindings_empty: true,
+    };
+    assert!(
+        context.fold_cache.get(&child_cache_key).is_some(),
+        "a repeated Composed child view must populate its exact cache entry"
+    );
+}
+
+#[test]
+fn prepared_fold_preserves_root_expression_overlay_through_nested_children() {
     let mut string_table = StringTable::new();
     let mut store = TemplateIrStore::new();
     let empty_context = TemplateViewContext::default();
@@ -787,12 +852,12 @@ fn fold_tir_view_preserves_root_expression_overlay_through_nested_children() {
 
     let first = {
         let mut context = fold_context(&mut string_table);
-        fold_tir_view(&first_view, &store, &mut context)
+        fold_prepared_view(&first_view, &mut context)
     }
     .expect("first overlay fold should succeed");
     let second = {
         let mut context = fold_context(&mut string_table);
-        fold_tir_view(&second_view, &store, &mut context)
+        fold_prepared_view(&second_view, &mut context)
     }
     .expect("second overlay fold should succeed");
 
@@ -801,7 +866,7 @@ fn fold_tir_view_preserves_root_expression_overlay_through_nested_children() {
 }
 
 #[test]
-fn fold_tir_view_below_composed_child_ignores_unconsumed_overlay_identity() {
+fn prepared_fold_below_composed_child_ignores_unconsumed_overlay_identity() {
     let mut string_table = StringTable::new();
     let mut store = TemplateIrStore::new();
     let parent_context = TemplateViewContext::default();
@@ -863,7 +928,7 @@ fn fold_tir_view_below_composed_child_ignores_unconsumed_overlay_identity() {
     .expect("parent view should construct");
     let mut context = fold_context(&mut string_table);
 
-    let emission = fold_tir_view(&view, &store, &mut context)
+    let emission = fold_prepared_view(&view, &mut context)
         .expect("a Parsed child's unconsumed overlay identity must not block folding");
 
     assert_eq!(emission, TemplateEmission::Output(child_text));
@@ -878,7 +943,7 @@ fn fold_tir_view_below_composed_child_ignores_unconsumed_overlay_identity() {
 // rejection, and finalization attribution counters on the one-store fold path.
 
 #[test]
-fn fold_tir_view_cache_hit_still_validates_malformed_authority() {
+fn prepared_fold_cache_hit_still_validates_malformed_authority() {
     let mut string_table = StringTable::new();
     let mut fixture = build_text_fixture(&mut string_table, "cached authority");
     let mut fold_context = fold_context(&mut string_table);
@@ -891,36 +956,42 @@ fn fold_tir_view_cache_hit_still_validates_malformed_authority() {
             fixture.context,
         )
         .expect("view should construct");
-        fold_tir_view(&view, &fixture.store, &mut fold_context)
+        let prepared = match prepare_tir_view(&view, &fixture.store, TemplatePreparationMode::Value)
+            .expect("preparation should succeed")
+        {
+            PreparedTemplate::Foldable(prepared) => prepared,
+            PreparedTemplate::Runtime(_) | PreparedTemplate::Helper(_) => {
+                panic!("text fixture should be foldable")
+            }
+        };
+        fold_prepared_template(&prepared, view.clone(), &mut fold_context)
             .expect("first fold should populate cache");
+
+        // Keep the completed proof so the second call exercises the cache
+        // boundary against the now-malformed store.
+        fixture.store.nodes.clear();
+        let view = TirView::new(
+            &fixture.store,
+            fixture.template_id,
+            TemplateTirPhase::Composed,
+            fixture.context,
+        )
+        .expect("view should still construct after clearing nodes");
+        let error = fold_prepared_template(&prepared, view, &mut fold_context)
+            .expect_err("cache hits must not hide malformed current-store authority");
+        let TemplateError::Infrastructure(error) = error else {
+            panic!("missing cached node should remain on the infrastructure lane");
+        };
+        assert!(
+            error.msg.contains("TIR fold: node"),
+            "expected a stable cache-boundary authority error, got: {}",
+            error.msg
+        );
     }
-
-    // Drop the structural nodes so the cached root no longer resolves to a
-    // valid tree. Cache hits must not hide this malformed current-store
-    // authority.
-    fixture.store.nodes.clear();
-
-    let view = TirView::new(
-        &fixture.store,
-        fixture.template_id,
-        TemplateTirPhase::Composed,
-        fixture.context,
-    )
-    .expect("view should still construct after clearing nodes");
-    let error = fold_tir_view(&view, &fixture.store, &mut fold_context)
-        .expect_err("cache hits must not hide malformed current-store authority");
-    let TemplateError::Infrastructure(error) = error else {
-        panic!("missing cached node should remain on the infrastructure lane");
-    };
-    assert!(
-        error.msg.contains("TIR preparation: node"),
-        "expected a stable cache-boundary authority error, got: {}",
-        error.msg
-    );
 }
 
 #[test]
-fn fold_tir_view_runtime_plan_early_return_validates_plan_authority() {
+fn prepared_runtime_plan_validates_plan_authority_before_handoff() {
     let mut string_table = StringTable::new();
     let mut fixture = build_text_fixture(&mut string_table, "runtime plan");
     let missing_slot_plan_id = TemplateSlotPlanId::new(999);
@@ -934,16 +1005,11 @@ fn fold_tir_view_runtime_plan_early_return_validates_plan_authority() {
         fixture.context,
     )
     .expect("view should construct");
-    let mut fold_context = fold_context(&mut string_table);
-    let error = fold_tir_view(&view, &fixture.store, &mut fold_context)
-        .expect_err("runtime-plan early return must validate its required plan");
-    let TemplateError::Infrastructure(error) = error else {
-        panic!("missing runtime slot plan should remain on the infrastructure lane");
-    };
+    let error = prepare_tir_view(&view, &fixture.store, TemplatePreparationMode::Value)
+        .expect_err("preparation must validate its required runtime slot plan");
     assert!(
-        error.msg.contains("TIR preparation: slot plan"),
-        "expected a stable runtime-plan authority error, got: {}",
-        error.msg
+        format!("{error:?}").contains("TIR preparation: slot plan"),
+        "expected a stable runtime-plan authority error, got: {error:?}"
     );
 }
 
@@ -1022,12 +1088,12 @@ fn fold_dynamic_ast_template_with_missing_root_authority() -> TemplateError {
         fold_cache: TirFoldCache::new(),
     };
 
-    fold_tir_view(&view, &store_ref, &mut fold_context)
+    fold_prepared_view(&view, &mut fold_context)
         .expect_err("dynamic AST templates must enter their own fold authority boundary")
 }
 
 #[test]
-fn fold_tir_view_dynamic_ast_template_validates_malformed_root_authority() {
+fn prepared_fold_dynamic_ast_template_validates_malformed_root_authority() {
     let error = fold_dynamic_ast_template_with_missing_root_authority();
     let TemplateError::Infrastructure(error) = error else {
         panic!("malformed dynamic template root should remain on the infrastructure lane");
@@ -1040,7 +1106,7 @@ fn fold_tir_view_dynamic_ast_template_validates_malformed_root_authority() {
 }
 
 #[test]
-fn fold_tir_view_rejects_direct_sequence_node_cycle_as_infrastructure() {
+fn prepared_fold_rejects_direct_sequence_node_cycle_as_infrastructure() {
     let mut store = TemplateIrStore::new();
     let context = TemplateViewContext::default();
     // The first pushed node gets index 0, so a Sequence root whose only child
@@ -1064,7 +1130,7 @@ fn fold_tir_view_rejects_direct_sequence_node_cycle_as_infrastructure() {
     let mut string_table = StringTable::new();
     let mut fold_context = fold_context(&mut string_table);
     let TemplateError::Infrastructure(error) =
-        fold_tir_view(&view, &store, &mut fold_context).expect_err("direct cycle must fail")
+        fold_prepared_view(&view, &mut fold_context).expect_err("direct cycle must fail")
     else {
         panic!("direct node cycle must remain on the infrastructure lane");
     };
@@ -1077,7 +1143,7 @@ fn fold_tir_view_rejects_direct_sequence_node_cycle_as_infrastructure() {
 
 #[cfg(feature = "benchmark_counters")]
 #[test]
-fn fold_tir_view_increments_phase1_attribution_counters() {
+fn prepared_fold_increments_phase1_attribution_counters() {
     use crate::compiler_frontend::instrumentation::{
         AstCounter, lock_counter_test, reset_ast_counters, test_read_ast_counter,
     };
@@ -1096,17 +1162,15 @@ fn fold_tir_view_increments_phase1_attribution_counters() {
     let mut fold_context = fold_context(&mut string_table);
 
     reset_ast_counters();
-    let first =
-        fold_tir_view(&view, &fixture.store, &mut fold_context).expect("first fold should succeed");
+    let first = fold_prepared_view(&view, &mut fold_context).expect("first fold should succeed");
     // Second fold with empty bindings must hit the fold cache.
-    let second = fold_tir_view(&view, &fixture.store, &mut fold_context)
-        .expect("second fold should succeed");
+    let second = fold_prepared_view(&view, &mut fold_context).expect("second fold should succeed");
     assert_eq!(first, second, "cached fold must equal the first fold");
 
     assert_eq!(
         test_read_ast_counter(AstCounter::TirViewFoldsAttempted),
         2,
-        "fold_tir_view should be attempted twice"
+        "prepared fold should be attempted twice"
     );
     assert_eq!(
         test_read_ast_counter(AstCounter::TirFoldCacheMisses),

@@ -11,10 +11,17 @@ use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::ast::templates::error::TemplateError;
 use crate::compiler_frontend::ast::templates::template::Template;
 use crate::compiler_frontend::ast::templates::template::{CommentDirectiveKind, TemplateType};
+use crate::compiler_frontend::ast::templates::template_folding::TemplateEmission;
 use crate::compiler_frontend::ast::templates::template_folding::TemplateFoldContext;
-use crate::compiler_frontend::ast::templates::tir::{TemplateIrStore, TirFoldCache};
+use crate::compiler_frontend::ast::templates::tir::{
+    PreparedTemplate, TemplateIrStore, TemplatePreparationMode, TemplateTirPhase, TirFoldCache,
+    TirView, fold_prepared_template, prepare_tir_view,
+};
 use crate::compiler_frontend::ast::templates::top_level_templates::{
     AstDocFragment, AstDocFragmentKind,
+};
+use crate::compiler_frontend::compiler_messages::{
+    CompilerDiagnostic, InvalidTemplateStructureReason,
 };
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
@@ -139,7 +146,38 @@ fn collect_doc_fragments(
             bindings: Vec::new(),
             fold_cache: TirFoldCache::new(),
         };
-        let rendered = template.fold_into_stringid(&mut fold_context)?;
+        let reference = template.tir_reference;
+        let store = context.template_ir_store.borrow();
+        let view = TirView::with_minimum_phase(
+            &store,
+            reference.root,
+            reference.phase,
+            TemplateTirPhase::Composed,
+            reference.context,
+        )?;
+        let preparation = prepare_tir_view(&view, &store, TemplatePreparationMode::ConstRequired)?;
+        let prepared = match preparation {
+            PreparedTemplate::Foldable(prepared) => prepared,
+            PreparedTemplate::Helper(_) | PreparedTemplate::Runtime(_) => {
+                return Err(CompilerDiagnostic::invalid_template_structure(
+                    InvalidTemplateStructureReason::NonFoldableConstTemplate,
+                    template.location.to_owned(),
+                )
+                .into());
+            }
+        };
+        let emission = fold_prepared_template(&prepared, view, &mut fold_context)?;
+        let rendered = match emission {
+            TemplateEmission::Output(value) => value,
+            TemplateEmission::NoOutput => fold_context.string_table.intern(""),
+            TemplateEmission::Break(_) | TemplateEmission::Continue(_) => {
+                return Err(CompilerDiagnostic::invalid_template_structure(
+                    InvalidTemplateStructureReason::NonFoldableConstTemplate,
+                    template.location.to_owned(),
+                )
+                .into());
+            }
+        };
 
         fragments.push(AstDocFragment {
             kind: AstDocFragmentKind::Doc,

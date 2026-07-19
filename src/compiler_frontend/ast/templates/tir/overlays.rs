@@ -372,12 +372,6 @@ pub(crate) struct TemplateViewContext {
 }
 
 impl TemplateViewContext {
-    pub(crate) fn is_empty(self) -> bool {
-        self.expression_overlay.is_none()
-            && self.slot_resolution.is_none()
-            && self.wrapper_context.is_none()
-    }
-
     /// Merges one newer context over this context, preserving last-context
     /// precedence independently for each overlay dimension.
     pub(crate) fn merge(self, newer: Self) -> Self {

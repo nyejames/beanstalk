@@ -660,30 +660,6 @@ fn tir_view_template_is_const_evaluable_value(
     tir_view_child_template_is_const_evaluable_value(&mut context, view.root_ref(), root, &[])
 }
 
-/// Checks whether one TIR subtree rooted at `node_id` is a const-evaluable value,
-/// reading effective expressions from the supplied `TirView`.
-///
-/// WHAT: exposes the view-based const-evaluability walker used by
-///       `template_control_flow` validation so it can ask the same question for
-///       branch bodies, loop bodies, and aggregate wrappers without duplicating
-///       the overlay-aware traversal.
-/// WHY: keeps the overlay-aware const-evaluability logic in `classification.rs`
-///      while letting the validator emit diagnostics at the right source locations.
-pub(crate) fn tir_view_subtree_is_const_evaluable_value(
-    view: &TirView<'_>,
-    store: &TemplateIrStore,
-    node_id: TemplateIrNodeId,
-    loop_binding_paths: &[InternedPath],
-) -> Result<bool, TemplateError> {
-    let mut context = TirViewConstEvaluationContext {
-        view: view.clone(),
-        store,
-        visiting_templates: HashSet::new(),
-        string_function_child_policy: StringFunctionChildConstPolicy::Strict,
-    };
-    tir_view_tree_is_const_evaluable_value(&mut context, node_id, loop_binding_paths)
-}
-
 fn tir_child_template_is_const_evaluable_value(
     store: &TemplateIrStore,
     template_id: TemplateIrId,
