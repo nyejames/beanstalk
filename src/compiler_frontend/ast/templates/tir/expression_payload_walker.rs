@@ -329,8 +329,8 @@ fn walk_tir_view_expression_payload_node(
             let insert_view = view.structural_helper(template_id)?;
             if visited_templates.insert(insert_view.identity()) {
                 // Insert contributions inherit the parent phase and view context,
-                // so they recurse through a child `TirView` instead of a raw
-                // same-store walk. A missing insert template or view context is an
+                // so they recurse through a child `TirView` instead of walking the
+                // store directly. A missing insert template or view context is an
                 // explicit internal error from the structural-helper transition.
                 let insert_root_node_id = {
                     let insert_root_template = insert_view.root_template()?;
@@ -505,8 +505,8 @@ pub(crate) fn collect_effective_tir_expression_overlay_payloads(
 ///
 /// The phase-preserving entry point is used by pre-normalization annotation so
 /// structural transitions apply the same Parsed-versus-Composed rules as the
-/// durable root reference. The legacy finalized entry point above remains for
-/// the finalized normalization consumer.
+/// durable root reference. The finalized entry point above remains for the
+/// finalized normalization consumer.
 pub(crate) fn collect_effective_tir_expression_overlay_payloads_with_phase(
     store: &TemplateIrStore,
     template_id: TemplateIrId,

@@ -262,7 +262,7 @@ impl<'store> RuntimeHandoffMaterializer<'store> {
     ///
     /// WHAT: keeps ordinary node materialization and wrapper fill injection on
     ///       the same structural traversal, including branches, loops and
-    ///       same-store child-template roots.
+    ///       module-local child-template roots.
     /// WHY: wrapper target selection is schema-owned, so the handoff walker must
     ///      be able to replace every structural shape that schema discovery can
     ///      reach without creating a second, partial materializer.
@@ -694,7 +694,7 @@ impl<'store> RuntimeHandoffMaterializer<'store> {
     /// handoff node.
     ///
     /// WHAT: validates the wrapper-context shape, honors `$fresh` suppression, and
-    ///       resolves the inherited wrapper set into same-store wrapper refs before
+    ///       resolves the inherited wrapper set into module-local wrapper refs before
     ///       wrapping the child handoff. `IfChildEmits` becomes a neutral
     ///       `ConditionalWrapper` node so HIR can use its existing emitted-output
     ///       guard without seeing TIR overlay state.

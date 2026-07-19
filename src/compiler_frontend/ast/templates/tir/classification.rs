@@ -7,8 +7,8 @@
 //! view context carry the authoritative reference identity.
 //!
 //! WHY: normalization and folding should classify from the TIR root they
-//! already trust instead of reconstructing template structure through a
-//! compatibility representation.
+//! already trust instead of reconstructing template structure through a second
+//! representation.
 //!
 //! ## Ownership contract
 //!
@@ -86,7 +86,7 @@ impl<'view, 'store> TirViewConstEvaluationContext<'view, 'store> {
     ///
     /// WHAT: delegates expression lookup to the module store while the
     ///       current view remains responsible for slot and wrapper dimensions.
-    /// WHY: nested same-store views can change those dimensions without
+    /// WHY: nested module-local views can change those dimensions without
     ///       discarding an outer finalized root expression override.
     fn effective_expression_for_site(
         &self,
@@ -96,14 +96,14 @@ impl<'view, 'store> TirViewConstEvaluationContext<'view, 'store> {
     }
 }
 
-/// Read-only unresolved-slot query over an existing same-store TIR subtree.
+/// Read-only unresolved-slot query over an existing module-local TIR subtree.
 ///
 /// WHAT: walks the subtree rooted at `root` (recursing through child templates
 ///       and nested control-flow bodies) for unresolved `Slot` nodes. The
-///       caller already holds a finalized same-store root.
+///       caller already holds a finalized module-local root.
 /// WHY: runtime control-flow slot-artifact validation prefers the finalized
 ///      body root after render-unit preparation.
-/// Missing nodes and required same-store templates are compiler errors. Cycle
+/// Missing nodes and required module-local templates are compiler errors. Cycle
 /// re-entry remains a semantic non-match.
 pub(crate) fn tir_subtree_has_unresolved_slots(
     store: &TemplateIrStore,
@@ -320,7 +320,7 @@ pub(crate) fn tir_node_is_const_evaluable_value_with_bindings(
 /// Follows `ChildTemplate` references into the same store with a visited set to
 /// prevent infinite recursion on cyclic references.
 ///
-/// Missing nodes and required same-store templates are malformed TIR authority,
+/// Missing nodes and required module-local templates are malformed TIR authority,
 /// not semantic absence. Cycle re-entry remains a non-match for this structural
 /// query.
 fn tir_tree_has_slots(
@@ -411,7 +411,7 @@ fn tir_tree_has_slots(
 ///      renderable string. Only slots that actually resolve to source templates
 ///      turn the template into a `WrapperTemplate`.
 ///
-/// Missing nodes and required same-store child or insert templates are malformed
+/// Missing nodes and required module-local child or insert templates are malformed
 /// TIR authority and propagate through `TemplateError`. Cycle re-entry remains a
 /// non-match.
 fn tir_view_has_resolved_slots(
@@ -522,7 +522,7 @@ fn tir_view_visit_child_template(
 ///       post-construction owner of this semantic marker.
 /// WHY: TIR trees may represent an escaped insert through either a
 ///      `ChildTemplate` or `InsertContribution`, so both forms must be checked.
-/// Missing nodes and required same-store templates are malformed TIR authority,
+/// Missing nodes and required module-local templates are malformed TIR authority,
 /// not semantic absence. Cycle re-entry remains a non-match.
 fn tir_tree_has_slot_insert_children(
     store: &TemplateIrStore,
@@ -1651,9 +1651,9 @@ fn tir_view_loop_header_is_const_evaluable(
 /// Store-aware binding-aware expression const classifier for the TIR tree walker.
 ///
 /// WHAT: threads the module-scoped store through the complete expression walk
-///       and follows embedded templates through their exact same-store TIR
+///       and follows embedded templates through their exact module-local TIR
 ///       references.
-/// WHY: TIR structural recursion must follow the authoritative same-store
+/// WHY: TIR structural recursion must follow the authoritative module-local
 ///      reference when it encounters a nested template expression.
 fn expression_is_const_evaluable_with_bindings_and_tir_templates(
     expression: &Expression,

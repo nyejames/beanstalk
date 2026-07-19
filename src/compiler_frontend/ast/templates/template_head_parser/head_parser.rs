@@ -124,8 +124,8 @@ fn should_inline_template_head_reference(
 
     // Head-only runtime template references are value reads, not receiver
     // applications. Runtime slot handoffs already carry the composition-owned
-    // wrapper/source plan, so copying the stale compatibility mirror would lose
-    // that plan when the surrounding template is later materialized for HIR.
+    // wrapper/source plan, so copying an already-materialized template would
+    // lose that plan when the surrounding template later crosses into HIR.
     !expression_contains_runtime_slot_handoff(&declaration.value, context)
 }
 

@@ -348,7 +348,7 @@ fn fold_tir_template_with_view(
     )?;
 
     // Wrapper sets store `TemplateWrapperReference` values; extract the
-    // store-local `TemplateIrId` for same-store folding lookups.
+    // store-local `TemplateIrId` for module-local TIR folding lookups.
     let wrapper_references: Vec<TemplateWrapperReference> =
         match template.conditional_child_wrapper_set {
             Some(wrapper_set_id) => store

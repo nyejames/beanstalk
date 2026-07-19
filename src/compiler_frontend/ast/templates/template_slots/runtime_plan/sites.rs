@@ -190,7 +190,7 @@ impl RuntimeWrapperSitePlanBuilder<'_> {
     /// table and wraps from innermost to outermost using the TIR-native wrapper
     /// render-piece path.
     /// WHY: `TirSlotPlaceholder` no longer stores recursive `Template` values,
-    /// so runtime slot-site planning must consume the same-store ID path.
+    /// so runtime slot-site planning must consume the module-local ID path.
     fn wrap_site_plan_with_tir_child_wrappers(
         &mut self,
         mut plan: TemplateSlotSiteRenderPlan,
@@ -204,7 +204,7 @@ impl RuntimeWrapperSitePlanBuilder<'_> {
         };
 
         // Wrapper sets store `TemplateWrapperReference` values; extract the
-        // store-local `TemplateIrId` for same-store lookups.
+        // store-local `TemplateIrId` for module-local TIR lookups.
         let wrapper_refs = wrapper_set.wrappers.clone();
         for wrapper_ref in wrapper_refs.into_iter().rev() {
             add_ast_counter(AstCounter::TemplateWrapperApplications, 1);
@@ -241,7 +241,7 @@ impl RuntimeWrapperSitePlanBuilder<'_> {
         Ok(plan)
     }
 
-    /// Builds child-wrapper site render pieces from a known same-store wrapper
+    /// Builds child-wrapper site render pieces from a known module-local wrapper
     /// TIR template.
     ///
     /// WHAT: consumes a store-local wrapper template ID and root directly,

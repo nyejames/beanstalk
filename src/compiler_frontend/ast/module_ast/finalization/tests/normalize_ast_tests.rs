@@ -1089,13 +1089,6 @@ fn finalization_fold_uses_finalized_expression_overlay_view() {
         folded, overlay_text,
         "finalized expression overlays must fold from the same effective TirView instead of the structural payload"
     );
-
-    #[cfg(feature = "benchmark_counters")]
-    assert_eq!(
-        test_read_ast_counter(AstCounter::TirStoreCloneFinalization),
-        0,
-        "finalized expression-overlay folding must borrow the live store instead of cloning it"
-    );
 }
 
 #[test]

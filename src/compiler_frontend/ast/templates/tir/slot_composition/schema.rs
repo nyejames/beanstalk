@@ -2,9 +2,8 @@
 //!
 //! WHAT: discovers declared `$slot` targets from TIR nodes, collects slot
 //!       placeholders in document order, and expands those placeholders with
-//!       routed contributions. This is the TIR-native replacement for the legacy
-//!       `template_slots/schema.rs` discovery and `compose_wrapper_atoms_recursive`
-//!       expansion phases.
+//!       routed contributions. This module owns TIR-native schema discovery and
+//!       wrapper expansion for those routed contributions.
 //!
 //! WHY: TIR-native slot composition discovers wrapper slots and substitutes
 //!      fill content from TIR nodes. Keeping schema discovery separate from
@@ -877,9 +876,9 @@ fn expand_tir_slot_placeholders_from_node(
     }
 }
 
-/// Applies a same-store `$children(..)` wrapper set to a single TIR node.
+/// Applies a module-local `$children(..)` wrapper set to a single TIR node.
 ///
-/// WHAT: resolves the wrapper set into same-store wrapper template IDs and
+/// WHAT: resolves the wrapper set into module-local wrapper template IDs and
 ///       delegates to `wrap_tir_node_in_wrappers_into`, which composes each
 ///       slot-bearing wrapper around the supplied node and prepends each
 ///       slot-less wrapper before it.
@@ -991,7 +990,7 @@ fn tir_node_is_control_flow_root(
             let template_id = reference.root;
             let template = store.get_template(template_id).ok_or_else(|| {
                 Box::new(internal_compiler_error(
-                    "TIR slot expansion: same-store child template ID was not present in the store while checking control flow.",
+                    "TIR slot expansion: module-local child template ID was not present in the TIR store while checking control flow.",
                 ))
             })?;
 
@@ -1190,8 +1189,8 @@ fn required_wrapper_set_count(
 /// WHAT: checks the template's summary for slot flags. Templates with slots are
 ///       wrapper receivers, not direct child output, so they must not be wrapped
 ///       by `$children(..)` wrappers.
-/// WHY: this mirrors the legacy `is_direct_child_template_atom` check that
-///      excludes templates with unresolved slots from direct-child wrapping.
+/// WHY: unresolved-slot templates are wrapper receivers, so this check excludes
+///      them from direct-child wrapping.
 #[cfg(test)]
 pub(super) fn tir_template_has_unresolved_slots(
     store: &TemplateIrStore,

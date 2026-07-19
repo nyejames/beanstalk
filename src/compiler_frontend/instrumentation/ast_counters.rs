@@ -91,23 +91,12 @@ pub(crate) enum AstCounter {
     TirFoldOutputBytes,
     TirFoldStringInternCalls,
 
-    // Phase 1 TIR attribution counters.
+    // Exact-view finalization attribution counters.
     //
-    // WHAT: fine-grained attribution for current-state materialization,
-    // module-store view folds, fold-cache behavior, and full
-    // `TemplateIrStore` clone sites, so Phase 2 can rank remaining clone and
-    // current-state materialization costs.
-    // WHY: the existing `ast_tir_templates_created` / `ast_tir_nodes_created`
-    // counters measure broad TIR materialization volume, but they cannot
-    // answer which current-state call sites or fold paths drove that volume.
-    // These counters add call-site and path attribution without changing fold
+    // WHAT: fine-grained attribution for module-store view folds and fold-cache
     // behavior.
-    /// TIR templates created by current-state materialization only.
-    TirCurrentStateTemplatesCreated,
-
-    /// TIR nodes created by current-state materialization only.
-    TirCurrentStateNodesCreated,
-
+    // WHY: broad TIR materialization counters cannot identify which finalization
+    // paths drove view-fold volume.
     /// Finalization view fold attempt that passed reference and store
     /// validation and reached view construction.
     TirFinalizationFoldAttempts,
@@ -141,18 +130,6 @@ pub(crate) enum AstCounter {
 
     /// Prepared exact-view fold cache lookups that missed and recomputed the fold.
     TirFoldCacheMisses,
-
-    /// Full `TemplateIrStore` clones in AST finalization
-    /// (`template_helpers`): the module-store view fold clone and the
-    /// fold-context snapshot clone.
-    TirStoreCloneFinalization,
-
-    /// Full `TemplateIrStore` clones during doc-fragment folding.
-    TirStoreCloneDocFragments,
-
-    /// Full `TemplateIrStore` clones during HIR runtime-template handoff
-    /// folding.
-    TirStoreCloneHirHandoff,
 }
 #[cfg(feature = "benchmark_counters")]
 use crate::compiler_frontend::compiler_messages::compiler_dev_logging::log_benchmark_counter;
@@ -163,7 +140,7 @@ mod detailed {
     use super::log_benchmark_counter;
     use std::cell::RefCell;
 
-    const COUNTER_COUNT: usize = AstCounter::TirStoreCloneHirHandoff as usize + 1;
+    const COUNTER_COUNT: usize = AstCounter::TirFoldCacheMisses as usize + 1;
 
     thread_local! {
         /// Per-thread AST counter store.
@@ -289,8 +266,6 @@ mod detailed {
             AstCounter::TirFoldNodesVisited,
             AstCounter::TirFoldOutputBytes,
             AstCounter::TirFoldStringInternCalls,
-            AstCounter::TirCurrentStateTemplatesCreated,
-            AstCounter::TirCurrentStateNodesCreated,
             AstCounter::TirFinalizationFoldAttempts,
             AstCounter::TirFinalizationFoldSuccesses,
             AstCounter::TirViewFoldsAttempted,
@@ -301,9 +276,6 @@ mod detailed {
             AstCounter::TirViewFoldWrapperContextPresent,
             AstCounter::TirFoldCacheHits,
             AstCounter::TirFoldCacheMisses,
-            AstCounter::TirStoreCloneFinalization,
-            AstCounter::TirStoreCloneDocFragments,
-            AstCounter::TirStoreCloneHirHandoff,
         ]
     }
 
@@ -391,8 +363,6 @@ mod detailed {
             AstCounter::TirFoldOutputBytes => "TIR fold output bytes",
             AstCounter::TirFoldStringInternCalls => "TIR fold string-intern calls",
 
-            AstCounter::TirCurrentStateTemplatesCreated => "TIR current-state templates created",
-            AstCounter::TirCurrentStateNodesCreated => "TIR current-state nodes created",
             AstCounter::TirFinalizationFoldAttempts => "finalization fold attempts",
             AstCounter::TirFinalizationFoldSuccesses => "finalization fold successes",
             AstCounter::TirViewFoldsAttempted => "TIR view folds attempted",
@@ -407,9 +377,6 @@ mod detailed {
             AstCounter::TirViewFoldWrapperContextPresent => "TIR view fold wrapper-context present",
             AstCounter::TirFoldCacheHits => "TIR fold cache hits",
             AstCounter::TirFoldCacheMisses => "TIR fold cache misses",
-            AstCounter::TirStoreCloneFinalization => "TIR store clone: finalization",
-            AstCounter::TirStoreCloneDocFragments => "TIR store clone: doc fragments",
-            AstCounter::TirStoreCloneHirHandoff => "TIR store clone: HIR handoff",
         }
     }
 
@@ -513,10 +480,6 @@ mod detailed {
             AstCounter::TirFoldOutputBytes => "ast_tir_fold_output_bytes",
             AstCounter::TirFoldStringInternCalls => "ast_tir_fold_string_intern_calls",
 
-            AstCounter::TirCurrentStateTemplatesCreated => {
-                "ast_tir_current_state_templates_created"
-            }
-            AstCounter::TirCurrentStateNodesCreated => "ast_tir_current_state_nodes_created",
             AstCounter::TirFinalizationFoldAttempts => "ast_tir_finalization_fold_attempts",
             AstCounter::TirFinalizationFoldSuccesses => "ast_tir_finalization_fold_successes",
             AstCounter::TirViewFoldsAttempted => "ast_tir_view_folds_attempted",
@@ -533,9 +496,6 @@ mod detailed {
             }
             AstCounter::TirFoldCacheHits => "ast_tir_fold_cache_hits",
             AstCounter::TirFoldCacheMisses => "ast_tir_fold_cache_misses",
-            AstCounter::TirStoreCloneFinalization => "ast_tir_store_clone_finalization",
-            AstCounter::TirStoreCloneDocFragments => "ast_tir_store_clone_doc_fragments",
-            AstCounter::TirStoreCloneHirHandoff => "ast_tir_store_clone_hir_handoff",
         }
     }
 

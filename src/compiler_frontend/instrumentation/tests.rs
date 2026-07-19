@@ -46,9 +46,7 @@ fn ast_counters_record_stable_metrics_when_stdout_is_suppressed() {
     add_ast_counter(AstCounter::TemplateFoldExpressionOwnedRewrites, 24);
     add_ast_counter(AstCounter::TemplateFoldBindingSubstitutions, 29);
 
-    // Phase 1 TIR attribution counters must flow through the stable metric path.
-    add_ast_counter(AstCounter::TirCurrentStateTemplatesCreated, 303);
-    add_ast_counter(AstCounter::TirCurrentStateNodesCreated, 305);
+    // Exact-view TIR attribution counters must flow through the stable metric path.
     add_ast_counter(AstCounter::TirFinalizationFoldAttempts, 313);
     add_ast_counter(AstCounter::TirFinalizationFoldSuccesses, 317);
     add_ast_counter(AstCounter::TirViewFoldsAttempted, 331);
@@ -59,9 +57,6 @@ fn ast_counters_record_stable_metrics_when_stdout_is_suppressed() {
     add_ast_counter(AstCounter::TirViewFoldWrapperContextPresent, 353);
     add_ast_counter(AstCounter::TirFoldCacheHits, 367);
     add_ast_counter(AstCounter::TirFoldCacheMisses, 373);
-    add_ast_counter(AstCounter::TirStoreCloneFinalization, 379);
-    add_ast_counter(AstCounter::TirStoreCloneDocFragments, 397);
-    add_ast_counter(AstCounter::TirStoreCloneHirHandoff, 401);
     add_ast_counter(AstCounter::TirPreparationAttempts, 409);
     add_ast_counter(AstCounter::TirPreparationNodesVisited, 419);
 
@@ -140,16 +135,6 @@ fn ast_counters_record_stable_metrics_when_stdout_is_suppressed() {
     );
     assert_counter_value(
         &observations.counters,
-        "ast_tir_current_state_templates_created",
-        303.0,
-    );
-    assert_counter_value(
-        &observations.counters,
-        "ast_tir_current_state_nodes_created",
-        305.0,
-    );
-    assert_counter_value(
-        &observations.counters,
         "ast_tir_finalization_fold_attempts",
         313.0,
     );
@@ -190,21 +175,6 @@ fn ast_counters_record_stable_metrics_when_stdout_is_suppressed() {
     );
     assert_counter_value(&observations.counters, "ast_tir_fold_cache_hits", 367.0);
     assert_counter_value(&observations.counters, "ast_tir_fold_cache_misses", 373.0);
-    assert_counter_value(
-        &observations.counters,
-        "ast_tir_store_clone_finalization",
-        379.0,
-    );
-    assert_counter_value(
-        &observations.counters,
-        "ast_tir_store_clone_doc_fragments",
-        397.0,
-    );
-    assert_counter_value(
-        &observations.counters,
-        "ast_tir_store_clone_hir_handoff",
-        401.0,
-    );
     assert_counter_value(
         &observations.counters,
         "ast_tir_preparation_attempts",

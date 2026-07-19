@@ -303,7 +303,8 @@ impl Template {
             // Head-chain composition materializes slot routing as needed, while
             // `$children(..)` direct-child wrappers are represented as
             // wrapper-context overlays. Both passes update the parser-owned TIR
-            // reference directly. There is no content-to-TIR fallback here.
+            // reference directly. There is no second template representation to
+            // reconstruct here.
             //
             // Overlay threading: head-chain composition returns a `ComposedTirRoot`
             // with an optional slot-resolution view context. Wrapper

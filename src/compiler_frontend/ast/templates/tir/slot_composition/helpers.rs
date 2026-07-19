@@ -88,11 +88,10 @@ pub(super) fn internal_compiler_error(message: &str) -> CompilerDiagnostic {
 /// Builds the diagnostic for an `$insert(...)` helper that targets a slot the
 /// wrapper does not declare.
 ///
-/// WHAT: mirrors the legacy `unknown_slot_target_error` from
-///       `template_slots/diagnostics.rs`, using the same
+/// WHAT: builds the shared unknown-slot-target diagnostic using the
 ///       `InvalidTemplateSlotReason` variants.
-/// WHY: the TIR-native path must produce the same user-facing diagnostic as
-///      the legacy path without modifying the legacy diagnostics module.
+/// WHY: TIR-native slot routing must preserve the established user-facing
+///      diagnostic semantics at its own error boundary.
 pub(super) fn unknown_slot_target_error(
     target: &SlotKey,
     location: SourceLocation,

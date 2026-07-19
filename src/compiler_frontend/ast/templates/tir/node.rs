@@ -195,7 +195,7 @@ pub(crate) enum TemplateIrNodeKind {
         /// attaches to `$(source)` template chunks.
         /// WHY: HIR lowering needs to distinguish direct subscriptions (lazy)
         /// from ordinary dynamic reads (snapshots) without re-parsing template
-        /// directives or consulting legacy render-plan fixtures.
+        /// directives or consulting another render-plan representation.
         reactive_subscription: Option<ReactiveSubscription>,
         /// Document-order site ID assigned when this node is emitted.
         ///
@@ -308,14 +308,13 @@ pub(crate) enum TemplateIrNodeKind {
 //  TIR Slot Placeholder
 // -------------------------
 
-/// Final TIR-owned payload for an unresolved slot occurrence.
+/// TIR-owned payload for an unresolved slot occurrence.
 ///
 /// WHAT: records the slot key, stable occurrence ID, source location, and the
 /// TIR-owned wrapper-set IDs needed by the remaining runtime slot planner.
-/// WHY: the legacy AST `SlotPlaceholder` stores recursive `Template` values.
-/// TIR must not own those templates directly; wrapper sets store same-store
-/// `TemplateIrId`s instead, preserving current behavior until wrapper context
-/// moves fully into overlays.
+/// WHY: the AST `SlotPlaceholder` stores recursive `Template` values. TIR must
+/// not own those templates directly; wrapper sets store module-local
+/// `TemplateIrId`s instead, keeping wrapper routing in the store-owned plan.
 #[derive(Clone, Debug)]
 pub(crate) struct TirSlotPlaceholder {
     /// Slot key (name and source location from the original placeholder).
@@ -332,7 +331,7 @@ pub(crate) struct TirSlotPlaceholder {
     /// WHAT: references a `TemplateWrapperSet` that was already resolved and
     /// applied to the placeholder's fallback children in the AST path.
     /// WHY: TIR does not own recursive wrapper templates; it stores the
-    /// same-store wrapper-set ID so folding can replay the applied wrappers.
+    /// module-local wrapper-set ID so folding can replay the applied wrappers.
     pub(crate) applied_child_wrapper_set: Option<TemplateWrapperSetId>,
 
     /// Wrappers to apply around this slot's resolved children.
@@ -485,7 +484,7 @@ impl TemplateIrBranch {
 
     /// Sets the branch selector's expression-site ID, returning the updated branch.
     ///
-    /// WHAT: used by direct-push construction paths (current-state materialization,
+    /// WHAT: used by direct-push construction paths (render-unit construction,
     /// slot expansion) that allocate or preserve a site ID outside the builder.
     /// WHY: keeps site-ID assignment in one clear place per construction path
     /// without changing the `new` signature used by the parser-facing builder.

@@ -1,76 +1,70 @@
-//! Template IR (TIR) — AST-local intermediate representation for parsed templates.
+//! AST-local Template IR for one module-scoped template store.
 //!
-//! WHAT: TIR is a tree-structured representation of template content that
-//! stores all template data in a single `TemplateIrStore` with typed IDs.
-//! It is the authoritative source of template semantics during AST processing.
+//! `TemplateIrStore` owns all TIR arenas, overlay payloads, and module-local
+//! occurrence counters. Typed IDs and thin durable references index that store.
+//! TIR is dropped before the completed AST leaves the frontend, so HIR and
+//! backends receive only folded strings or neutral owned runtime-handoff data.
 //!
-//! WHY: TIR gives composition, formatting, folding, metadata, and HIR handoff
-//! a single stable representation, making the data flow explicit and avoiding
-//! repeated rebuilding of intermediate template content.
+//! ## View contract
 //!
-//! ## Ownership contract
+//! `TirViewIdentity` is the complete read identity:
 //!
-//! TIR is owned by the AST template subsystem. It does not own HIR, backend,
-//! or public API data. The store is module-scoped and dropped after AST
-//! template processing for that module completes. HIR and backends never see
-//! TIR IDs, stores, views, overlays, or store values.
+//! ```text
+//! root + phase + TemplateViewContext
+//! ```
 //!
-//! ## Phase model
+//! `TemplateViewContext` carries `expression_overlay`, `slot_resolution`, and
+//! `wrapper_context` by value. `TirView` is the sole structural read surface
+//! and owns structural-child, wrapper, resolved-source, helper, and
+//! nested-value transitions.
 //!
-//! `TemplateTirPhase` tracks how far a structural root has progressed through
-//! the AST template pipeline:
+//! ## Phase and final reducers
 //!
 //! ```text
 //! Parsed -> Composed -> Formatted -> Finalized
 //! ```
 //!
-//! Consumers require a minimum phase: folding needs `Composed`, and HIR handoff
-//! needs `Finalized`.
+//! `preparation.rs` performs the exhaustive semantic preparation for an exact
+//! view. `fold_prepared_template` is the sole prepared constant-fold entry.
+//! `handoff_materialization.rs` builds prepared owned runtime handoffs for the
+//! neutral `runtime_handoff` payloads consumed by HIR.
 //!
-//! ## Store, views, and overlays
+//! ## Module map
 //!
-//! `TemplateIrStore` owns all structural and overlay data for one module.
-//! `TirView` is the single production read API: it pairs a module-local root
-//! with a phase and a value-carried view context.
+//! | Module | Responsibility |
+//! |---|---|
+//! | `ids.rs` | Typed module-local IDs for TIR arenas and occurrences |
+//! | `refs.rs` | Thin durable root/phase/context references |
+//! | `overlays.rs` | Value-carried view context and overlay payloads |
+//! | `view.rs` | Exact `TirView` identity, reads, and structural/nested-value transitions |
+//! | `store.rs` | One module-scoped store for TIR arenas, overlays, and side tables |
+//! | `node.rs` | TIR roots and structural node kinds |
+//! | `summary.rs` | Cheap shape and capacity metadata |
+//! | `builder.rs` | Narrow parser-facing TIR emission facade |
+//! | `parser_builder_state.rs` | In-progress parser emission state |
+//! | `construction_context.rs` | Parser-local construction context over the shared store |
+//! | `control_flow_roots.rs` | Install and resolve composed control-flow roots |
+//! | `render_unit.rs` | Construct branch and aggregate render-unit roots |
+//! | `formatter_view.rs` | Adapt formatter input/output to TIR views |
+//! | `slot_composition/` | Compose head chains and route slot contributions |
+//! | `slot_plan.rs` | Store-owned runtime slot site and source plans |
+//! | `wrapper_sets.rs` | Reuse wrapper references and build wrapper contexts |
+//! | `contribution_shape.rs` | Share child-contribution shape decisions |
+//! | `copy_state.rs` and `subtree_copy.rs` | Copy module-local derived subtrees for runtime slot planning |
+//! | `classification.rs` | Answer narrow TIR shape queries used before final reduction |
+//! | `expression_payload_walker.rs` | Walk expression payloads through exact TIR views |
+//! | `preparation.rs` | Sole exhaustive semantic preparation owner |
+//! | `fold.rs` | Implement `fold_prepared_template`, the sole prepared fold entry |
+//! | `fold_cache.rs` | Cache exact-view prepared fold emissions |
+//! | `handoff_materialization.rs` | Build prepared owned runtime-handoff payloads |
+//! | `tests/` | Focused TIR invariant tests |
 //!
-//! ## Module layout
-//!
-//! ```text
-//! tir/
-//! ├── mod.rs                           Module entry and narrow re-exports
-//! ├── ids.rs                           Typed store IDs (template, node, wrapper set, slot plan)
-//! ├── refs.rs                          Module-local durable TIR references
-//! ├── overlays.rs                      Final view context and overlay dimension handles
-//! ├── store.rs                         TemplateIrStore — central owned storage
-//! ├── node.rs                          TemplateIr, TemplateIrNode, TemplateIrNodeKind
-//! ├── summary.rs                       TemplateIrSummary — shape metadata for capacity planning
-//! ├── builder.rs                       Parser-facing mutable facade for direct TIR emission
-//! ├── parser_builder_state.rs          In-progress parser TIR accumulator
-//! ├── expression_payload_walker.rs     Shared read-only expression-payload traversal
-//! ├── copy_state.rs                    Recursive TIR copy-pass state and instrumentation
-//! ├── subtree_copy.rs                  TIR-native active-context subtree copying
-//! ├── control_flow_roots.rs            Install prepared control-flow body roots
-//! ├── classification.rs                Store-aware TIR shape queries for classification
-//! ├── fold.rs                          TIR-native compile-time folding
-//! ├── formatter_view.rs                TIR-native formatter feed
-//! ├── render_unit.rs                   Render-unit and aggregate-wrapper preparation
-//! ├── handoff_materialization.rs       Build owned runtime-template trees for HIR lowering
-//! ├── slot_plan.rs                     Runtime slot route handoff side tables
-//! ├── slot_composition/                TIR-native slot schema and contribution routing
-//! ├── wrapper_sets.rs                  Wrapper set equivalence and reuse
-//! └── tests/                           TIR-focused tests
-//! ```
-//!
-//! Only `mod.rs` controls what is re-exported. Submodules keep their internals
-//! `pub(crate)` and `mod.rs` selects a narrow API surface.
+//! Only this module selects the narrow `pub(crate)` surface used by the AST
+//! template stages.
 
 // -------------------------
 //  Submodules
 // -------------------------
-//
-// Test-only surfaces are gated with `#[cfg(test)]`. Production submodules keep
-// their item-level dead-code exceptions local to reserved fields or narrow
-// forward-parity hooks with explicit reasons.
 
 mod classification;
 mod contribution_shape;
@@ -79,70 +73,24 @@ mod expression_payload_walker;
 mod ids;
 mod subtree_copy;
 
-// `refs` defines durable module-local identities consumed by view, folding,
-// formatting, metadata, validation, and handoff paths.
-pub(crate) mod refs;
-
-// `TemplateIrStore` owns AST-local template IR plus overlay storage.
-// Production construction, finalization, view, folding, formatting,
-// metadata, and slot-composition paths use the active store surface, while
-// focused tests keep currently-unused freeze/domain helpers gated to test
-// builds.
-
-// `overlays` defines active view context and overlay-dimension payloads. The
-// production store/view paths consume expression and slot-resolution
-// overlays; focused tests keep the wrapper-context payload surface covered
-// until production allocates that overlay dimension.
-mod overlays;
-
-// `view` is the central AST-local read API over store-owned template roots
-// and body/root subtrees plus view contexts. It is consumed by production final
-// type-boundary and debug validation as well as tests.
-mod view;
-
-// `node` defines the core `TemplateIr`, `TemplateIrNode`, and `TemplateIrNodeKind`
-// types consumed by construction, view, folding, formatting, metadata, validation,
-// slot composition, and HIR handoff.
-mod node;
-
-// `store` owns every TIR template, node, wrapper set, and side-table entry. It is
-// the central storage consumed by construction, finalization, view, folding,
-// formatting, metadata, validation, slot composition, and HIR handoff.
-mod store;
-
-mod summary;
-
 mod builder;
 mod construction_context;
-mod fold;
-mod preparation;
-
-// Fold-cache types are production plumbing for prepared exact-view folds.
-mod fold_cache;
-
-mod parser_builder_state;
-
-// `formatter_view` produces the TIR-native formatted tree and any formatter
-// warnings. The result type is re-exported so production callers can forward
-// warnings without reaching into the private formatter-view module.
-mod formatter_view;
-
-// `hir_handoff` builds the owned runtime-template and runtime-slot handoff
-// payloads consumed by HIR lowering. All re-exported items are consumed by
-// AST finalization, reactive metadata, validation, or HIR lowering.
-mod handoff_materialization;
-
-mod render_unit;
-
-// Runtime slot-plan handoff side-table types consumed by reactive metadata and HIR lowering.
-mod slot_plan;
-
-// `control_flow_roots` installs and resolves finalized control-flow body
-// roots after render-unit preparation.
 mod control_flow_roots;
-
+mod fold;
+mod fold_cache;
+mod formatter_view;
+mod handoff_materialization;
+mod node;
+mod overlays;
+mod parser_builder_state;
+mod preparation;
+pub(crate) mod refs;
+mod render_unit;
 mod slot_composition;
-
+mod slot_plan;
+mod store;
+mod summary;
+mod view;
 mod wrapper_sets;
 
 #[cfg(test)]
@@ -152,32 +100,20 @@ mod tests;
 //  Re-exports
 // -------------------------
 
-// IDs are the primary external interface — consumers use them to reference
-// store entries without reaching into the store module directly.
 pub(crate) use ids::{
     ExpressionSiteId, TemplateIrId, TemplateIrNodeId, TemplateSlotPlanId, TemplateWrapperSetId,
 };
 
-// Focused cross-module tests need to construct overlay payloads directly. Keep
-// the extra occurrence/resolution types out of the normal production surface.
 #[cfg(test)]
 pub(crate) use ids::SlotOccurrenceId;
 
-// Read-only effective-view expression-payload walker shared by final
-// type-boundary validation and debug TypeId validation. The walker is
-// TIR-authoritative and removes the duplicated local traversal helpers from
-// AST finalization.
 pub(crate) use expression_payload_walker::walk_tir_view_expression_payloads;
-// Expression-payload overlay APIs consumed by production AST finalization.
-// Mutation is retained only for focused TIR walker tests.
 pub(crate) use expression_payload_walker::{
     collect_effective_tir_expression_overlay_payloads,
     collect_effective_tir_expression_overlay_payloads_with_phase,
     walk_expression_payloads_with_nested_tir_views,
 };
 
-// Store and node types are re-exported so HIR handoff construction and later
-// phases can construct TIR data without deep import paths.
 pub(crate) use node::TemplateLoopHeaderExpressionSites;
 pub(crate) use node::{
     TemplateIr, TemplateIrBranch, TemplateIrNode, TemplateIrNodeKind, TirSlotPlaceholder,
@@ -190,8 +126,6 @@ pub(crate) use refs::{TemplateTirReference, TemplateWrapperReference};
 pub(crate) use view::{TirView, TirViewIdentity};
 pub(crate) use wrapper_sets::{attach_wrapper_context_overlay, wrapper_reference_for_template};
 
-// Final view context and expression-overlay types consumed by production
-// template creation and finalization.
 pub(crate) use overlays::{TemplateViewContext, TirExpressionOverlay};
 #[cfg(test)]
 pub(crate) use overlays::{
@@ -201,22 +135,15 @@ pub(crate) use overlays::{
 #[cfg(test)]
 pub(crate) use store::TemplateWrapperSet;
 
-// Builder: narrow parser-facing facade for direct TIR emission.
 pub(crate) use builder::TemplateIrBuilder;
 
-// Control-flow root installation after render-unit preparation.
 pub(crate) use control_flow_roots::{
     ControlFlowBodyKind, replace_control_flow_body_tir_root,
     replace_loop_aggregate_wrapper_tir_root,
 };
 
-// TIR-native child-contribution classification shared by slot composition and
-// the atom-based runtime slot planner.
 pub(crate) use contribution_shape::{ContributionShape, classify_tir_contribution_node};
 
-// TIR-native slot composition and runtime slot-site planning entry points used
-// outside `tir/`. The schema query is shared with atom-level routing; routing
-// internals stay in `slot_composition`.
 pub(crate) use slot_composition::{
     RoutedTirSlotContributions, TirSlotContributions, TirSlotSchema,
     collect_tir_slot_placeholders_in_order, collect_tir_slot_schema, compose_tir_head_chain,
@@ -224,43 +151,28 @@ pub(crate) use slot_composition::{
     wrap_tir_node_in_wrappers,
 };
 
-// Parser-local construction context: owns the in-progress builder state while
-// a template is being parsed and shaped, keeping parse-time accumulator state
-// off the long-lived `Template` struct.
 pub(crate) use construction_context::TemplateConstructionContext;
 
-// TIR copy state and instrumentation: recursive copy-pass state and
-// copy-pass counters used by subtree copying and runtime slot planning.
 pub(crate) use copy_state::{TirCopyState, record_tir_copy_counters};
 pub(crate) use subtree_copy::copy_tir_subtree_with_active_slot_plan;
 
-// Classification: store-aware TIR shape queries for template classification.
 pub(crate) use classification::{
     TirTemplateClassification, classify_effective_tir_view_template,
     refresh_kind_from_classification, tir_node_is_const_evaluable_value,
     tir_subtree_has_unresolved_slots,
 };
-// The sole fold entry consumes a completed preparation proof and the exact
-// view that produced it.
+
 pub(crate) use fold::fold_prepared_template;
 pub(crate) use preparation::{
     PreparedRuntime, PreparedTemplate, RuntimeTemplateReason, TemplateHelperKind,
     TemplatePreparationMode, prepare_tir_view,
 };
 
-// Fold cache: AST-phase-local cache for TIR fold results. The primary cache is
-// production state used by template folding and HIR handoff.
 pub(crate) use fold_cache::TirFoldCache;
-
-// Fold-cache key/result types are imported directly from `fold_cache` by
-// focused TIR tests and are not part of the production re-export surface.
-
-// Formatter view: TIR-native formatter feed.
 
 #[cfg(test)]
 pub(crate) use formatter_view::format_tir_template;
 
-// Render-unit helpers: prepare control-flow render roots from TIR-owned nodes.
 pub(in crate::compiler_frontend::ast::templates) use render_unit::{
     apply_inherited_child_wrappers_to_body_root, build_branch_body_candidate_from_tir_nodes,
     format_tir_body_root, head_prefix_tir_nodes, prepare_loop_aggregate_wrapper,
@@ -273,5 +185,4 @@ pub(crate) use slot_plan::{
     TemplateSlotSiteRenderPiece, TemplateSlotSiteRenderPlan, convert_tir_tree_to_active_slot_plan,
 };
 
-// Central read API over structural roots in the store and value-carried view contexts.
 pub(crate) use view::{TemplateTirPhase, finalized_tir_view_for_template};

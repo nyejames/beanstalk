@@ -5,8 +5,7 @@
 //!       single loose contribution and expanding the wrapper's slot
 //!       placeholders.
 //!
-//! WHY: this is the TIR-native equivalent of the child-wrapper branches in the
-//!      legacy template composition pipeline. Keeping it separate from
+//! WHY: this owns TIR-native child-wrapper application. Keeping it separate from
 //!      head-chain composition reflects the two distinct composition sites:
 //!      head-chain receivers are opened by head-origin wrappers, while child
 //!      wrappers are inherited from enclosing control-flow or render-unit
@@ -181,7 +180,7 @@ fn apply_tir_child_wrappers_into(
 ///
 /// WHAT: iterates the wrapper list in reverse (outermost-first), composing each
 ///       wrapper around the current wrapped child.
-/// WHY: the legacy pipeline applies wrappers outermost-first so the first
+/// WHY: wrapper application is outermost-first, so the first
 ///      wrapper in the inherited list becomes the innermost layer around the
 ///      child; reverse iteration preserves that nesting order.
 pub(crate) fn wrap_tir_node_in_wrappers(
@@ -334,9 +333,8 @@ pub(super) fn wrap_tir_node_in_wrappers_into(
 ///
 /// WHAT: creates a new `String` template whose root sequence contains a
 ///       `ChildTemplate` reference to the wrapper followed by the current child.
-/// WHY: this mirrors the legacy `wrap_atom_in_child_template` branch for
-///      slot-less wrappers, which puts the wrapper content immediately before
-///      the wrapped atom.
+/// WHY: slot-less wrappers put their content immediately before the wrapped
+///      child in the composed TIR sequence.
 fn build_tir_prepended_wrapper_template(
     store: &mut TemplateIrStore,
     wrapper_template_id: TemplateIrId,

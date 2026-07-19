@@ -45,10 +45,9 @@ use std::collections::HashSet;
 // -------------------------
 
 // These tables keep bulky or rarely read template metadata outside the main
-// `TemplateIr` and `TemplateIrNode` records. Some entries are still reserved
-// for fields the remaining compatibility surface will drop as the
-// replacement lands; slot plans already carry TIR-owned runtime slot
-// application route data.
+// `TemplateIr` and `TemplateIrNode` records. Slot plans carry TIR-owned runtime
+// slot-application route data until materialization creates neutral owned
+// handoff payloads.
 
 /// A reusable set of `$children(..)` wrapper template refs.
 ///
@@ -72,18 +71,6 @@ pub(crate) struct TemplateWrapperSet {
     /// WHY: storing the effective view identity keeps wrapper reuse precise
     /// without duplicating template content.
     pub(crate) wrappers: Vec<TemplateWrapperReference>,
-}
-
-/// Opaque anchor for a formatter-produced region.
-///
-/// WHAT: records boundaries where a style formatter (e.g., `$md`) produced
-/// output so fold and HIR can treat the region as opaque text.
-/// WHY: separating formatter anchors from body text nodes keeps the formatter
-/// boundary explicit without string-level guard characters.
-#[derive(Clone, Debug)]
-pub(crate) struct TemplateFormatterAnchor {
-    /// Reserved anchor fields; populated as the remaining formatter surfaces move onto TIR.
-    pub(crate) _reserved: (),
 }
 
 // -------------------------
@@ -152,21 +139,15 @@ pub(crate) struct TemplateIrStore {
     pub(crate) slot_resolution_overlays: Vec<TirSlotResolutionOverlay>,
     pub(crate) wrapper_context_overlays: Vec<TirWrapperContextOverlay>,
 
-    /// Formatter opaque anchors.
-    #[allow(
-        dead_code,
-        reason = "formatter anchors are reserved for the remaining formatter surfaces moving onto TIR"
-    )]
-    pub(crate) formatter_anchors: Vec<TemplateFormatterAnchor>,
-
     /// Reactive `$(source)` subscription metadata attached to individual TIR
     /// nodes. Indexed by `TemplateIrNodeId`; `None` means the node carries no
     /// reactive dependency.
     ///
     /// WHAT: stores subscriptions for node kinds that cannot carry the metadata
     ///       in their payload, currently `Text` nodes.
-    /// WHY: reactive literal text must survive TIR formatting and current-state
-    ///      materialization without broadening the `TemplateIrNodeKind` enum shape.
+    /// WHY: reactive literal text must survive TIR formatting and runtime
+    ///      handoff materialization without broadening the
+    ///      `TemplateIrNodeKind` enum shape.
     pub(crate) node_reactive_subscriptions: Vec<Option<ReactiveSubscription>>,
 }
 
@@ -184,7 +165,6 @@ impl TemplateIrStore {
             expression_overlays: Vec::new(),
             slot_resolution_overlays: Vec::new(),
             wrapper_context_overlays: Vec::new(),
-            formatter_anchors: Vec::new(),
             node_reactive_subscriptions: Vec::new(),
         }
     }
@@ -217,7 +197,6 @@ impl TemplateIrStore {
             expression_overlays: Vec::with_capacity(side_capacity),
             slot_resolution_overlays: Vec::with_capacity(side_capacity),
             wrapper_context_overlays: Vec::with_capacity(side_capacity),
-            formatter_anchors: Vec::with_capacity(side_capacity),
             node_reactive_subscriptions: Vec::with_capacity(node_capacity),
         }
     }

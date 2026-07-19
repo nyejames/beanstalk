@@ -740,7 +740,7 @@ AST owns all template semantics.
 
 One module AST build owns one `TemplateIrStore`. Parser emission writes text, expressions, child templates, slots, inserts, wrappers and control-flow roots directly into that store. All TIR IDs are module-local typed IDs.
 
-`Template` is a thin handle carrying a durable TIR reference and source location while AST construction is active. It is not a registry handle.
+`Template` is a thin handle carrying a durable TIR reference and source location while AST construction is active. The reference contains a module-local root, the root phase and a value-carried `TemplateViewContext`; it is not a registry handle.
 
 The phase sequence is:
 
@@ -750,11 +750,11 @@ Parsed -> Composed -> Formatted -> Finalized
 
 Folding requires `Composed` or later. AST-to-HIR handoff requires `Finalized`.
 
-An exact `TirView` is the structural read authority after parser emission. Consumers do not carry parallel authority tokens, store identities or overlay stacks outside that view.
+An exact `TirView` is the structural read authority after parser emission. Its `TirViewIdentity` contains the module-local root, phase and complete value context. The context contains only the optional expression, slot-resolution and wrapper-context overlay IDs, whose payloads remain owned by the module store. This identity determines effective reads, preparation and fold-cache keys and cycle detection. Consumers do not carry parallel authority tokens, store identities, context tables or overlay stacks outside the view.
 
 Recursive consumers use two explicit view transitions:
 
-- Structural transitions follow child nodes, wrappers and resolved slot sources while preserving the current effective expression overlay. Parsed references ignore referenced slot and wrapper overlays. Composed or later references use the referenced structural context.
+- Structural child and wrapper transitions preserve the current complete expression overlay. Parsed references ignore their referenced slot-resolution and wrapper-context overlays; Composed or later references supply those two structural dimensions. Resolved slot sources and structural helpers retain the complete current context.
 - Nested-value transitions enter an independently owned nested `Template` through that value's complete context rather than inheriting the containing structural root's expression overlay.
 
 A composed or finalised root overlay contains effective overrides for every structural descendant reachable through children, wrappers, resolved slots, branches, fallbacks, loops and helper roots. Expression lookup uses that complete overlay followed by structural fallback.
@@ -770,11 +770,11 @@ One semantic preparation owner:
 
 Preparation validates and classifies. It does not perform final folding or HIR handoff.
 
-Preparation has two semantic modes. Ordinary value mode permits either a folded or runtime result while preserving lazy runtime behaviour. Const-required mode validates every required reachable branch, loop and helper before the owning caller rejects a runtime result through the established const diagnostic.
+Preparation has two semantic modes. `Value` permits either a folded or runtime result while preserving lazy runtime behaviour. `ConstRequired` validates every required reachable branch, loop and helper before the owning caller rejects a runtime result through the established const diagnostic.
 
 Discovering runtime dependence does not end authority validation. Preparation still validates every required reachable TIR structure so a valid runtime classification cannot conceal malformed internal state.
 
-Folding and runtime handoff consume the same exact TirView accepted by preparation and use the same structural and nested-value transitions. They do not classify again, reconstruct overlays or apply a second interpretation of template structure.
+Folding and runtime handoff consume the same exact `TirViewIdentity` accepted by preparation and use the same structural and nested-value transitions. `fold_prepared_template` is the sole constant-fold entry. Runtime materialisation accepts `PreparedRuntime` plus the exact view and produces only neutral owned runtime-handoff vocabulary. Neither path classifies again, reconstructs overlays or applies a second interpretation of template structure.
 
 AST finalisation:
 
@@ -789,7 +789,7 @@ The TIR store is dropped before the completed AST leaves the stage.
 
 No TIR store, ID, view, overlay, preparation type or registry crosses into a completed module, public interface, HIR or backend.
 
-Missing roots, phases, overlays or exact-view authority are internal errors. There is no reconstruction fallback from legacy template content.
+Missing roots, phases, overlays or exact-view authority are internal errors. Template meaning is never reconstructed from a second representation.
 
 Number formatting uses the common value-to-string path. It does not add Number-specific TIR nodes.
 

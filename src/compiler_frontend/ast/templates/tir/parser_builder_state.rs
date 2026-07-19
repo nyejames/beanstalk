@@ -88,7 +88,7 @@ impl TemplateParserIrBuilderState {
     /// Returns the in-progress root child nodes recorded by the parser.
     ///
     /// WHAT: exposes the builder state's accumulated children so callers that
-    ///       already proved same-store ownership can walk the incomplete TIR tree
+    ///       already established the module-local store can walk the incomplete TIR tree
     ///       before `finish` seals it under a root sequence node.
     /// WHY: runtime control-flow validation needs to traverse parser-emitted TIR
     ///      without forcing the builder to finalize first.
@@ -168,7 +168,7 @@ impl TemplateParserIrBuilderState {
 
     /// Records a child-template reference node into this builder state.
     ///
-    /// WHAT: pushes a `ChildTemplate` node for a same-store finalized template
+    /// WHAT: pushes a `ChildTemplate` node for a module-local finalized template
     ///       reference, preserving the child phase and overlay context.
     /// WHY: head and body template-valued segments must remain structural TIR
     ///      references so later composition can resolve slots and wrappers.

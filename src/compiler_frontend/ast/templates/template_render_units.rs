@@ -24,7 +24,7 @@ use crate::compiler_frontend::ast::templates::tir::{
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 
-/// Installs formatter output as the current same-store TIR reference.
+/// Installs formatter output as the current module-local TIR reference.
 ///
 /// WHAT: runs the TIR formatter adapter over the template's current referenced
 ///       root and stores the append-only formatted root as a new TIR template.
@@ -51,7 +51,7 @@ pub(in crate::compiler_frontend::ast::templates) fn install_formatted_tir_refere
 
     let original_template = store.get_template(reference.root).cloned().ok_or_else(|| {
         CompilerError::compiler_error(
-            "Template TIR reference pointed at a missing same-store template.",
+            "Template TIR reference pointed at a missing module-local TIR template.",
         )
     })?;
 
@@ -131,7 +131,7 @@ fn prepare_branch_body_tir_root(
 
     // The body is already a parser-emitted TIR sequence node. Formatting,
     // wrapper application, and head-chain composition operate on this root
-    // directly without content-to-TIR materialization.
+    // directly without reconstructing a second template representation.
 
     // Format the body root before inherited wrappers and head-chain composition
     // so the final body tree carries formatted text while wrappers remain opaque
@@ -204,7 +204,7 @@ fn prepare_branch_or_fallback_body(
     } = ctx;
 
     // Collect parser-emitted root children before the mutable store borrow so
-    // the TIR-derived path can reuse same-store head-prefix nodes.
+    // the TIR-derived path can reuse module-local head-prefix nodes.
     let root_children = construction_context.builder().root_children().to_vec();
 
     prepare_branch_body_tir_root(
@@ -244,7 +244,7 @@ fn prepare_loop_body_tir_root(
 ) -> Result<(), TemplateError> {
     // The loop body is already a parser-emitted TIR sequence node; formatting,
     // loop-control boundary trimming, and wrapper application operate on it
-    // directly without content-to-TIR materialization.
+    // directly without reconstructing a second template representation.
 
     // Release the store borrow around the TIR formatter call; the formatter
     // authority mutates the shared module store through `TirView`.
@@ -486,7 +486,7 @@ fn prepare_loop_render_units(
     )?;
 
     // Collect the parser-emitted root children before the mutable store
-    // borrow so the aggregate wrapper can reuse existing same-store TIR
+    // borrow so the aggregate wrapper can reuse existing module-local TIR
     // head-prefix nodes instead of rebuilding from content atoms.
     let root_children = construction_context.builder().root_children().to_vec();
 

@@ -1,130 +1,61 @@
-//! Template parsing, composition, formatting, folding, and TIR.
+//! AST-stage template parsing, composition, formatting, folding, and handoff.
 //!
-//! Templates are Beanstalk's first-class string-producing construct. This module
-//! contains the full AST-stage pipeline for templates. The Template IR (`tir/`)
-//! is the authoritative representation: templates are emitted into a
-//! module-scoped `TemplateIrStore`, composed, formatted, folded, and handed off
-//! to HIR as either a folded constant or an owned runtime-template payload.
+//! One module build owns one `TemplateIrStore`. Parser and composition code emit
+//! structural TIR into that store, then consume exact `TirView` values through
+//! the AST template stages. TIR IDs and references stay module-local and are
+//! dropped before the completed AST leaves the frontend.
 //!
-//! ## Template compilation flow (AST stage)
+//! ## Template pipeline
 //!
 //! ```text
-//! Tokens
-//!   │
-//!   ▼ template_head_parser/       Parse the head: directives, style config, slot
-//!   │                             declarations, head expressions, and control-flow
-//!   │                             suffixes.
-//!   ▼ template_body_parser.rs     Parse the body: raw text, nested templates,
-//!   │                             runtime expression splices.
-//!   │ template_body_sentinels.rs  Body-only structural markers (`[else]`,
-//!   │                             `[break]`, `[continue]`).
-//!   ▼ create_template_node.rs     Orchestrate head + body → `Template`; start and
-//!   │                             finish parser-TIR builder state.
-//!   │
-//!   ▼ TIR path ───────────────────────────────────────────────────────────┐
-//!   │  │
-//!   │  ▼ tir/parser_builder_state.rs + tir/builder.rs                     │
-//!   │     Emit literal parser output (text, dynamic expressions, children, │
-//!   │     slots, control flow) into the module-scoped `TemplateIrStore`.    │
-//!   │  │
-//!   │  ▼ template_render_units.rs                                         │
-//!   │     After composition and formatting, install finalized linear and   │
-//!   │     control-flow bodies as finalized TIR roots.                     │
-//!   │  │
-//!   │  ▼ Primary TIR consumers                                            │
-//!   │     • tir/fold.rs                     — compile-time TIR folding        │
-//!   │     • tir/formatter_view.rs           — style formatters applied to TIR │
-//!   │     • tir/slot_plan.rs                — TIR-side runtime slot-routing   │
-//!   │     • tir/handoff_materialization.rs  — build owned runtime handoffs    │
-//!   │
-//!   ▼ Neutral AST/HIR boundary                                            │
-//!      runtime_handoff.rs          Owned runtime-template and slot handoff
-//!                                 payloads consumed by HIR lowering.
+//! tokens
+//!   -> head/body parsers and `TemplateConstructionContext`
+//!   -> module-local `TemplateIrStore`
+//!   -> composition, render-unit construction, and formatting
+//!   -> exact `TirView` reads
+//!   -> `preparation.rs`
+//!      -> `fold_prepared_template` for constants
+//!      -> `tir/handoff_materialization.rs` for prepared runtime values
+//!   -> folded strings or `runtime_handoff.rs` owned payloads
+//!   -> HIR
 //! ```
 //!
-//! ## TIR — Template IR
+//! `TemplateTirReference` and `TemplateWrapperReference` are thin durable
+//! root/phase/context values. `TirViewIdentity` carries the root, phase, and
+//! value-carried `TemplateViewContext` (`expression_overlay`, `slot_resolution`,
+//! and `wrapper_context`) that determine every effective read. `TirView` owns
+//! the structural-child, wrapper, resolved-source, helper, and nested-value
+//! transition rules.
 //!
-//! The `tir/` submodule provides the AST-local Template IR. It is the
-//! authoritative internal representation for parsed templates and the single
-//! source of truth for template semantics during AST processing.
+//! `preparation.rs` is the sole exhaustive semantic preparation owner. It
+//! validates reachable structure and produces the foldable, runtime, or helper
+//! result consumed by the final reducer. `fold_prepared_template` is the sole
+//! prepared constant-fold entry. Template values cross the AST/HIR boundary
+//! only as folded strings or neutral owned payloads from `runtime_handoff.rs`.
 //!
-//! A `Template` value holds a `tir_reference` into the module-scoped
-//! `TemplateIrStore`. TIR is local to AST construction/finalization for one
-//! module and is dropped before the `Ast` is returned. HIR and backends never
-//! see TIR IDs, stores, views, overlays, or other TIR-internal values; they receive only
-//! folded string constants or neutral owned runtime-handoff payloads from
-//! `runtime_handoff.rs`.
+//! ## Module map
 //!
-//! Submodule roles (see `tir/mod.rs` for the full layout and ownership contract):
-//!
-//! | File | Role |
+//! | Module | Responsibility |
 //! |---|---|
-//! | `tir/mod.rs` | Module entry, narrow re-exports, ownership contract |
-//! | `tir/ids.rs` | Typed module-local IDs (`TemplateIrId`, `TemplateIrNodeId`, …) |
-//! | `tir/refs.rs` | Module-local final TIR references |
-//! | `tir/overlays.rs` | Final view context and overlay dimension handles |
-//! | `tir/store.rs` | `TemplateIrStore` — central contiguous storage |
-//! | `tir/node.rs` | `TemplateIr`, `TemplateIrNode`, `TemplateIrNodeKind` |
-//! | `tir/summary.rs` | `TemplateIrSummary` — cheap shape metadata |
-//! | `tir/builder.rs` | Parser-facing mutable facade for pushing TIR nodes |
-//! | `tir/parser_builder_state.rs` | Parser-emitted TIR builder state |
-//! | `tir/expression_payload_walker.rs` | Shared read-only expression-payload traversal |
-//! | `tir/copy_state.rs` | Recursive TIR copy-pass state and instrumentation |
-//! | `tir/subtree_copy.rs` | TIR-native active-context subtree copying |
-//! | `tir/control_flow_roots.rs` | Install and resolve finalized control-flow body roots |
-//! | `tir/classification.rs` | Store-aware TIR shape queries for classification |
-//! | `tir/fold.rs` | TIR-native compile-time folding |
-//! | `tir/formatter_view.rs` | TIR-native formatter feed |
-//! | `tir/render_unit.rs` | Render-unit and aggregate-wrapper preparation |
-//! | `tir/handoff_materialization.rs` | Build owned runtime-template trees for HIR lowering |
-//! | `tir/slot_plan.rs` | Runtime slot route handoff side tables |
-//! | `tir/slot_composition/` | TIR-native slot schema and contribution routing |
-//! | `tir/wrapper_sets.rs` | Wrapper set equivalence and reuse |
-//! | `tir/tests/` | TIR-focused tests |
-//!
-//! ## Module responsibilities at a glance
-//!
-//! | File / submodule | Owns |
-//! |---|---|
-//! | `template_head_parser/` | Template head parsing: directives, style config, head expressions, control-flow suffixes |
-//! | `template_body_parser.rs` | Template body parsing: text, nested templates, expression splices |
-//! | `template_body_sentinels.rs` | Body structural markers (`[else]`, `[break]`, `[continue]`) and diagnostics |
-//! | `create_template_node.rs` | Template construction orchestrator; starts/finishes parser-TIR builder state |
-//! | `template.rs` | Durable `Template` handle and shared vocabulary: `TemplateType`, `Style`, `SlotKey`, `SlotPlaceholder`, formatters |
-//! | `template_control_flow/` | Structured `if` / `loop` metadata, validation, const-eval helpers |
-//! | `template_slots/` | Slot schema, contribution bucketing, runtime plan construction |
-//! | `tir/slot_composition/` | TIR-native head-chain composition and `$children(..)` wrapper application |
-//! | `template_render_units.rs` | Shared render-unit preparation; installs finalized bodies as TIR roots |
-//! | `styles/` | Directive-owned formatters (markdown, raw, whitespace) |
-//! | `formatter_contract.rs` | Formatter anchor shapes and pipeline adapters |
-//! | `template_folding.rs` | Compile-time folding entry point; TIR-native for finalized templates |
-//! | `top_level_templates.rs` | Entry-file const fragment collection and doc fragment extraction |
-//! | `tir/mod.rs` | TIR module entry, re-exports, ownership contract |
-//! | `tir/ids.rs` | Typed module-local IDs |
-//! | `tir/refs.rs` | Module-local final TIR references |
-//! | `tir/overlays.rs` | Final view context and overlay dimension handles |
-//! | `tir/store.rs` | `TemplateIrStore` — central contiguous storage |
-//! | `tir/node.rs` | `TemplateIr`, `TemplateIrNode`, `TemplateIrNodeKind` |
-//! | `tir/summary.rs` | `TemplateIrSummary` — cheap shape metadata |
-//! | `tir/builder.rs` | Parser-facing mutable facade for pushing TIR nodes |
-//! | `tir/parser_builder_state.rs` | Parser-emitted TIR builder state |
-//! | `tir/expression_payload_walker.rs` | Shared read-only expression-payload traversal |
-//! | `tir/copy_state.rs` | Recursive TIR copy-pass state and instrumentation |
-//! | `tir/subtree_copy.rs` | TIR-native active-context subtree copying |
-//! | `tir/control_flow_roots.rs` | Install and resolve finalized control-flow body roots |
-//! | `tir/classification.rs` | Store-aware TIR shape queries for classification |
-//! | `tir/fold.rs` | TIR-native compile-time folding |
-//! | `tir/formatter_view.rs` | TIR-native style-formatter view |
-//! | `tir/render_unit.rs` | Render-unit and aggregate-wrapper preparation |
-//! | `tir/handoff_materialization.rs` | Build owned runtime-template trees for HIR lowering |
-//! | `tir/slot_plan.rs` | Runtime slot route handoff side tables |
-//! | `tir/slot_composition/` | TIR-native slot schema and contribution routing |
-//! | `tir/wrapper_sets.rs` | Wrapper set equivalence and reuse |
-//! | `runtime_handoff.rs` | Neutral AST/HIR owner of owned runtime-template handoff shapes |
-//! | `reactive_template_metadata.rs` | Structural traversal merging reactive `$(source)` metadata |
-//! | `template_renderability.rs` | Template-head value renderability classification by `TypeId` |
-//! | `doc_fragments.rs` | Extract `$doc` comment templates into `AstDocFragment` metadata |
-//! | `error.rs` | Local `TemplateError` boundary between diagnostics and infrastructure errors |
+//! | `create_template_node.rs` | Coordinate head/body parsing and finish parser TIR construction |
+//! | `template_head_parser/` | Parse directives, head expressions, slots, and control-flow suffixes |
+//! | `template_body_parser.rs` | Parse body text, nested templates, and expression splices |
+//! | `template_body_sentinels.rs` | Parse body-only control-flow markers |
+//! | `template_build_state.rs` | Hold parser-local template construction state |
+//! | `template.rs` | Define the thin `Template` handle and shared template vocabulary |
+//! | `template_control_flow/` | Define template `if`/`loop` metadata, validation, and const helpers |
+//! | `template_slots/` | Define slot schema and runtime slot plans |
+//! | `template_render_units.rs` | Build composed and formatted TIR render-unit roots |
+//! | `styles/` | Implement directive-owned formatters |
+//! | `formatter_contract.rs` | Define formatter input/output and anchor boundaries |
+//! | `template_folding.rs` | Own AST folding context and final value-boundary policy |
+//! | `top_level_templates.rs` | Collect top-level constant and documentation fragments |
+//! | `reactive_template_metadata.rs` | Collect reactive metadata across template structure and owned payloads |
+//! | `template_renderability.rs` | Resolve template-head renderability from semantic types |
+//! | `runtime_handoff.rs` | Define neutral owned runtime-template and slot payloads for HIR |
+//! | `tir/` | Own module-local TIR storage, views, preparation, folding, formatting, and materialization |
+//! | `doc_fragments.rs` | Build AST documentation-fragment metadata |
+//! | `error.rs` | Define the local template diagnostic/infrastructure boundary |
 
 // -------------------------
 //  Public Modules
@@ -149,10 +80,6 @@ pub(crate) mod top_level_templates;
 // -------------------------
 //  Template IR (TIR)
 // -------------------------
-//
-// TIR is the authoritative internal representation for templates during AST
-// processing. The `tir/` submodule owns the module store, views, overlays,
-// folding, formatting, and HIR handoff construction.
 
 pub(crate) mod tir;
 
@@ -169,9 +96,6 @@ pub(crate) use runtime_handoff::{
 // -------------------------
 //  Reactive metadata traversal
 // -------------------------
-//
-// Owned by the template subsystem because it only depends on template shape.
-// AST finalization supplies its own expression resolver for flow-aware lookup.
 
 pub(crate) mod reactive_template_metadata;
 

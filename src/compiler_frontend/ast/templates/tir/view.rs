@@ -134,14 +134,14 @@ impl fmt::Display for TemplateTirPhase {
 ///       `tir_reference` to be at least `Finalized`, to resolve its root and
 ///       validate the optional payload IDs carried by its view context against
 ///       the exact module store through `TirView`. Every missing authority condition is an explicit
-///       internal `CompilerError`. No caller may downgrade to a raw same-store
-///       path.
+///       internal `CompilerError`. No caller may bypass that authority with raw
+///       module-store reconstruction.
 /// WHY: after normalization every template that reaches the AST-to-HIR boundary
 ///      owns a Finalized store-backed identity. A missing phase, root or overlay
 ///      is a compiler bug, not permission to reconstruct
 ///      template meaning from raw stores. Centralizing the required resolution
 ///      keeps the authority boundary in one place and removes duplicate local
-///      fallback helpers from AST finalization.
+///      reconstruction helpers from AST finalization.
 pub(crate) fn finalized_tir_view_for_template<'a>(
     template: &Template,
     store: &'a TemplateIrStore,

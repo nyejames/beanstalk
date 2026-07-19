@@ -118,7 +118,7 @@ impl<'store> TemplateIrBuilder<'store> {
         ))
     }
 
-    /// Pushes a same-store child-template reference node and returns its ID.
+    /// Pushes a module-local child-template reference node and returns its ID.
     ///
     /// WHAT: convenience for tests and early construction paths that do not yet
     ///       know the child's phase or overlay context. The emitted node carries
@@ -199,9 +199,9 @@ impl<'store> TemplateIrBuilder<'store> {
     ///
     /// WHAT: stores a `TirSlotPlaceholder` that may already carry TIR-owned
     /// wrapper-set IDs.
-    /// WHY: parser/current-state boundaries convert legacy AST slot metadata
-    /// before entering the TIR node store, so this builder never stores
-    /// recursive `Template` wrapper payloads.
+    /// WHY: the parser-to-TIR boundary converts AST slot metadata before it
+    /// enters the node store, so this builder never stores recursive
+    /// `Template` wrapper payloads.
     pub(crate) fn push_tir_slot_placeholder_node(
         &mut self,
         placeholder: TirSlotPlaceholder,

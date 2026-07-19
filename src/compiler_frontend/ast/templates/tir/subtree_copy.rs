@@ -33,11 +33,11 @@ use crate::compiler_frontend::ast::templates::tir::copy_state::TirCopyState;
 ///       `InsertContribution` references are deep-copied as fresh template
 ///       entries; runtime-slot-handoff children keep their own plan and are not
 ///       reprocessed under the parent's active plan.
-/// WHY: this lets `materialize_loop` reuse a same-store finalized loop body root
+/// WHY: this lets `materialize_loop` reuse a module-local finalized loop body root
 ///      without mutating the stored root in place, while still honoring the
 ///      active slot-plan cursor semantics required by nested runtime slot
-///      wrappers. Runtime slot handoff planning also uses it to copy a same-store
-///      finalized wrapper root when that root is runtime-kind-safe.
+///      wrappers. Runtime slot handoff planning also uses it to copy a
+///      module-local finalized wrapper root when that root is runtime-kind-safe.
 pub(crate) fn copy_tir_subtree_with_active_slot_plan(
     source_node_id: TemplateIrNodeId,
     active_slot_plan: Option<TemplateSlotPlanId>,

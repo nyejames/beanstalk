@@ -2,7 +2,7 @@
 //!
 //! WHAT: installs TIR-derived control-flow body roots after render-unit
 //!       preparation.
-//! WHY: production readers need a single owner for same-store control-flow
+//! WHY: production readers need a single owner for module-local control-flow
 //!      body replacement.
 
 use crate::compiler_frontend::ast::templates::tir::{TemplateIrNodeId, TemplateIrStore};
@@ -55,7 +55,7 @@ pub(crate) fn replace_control_flow_body_tir_root(
     Ok(())
 }
 
-/// Replaces the aggregate-wrapper subtree on the owning template's same-store
+/// Replaces the aggregate-wrapper subtree on the owning template's module-local
 /// `Loop` control-flow node.
 ///
 /// WHAT: installs `new_aggregate_wrapper_root` on the supplied TIR `Loop` node.

@@ -29,18 +29,19 @@ TIR remains AST-local. No TIR store, ID, view, overlay or preparation type may c
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/final-tir-completion-plan.md
 STATUS: active
-CURRENT_SLICE: R5C accepted and ready to commit; R6A source/module-map hygiene is next
-LAST_ACCEPTED_COMMIT: c649e0ea8 (R5A exact-view reactive metadata reducer)
-WORKTREE: main at c649e0ea8 with the accepted R5C test-ownership and parent-owned plan diff; concurrent user documentation remains untouched
+CURRENT_SLICE: R6A-R6B accepted and ready to commit; R6C instrumentation and recorded performance evidence is next
+LAST_ACCEPTED_COMMIT: e17b8a278 (R5C primary-owner test consolidation; R5 complete)
+WORKTREE: main at e17b8a278 with the accepted R6A-R6B source, compiler-design and plan diff; concurrent user documentation remains untouched
 REQUIRED_RELOADS: startup files, this plan, and current TIR source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: compiler-design-overview.md exact-view transition and AST-to-HIR contracts; testing.bd primary-owner rules; this plan's R6A-R6B documentation and hard-grep contracts
-- code: R5C deleted the obsolete test-only linear-current-state helper and consolidated parser, TirView, preparation/cache, finalization, handoff, wrapper and reactive coverage under their semantic owners
+- docs: compiler-design-overview.md now records the exact identity, transition, preparation-mode and owned-handoff contracts; this plan's R6C counter and recorded-benchmark requirements
+- code: preparation/fold/wrapper/reservation/handoff instrumentation and every production prepare_tir_view caller; benchmark history/report tooling owns the six recorded samples
 ACCEPTANCE_CRITERIA:
-- commit the accepted R5C cleanup without unrelated or concurrent user-owned documentation changes
-- refresh this state with the accepted R5 commit before launching R6
-- launch one bounded Codex CLI R6A-R6B source/module-map and hard-grep hygiene slice; parent retains compiler-design and plan ownership
-- do not record benchmarks or begin the downstream roadmap handoff until R6A-R6B is reviewed
+- commit the accepted R6A-R6B checkpoint without unrelated or concurrent user-owned documentation changes
+- map every retained R6C counter to its production increment site and confirm the deliberate absence of a preparation cache after proving adjacent callers do not repeat preparation for the same exact view
+- run six recorded `just bench` samples followed by `just bench-report` only after the caller/counter review is accepted
+- compare representative template, wrapper, slot, control-flow, Beandown and docs workloads against `c1ecc2c58` and `069a29acb`; attribute any consistent regression without restoring deleted architecture
+- do not begin the R6D downstream roadmap handoff until R6C evidence is reviewed
 VALIDATION_STATE:
 - R2C just validate: passed; cross-target Clippy, 3421 unit tests, 1784 integration cases, docs check and 28 benchmark sanity cases; -7ms average, 23 faster and 0 slower
 - R3 ownership map: passed through Codex CLI simple-exploration; no repeated preparation proving a cache, new preparation.rs is the required final owner, and classification/control-flow predicates remain only where they answer earlier-stage questions
@@ -63,12 +64,16 @@ VALIDATION_STATE:
 - R5C Codex implementation and parent-review correction slices: accepted; the obsolete test-only linear-current-state helper, its implementation-shaped assertions and five redundant tests are deleted, while the distinct normalization-to-runtime reactive metadata boundary remains covered
 - R5C just validate after the parent-review correction: passed; cross-target Clippy, 3433 unit tests, 1784 integration cases, docs check and 28 benchmark sanity cases; -7ms average, 23 faster and 0 slower
 - final R5 TIR inventory: 18,854 production and 17,681 test lines (R5A: 18,861 and 17,739; 069a29acb: 24,274 and 27,231)
-DOCS_IMPACT: index.md locator updated for preparation.rs; progress matrix unchanged because user-visible support did not change
+- R6A-R6B Codex implementation and parent-review cleanup slices: accepted; Rust module maps and compiler-design now name one store, exact identity/transitions, one preparation owner, prepared fold/runtime reducers and the neutral HIR boundary; obsolete formatter-anchor, current-state and store-clone instrumentation surfaces are deleted
+- R6B TIR identifier/phrase and HIR/backend import gates: passed; the four global `fallback path` hits are exact non-TIR owners in JS map/string safety, AST/HIR fallible return-shape handling and borrow-checker registry-drift protection
+- R6A-R6B just validate after the parent doctest correction: passed; cross-target Clippy, 3433 unit tests, 1784 integration cases, docs check and 28 benchmark sanity cases; -7ms average, 22 faster and 0 slower
+- final R6A-R6B TIR inventory: 18,740 production and 17,681 test lines (R5: 18,854 and 17,681; 069a29acb: 24,274 and 27,231)
+DOCS_IMPACT: compiler-design-overview.md and Rust module maps updated for the final architecture; index.md locator already names preparation.rs; progress matrix unchanged because user-visible support did not change
 BLOCKERS_OR_OPEN_DECISIONS: none
-DELEGATION_DECISION: parent checkpoint, then codex-cli implementation - user requires Codex CLI for worker slices and R6A-R6B has a bounded source/module-map hygiene owner
+DELEGATION_DECISION: parent checkpoint, then codex-cli simple-exploration - user requires Codex CLI for worker slices and R6C needs a bounded read-only counter/caller proof before recorded benchmarks
 NEXT_WORKER_ORDER: codex-cli (user-required provider)
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit the accepted R5C checkpoint, refresh this state with its commit and launch bounded R6A-R6B source/module-map hygiene
+NEXT_RESUME_ACTION: commit the accepted R6A-R6B checkpoint, refresh this state with its commit and launch the bounded R6C counter/caller review
 ```
 
 Use `069a29acb` as the implementation and regression base. Do not continue extending `FoldAuthorityWalk`, foreign-store traversal, external expression-overlay stacks or prepared foreign-wrapper proofs.
@@ -871,6 +876,20 @@ fallback path
 ```
 
 Require zero TIR imports in HIR and backend modules except neutral owned runtime handoff vocabulary.
+
+R6A-R6B accepted on the pre-commit `e17b8a278` worktree. The compiler contract and Rust
+module maps now name one module store, module-local identities, complete `TirViewIdentity`, shared
+structural and nested-value transitions, the sole exhaustive preparation owner, the sole prepared
+fold entry, prepared runtime materialisation and neutral owned AST-to-HIR payloads. Parent review
+also removed the unused formatter-anchor reservation plus five obsolete zero-only current-state
+and full-store-clone counters rather than preserving dead instrumentation surfaces. The word-bounded
+TIR identifier and exact stale-phrase greps are empty, and HIR/backend modules import no
+TIR-internal type. Four global `fallback path` phrases remain only in exact non-TIR owners: JS
+map/string copy safety, AST and HIR fallible return-shape handling, and borrow-checker registry-drift
+protection. The final tracked TIR inventory is 18,740 production and 17,681 test lines versus
+24,274 and 27,231 at `069a29acb`. After correcting a stray module-map doctest fence, `just
+validate` passed with cross-target Clippy, 3,433 unit tests, 1,784 integration cases, docs checking
+and all 28 benchmark sanity cases. The progress matrix is unchanged because support did not change.
 
 #### R6C - Performance evidence
 

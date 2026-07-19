@@ -76,8 +76,8 @@ struct TirChainLayer {
 /// WHAT: each item is either a direct TIR node that passes through unchanged,
 ///       or a reference to a chain layer that must be resolved into a new
 ///       `ChildTemplate` node.
-/// WHY: this mirrors the legacy `PendingChainItem` from
-///      `template_composition.rs` while operating on TIR node IDs.
+/// WHY: this keeps pending wrapper layers separate from direct TIR nodes while
+///      operating on TIR node IDs.
 enum TirChainItem {
     /// A direct node ID (text, dynamic expression, non-receiver child template).
     DirectNode(TemplateIrNodeId),
@@ -462,8 +462,8 @@ fn push_tir_chain_item(
 ///
 /// WHAT: direct nodes pass through; layer references trigger bottom-up
 ///       resolution of the wrapper's slots with the accumulated fill items.
-/// WHY: this mirrors the legacy `resolve_pending_chain_items` and
-///      `resolve_chain_layer` while using TIR-native routing and expansion.
+/// WHY: bottom-up layer resolution keeps TIR-native routing and expansion
+///      explicit at the point where each wrapper's fill is available.
 fn resolve_tir_chain_items(
     store: &mut TemplateIrStore,
     items: &[TirChainItem],
@@ -518,11 +518,11 @@ fn resolve_tir_chain_layer(
 
     if layer.fill_items.is_empty() {
         // Head-only wrapper references stay unresolved so they can be filled
-        // later at a use-site. This matches the legacy path.
+        // later at a use-site, preserving the wrapper's unresolved-slot state.
         return Ok(original_node_id);
     }
 
-    // Same-store wrapper: structural expansion path (existing behavior).
+    // Module-local wrapper: structural expansion path.
     let wrapper_template_id = layer.wrapper_reference.root;
 
     let resolved_fill_node_ids = resolve_tir_chain_items(store, &layer.fill_items, layers, inputs)?;
