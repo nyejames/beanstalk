@@ -30,30 +30,30 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 2R6b — complete the loop-borrow edge matrix and positive integration owner
-LAST_ACCEPTED_COMMIT: pending Phase 2R6a acceptance commit (previous plan commit `bd070da33`)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 2R6a changes ready to commit
+CURRENT_SLICE: Phase 2R7a — audit lifetime-prefixed fixture dispositions and replacement owners
+LAST_ACCEPTED_COMMIT: pending Phase 2R6b acceptance commit (previous plan commit `a6a1ad0a9`)
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 2R6b changes ready to commit
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: borrow-validation, access-and-aliasing, ownership, testing, validation, compiler overview, and progress matrix govern the semantic fix and gates
-- code: `borrow_checker_loop_tests.rs` owns hidden transfer/CFG edges; `loop_borrow_mutation_conflict` remains the primary negative integration owner; one positive case must observe unrelated-root and copied-root independence
+- code: seven `lifetime_inference_*` fixtures require source-semantic disposition; `borrow_checker_drop_site_tests.rs` and `borrow_checker_fact_tests.rs` own hidden drop/last-use facts; the manifest owns atomic case identity
 ACCEPTANCE_CRITERIA:
-- focused units cover mutable helper calls, iterable aliases, nested iterable aliases, and mutation after loop exit without duplicating integration behavior
-- the canonical negative case continues to fail with `SharedMutableConflict`
-- one positive integration case observes both unrelated-root mutation and copied-root independence with labeled output
-- exact cases, canonical audit, focused borrow tests, `cargo fmt`, `git diff --check`, and `just validate` pass
+- every lifetime-prefixed canonical case is mapped to a source-visible contract, a focused hidden-fact owner, or removal
+- misleading drop/move/diagnostic-precision claims are not retained as integration ownership
+- proposed renames/removals preserve real negative and observable final-use behavior without adding new semantics
+- the read-only audit returns exact file paths, replacement evidence, and the smallest implementation slice
 VALIDATION_STATE:
 - `cargo fmt --check`: passed
-- `cargo test --quiet borrow_checker_loop_tests -- --format terse`: passed; 6 tests
-- `cargo test --quiet borrow_checker -- --format terse`: passed; 53 tests
-- `cargo run --quiet -- tests --case loop_borrow_mutation_conflict --backend html`: passed; 1/1 expected failure
-- `just validate`: passed; cross-target Clippy, 3,499 Rust tests, 1,784 integration executions, docs check, and 28 benchmark cases
-DOCS_IMPACT: progress matrix already says broad loop/borrow coverage; review again after Phase 2R6b, but no change is currently required
+- `cargo test --quiet borrow_checker_loop_tests -- --format terse`: passed; 11 tests
+- exact negative and positive integration cases: passed; 2/2
+- `cargo run --quiet -- tests --audit`: passed; 1,652 cases, 1,785 executions, 17 acceptance-only, 33 baseline-only, 529 rendered-output blocks, zero hard findings
+- `just validate`: passed; cross-target Clippy, 3,504 Rust tests, 1,785 integration executions, docs check, and 28 benchmark cases
+DOCS_IMPACT: Phase 2R6 requires no progress-matrix change because its existing broad loop/borrow coverage wording remains accurate
 BLOCKERS_OR_OPEN_DECISIONS: none; compiler diagnostics Phase 4.1c remains serialized and untouched
-DELEGATION_DECISION: codex-cli — explicit user-selected provider for implementation workers
+DELEGATION_DECISION: codex-cli audit — explicit user-selected provider; Phase 2R7 needs a read-only ownership audit before fixture edits
 NEXT_WORKER_ORDER: codex-cli only for this run-local override
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit accepted Phase 2R6a, refresh its hash, then launch bounded Phase 2R6b through `codex-cli-beanstalk`
+NEXT_RESUME_ACTION: commit accepted Phase 2R6b, refresh its hash, then run the bounded Phase 2R7a audit through `codex-cli-beanstalk`
 
 ---
 
@@ -138,7 +138,8 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 2R5c3 call/result/option markers | `58ce37ee2` | Accepted | 528 rendered-output blocks; ten call/result/option fixtures now observe context-labeled behavior; zero hard findings |
 | Phase 2R5c4 receiver/struct markers | `1a3ff086c` | Accepted | 528 rendered-output blocks; six receiver/struct/multi-file fixtures now observe context-labeled values; zero hard findings |
 | Phase 2R5c5 marker/role closure | `bd070da33` | Accepted | 17 acceptance-only smoke cases; two HTML-Wasm parity cases are backend-role; 528 rendered-output blocks; zero hard findings |
-| Phase 2R6a CFG/projected actors | pending acceptance commit | Accepted | 3,499 Rust tests; CFG-accurate naming; projected user/compiler origin distinction; 1,784 integration executions |
+| Phase 2R6a CFG/projected actors | `a6a1ad0a9` | Accepted | 3,499 Rust tests; CFG-accurate naming; projected user/compiler origin distinction; 1,784 integration executions |
+| Phase 2R6b loop-borrow edge matrix | pending acceptance commit | Accepted | 3,504 Rust tests; 1,652 cases and 1,785 executions; one primary plus one boundary integration owner; zero hard findings |
 
 ---
 
@@ -475,31 +476,31 @@ The accepted fix uses CFG future-use facts and is in the correct compiler stage,
 ### Focused unit coverage
 
 - [x] Mutating the active iterable fails with `SharedMutableConflict`.
-- [ ] Mutating the iterable through a mutable helper call inside the loop fails.
-- [ ] Mutating through an alias of the iterable fails.
-- [ ] Nested collection loops preserve both active iterable aliases.
+- [x] Mutating the iterable through a mutable helper call inside the loop fails.
+- [x] Mutating through an alias of the iterable fails.
+- [x] Nested collection loops preserve both active iterable aliases.
 - [x] A branch/join case proves the intended CFG behavior after linear expiry.
 - [x] A compiler-temporary projected target retains the intended linear-expiry behavior.
 - [x] A user-local field/index projected target retains source-semantic conflict behavior.
-- [ ] Mutation after loop exit succeeds.
+- [x] Mutation after loop exit succeeds.
 
 ### Integration ownership
 
-- [ ] Keep `loop_borrow_mutation_conflict` as the primary negative user-visible owner.
-- [ ] Add or strengthen one positive integration case covering unrelated-root and copied-root independence with labeled observable output.
-- [ ] Retain focused units only for transfer/origin/CFG facts that integration output cannot expose.
+- [x] Keep `loop_borrow_mutation_conflict` as the primary negative user-visible owner.
+- [x] Add or strengthen one positive integration case covering unrelated-root and copied-root independence with labeled observable output.
+- [x] Retain focused units only for transfer/origin/CFG facts that integration output cannot expose.
 
 ### Documentation/status
 
-- [ ] Describe the result as corrected rejection coverage, not a new language feature.
-- [ ] Update the progress matrix only if its current borrow/loop coverage wording was inaccurate.
+- [x] Describe the result as corrected rejection coverage, not a new language feature.
+- [x] Update the progress matrix only if its current borrow/loop coverage wording was inaccurate.
 
 ### Acceptance
 
-- [ ] Helper names match the implemented invariant.
-- [ ] Source locals and compiler temporaries are distinguished deliberately.
-- [ ] The edge matrix passes and no unrelated valid program regresses.
-- [ ] The full gate passes in a separate semantic-fix slice.
+- [x] Helper names match the implemented invariant.
+- [x] Source locals and compiler temporaries are distinguished deliberately.
+- [x] The edge matrix passes and no unrelated valid program regresses.
+- [x] The full gate passes in a separate semantic-fix slice.
 
 ---
 

@@ -1,0 +1,4 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = ["loop_borrow_independent_roots original=3 other=5 copied=6"]

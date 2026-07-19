@@ -43,6 +43,102 @@ loop items |item|:
 }
 
 #[test]
+fn collection_loop_mutable_helper_call_on_iterable_reports_shared_mutable_conflict() {
+    let source = r#"
+mutate |values ~{Int}|:
+    ~values.push(4) catch:
+    ;
+;
+items ~{Int} = {1, 2, 3}
+loop items |item|:
+    mutate(~items)
+;
+after = items.length()
+"#;
+    let (ast, mut string_table) = parse_single_file_ast(source);
+    let hir = lower_hir(ast, &mut string_table);
+    let external_package_registry = default_external_package_registry(&mut string_table);
+
+    let error = run_borrow_checker(&hir, &external_package_registry, &string_table)
+        .expect_err("a mutable helper call on the active iterable should fail");
+    assert_borrow_error_kind(&error, BorrowDiagnosticKind::SharedMutableConflict);
+}
+
+#[test]
+fn collection_loop_mutation_through_iterable_alias_reports_shared_mutable_conflict() {
+    let source = r#"
+items ~{Int} = {1, 2, 3}
+alias ~= items
+loop items |item|:
+    ~alias.push(4) catch:
+    ;
+;
+"#;
+    let (ast, mut string_table) = parse_single_file_ast(source);
+    let hir = lower_hir(ast, &mut string_table);
+    let external_package_registry = default_external_package_registry(&mut string_table);
+
+    let error = run_borrow_checker(&hir, &external_package_registry, &string_table)
+        .expect_err("mutating an alias of the active iterable should fail");
+    assert_borrow_error_kind(&error, BorrowDiagnosticKind::SharedMutableConflict);
+}
+
+#[test]
+fn nested_collection_loop_mutation_of_outer_iterable_reports_shared_mutable_conflict() {
+    let source = r#"
+outer ~{Int} = {1, 2, 3}
+inner ~{Int} = {4, 5, 6}
+loop outer |outer_item|:
+    loop inner |inner_item|:
+        ~outer.push(7) catch:
+        ;
+    ;
+;
+"#;
+    let (ast, mut string_table) = parse_single_file_ast(source);
+    let hir = lower_hir(ast, &mut string_table);
+    let external_package_registry = default_external_package_registry(&mut string_table);
+
+    let error = run_borrow_checker(&hir, &external_package_registry, &string_table)
+        .expect_err("the outer iterable must stay protected inside a nested loop");
+    assert_borrow_error_kind(&error, BorrowDiagnosticKind::SharedMutableConflict);
+}
+
+#[test]
+fn nested_collection_loop_mutation_of_inner_iterable_reports_shared_mutable_conflict() {
+    let source = r#"
+outer ~{Int} = {1, 2, 3}
+inner ~{Int} = {4, 5, 6}
+loop outer |outer_item|:
+    loop inner |inner_item|:
+        ~inner.push(7) catch:
+        ;
+    ;
+;
+"#;
+    let (ast, mut string_table) = parse_single_file_ast(source);
+    let hir = lower_hir(ast, &mut string_table);
+    let external_package_registry = default_external_package_registry(&mut string_table);
+
+    let error = run_borrow_checker(&hir, &external_package_registry, &string_table)
+        .expect_err("the inner iterable must stay protected inside a nested loop");
+    assert_borrow_error_kind(&error, BorrowDiagnosticKind::SharedMutableConflict);
+}
+
+#[test]
+fn collection_loop_mutation_after_exit_is_valid() {
+    borrow_check_source(
+        r#"
+items ~{Int} = {1, 2, 3}
+loop items |item|:
+;
+~items.push(4) catch:
+;
+"#,
+    );
+}
+
+#[test]
 fn collection_loop_mutation_of_unrelated_root_is_valid() {
     borrow_check_source(
         r#"

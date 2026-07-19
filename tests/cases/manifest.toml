@@ -2968,6 +2968,15 @@ tags = ["integration","control-flow"]
 id = "loop_borrow_mutation_conflict"
 path = "loop_borrow_mutation_conflict"
 tags = ["integration","control-flow","borrows","diagnostics"]
+contract = "language.loops.iterable_mutation_exclusivity"
+role = "primary"
+
+[[case]]
+id = "loop_borrow_independent_roots"
+path = "loop_borrow_independent_roots"
+tags = ["integration","control-flow","borrows","collections"]
+contract = "language.loops.iterable_mutation_exclusivity"
+role = "boundary"
 
 [[case]]
 id = "loop_collection_iteration"
