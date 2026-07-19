@@ -1,4 +1,4 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
-rendered_output_contains = ["2", "3"]
+rendered_output_contains = ["selected=2", "length=3"]

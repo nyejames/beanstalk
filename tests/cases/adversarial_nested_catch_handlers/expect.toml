@@ -1,4 +1,4 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
-rendered_output_contains = ["0", "guest-0"]
+rendered_output_contains = ["nested-catch-code=0", "nested-catch-user=guest-0"]

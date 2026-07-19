@@ -8,6 +8,6 @@ Response ::
 response = Response::Err("bad")
 
 if response is:
-    Err(message as error_message) => io.line([: [error_message]])
+    Err(message as error_message) => io.line([: match-renamed-capture=[error_message]])
     Success => io.line("ok")
 ;

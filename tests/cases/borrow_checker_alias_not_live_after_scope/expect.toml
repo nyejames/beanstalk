@@ -3,4 +3,4 @@ entry = "."
 [backends.html]
 mode = "success"
 warnings = "forbid"
-rendered_output_contains = ["10", "20"]
+rendered_output_contains = ["before-scope=10", "after-scope=20"]

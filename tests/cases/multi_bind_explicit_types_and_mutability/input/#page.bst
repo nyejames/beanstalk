@@ -4,6 +4,6 @@ triple || -> Int, String, Float:
 
 a, b String, c ~Float = triple()
 c = c + 1.0
-io.line([: [a]])
-io.line([: [b]])
-io.line([: [c]])
+io.line([: multi-bind-int=[a]])
+io.line([: multi-bind-string=[b]])
+io.line([: multi-bind-mutated-float=[c]])

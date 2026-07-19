@@ -8,6 +8,6 @@ Response ::
 response = Response::Err("bad")
 
 if response is:
-    Err(message as message) => io.line([: [message]])
+    Err(message as message) => io.line([: match-self-alias-rename=[message]])
     Success => io.line("ok")
 ;

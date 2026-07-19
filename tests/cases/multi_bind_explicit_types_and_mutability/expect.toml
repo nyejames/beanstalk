@@ -1,4 +1,4 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
-rendered_output_contains = ["1", "two", "4"]
+rendered_output_contains = ["multi-bind-int=1", "multi-bind-string=two", "multi-bind-mutated-float=4"]

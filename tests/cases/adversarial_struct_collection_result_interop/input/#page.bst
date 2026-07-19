@@ -14,5 +14,5 @@ values ~= {point.x, point.y, 3}
 selected = load_index(~values, 1) catch:
     then 0
 ;
-io.line([: [selected]])
-io.line([: [values.length()]])
+io.line([: selected=[selected]])
+io.line([: length=[values.length()]])

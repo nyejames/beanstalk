@@ -30,15 +30,15 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 2R5c — replace ambiguous runtime substrings in the named review set
-LAST_ACCEPTED_COMMIT: pending Phase 2R5b acceptance commit (previous plan commit `8992704e9`)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 2R5b changes ready to commit
+CURRENT_SLICE: Phase 2R5c2 — replace remaining weak borrow and adversarial runtime markers
+LAST_ACCEPTED_COMMIT: pending Phase 2R5c1 acceptance commit (previous plan commit `dee1a6176`)
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 2R5c1 changes ready to commit
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: `testing.bd`, `validation.bd`, compiler/build-system overviews, and progress matrix govern runner contracts and gates
-- code: named `borrow_checker_alias_not_live_after_scope`, adversarial, multi-bind, and `choice_payload_match_*` fixtures with weak runtime substrings
+- code: Phase 2-migrated borrow/adversarial fixtures whose outputs remain unlabeled values such as `value`, `shared`, `32`, `16`, `true`, `30 21`, `shared_data`, or `test_value`
 ACCEPTANCE_CRITERIA:
-- every numeric-only, very short, or repeated generic marker in the named review set is replaced by context-rich observable output
+- the remaining weak borrow/adversarial markers are replaced by context-rich observable output without changing the access/control-flow contract
 - static page contracts remain artifact-owned and no artificial console output is introduced
 - current backend outcomes and distinct fixture ownership remain unchanged
 - exact case runs, canonical audit, and `just validate` pass
@@ -51,7 +51,7 @@ BLOCKERS_OR_OPEN_DECISIONS: none; compiler diagnostics Phase 4.1c remains serial
 DELEGATION_DECISION: codex-cli — explicit user-selected provider for implementation workers
 NEXT_WORKER_ORDER: codex-cli only for this run-local override
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit accepted Phase 2R5b, refresh its hash, inventory the named weak markers, then launch bounded Phase 2R5c through `codex-cli-beanstalk`
+NEXT_RESUME_ACTION: commit accepted Phase 2R5c1, refresh its hash, then launch bounded Phase 2R5c2 through `codex-cli-beanstalk`
 
 ---
 
@@ -130,7 +130,8 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 2R3 suite policy owner | `7f9078329` | Accepted | 3,486 Rust tests; 1,784 integration executions; 33 baseline-only advisories; zero hard findings |
 | Phase 2R4 path containment | `5e39b34aa` | Accepted | 3,496 Rust tests; 1,784 integration executions; canonical fixture/input/entry containment enforced; zero hard findings |
 | Phase 2R5a choice-construction contracts | `8992704e9` | Accepted | 17 acceptance-only; 526 rendered-output blocks; six choice cases now observe variants/payloads; zero hard findings |
-| Phase 2R5b named fixture contracts | pending acceptance commit | Accepted | 17 acceptance-only; 528 rendered-output blocks; struct default, Bool branch, and current-config wording now observed; zero hard findings |
+| Phase 2R5b named fixture contracts | `dee1a6176` | Accepted | 17 acceptance-only; 528 rendered-output blocks; struct default, Bool branch, and current-config wording now observed; zero hard findings |
+| Phase 2R5c1 named weak runtime markers | pending acceptance commit | Accepted | 528 rendered-output blocks; ten named fixtures now use context-rich markers; zero hard findings |
 
 ---
 
@@ -419,7 +420,7 @@ For each:
 ### Ambiguous runtime substrings
 
 - [ ] Review all Phase 2 migrated `rendered_output_contains` values that are numeric-only, very short, or repeated generic words.
-- [ ] At minimum correct:
+- [x] At minimum correct:
   - `borrow_checker_alias_not_live_after_scope`
   - `adversarial_nested_catch_handlers`
   - `adversarial_struct_collection_result_interop`
