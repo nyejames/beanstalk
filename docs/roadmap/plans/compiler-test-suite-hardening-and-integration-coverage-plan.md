@@ -28,10 +28,10 @@ This ordering is mandatory. Do not begin broad pruning while the harness can sti
 ## Current state
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
-STATUS: active
+STATUS: blocked
 CURRENT_SLICE: Phase 2B9 — migrate the remaining unambiguous fallback-backed runtime and package cases
 LAST_ACCEPTED_COMMIT: `00435b923` — make choice and optional success explicit
-WORKTREE: parent `main` at `00435b923`; Phase 1 worker worktrees were removed after patch-equivalence checks; reuse `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase2a` for subsequent serialized slices
+WORKTREE: parent `main` has the Phase 2B8 checkpoint at `7031419de`; reusable worker branch is clean at merge commit `9113f06fc` in `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase2a`; do not create another worktree
 REQUIRED_RELOADS: startup files, this plan and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: `testing.bd` routes runtime behaviour to rendered output and backend structure to artifact assertions; package imports use their resolved package-scoped lowering
@@ -60,12 +60,13 @@ VALIDATION_STATE:
 - Phase 2B6: all four exact HTML cases, 70 focused runner tests, audit, formatting, diff checks and `just validate` passed; the full gate covered 3,463 Rust tests, 1,784 integration executions and 28 benchmark sanity cases
 - Phase 2B7: all six exact HTML cases, 70 focused runner tests, audit, formatting, diff checks and `just validate` passed; `struct_using_constant` uses the correct static HTML artifact lane and the full gate passed
 - Phase 2B8: all seven exact HTML cases, 70 focused runner tests, audit, diff checks and `just validate` passed; audit reported 17 compile-only, 61 backend-baseline-only, six fallback-backed and zero hard violations
+- Phase 2B9 launch: both the optional `beanstalk-spark-explorer` and required `beanstalk-plan-worker` Codex CLI profiles selected `gpt-5.6-luna` but returned the account usage-limit error before repository edits; the service reported retry availability at 2026-07-25 11:08 AM
 DOCS_IMPACT: Phase 1 workflow docs, generated release output and the deferred code-block highlighting roadmap note are current; fixture outcomes/backend coverage and the progress matrix remain unchanged
 BLOCKERS_OR_OPEN_DECISIONS: diagnostics Phase 4.1c remains serialized at `d7fb3654f`; disk permits at most one additional worktree; before Phase 2 closes, resolve `adversarial_multi_file_helper_chain` using unsupported `@./prefix` and review mutation-during-iteration semantics in `loop_borrow_mutation_conflict`
-DELEGATION_DECISION: codex-cli — reuse the existing dedicated worktree for the user-requested Codex CLI Phase 2B9 implementation slice; the optional Spark selection attempt hit its usage limit without repository edits, so the parent bounded the slice from source and current assertion owners
-NEXT_WORKER_ORDER: codex-cli only for the Phase 2B9 implementation slice
-STOP_REASON: none
-NEXT_RESUME_ACTION: commit this Phase 2B8 checkpoint, synchronize the reusable worker branch with main and launch the bounded Phase 2B9 fixture slice
+DELEGATION_DECISION: codex-cli blocked — the user-requested provider returned an account usage-limit error before B9 edits; do not substitute Ollama or parent-direct
+NEXT_WORKER_ORDER: none until the requested Codex CLI profile is available
+STOP_REASON: the exact requested Codex CLI provider is unavailable before edits for both simple exploration and implementation because the account usage limit is exhausted until 2026-07-25 11:08 AM
+NEXT_RESUME_ACTION: retry `codex-cli-beanstalk .codex-worker/tasks/test-hardening-phase2b9.md` in the existing reusable worktree after Codex CLI capacity returns or the user changes the selected profile to one with available capacity
 
 ## Recommended roadmap placement and activation conditions
 
@@ -115,7 +116,7 @@ LAST_GOOD_COMMIT:
 - `00435b923` — accepted Phase 2B8 choice, optional and syntax expectation migration
 
 CURRENT_WORKTREE_STATE:
-- Clean / known changes: parent `main` is at `00435b923`; this Phase 2B8 checkpoint update is parent-owned
+- Clean / known changes: parent `main` has the Phase 2B8 checkpoint at `7031419de`; the reusable worker branch is clean at merge commit `9113f06fc` and B9 changed no repository files
 - Branch: local `main`
 - Dedicated worker worktrees: all accepted Phase 1 worktrees were clean and removed after `git cherry` confirmed their patches on main; reuse `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase2a` from worker commit `7a438ba5d`
 
@@ -184,6 +185,7 @@ BLOCKERS / RISKS:
 - a new integration case may reveal a real compiler bug; do not weaken the test to preserve a green gate
 - the design documents describe accepted end state while the progress matrix describes current support
 - Phase 2B must classify 53 fallback-backed cases and 57 explicit weak blocks; do not blanket-mark them compile-only
+- the user-requested Codex CLI provider is unavailable before Phase 2B9 edits because both selected `gpt-5.6-luna` profiles returned an account usage-limit error with a 2026-07-25 11:08 AM retry time; do not substitute another provider without user direction
 
 VALIDATION_STATE:
 - last recorded command: `just validate`, run for accepted Phase 1D in the dedicated worker worktree
@@ -220,6 +222,7 @@ VALIDATION_STATE:
 - Phase 2B7 worker changed `struct_using_constant` from an inapplicable runtime assertion to an `index.html` artifact assertion; `just validate` passed and audit reported 13 compile-only, 68 backend-baseline-only, 13 fallback-backed and zero hard violations
 - Phase 2B8 worker `just validate` passed; parent repeated the 70 focused runner tests and audit, which reported 17 compile-only, 61 backend-baseline-only, six fallback-backed and zero hard violations
 - Phase 2B9 optional Codex CLI Spark selection attempt hit its usage limit before producing a handoff; the worktree remained unchanged and the parent bounded the slice from the four sources and current package/assertion owners
+- Phase 2B9 Codex CLI implementation launch also hit the same usage limit before edits; no Phase 2B9 validation ran and the reusable worktree remains clean
 
 DOCS_IMPACT:
 - progress matrix needed: review after every phase that adds, removes, or materially strengthens current coverage; update only when the coverage statement changes
@@ -227,7 +230,7 @@ DOCS_IMPACT:
 - authorized docs updates: this plan explicitly authorizes the documentation changes listed in each phase; do not broaden language or architecture docs without a discovered contradiction or an intentional accepted behaviour change
 
 NEXT_ACTION:
-- commit this Phase 2B8 checkpoint, synchronize the reusable worker branch with main and launch the bounded Phase 2B9 fixture slice
+- retry the existing Phase 2B9 Codex CLI task after capacity returns or the user supplies an available Codex CLI profile; do not create a new worktree
 
 ---
 
