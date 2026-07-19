@@ -6,7 +6,7 @@
 
 use super::{CaseRole, ManifestCaseSpec};
 use serde::Deserialize;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -43,7 +43,6 @@ pub(crate) fn parse_manifest_file(path: &Path) -> Result<Vec<ManifestCaseSpec>, 
 
     let mut seen_ids = HashSet::new();
     let mut seen_paths = HashSet::new();
-    let mut seen_primary_contracts = HashMap::<String, String>::new();
     let mut cases = Vec::with_capacity(parsed.case.len());
     for case in parsed.case {
         if case.id.trim().is_empty() {
@@ -98,14 +97,6 @@ pub(crate) fn parse_manifest_file(path: &Path) -> Result<Vec<ManifestCaseSpec>, 
                 )
             })?;
 
-        if role == Some(CaseRole::Primary) && case.contract.is_none() {
-            return Err(format!(
-                "Manifest '{}' case '{}' has role 'primary' but is missing a contract.",
-                path.display(),
-                case.id
-            ));
-        }
-
         if !seen_ids.insert(case.id.clone()) {
             return Err(format!(
                 "Manifest '{}' has duplicate case id '{}'.",
@@ -118,19 +109,6 @@ pub(crate) fn parse_manifest_file(path: &Path) -> Result<Vec<ManifestCaseSpec>, 
                 "Manifest '{}' has duplicate case path '{}'.",
                 path.display(),
                 case.path
-            ));
-        }
-
-        if let (Some(CaseRole::Primary), Some(contract)) = (role, case.contract.as_ref())
-            && let Some(previous_case_id) =
-                seen_primary_contracts.insert(contract.clone(), case.id.clone())
-        {
-            return Err(format!(
-                "Manifest '{}' has duplicate primary contract '{}' on cases '{}' and '{}'.",
-                path.display(),
-                contract,
-                previous_case_id,
-                case.id
             ));
         }
 

@@ -30,28 +30,28 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 2R3 — give suite policy one owner
-LAST_ACCEPTED_COMMIT: pending Phase 2R2 acceptance commit (previous plan commit `5dc811a7c`; unrelated concurrent head `7a2172329` preserved)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 2R2 changes ready to commit atop concurrent roadmap commit `7a2172329`
+CURRENT_SLICE: Phase 2R4 — contain fixture and entry paths
+LAST_ACCEPTED_COMMIT: pending Phase 2R3 acceptance commit (previous plan commit `ca2d013ee`)
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 2R3 changes ready to commit
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: `testing.bd`, `validation.bd`, compiler/build-system overviews, and progress matrix govern runner contracts and gates
-- code: current policy reconstruction in `reporting.rs` and `manifest.rs`, invocation in `runner.rs`, typed suite metadata, and focused CLI/self-tests
+- code: path parsing in `manifest.rs`, fixture-root and entry resolution in `fixture.rs`, canonical discovery, and focused manifest/fixture tests
 ACCEPTANCE_CRITERIA:
-- one narrow suite-policy evaluator owns cross-case and assertion-strength rules
-- list/execution reject hard findings before selection or compilation
-- audit writes its report then fails on hard findings; advisories remain non-fatal
-- deterministic focused harness/CLI tests, canonical audit, and `just validate` pass
+- manifest paths and non-sentinel entries reject absolute, parent, root, prefix, and current-directory components
+- canonicalized fixture and entry paths remain inside their owning roots, including symlink resolution where supported
+- identity metadata rejects leading/trailing whitespace and duplicate tags
+- focused path tests, canonical audit, and `just validate` pass
 VALIDATION_STATE:
-- `cargo test --quiet integration_test_runner -- --format terse`: passed; 84 tests
+- `cargo test --quiet integration_test_runner -- --format terse`: passed; 90 tests
 - `cargo run --quiet -- tests --audit`: passed; 1,651 cases, 1,784 backend executions, 23 acceptance-only, 33 baseline-only, zero hard findings
-- `just validate`: passed; cross-target Clippy, 3,480 Rust tests, 1,784 integration executions, docs check, and 28 benchmark cases
+- `just validate`: passed; cross-target Clippy, 3,486 Rust tests, 1,784 integration executions, docs check, and 28 benchmark cases
 DOCS_IMPACT: progress matrix unchanged; workflow prose remains scheduled for Phase 2R8
 BLOCKERS_OR_OPEN_DECISIONS: none; compiler diagnostics Phase 4.1c remains serialized and untouched
 DELEGATION_DECISION: codex-cli — explicit user-selected provider for implementation workers
 NEXT_WORKER_ORDER: codex-cli only for this run-local override
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit accepted Phase 2R2, refresh its hash, then launch bounded Phase 2R3 through `codex-cli-beanstalk`
+NEXT_RESUME_ACTION: commit accepted Phase 2R3, refresh its hash, then launch bounded Phase 2R4 through `codex-cli-beanstalk`
 
 ---
 
@@ -126,7 +126,8 @@ This file is a reloadable execution plan, not a command transcript.
 | Foundation through Phase 2B11c | `ba3366218` | Accepted | 3,466 Rust tests; 1,784 integration executions; 23 current `compile_only`; 35 baseline-only; zero fallback |
 | Plan pause | `97d3174fd` | Accepted | No code change |
 | Phase 2R1 success intent and inventory | `5dc811a7c` | Accepted | 3,475 Rust tests; 1,784 integration executions; 23 acceptance-only; 33 baseline-only; zero hard findings |
-| Phase 2R2 golden inventory | pending acceptance commit | Accepted | 3,480 Rust tests; 1,784 integration executions; 38 file-backed golden blocks; 17 orphaned modes removed; zero hard findings |
+| Phase 2R2 golden inventory | `ca2d013ee` | Accepted | 3,480 Rust tests; 1,784 integration executions; 38 file-backed golden blocks; 17 orphaned modes removed; zero hard findings |
+| Phase 2R3 suite policy owner | pending acceptance commit | Accepted | 3,486 Rust tests; 1,784 integration executions; 33 baseline-only advisories; zero hard findings |
 
 ---
 
@@ -312,29 +313,29 @@ Manifest parsing, audit reporting, and normal execution currently duplicate or d
 
 ### Required implementation
 
-- [ ] Add one narrow suite-policy evaluator, for example `policy.rs`.
-- [ ] Move duplicate-primary, primary-without-contract, acceptance-only role, baseline-only, and related cross-case rules into that owner.
-- [ ] Remove duplicated policy reconstruction from `reporting.rs` and `manifest.rs` where it no longer owns the rule.
-- [ ] Normal list/execution rejects hard policy findings before selection or compilation.
-- [ ] Audit writes the JSON report even when hard findings exist, then returns an error/nonzero result.
-- [ ] Advisory findings remain non-fatal.
-- [ ] Keep malformed TOML and unsafe filesystem shape as immediate loader errors rather than reportable policy findings.
-- [ ] Make hard/advisory ordering deterministic.
+- [x] Add one narrow suite-policy evaluator, for example `policy.rs`.
+- [x] Move duplicate-primary, primary-without-contract, acceptance-only role, baseline-only, and related cross-case rules into that owner.
+- [x] Remove duplicated policy reconstruction from `reporting.rs` and `manifest.rs` where it no longer owns the rule.
+- [x] Normal list/execution rejects hard policy findings before selection or compilation.
+- [x] Audit writes the JSON report even when hard findings exist, then returns an error/nonzero result.
+- [x] Advisory findings remain non-fatal.
+- [x] Keep malformed TOML and unsafe filesystem shape as immediate loader errors rather than reportable policy findings.
+- [x] Make hard/advisory ordering deterministic.
 
 ### Self-tests
 
-- [ ] Duplicate primary contract is produced once by the policy owner.
-- [ ] Primary without contract is produced once by the policy owner.
-- [ ] Audit serializes hard findings and fails.
-- [ ] Normal execution fails before compiling when hard findings exist.
-- [ ] Advisories serialize without failing.
-- [ ] Reporting contains no independent policy taxonomy.
+- [x] Duplicate primary contract is produced once by the policy owner.
+- [x] Primary without contract is produced once by the policy owner.
+- [x] Audit serializes hard findings and fails.
+- [x] Normal execution fails before compiling when hard findings exist.
+- [x] Advisories serialize without failing.
+- [x] Reporting contains no independent policy taxonomy.
 
 ### Acceptance
 
-- [ ] Every policy rule has one owner.
-- [ ] Audit hard findings are operationally meaningful.
-- [ ] Focused harness/CLI tests and the full gate pass.
+- [x] Every policy rule has one owner.
+- [x] Audit hard findings are operationally meaningful.
+- [x] Focused harness/CLI tests and the full gate pass.
 
 ---
 

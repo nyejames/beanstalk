@@ -3,11 +3,12 @@
 //! WHAT: protects grouped listing and audit inventory reporting.
 //! WHY: both reporting modes must expose retained metadata without invoking case execution.
 
+use super::super::policy::evaluate_suite;
 use super::super::reporting::{build_suite_inventory_report, format_case_listing};
 use super::super::types::{GoldenExpectation, SuccessContract};
 use super::super::{
     BackendId, CaseRole, ExpectedOutcome, FailureExpectation, SuccessExpectation, TestCaseSpec,
-    WarningExpectation,
+    TestSuiteSpec, WarningExpectation,
 };
 use std::path::PathBuf;
 
@@ -31,6 +32,17 @@ fn case(
         flags: Vec::new(),
         expected,
     }
+}
+
+fn report_for_cases(
+    cases: &[TestCaseSpec],
+    repository_commit: Option<String>,
+) -> super::super::reporting::SuiteInventoryReport {
+    let suite = TestSuiteSpec {
+        cases: cases.to_vec(),
+    };
+    let policy_evaluation = evaluate_suite(&suite);
+    build_suite_inventory_report(&suite.cases, &policy_evaluation, repository_commit)
 }
 
 #[test]
@@ -115,8 +127,7 @@ fn inventory_json_groups_backend_metadata_under_one_canonical_case() {
         }),
     );
 
-    let report =
-        build_suite_inventory_report(&[html_case, wasm_case], Some("0123456789abcdef".to_owned()));
+    let report = report_for_cases(&[html_case, wasm_case], Some("0123456789abcdef".to_owned()));
     let json = serde_json::to_value(&report).expect("inventory should serialize");
 
     assert_eq!(json["schema_version"], 2);
@@ -186,7 +197,7 @@ fn inventory_distinguishes_acceptance_only_from_baseline_only() {
         }),
     );
 
-    let report = build_suite_inventory_report(&[explicit_case, baseline_only_case], None);
+    let report = report_for_cases(&[explicit_case, baseline_only_case], None);
     let json = serde_json::to_value(&report).expect("inventory should serialize");
 
     assert_eq!(json["cases"][0]["backends"][0]["baseline_applied"], true);
@@ -207,7 +218,7 @@ fn inventory_distinguishes_acceptance_only_from_baseline_only() {
 
 #[test]
 fn inventory_counts_authored_expected_warning_as_a_contract() {
-    let report = build_suite_inventory_report(
+    let report = report_for_cases(
         &[case(
             "expected_warning",
             BackendId::Html,
@@ -237,115 +248,7 @@ fn inventory_counts_authored_expected_warning_as_a_contract() {
 }
 
 #[test]
-fn whole_case_acceptance_only_requires_smoke_role() {
-    let report = build_suite_inventory_report(
-        &[case(
-            "acceptance_only_case",
-            BackendId::Html,
-            &["integration"],
-            None,
-            Some(CaseRole::Backend),
-            ExpectedOutcome::Success(SuccessExpectation {
-                warnings: WarningExpectation::Forbid,
-                success_contract: Some(SuccessContract::AcceptanceOnly),
-                artifact_assertions: Vec::new(),
-                golden: GoldenExpectation::default(),
-                rendered_output_contains: Vec::new(),
-                rendered_output_not_contains: Vec::new(),
-                artifacts_must_not_exist: Vec::new(),
-            }),
-        )],
-        None,
-    );
-
-    assert_eq!(report.hard_policy_violations.len(), 1);
-    assert_eq!(
-        report.hard_policy_violations[0].code,
-        "acceptance_only_requires_smoke_role"
-    );
-}
-
-#[test]
-fn mixed_backend_acceptance_only_does_not_force_smoke_role() {
-    let acceptance_case = case(
-        "mixed_contracts",
-        BackendId::Html,
-        &["integration"],
-        None,
-        Some(CaseRole::Backend),
-        ExpectedOutcome::Success(SuccessExpectation {
-            warnings: WarningExpectation::Forbid,
-            success_contract: Some(SuccessContract::AcceptanceOnly),
-            artifact_assertions: Vec::new(),
-            golden: GoldenExpectation::default(),
-            rendered_output_contains: Vec::new(),
-            rendered_output_not_contains: Vec::new(),
-            artifacts_must_not_exist: Vec::new(),
-        }),
-    );
-    let stronger_case = case(
-        "mixed_contracts",
-        BackendId::HtmlWasm,
-        &["integration"],
-        None,
-        Some(CaseRole::Backend),
-        ExpectedOutcome::Success(SuccessExpectation {
-            warnings: WarningExpectation::Forbid,
-            success_contract: None,
-            artifact_assertions: Vec::new(),
-            golden: GoldenExpectation::default(),
-            rendered_output_contains: vec!["marker".to_owned()],
-            rendered_output_not_contains: Vec::new(),
-            artifacts_must_not_exist: Vec::new(),
-        }),
-    );
-
-    let report = build_suite_inventory_report(&[acceptance_case, stronger_case], None);
-
-    assert!(report.hard_policy_violations.is_empty());
-    assert_eq!(report.summary.acceptance_only_backend_blocks, 1);
-    assert_eq!(report.summary.rendered_output_backend_blocks, 1);
-}
-
-#[test]
-fn inventory_reports_missing_contract_and_role_as_advisories() {
-    let report = build_suite_inventory_report(
-        &[case(
-            "unclassified",
-            BackendId::Html,
-            &["integration"],
-            None,
-            None,
-            ExpectedOutcome::Success(SuccessExpectation {
-                warnings: WarningExpectation::Forbid,
-                success_contract: None,
-                artifact_assertions: Vec::new(),
-                golden: GoldenExpectation::default(),
-                rendered_output_contains: Vec::new(),
-                rendered_output_not_contains: Vec::new(),
-                artifacts_must_not_exist: Vec::new(),
-            }),
-        )],
-        None,
-    );
-
-    let codes = report
-        .advisory_findings
-        .iter()
-        .map(|finding| finding.code.as_str())
-        .collect::<Vec<_>>();
-    assert_eq!(
-        codes,
-        vec![
-            "missing_contract_classification",
-            "missing_role_classification"
-        ]
-    );
-    assert!(report.hard_policy_violations.is_empty());
-}
-
-#[test]
-fn inventory_keeps_duplicate_primary_contracts_in_hard_findings() {
+fn report_serializes_supplied_policy_evaluation() {
     let cases = [
         case(
             "case_a",
@@ -381,7 +284,11 @@ fn inventory_keeps_duplicate_primary_contracts_in_hard_findings() {
         ),
     ];
 
-    let report = build_suite_inventory_report(&cases, None);
+    let suite = TestSuiteSpec {
+        cases: cases.to_vec(),
+    };
+    let policy_evaluation = evaluate_suite(&suite);
+    let report = build_suite_inventory_report(&suite.cases, &policy_evaluation, None);
     assert_eq!(report.hard_policy_violations.len(), 1);
     assert_eq!(
         report.hard_policy_violations[0].code,

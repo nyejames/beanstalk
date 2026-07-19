@@ -10,6 +10,7 @@ use super::{
     FailureTriageEntry, FailureTriageReport, SEPARATOR_LINE_LENGTH, SuccessExpectation,
     SummaryCounts, TestCaseSpec, WarningExpectation,
 };
+use super::{PolicyEvaluation, PolicyFinding};
 use crate::compiler_frontend::compiler_messages::render::{terminal, terse};
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, DiagnosticCategory, DiagnosticSeverity,
@@ -85,8 +86,8 @@ pub(crate) struct SuiteInventoryReport {
     pub expanded_backend_execution_count: usize,
     pub summary: InventorySummary,
     pub cases: Vec<InventoryCase>,
-    pub hard_policy_violations: Vec<AuditFinding>,
-    pub advisory_findings: Vec<AuditFinding>,
+    pub hard_policy_violations: Vec<PolicyFinding>,
+    pub advisory_findings: Vec<PolicyFinding>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -127,15 +128,9 @@ pub(crate) struct InventoryBackend {
     pub artifact_absence_assertion_count: usize,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub(crate) struct AuditFinding {
-    pub code: String,
-    pub case_id: Option<String>,
-    pub message: String,
-}
-
 pub(crate) fn build_suite_inventory_report(
     cases: &[TestCaseSpec],
+    policy_evaluation: &PolicyEvaluation,
     repository_commit: Option<String>,
 ) -> SuiteInventoryReport {
     let mut inventory_cases = Vec::<InventoryCase>::new();
@@ -158,81 +153,25 @@ pub(crate) fn build_suite_inventory_report(
         });
     }
 
-    let mut hard_policy_violations = Vec::new();
-    let mut advisory_findings = Vec::new();
-    let mut primary_contracts = BTreeMap::<String, String>::new();
-
-    for inventory_case in &inventory_cases {
-        if inventory_case.contract.is_none() {
-            advisory_findings.push(AuditFinding {
-                code: "missing_contract_classification".to_owned(),
-                case_id: Some(inventory_case.canonical_id.clone()),
-                message: "Case has no manifest contract classification.".to_owned(),
-            });
-        }
-
-        if inventory_case.role.is_none() {
-            advisory_findings.push(AuditFinding {
-                code: "missing_role_classification".to_owned(),
-                case_id: Some(inventory_case.canonical_id.clone()),
-                message: "Case has no manifest role classification.".to_owned(),
-            });
-        }
-
-        if is_whole_case_acceptance_only(inventory_case)
-            && inventory_case.role != Some(CaseRole::Smoke)
-        {
-            hard_policy_violations.push(AuditFinding {
-                code: "acceptance_only_requires_smoke_role".to_owned(),
-                case_id: Some(inventory_case.canonical_id.clone()),
-                message: "Whole-case acceptance-only cases must declare role = \"smoke\"."
-                    .to_owned(),
-            });
-        }
-
-        if inventory_case.role == Some(CaseRole::Primary) {
-            if let Some(contract) = inventory_case.contract.as_ref()
-                && let Some(previous_case_id) =
-                    primary_contracts.insert(contract.clone(), inventory_case.canonical_id.clone())
-            {
-                hard_policy_violations.push(AuditFinding {
-                    code: "duplicate_primary_contract".to_owned(),
-                    case_id: Some(inventory_case.canonical_id.clone()),
-                    message: format!(
-                        "Primary contract '{contract}' is also owned by case '{previous_case_id}'."
-                    ),
-                });
-            } else if inventory_case.contract.is_none() {
-                hard_policy_violations.push(AuditFinding {
-                    code: "primary_missing_contract".to_owned(),
-                    case_id: Some(inventory_case.canonical_id.clone()),
-                    message: "Primary case has no manifest contract classification.".to_owned(),
-                });
-            }
-        }
-    }
-
     SuiteInventoryReport {
         schema_version: SUITE_INVENTORY_SCHEMA_VERSION,
         repository_commit,
         manifest_case_count: inventory_cases.len(),
         expanded_backend_execution_count: cases.len(),
-        summary: build_inventory_summary(&inventory_cases),
+        summary: build_inventory_summary(
+            &inventory_cases,
+            policy_evaluation.baseline_only_backend_blocks,
+        ),
         cases: inventory_cases,
-        hard_policy_violations,
-        advisory_findings,
+        hard_policy_violations: policy_evaluation.hard_findings.clone(),
+        advisory_findings: policy_evaluation.advisories.clone(),
     }
 }
 
-fn is_whole_case_acceptance_only(inventory_case: &InventoryCase) -> bool {
-    !inventory_case.backends.is_empty()
-        && inventory_case
-            .backends
-            .iter()
-            .all(|backend| backend.mode == "success" && backend.acceptance_only)
-}
-
-fn build_inventory_summary(cases: &[InventoryCase]) -> InventorySummary {
+fn build_inventory_summary(
+    cases: &[InventoryCase],
+    baseline_only_backend_blocks: usize,
+) -> InventorySummary {
     let mut summary = InventorySummary {
         acceptance_only_backend_blocks: 0,
         baseline_only_backend_blocks: 0,
@@ -253,16 +192,6 @@ fn build_inventory_summary(cases: &[InventoryCase]) -> InventorySummary {
         if backend.acceptance_only {
             summary.acceptance_only_backend_blocks += 1;
         }
-        if backend.baseline_applied
-            && !backend.acceptance_only
-            && !has_rendered_output
-            && !has_artifacts
-            && !has_golden
-            && !has_absence
-            && !has_expected_warning
-        {
-            summary.baseline_only_backend_blocks += 1;
-        }
         if has_rendered_output {
             summary.rendered_output_backend_blocks += 1;
         }
@@ -279,6 +208,8 @@ fn build_inventory_summary(cases: &[InventoryCase]) -> InventorySummary {
             summary.expected_warning_backend_blocks += 1;
         }
     }
+
+    summary.baseline_only_backend_blocks = baseline_only_backend_blocks;
 
     summary
 }

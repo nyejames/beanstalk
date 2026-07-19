@@ -3,7 +3,8 @@
 //! WHAT: runs the integration test suite and renders results.
 
 use crate::compiler_tests::integration_test_runner::{
-    BackendId, FailureTriageEntry, SummaryCounts, TestCaseSpec, TestRunnerOptions,
+    BackendId, CaseExecutionResult, FailureTriageEntry, SummaryCounts, TestCaseSpec,
+    TestRunnerOptions, TestSuiteSpec,
 };
 use rayon::prelude::*;
 use saying::say;
@@ -28,20 +29,52 @@ pub(crate) fn run_all_test_cases(
     options.validate()?;
 
     let suite = fixture::load_test_suite()?;
+    run_loaded_suite(
+        suite,
+        options,
+        execution::execute_test_case,
+        super::SUITE_INVENTORY_REPORT_PATH,
+    )
+}
+
+pub(crate) fn run_loaded_suite<F>(
+    suite: TestSuiteSpec,
+    options: TestRunnerOptions,
+    execute_case: F,
+    inventory_report_path: &str,
+) -> Result<super::IntegrationRunSummary, String>
+where
+    F: Fn(&TestCaseSpec) -> CaseExecutionResult + Send + Sync,
+{
+    options.validate()?;
+
+    // Evaluate the complete loaded suite before selection so every normal mode shares one
+    // policy boundary and no compiler callback can run for a hard-invalid suite.
+    let policy_evaluation = super::policy::evaluate_suite(&suite);
 
     if options.audit {
         let report = reporting::build_suite_inventory_report(
             &suite.cases,
+            &policy_evaluation,
             reporting::discover_repository_commit(),
         );
-        reporting::write_suite_inventory_report(super::SUITE_INVENTORY_REPORT_PATH, &report)?;
+        reporting::write_suite_inventory_report(inventory_report_path, &report)?;
         println!(
             "Wrote integration suite inventory to {} ({} cases, {} backend executions).",
-            super::SUITE_INVENTORY_REPORT_PATH,
+            inventory_report_path,
             report.manifest_case_count,
             report.expanded_backend_execution_count
         );
+
+        if policy_evaluation.has_hard_findings() {
+            return Err(super::policy::format_hard_findings(&policy_evaluation));
+        }
+
         return Ok(SummaryCounts::default().into());
+    }
+
+    if policy_evaluation.has_hard_findings() {
+        return Err(super::policy::format_hard_findings(&policy_evaluation));
     }
 
     let cases = select_cases(suite.cases, &options);
@@ -70,7 +103,7 @@ pub(crate) fn run_all_test_cases(
                 .into_par_iter()
                 .enumerate()
                 .map(|(index, case)| {
-                    let result = execution::execute_test_case(&case);
+                    let result = execute_case(&case);
                     (index, case, result)
                 })
                 .collect::<Vec<_>>()
@@ -80,7 +113,7 @@ pub(crate) fn run_all_test_cases(
             .into_par_iter()
             .enumerate()
             .map(|(index, case)| {
-                let result = execution::execute_test_case(&case);
+                let result = execute_case(&case);
                 (index, case, result)
             })
             .collect::<Vec<_>>()

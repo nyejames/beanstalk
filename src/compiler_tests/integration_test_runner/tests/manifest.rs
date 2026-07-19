@@ -82,7 +82,7 @@ fn parses_every_supported_manifest_role() {
 }
 
 #[test]
-fn rejects_primary_manifest_case_without_contract() {
+fn retains_primary_manifest_case_without_contract_for_policy_evaluation() {
     let root = temp_dir("manifest_primary_without_contract");
     fs::create_dir_all(&root).expect("should create root");
     write_success_fixture(&root, "case");
@@ -93,12 +93,10 @@ fn rejects_primary_manifest_case_without_contract() {
     )
     .expect("should write manifest");
 
-    let Err(error) = load_test_suite_from_root(&root) else {
-        panic!("primary case without a contract should be rejected");
-    };
-    assert!(error.contains("case"), "unexpected: {error}");
-    assert!(error.contains("primary"), "unexpected: {error}");
-    assert!(error.contains("contract"), "unexpected: {error}");
+    let suite = load_test_suite_from_root(&root)
+        .expect("cross-case primary policy should be evaluated after loading");
+    assert_eq!(suite.cases[0].role, Some(CaseRole::Primary));
+    assert_eq!(suite.cases[0].contract, None);
 
     fs::remove_dir_all(&root).expect("should clean up temp fixture root");
 }
@@ -126,7 +124,7 @@ fn rejects_manifest_case_with_empty_contract() {
 }
 
 #[test]
-fn rejects_duplicate_primary_contracts() {
+fn retains_duplicate_primary_contracts_for_policy_evaluation() {
     let root = temp_dir("manifest_duplicate_primary_contract");
     fs::create_dir_all(&root).expect("should create root");
     write_success_fixture(&root, "case_a");
@@ -138,13 +136,11 @@ fn rejects_duplicate_primary_contracts() {
     )
     .expect("should write manifest");
 
-    let Err(error) = load_test_suite_from_root(&root) else {
-        panic!("duplicate primary contracts should be rejected");
-    };
-    assert!(error.contains("duplicate"), "unexpected: {error}");
-    assert!(error.contains("language.example"), "unexpected: {error}");
-    assert!(error.contains("case_a"), "unexpected: {error}");
-    assert!(error.contains("case_b"), "unexpected: {error}");
+    let suite = load_test_suite_from_root(&root)
+        .expect("cross-case primary policy should be evaluated after loading");
+    assert_eq!(suite.cases.len(), 2);
+    assert_eq!(suite.cases[0].contract, Some("language.example".to_owned()));
+    assert_eq!(suite.cases[1].contract, Some("language.example".to_owned()));
 
     fs::remove_dir_all(&root).expect("should clean up temp fixture root");
 }

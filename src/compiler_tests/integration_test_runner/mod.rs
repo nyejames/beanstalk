@@ -10,6 +10,7 @@ mod execution;
 mod expectations;
 mod fixture;
 mod manifest;
+mod policy;
 mod reporting;
 mod runner;
 mod types;
@@ -24,10 +25,12 @@ pub use types::IntegrationRunSummary;
 pub(crate) use types::{
     ArtifactAssertion, ArtifactKind, BackendId, CaseExecutionResult, CaseRole, ExpectationMode,
     ExpectedOutcome, FailureExpectation, FailureKind, FailureTriageEntry, FailureTriageReport,
-    GoldenMode, ManifestCaseSpec, ParsedBackendExpectation, ParsedExpectationFile,
+    GoldenMode, ManifestCaseSpec, ParsedBackendExpectation, ParsedExpectationFile, SuccessContract,
     SuccessExpectation, SummaryCounts, TestCaseSpec, TestRunnerOptions, TestSuiteSpec,
     WarningExpectation,
 };
+
+pub(crate) use policy::{PolicyEvaluation, PolicyFinding};
 
 pub(crate) const CANONICAL_TESTS_PATH: &str = "tests/cases";
 pub(crate) const MANIFEST_FILE_NAME: &str = "manifest.toml";
