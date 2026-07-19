@@ -146,7 +146,7 @@ fn inventory_json_groups_backend_metadata_under_one_canonical_case() {
 }
 
 #[test]
-fn inventory_distinguishes_explicit_compile_only_from_backend_baseline() {
+fn inventory_distinguishes_explicit_compile_only_from_baseline_only() {
     let explicit_case = case(
         "explicit_compile_only",
         BackendId::Html,
@@ -164,8 +164,8 @@ fn inventory_distinguishes_explicit_compile_only_from_backend_baseline() {
             artifacts_must_not_exist: Vec::new(),
         }),
     );
-    let implicit_case = case(
-        "implicit_backend_baseline",
+    let baseline_only_case = case(
+        "baseline_only",
         BackendId::HtmlWasm,
         &["integration"],
         None,
@@ -182,7 +182,7 @@ fn inventory_distinguishes_explicit_compile_only_from_backend_baseline() {
         }),
     );
 
-    let report = build_suite_inventory_report(&[explicit_case, implicit_case], None);
+    let report = build_suite_inventory_report(&[explicit_case, baseline_only_case], None);
     let json = serde_json::to_value(&report).expect("inventory should serialize");
 
     assert_eq!(json["cases"][0]["backends"][0]["compile_only"], true);

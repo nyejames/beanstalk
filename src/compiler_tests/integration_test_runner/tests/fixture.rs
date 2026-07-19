@@ -6,8 +6,8 @@
 use super::super::fixture::{load_canonical_case_specs, load_test_suite_from_root};
 use super::super::runner::select_cases;
 use super::super::{
-    BackendId, CaseRole, EXPECT_FILE_NAME, ExpectedOutcome, GOLDEN_DIR_NAME, INPUT_DIR_NAME,
-    MANIFEST_FILE_NAME, TestRunnerOptions,
+    BackendId, CaseRole, EXPECT_FILE_NAME, GOLDEN_DIR_NAME, INPUT_DIR_NAME, MANIFEST_FILE_NAME,
+    TestRunnerOptions,
 };
 use crate::compiler_tests::test_support::temp_dir;
 use std::fs;
@@ -56,25 +56,25 @@ fn accepts_failure_fixture_without_message_contains() {
 }
 
 #[test]
-fn accepts_success_fixture_without_explicit_artifact_assertions() {
-    let root = temp_dir("success_contract_golden_assertion");
+fn rejects_canonical_fixture_without_expectation_before_execution() {
+    let root = temp_dir("missing_expectation");
     let case_root = root.join("case");
     let input_root = case_root.join(INPUT_DIR_NAME);
     fs::create_dir_all(&input_root).expect("should create fixture input directory");
-    fs::write(input_root.join("#page.bst"), "#[:ok]\n").expect("should write fixture source");
-    fs::write(
-        case_root.join(EXPECT_FILE_NAME),
-        "[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\n",
-    )
-    .expect("should write expect file");
+    fs::write(input_root.join("#page.bst"), "not valid Beanstalk source\n")
+        .expect("should write fixture source");
 
-    let cases = load_canonical_case_specs(&case_root, None).expect("fixture should be accepted");
-    assert_eq!(cases.len(), 1);
-    assert_eq!(cases[0].display_name, "case [html]");
-    let ExpectedOutcome::Success(expectation) = &cases[0].expected else {
-        panic!("case should have a success expectation");
+    let expected_path = case_root.join(EXPECT_FILE_NAME);
+    let Err(error) = load_canonical_case_specs(&case_root, None) else {
+        panic!("fixture without an expectation file should be rejected");
     };
-    assert!(expectation.success_contract.is_none());
+    assert!(
+        error.contains("Canonical case 'case'")
+            && error.contains("missing required expectation file")
+            && error.contains(&case_root.display().to_string())
+            && error.contains(&expected_path.display().to_string()),
+        "unexpected error: {error}"
+    );
 
     fs::remove_dir_all(&root).expect("should clean up temp fixture root");
 }

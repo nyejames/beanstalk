@@ -7,9 +7,9 @@
 
 use super::types::SuccessContract;
 use super::{
-    BackendId, CANONICAL_TESTS_PATH, DEFAULT_EXPECT_STUB_PATH, EXPECT_FILE_NAME, ExpectationMode,
-    ExpectedOutcome, FailureExpectation, GOLDEN_DIR_NAME, INPUT_DIR_NAME, MANIFEST_FILE_NAME,
-    ManifestCaseSpec, ParsedExpectationFile, SuccessExpectation, TestCaseSpec, TestSuiteSpec,
+    BackendId, CANONICAL_TESTS_PATH, EXPECT_FILE_NAME, ExpectationMode, ExpectedOutcome,
+    FailureExpectation, GOLDEN_DIR_NAME, INPUT_DIR_NAME, MANIFEST_FILE_NAME, ManifestCaseSpec,
+    ParsedExpectationFile, SuccessExpectation, TestCaseSpec, TestSuiteSpec,
 };
 use crate::compiler_frontend::Flag;
 use std::collections::HashSet;
@@ -136,18 +136,21 @@ pub(crate) fn load_canonical_case_specs(
         ));
     }
 
-    let parsed_expectation = if expect_path.is_file() {
-        super::expectations::parse_expectation_file(&expect_path)?
-    } else {
-        let default_stub_path = Path::new(DEFAULT_EXPECT_STUB_PATH);
-        let source = fs::read_to_string(default_stub_path).map_err(|error| {
-            format!(
-                "Failed to read default expectation stub '{}': {error}",
-                default_stub_path.display()
-            )
-        })?;
-        super::expectations::parse_expectation_source(&source, &expect_path)?
-    };
+    if !expect_path.is_file() {
+        let case_name = manifest_case
+            .as_ref()
+            .map(|case| case.id.as_str())
+            .or_else(|| fixture_root.file_name().and_then(|name| name.to_str()))
+            .unwrap_or("unnamed_case");
+        return Err(format!(
+            "Canonical case '{}' at fixture '{}' is missing required expectation file '{}'.",
+            case_name,
+            fixture_root.display(),
+            expect_path.display()
+        ));
+    }
+
+    let parsed_expectation = super::expectations::parse_expectation_file(&expect_path)?;
     validate_fixture_contract(fixture_root, &parsed_expectation)?;
     let entry_path = resolve_case_entry_path(&input_root, parsed_expectation.entry.as_deref())?;
     let manifest_relative_path = manifest_case

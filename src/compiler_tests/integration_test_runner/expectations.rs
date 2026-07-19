@@ -91,22 +91,10 @@ pub(crate) fn parse_expectation_file(path: &Path) -> Result<ParsedExpectationFil
         )
     })?;
 
-    parse_expectation_source(&source, path)
-}
-
-/// Parse expectation TOML from an in-memory string.
-///
-/// WHAT: separates parsing from file I/O so the runner can supply a default stub
-///       while still reporting errors against the canonical case path.
-/// WHY: avoids duplicating boilerplate expect.toml files across cases.
-pub(crate) fn parse_expectation_source(
-    source: &str,
-    display_path: &Path,
-) -> Result<ParsedExpectationFile, String> {
-    let parsed: ExpectationToml = toml::from_str(source).map_err(|error| {
+    let parsed: ExpectationToml = toml::from_str(&source).map_err(|error| {
         format!(
             "Failed to parse expectation file '{}' as TOML: {error}",
-            display_path.display()
+            path.display()
         )
     })?;
 
@@ -115,18 +103,18 @@ pub(crate) fn parse_expectation_source(
     {
         return Err(format!(
             "Expectation file '{}' only supports builder = \"html\" right now",
-            display_path.display()
+            path.display()
         ));
     }
 
     if parsed.backends.is_empty() {
         return Err(format!(
             "Expectation file '{}' must declare at least one '[backends.<id>]' section. Legacy top-level mode/flags/error fields are no longer supported.",
-            display_path.display()
+            path.display()
         ));
     }
 
-    parse_matrix_expectation_file(display_path, parsed)
+    parse_matrix_expectation_file(path, parsed)
 }
 
 fn parse_matrix_expectation_file(
