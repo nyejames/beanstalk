@@ -29,16 +29,16 @@ This ordering is mandatory. Do not begin broad pruning while the harness can sti
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 2B11c — assert config, HTML runtime and receiver outputs
-LAST_ACCEPTED_COMMIT: `71ca50815` — classify choice construction contracts
-WORKTREE: parent `main` has only this Phase 2B11c plan checkpoint diff atop `71ca50815`; reusable worker branch is clean at `f74c6745c` in `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase2a`; do not create another worktree
+CURRENT_SLICE: Phase 2B11c correction — route static page content to artifact assertions
+LAST_ACCEPTED_COMMIT: `9f120d875` — queue runtime output contracts
+WORKTREE: parent `main` has only this Phase 2B11c correction plan diff atop `9f120d875`; reusable worker branch is clean at merge commit `6aed00e6f` after reverting the blocked attempt; do not create another worktree
 REQUIRED_RELOADS: startup files, this plan and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: behavior-first page and console fixtures should assert their visible result; existing HTML-Wasm artifact contracts remain backend-specific and unchanged
-- code: six HTML success blocks have direct source-derived output but still rely only on the backend baseline; paired HTML-Wasm blocks already own artifact contracts where present
+- docs: `rendered_output_contains` owns executed script slot/console output, while static or folded page fragments belong to `index.html` artifact assertions
+- code: the first attempt correctly passed `receiver_method_basic_call` but five static/folded page fixtures produced empty dynamic rendered output and were cleanly reverted
 ACCEPTANCE_CRITERIA:
-- add the exact source-derived rendered output to only the six selected HTML backend blocks
-- preserve sources, HTML-Wasm blocks, artifacts and warning policy; leave `path_bst_template_warning` for warning-contract enforcement
+- add `index.html` text artifact assertions for the five static/folded page fixtures and rendered output only for the receiver console fixture
+- preserve sources, HTML-Wasm blocks, existing artifacts and warning policy; leave `path_bst_template_warning` for warning-contract enforcement
 - all six exact HTML cases, focused runner tests, audit, diff checks and full gate pass
 VALIDATION_STATE:
 - final TIR at `dc81f7e53`: `just validate` passed with 3,433 Rust tests, 1,784 integration executions, docs checking and 28 benchmark sanity cases
@@ -69,13 +69,14 @@ VALIDATION_STATE:
 - Phase 2B11 exploration: Codex CLI accounted for all 55 remaining blocks in nine bounded batches; corrected detailed totals are 38 rendered-output, one artifact, two warning, 13 compile-only and one design-conflict investigation; no files changed
 - Phase 2B11a: all seven choice payload-match cases, 70 runner tests, audit and diff checks passed in worker and parent review; worker `just validate` passed with 3,466 Rust tests and 1,784 integration executions; audit reported 17 compile-only, 48 baseline-only, zero fallback and zero hard violations
 - Phase 2B11b: all seven choice constructor/constant/import cases, 70 runner tests, audit and diff checks passed in worker and parent review; worker `just validate` passed with 3,466 Rust tests and 1,784 integration executions; audit reported 23 compile-only, 41 baseline-only, zero fallback and zero hard violations
+- Phase 2B11c first attempt: receiver rendered output passed, five static/folded page assertions failed with empty dynamic output, and the worker reverted all edits; runner tests, audit and full gate were not run because the stop rule fired; worktree remained clean
 - Phase 2B9 launch: both the optional `beanstalk-spark-explorer` and required `beanstalk-plan-worker` Codex CLI profiles selected `gpt-5.6-luna` but returned the account usage-limit error before repository edits; the service reported retry availability at 2026-07-25 11:08 AM
 DOCS_IMPACT: Phase 1 workflow docs, generated release output and the deferred code-block highlighting roadmap note are current; fixture outcomes/backend coverage and the progress matrix remain unchanged
 BLOCKERS_OR_OPEN_DECISIONS: none for this slice; diagnostics Phase 4.1c remains serialized at `d7fb3654f`; disk permits at most one additional worktree
-DELEGATION_DECISION: codex-cli implementation — explicit user-requested provider and the six selected outputs are direct, backend-local and source-bounded
+DELEGATION_DECISION: codex-cli implementation — explicit user-requested provider and the corrected assertion lanes are established by runner ownership and the clean failed attempt
 NEXT_WORKER_ORDER: codex-cli only for this run
 STOP_REASON: none
-NEXT_RESUME_ACTION: launch the bounded Phase 2B11c config/runtime/receiver output migration in the existing reusable worktree
+NEXT_RESUME_ACTION: relaunch Phase 2B11c with five HTML artifact assertions and one rendered-output assertion
 
 ## Recommended roadmap placement and activation conditions
 
@@ -118,16 +119,16 @@ ACTIVE_PLAN:
 CURRENT_SLICE:
 - Phase: 2
 - Checklist item: 2B11c — assert config, HTML runtime and receiver outputs
-- Goal: replace six HTML backend baselines with direct rendered-output contracts while preserving paired Wasm artifact ownership
+- Goal: replace five static/folded HTML baselines with `index.html` artifact contracts and one console-backed baseline with rendered output
 - Non-goals: no source edits, `path_bst_template_warning`, HTML-Wasm expectation changes, schema enforcement, assertion-module split, diagnostic multiplicity work, role/contract backfill or later phases
 
 LAST_GOOD_COMMIT:
-- `71ca50815` — accepted Phase 2B11b choice construction, constant and imported-payload contracts
+- `9f120d875` — accepted Phase 2B11b plan checkpoint and Phase 2B11c launch state
 
 CURRENT_WORKTREE_STATE:
-- Clean / known changes: parent `main` has only this Phase 2B11c plan checkpoint diff atop `71ca50815`; the reusable worker branch is clean at `f74c6745c`
+- Clean / known changes: parent `main` has only this Phase 2B11c correction plan diff atop `9f120d875`; the reusable worker branch is clean at merge commit `6aed00e6f` after reverting the blocked attempt
 - Branch: local `main`
-- Dedicated worker worktrees: reuse `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase2a`, currently clean at `f74c6745c`; do not create another worktree
+- Dedicated worker worktrees: reuse `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase2a`, currently clean at merge commit `6aed00e6f`; do not create another worktree
 
 RELEVANT_DOCS_THIS_SLICE:
 - `AGENTS.md`
@@ -142,15 +143,15 @@ RELEVANT_DOCS_THIS_SLICE:
 - `docs/roadmap/roadmap.md`
 
 RELEVANT_CODE:
-- `tests/cases/config_current_keys_success/expect.toml`: assert `<h1>Backward Compatibility Test</h1>`
-- `tests/cases/config_loading/expect.toml`: assert `<h1>Config Loading Test</h1>`
-- `tests/cases/html_wasm_bool_conditional/expect.toml`: HTML asserts `yes`; preserve Wasm exports
-- `tests/cases/html_wasm_flag_off_js_only_regression/expect.toml`: assert `js only default`
-- `tests/cases/html_wasm_multi_fragment_string/expect.toml`: HTML asserts `Hello World` and `entry`; preserve Wasm artifacts
-- `tests/cases/receiver_method_basic_call/expect.toml`: assert `3, 4`
+- `tests/cases/config_current_keys_success/expect.toml`: `index.html` must contain `<h1>Backward Compatibility Test</h1>`
+- `tests/cases/config_loading/expect.toml`: `index.html` must contain `<h1>Config Loading Test</h1>`
+- `tests/cases/html_wasm_bool_conditional/expect.toml`: HTML `index.html` must contain `yes`; preserve Wasm exports
+- `tests/cases/html_wasm_flag_off_js_only_regression/expect.toml`: `index.html` must contain `js only default`
+- `tests/cases/html_wasm_multi_fragment_string/expect.toml`: HTML `index.html` must contain `Hello World` and `entry`; preserve Wasm artifacts
+- `tests/cases/receiver_method_basic_call/expect.toml`: dynamic rendered output must contain `3, 4`
 
 ACCEPTANCE_CRITERIA:
-- the six selected HTML backends own the exact source-derived rendered fragments
+- five selected HTML backends own exact `index.html` text assertions and the receiver owns the exact dynamic rendered fragment
 - no input source, manifest metadata, HTML-Wasm contract or other fixture changes
 - exact cases, 70 runner tests, audit, formatting, diff checks and `just validate` pass; baseline-only falls from 41 to 35
 
@@ -188,6 +189,9 @@ DECISIONS_ALREADY_MADE:
 - decision: isolate `choice_import_visibility_non_exported` from expectation migration
   - reason: its current success conflicts with documented private cross-module import rejection and must not be silently encoded
   - source/user/date: Phase 2B11 Codex CLI exploration, 2026-07-19
+- decision: keep static/folded page content out of dynamic rendered-output assertions
+  - reason: the runner deliberately executes scripts and combines runtime slot/console output only; five static-page assertions returned empty output while the receiver console assertion passed
+  - source/user/date: Phase 2B11c Codex CLI blocked attempt and `validate_rendered_output`, 2026-07-19
 
 BLOCKERS / RISKS:
 - final TIR is accepted and is no longer a blocker; do not reopen it during suite hardening
@@ -244,7 +248,7 @@ DOCS_IMPACT:
 - authorized docs updates: this plan explicitly authorizes the documentation changes listed in each phase; do not broaden language or architecture docs without a discovered contradiction or an intentional accepted behaviour change
 
 NEXT_ACTION:
-- launch the bounded Phase 2B11c Codex CLI config/runtime/receiver output migration in the existing reusable worktree
+- relaunch the bounded Phase 2B11c Codex CLI migration with corrected artifact/rendered assertion ownership
 
 ---
 
