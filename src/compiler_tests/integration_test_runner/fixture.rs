@@ -5,6 +5,7 @@
 //! WHY: keeping fixture loading separate from expectation parsing and case execution gives
 //!      each piece a single clear responsibility.
 
+use super::types::GoldenExpectation;
 use super::types::SuccessContract;
 use super::{
     BackendId, CANONICAL_TESTS_PATH, EXPECT_FILE_NAME, ExpectationMode, ExpectedOutcome,
@@ -151,7 +152,18 @@ pub(crate) fn load_canonical_case_specs(
     }
 
     let parsed_expectation = super::expectations::parse_expectation_file(&expect_path)?;
-    validate_fixture_contract(fixture_root, &parsed_expectation)?;
+    let golden_expectations = parsed_expectation
+        .backend_expectations
+        .iter()
+        .map(|backend_expectation| {
+            let golden_dir = golden_dir_for_backend(fixture_root, backend_expectation.backend_id);
+            super::assertions::discover_golden_expectation(
+                &golden_dir,
+                backend_expectation.golden_mode,
+            )
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    validate_fixture_contract(fixture_root, &parsed_expectation, &golden_expectations)?;
     let entry_path = resolve_case_entry_path(&input_root, parsed_expectation.entry.as_deref())?;
     let manifest_relative_path = manifest_case
         .as_ref()
@@ -183,15 +195,17 @@ pub(crate) fn load_canonical_case_specs(
     };
 
     let mut case_specs = Vec::new();
-    for backend_expectation in parsed_expectation.backend_expectations {
-        let golden_dir = golden_dir_for_backend(fixture_root, backend_expectation.backend_id);
+    for (backend_expectation, golden) in parsed_expectation
+        .backend_expectations
+        .into_iter()
+        .zip(golden_expectations)
+    {
         let expected = match backend_expectation.mode {
             ExpectationMode::Success => ExpectedOutcome::Success(SuccessExpectation {
                 warnings: backend_expectation.warnings,
                 success_contract: backend_expectation.success_contract,
                 artifact_assertions: backend_expectation.artifact_assertions,
-                golden_mode: backend_expectation.golden_mode,
-                has_golden: golden_dir_has_files(&golden_dir),
+                golden,
                 rendered_output_contains: backend_expectation.rendered_output_contains,
                 rendered_output_not_contains: backend_expectation.rendered_output_not_contains,
                 artifacts_must_not_exist: backend_expectation.artifacts_must_not_exist,
@@ -218,7 +232,6 @@ pub(crate) fn load_canonical_case_specs(
             role,
             backend_id: backend_expectation.backend_id,
             entry_path: entry_path.clone(),
-            golden_dir,
             flags,
             expected,
         });
@@ -247,6 +260,7 @@ fn merge_flags(default_flags: Vec<Flag>, extra_flags: Vec<Flag>) -> Vec<Flag> {
 fn validate_fixture_contract(
     fixture_root: &Path,
     expectation: &ParsedExpectationFile,
+    golden_expectations: &[GoldenExpectation],
 ) -> Result<(), String> {
     if expectation.backend_expectations.is_empty() {
         return Err(format!(
@@ -255,9 +269,12 @@ fn validate_fixture_contract(
         ));
     }
 
-    for backend_expectation in &expectation.backend_expectations {
-        let golden_dir = golden_dir_for_backend(fixture_root, backend_expectation.backend_id);
-        let has_golden_dir = golden_dir_has_files(&golden_dir);
+    for (backend_expectation, golden) in expectation
+        .backend_expectations
+        .iter()
+        .zip(golden_expectations)
+    {
+        let has_golden_files = golden.is_present();
         let has_artifact_assertions = !backend_expectation.artifact_assertions.is_empty();
         let has_backend_baseline = backend_expectation.backend_id.has_universal_baseline();
 
@@ -280,19 +297,20 @@ fn validate_fixture_contract(
             }
             ExpectationMode::Success => {
                 if backend_expectation.success_contract == Some(SuccessContract::AcceptanceOnly)
-                    && has_golden_dir
+                    && has_golden_files
                 {
                     return Err(format!(
                         "Fixture '{}' backend '{}' declares success_contract = \"acceptance_only\" but has golden artifacts in '{}'.",
                         fixture_root.display(),
                         backend_expectation.backend_id.as_str(),
-                        golden_dir.display()
+                        golden_dir_for_backend(fixture_root, backend_expectation.backend_id)
+                            .display()
                     ));
                 }
 
                 let has_rendered_output = !backend_expectation.rendered_output_contains.is_empty()
                     || !backend_expectation.rendered_output_not_contains.is_empty();
-                if !has_golden_dir
+                if !has_golden_files
                     && !has_artifact_assertions
                     && !has_backend_baseline
                     && !has_rendered_output
@@ -302,7 +320,8 @@ fn validate_fixture_contract(
                          artifact assertions, a '{}' directory, or 'rendered_output_contains'.",
                         fixture_root.display(),
                         backend_expectation.backend_id.as_str(),
-                        golden_dir.display()
+                        golden_dir_for_backend(fixture_root, backend_expectation.backend_id)
+                            .display()
                     ));
                 }
                 if !backend_expectation.message_contains.is_empty()
@@ -351,10 +370,4 @@ fn resolve_case_entry_path(
 /// WHY: keeps artifact snapshots backend-specific even for non-matrix fixtures.
 pub(crate) fn golden_dir_for_backend(fixture_root: &Path, backend_id: BackendId) -> PathBuf {
     fixture_root.join(GOLDEN_DIR_NAME).join(backend_id.as_str())
-}
-
-fn golden_dir_has_files(golden_dir: &Path) -> bool {
-    std::fs::read_dir(golden_dir)
-        .ok()
-        .is_some_and(|mut entries| entries.next().is_some())
 }

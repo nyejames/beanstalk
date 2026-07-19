@@ -3,5 +3,4 @@ entry = "."
 [backends.html]
 mode = "success"
 warnings = "forbid"
-golden_mode = "normalized"
 rendered_output_contains = ["ok"]

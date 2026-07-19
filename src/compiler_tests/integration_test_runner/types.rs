@@ -54,7 +54,6 @@ pub(crate) struct TestCaseSpec {
     pub role: Option<CaseRole>,
     pub backend_id: BackendId,
     pub entry_path: PathBuf,
-    pub golden_dir: PathBuf,
     pub flags: Vec<Flag>,
     pub expected: ExpectedOutcome,
 }
@@ -77,8 +76,7 @@ pub(crate) struct SuccessExpectation {
     pub warnings: WarningExpectation,
     pub success_contract: Option<SuccessContract>,
     pub artifact_assertions: Vec<ArtifactAssertion>,
-    pub golden_mode: GoldenMode,
-    pub has_golden: bool,
+    pub golden: GoldenExpectation,
     pub rendered_output_contains: Vec<String>,
     pub rendered_output_not_contains: Vec<String>,
     pub artifacts_must_not_exist: Vec<String>,
@@ -116,6 +114,35 @@ pub(crate) enum GoldenMode {
     #[default]
     Strict,
     Normalized,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct GoldenFileInventory {
+    pub files: Vec<GoldenFile>,
+}
+
+impl GoldenFileInventory {
+    pub(crate) fn is_empty(&self) -> bool {
+        self.files.is_empty()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct GoldenFile {
+    pub relative_path: String,
+    pub absolute_path: PathBuf,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct GoldenExpectation {
+    pub inventory: GoldenFileInventory,
+    pub mode: Option<GoldenMode>,
+}
+
+impl GoldenExpectation {
+    pub(crate) fn is_present(&self) -> bool {
+        !self.inventory.is_empty()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -325,7 +352,7 @@ pub(crate) struct ParsedBackendExpectation {
     pub message_contains: Vec<String>,
     pub diagnostic_codes: Vec<String>,
     pub artifact_assertions: Vec<ArtifactAssertion>,
-    pub golden_mode: GoldenMode,
+    pub golden_mode: Option<GoldenMode>,
     pub rendered_output_contains: Vec<String>,
     pub rendered_output_not_contains: Vec<String>,
     pub artifacts_must_not_exist: Vec<String>,

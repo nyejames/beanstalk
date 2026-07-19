@@ -6,9 +6,9 @@
 use super::super::assertions::{
     normalize_text_for_comparison, validate_failure_result, validate_success_result,
 };
-use super::super::types::SuccessContract;
+use super::super::types::{GoldenExpectation, SuccessContract};
 use super::super::{
-    BackendId, ExpectedOutcome, FailureExpectation, GoldenMode, SuccessExpectation, TestCaseSpec,
+    BackendId, ExpectedOutcome, FailureExpectation, SuccessExpectation, TestCaseSpec,
     WarningExpectation,
 };
 use crate::build_system::build::{BuildResult, CleanupPolicy, FileKind, OutputFile, Project};
@@ -233,8 +233,7 @@ fn absence_expectation(forbidden: Vec<String>) -> SuccessExpectation {
         warnings: WarningExpectation::Forbid,
         success_contract: None,
         artifact_assertions: Vec::new(),
-        golden_mode: GoldenMode::Strict,
-        has_golden: false,
+        golden: GoldenExpectation::default(),
         rendered_output_contains: Vec::new(),
         rendered_output_not_contains: Vec::new(),
         artifacts_must_not_exist: forbidden,
@@ -246,8 +245,7 @@ fn acceptance_only_expectation() -> SuccessExpectation {
         warnings: WarningExpectation::Forbid,
         success_contract: Some(SuccessContract::AcceptanceOnly),
         artifact_assertions: Vec::new(),
-        golden_mode: GoldenMode::Strict,
-        has_golden: false,
+        golden: GoldenExpectation::default(),
         rendered_output_contains: Vec::new(),
         rendered_output_not_contains: Vec::new(),
         artifacts_must_not_exist: Vec::new(),
@@ -264,7 +262,6 @@ fn absence_test_case(expectation: SuccessExpectation) -> TestCaseSpec {
         role: None,
         backend_id: BackendId::Html,
         entry_path: PathBuf::from("."),
-        golden_dir: PathBuf::from("nonexistent-golden"),
         flags: Vec::new(),
         expected: ExpectedOutcome::Success(expectation),
     }
@@ -280,7 +277,6 @@ fn success_test_case(backend_id: BackendId, expectation: SuccessExpectation) -> 
         role: None,
         backend_id,
         entry_path: PathBuf::from("."),
-        golden_dir: PathBuf::from("nonexistent-golden"),
         flags: Vec::new(),
         expected: ExpectedOutcome::Success(expectation),
     }

@@ -5,7 +5,7 @@
 
 use super::super::runner::select_cases;
 use super::super::{
-    BackendId, ExpectedOutcome, GoldenMode, SuccessExpectation, TestCaseSpec, TestRunnerOptions,
+    BackendId, ExpectedOutcome, SuccessExpectation, TestCaseSpec, TestRunnerOptions,
     WarningExpectation,
 };
 use std::path::PathBuf;
@@ -26,14 +26,12 @@ fn case(
         role: None,
         backend_id,
         entry_path: PathBuf::from("input/#page.bst"),
-        golden_dir: PathBuf::from("golden"),
         flags: Vec::new(),
         expected: ExpectedOutcome::Success(SuccessExpectation {
             warnings: WarningExpectation::Ignore,
             success_contract: None,
             artifact_assertions: Vec::new(),
-            golden_mode: GoldenMode::Strict,
-            has_golden: false,
+            golden: Default::default(),
             rendered_output_contains: Vec::new(),
             rendered_output_not_contains: Vec::new(),
             artifacts_must_not_exist: Vec::new(),

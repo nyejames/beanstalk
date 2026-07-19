@@ -5,6 +5,7 @@
 
 use super::super::fixture::{load_canonical_case_specs, load_test_suite_from_root};
 use super::super::runner::select_cases;
+use super::super::types::GoldenMode;
 use super::super::{
     BackendId, CaseRole, EXPECT_FILE_NAME, GOLDEN_DIR_NAME, INPUT_DIR_NAME, MANIFEST_FILE_NAME,
     TestRunnerOptions,
@@ -121,8 +122,121 @@ fn accepts_acceptance_only_without_fixture_specific_source_marker() {
     )
     .expect("should write expect file");
 
-    load_canonical_case_specs(&case_root, None)
+    let cases = load_canonical_case_specs(&case_root, None)
         .expect("acceptance-only should not require a fixture-specific source marker");
+    let super::super::types::ExpectedOutcome::Success(expectation) = &cases[0].expected else {
+        panic!("case should have a success expectation");
+    };
+    assert!(!expectation.golden.is_present());
+    assert_eq!(expectation.golden.mode, None);
+
+    fs::remove_dir_all(&root).expect("should clean up");
+}
+
+#[test]
+fn empty_backend_golden_directory_has_no_contract() {
+    let root = temp_dir("empty_backend_golden_directory");
+    let case_root = root.join("case");
+    let input_root = case_root.join(INPUT_DIR_NAME);
+    fs::create_dir_all(&input_root).expect("should create fixture input directory");
+    fs::create_dir_all(case_root.join(GOLDEN_DIR_NAME).join("html"))
+        .expect("should create empty golden directory");
+    fs::write(input_root.join("#page.bst"), "#[:ok]\n").expect("should write fixture source");
+    fs::write(
+        case_root.join(EXPECT_FILE_NAME),
+        "[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\n",
+    )
+    .expect("should write expect file");
+
+    let cases = load_canonical_case_specs(&case_root, None)
+        .expect("empty golden directory should not create a contract");
+    let super::super::types::ExpectedOutcome::Success(expectation) = &cases[0].expected else {
+        panic!("case should have a success expectation");
+    };
+    assert!(!expectation.golden.is_present());
+    assert_eq!(expectation.golden.mode, None);
+
+    fs::remove_dir_all(&root).expect("should clean up");
+}
+
+#[test]
+fn empty_nested_golden_directory_has_no_contract() {
+    let root = temp_dir("empty_nested_golden_directory");
+    let case_root = root.join("case");
+    let input_root = case_root.join(INPUT_DIR_NAME);
+    fs::create_dir_all(case_root.join(GOLDEN_DIR_NAME).join("html").join("nested"))
+        .expect("should create empty nested golden directory");
+    fs::create_dir_all(&input_root).expect("should create fixture input directory");
+    fs::write(input_root.join("#page.bst"), "#[:ok]\n").expect("should write fixture source");
+    fs::write(
+        case_root.join(EXPECT_FILE_NAME),
+        "[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\n",
+    )
+    .expect("should write expect file");
+
+    let cases = load_canonical_case_specs(&case_root, None)
+        .expect("empty nested golden directory should not create a contract");
+    let super::super::types::ExpectedOutcome::Success(expectation) = &cases[0].expected else {
+        panic!("case should have a success expectation");
+    };
+    assert!(!expectation.golden.is_present());
+    assert_eq!(expectation.golden.mode, None);
+
+    fs::remove_dir_all(&root).expect("should clean up");
+}
+
+#[test]
+fn explicit_golden_mode_without_files_is_rejected() {
+    let root = temp_dir("explicit_golden_mode_without_files");
+    let case_root = root.join("case");
+    let input_root = case_root.join(INPUT_DIR_NAME);
+    fs::create_dir_all(&input_root).expect("should create fixture input directory");
+    fs::write(input_root.join("#page.bst"), "#[:ok]\n").expect("should write fixture source");
+    fs::write(
+        case_root.join(EXPECT_FILE_NAME),
+        "[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\ngolden_mode = \"strict\"\n",
+    )
+    .expect("should write expect file");
+
+    let Err(error) = load_canonical_case_specs(&case_root, None) else {
+        panic!("explicit golden mode without files should be rejected");
+    };
+    assert!(
+        error.contains("golden_mode") && error.contains("no golden files"),
+        "{error}"
+    );
+
+    fs::remove_dir_all(&root).expect("should clean up");
+}
+
+#[test]
+fn nested_golden_files_use_relative_inventory_paths() {
+    let root = temp_dir("nested_golden_file_inventory");
+    let case_root = root.join("case");
+    let input_root = case_root.join(INPUT_DIR_NAME);
+    let golden_root = case_root.join(GOLDEN_DIR_NAME).join("html");
+    let nested_file = golden_root.join("nested").join("page.html");
+    fs::create_dir_all(&input_root).expect("should create fixture input directory");
+    fs::create_dir_all(nested_file.parent().expect("nested parent should exist"))
+        .expect("should create nested golden directory");
+    fs::write(input_root.join("#page.bst"), "#[:ok]\n").expect("should write fixture source");
+    fs::write(&nested_file, "<h1>ok</h1>\n").expect("should write nested golden file");
+    fs::write(
+        case_root.join(EXPECT_FILE_NAME),
+        "[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\n",
+    )
+    .expect("should write expect file");
+
+    let cases = load_canonical_case_specs(&case_root, None)
+        .expect("nested golden file should create a contract");
+    let super::super::types::ExpectedOutcome::Success(expectation) = &cases[0].expected else {
+        panic!("case should have a success expectation");
+    };
+    assert_eq!(expectation.golden.mode, Some(GoldenMode::Strict));
+    assert_eq!(
+        expectation.golden.inventory.files[0].relative_path,
+        "nested/page.html"
+    );
 
     fs::remove_dir_all(&root).expect("should clean up");
 }
@@ -260,8 +374,32 @@ fn matrix_cases_resolve_backend_specific_golden_directories() {
         .find(|case| case.backend_id == BackendId::HtmlWasm)
         .expect("html_wasm case should exist");
 
-    assert_eq!(html_case.golden_dir, golden_html_root);
-    assert_eq!(wasm_case.golden_dir, golden_wasm_root);
+    let super::super::types::ExpectedOutcome::Success(html_expectation) = &html_case.expected
+    else {
+        panic!("html case should have a success expectation");
+    };
+    let super::super::types::ExpectedOutcome::Success(wasm_expectation) = &wasm_case.expected
+    else {
+        panic!("html_wasm case should have a success expectation");
+    };
+    assert_eq!(html_expectation.golden.mode, Some(GoldenMode::Strict));
+    assert_eq!(wasm_expectation.golden.mode, Some(GoldenMode::Strict));
+    assert_eq!(
+        html_expectation.golden.inventory.files[0].relative_path,
+        "index.html"
+    );
+    assert_eq!(
+        wasm_expectation.golden.inventory.files[0].relative_path,
+        "index.html"
+    );
+    assert_eq!(
+        html_expectation.golden.inventory.files[0].absolute_path,
+        golden_html_root.join("index.html")
+    );
+    assert_eq!(
+        wasm_expectation.golden.inventory.files[0].absolute_path,
+        golden_wasm_root.join("index.html")
+    );
 
     fs::remove_dir_all(&root).expect("should clean up temp fixture root");
 }

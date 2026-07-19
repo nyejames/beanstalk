@@ -434,10 +434,15 @@ fn validate_artifact_strings(
     Ok(())
 }
 
-fn parse_golden_mode(path: &Path, context: &str, raw: Option<&str>) -> Result<GoldenMode, String> {
+fn parse_golden_mode(
+    path: &Path,
+    context: &str,
+    raw: Option<&str>,
+) -> Result<Option<GoldenMode>, String> {
     match raw {
-        None | Some("strict") => Ok(GoldenMode::Strict),
-        Some("normalized") => Ok(GoldenMode::Normalized),
+        None => Ok(None),
+        Some("strict") => Ok(Some(GoldenMode::Strict)),
+        Some("normalized") => Ok(Some(GoldenMode::Normalized)),
         Some(other) => Err(format!(
             "Expectation file '{}' {} has unsupported golden_mode '{other}'. \
              Supported values: \"strict\", \"normalized\".",

@@ -294,8 +294,8 @@ fn build_backend_inventory(case: &TestCaseSpec) -> InventoryBackend {
             diagnostic_match: None,
             structured_diagnostic_assertions: false,
             assertion_kinds: success_assertion_kinds(case, expectation),
-            golden_mode: Some(golden_mode_label(expectation.golden_mode)),
-            golden_present: expectation.has_golden,
+            golden_mode: expectation.golden.mode.map(golden_mode_label),
+            golden_present: expectation.golden.is_present(),
             artifact_assertion_count: expectation.artifact_assertions.len(),
             rendered_output_assertion_count: expectation.rendered_output_contains.len()
                 + expectation.rendered_output_not_contains.len(),
@@ -335,7 +335,7 @@ fn success_assertion_kinds(
     if !expectation.artifact_assertions.is_empty() {
         kinds.push("artifact_assertions");
     }
-    if expectation.has_golden {
+    if expectation.golden.is_present() {
         kinds.push("golden");
     }
     if !expectation.rendered_output_contains.is_empty()

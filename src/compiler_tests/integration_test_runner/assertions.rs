@@ -5,16 +5,19 @@
 //! WHY: separating assertion logic from case execution keeps each concern independently
 //!      testable and prevents the execution path from growing into a second monolith.
 
+mod goldens;
+
+pub(crate) use goldens::discover_golden_expectation;
+
 use super::{
     ArtifactAssertion, ArtifactKind, BackendId, CaseExecutionResult, FailureExpectation,
-    FailureKind, GoldenMode, SuccessExpectation, TestCaseSpec, WarningExpectation,
-    normalize_relative_path, normalize_relative_path_text,
+    FailureKind, SuccessExpectation, TestCaseSpec, WarningExpectation, normalize_relative_path,
+    normalize_relative_path_text,
 };
 use crate::build_system::build::{BuildResult, FileKind, OutputFile};
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_messages::render::{terminal, terse};
-use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 use wasmparser::{Imports, Parser, Payload};
@@ -57,7 +60,7 @@ pub(crate) fn validate_success_result(
     }
 
     if let Some((reason, kind)) =
-        validate_golden_outputs(&build_result, &case.golden_dir, expectation.golden_mode)
+        goldens::validate_golden_outputs(&build_result, &expectation.golden)
     {
         return fail(build_result, reason, kind);
     }
@@ -196,27 +199,6 @@ fn validate_warning_expectation(
         WarningExpectation::Exact(expected) => (actual_count != expected)
             .then(|| format!("Expected exactly {expected} warnings, but found {actual_count}.")),
     }
-}
-
-fn validate_expected_artifact_paths(
-    build_result: &BuildResult,
-    expected_paths: &[String],
-) -> Option<String> {
-    let actual_paths = collect_built_artifact_paths(build_result);
-
-    let mut expected = expected_paths
-        .iter()
-        .map(|path| normalize_relative_path_text(path))
-        .collect::<Vec<_>>();
-    expected.sort();
-
-    if actual_paths != expected {
-        return Some(format!(
-            "Expected output paths {expected:?}, but produced {actual_paths:?}."
-        ));
-    }
-
-    None
 }
 
 fn collect_built_artifact_paths(build_result: &BuildResult) -> Vec<String> {
@@ -674,112 +656,6 @@ fn output_binary_bytes(output: &OutputFile) -> Option<&[u8]> {
     }
 }
 
-fn validate_golden_outputs(
-    build_result: &BuildResult,
-    golden_dir: &Path,
-    mode: GoldenMode,
-) -> Option<(String, FailureKind)> {
-    if !golden_dir.is_dir() {
-        return None;
-    }
-
-    let mut expected_files = collect_files_recursive(golden_dir);
-    expected_files.sort();
-
-    if expected_files.is_empty() {
-        return None;
-    }
-
-    let mut expected_paths = Vec::with_capacity(expected_files.len());
-    for file in &expected_files {
-        let relative = file
-            .strip_prefix(golden_dir)
-            .unwrap_or(file)
-            .to_string_lossy()
-            .replace('\\', "/");
-        expected_paths.push(relative);
-    }
-
-    if let Some(reason) = validate_expected_artifact_paths(build_result, &expected_paths) {
-        return Some((reason, FailureKind::StrictGoldenMismatch));
-    }
-
-    for file in expected_files {
-        let relative = file
-            .strip_prefix(golden_dir)
-            .unwrap_or(&file)
-            .to_string_lossy()
-            .replace('\\', "/");
-
-        let Some(output) = find_output_file(build_result, &relative) else {
-            return Some((
-                format!("Golden output '{relative}' was not produced."),
-                FailureKind::StrictGoldenMismatch,
-            ));
-        };
-
-        let expected_bytes = match fs::read(&file) {
-            Ok(bytes) => bytes,
-            Err(error) => {
-                return Some((
-                    format!("Failed to read golden output '{}': {error}", file.display()),
-                    FailureKind::HarnessFailed,
-                ));
-            }
-        };
-
-        let actual_bytes = match output.file_kind() {
-            FileKind::Html(content) | FileKind::Js(content) => content.as_bytes().to_vec(),
-            FileKind::Wasm(bytes) | FileKind::Bytes(bytes) => bytes.clone(),
-            FileKind::Directory | FileKind::NotBuilt => Vec::new(),
-        };
-
-        // Text artifacts support normalized comparison; binary/wasm always use strict.
-        let is_text = matches!(output.file_kind(), FileKind::Html(_) | FileKind::Js(_));
-        if is_text {
-            let expected_str = String::from_utf8_lossy(&expected_bytes);
-            let actual_str = match output.file_kind() {
-                FileKind::Html(s) | FileKind::Js(s) => s.as_str(),
-                _ => unreachable!("is_text is true"),
-            };
-
-            if let Some(detail) = compare_text_golden(expected_str.as_ref(), actual_str, mode) {
-                let failure_kind = if mode == GoldenMode::Normalized {
-                    FailureKind::NormalizedSemanticMismatch
-                } else {
-                    FailureKind::StrictGoldenMismatch
-                };
-                let context = if mode == GoldenMode::Normalized {
-                    "did not match after normalization"
-                } else {
-                    "did not match the produced artifact"
-                };
-                return Some((
-                    format!("Golden output '{relative}' {context}.\n{detail}"),
-                    failure_kind,
-                ));
-            }
-            continue;
-        }
-
-        if actual_bytes != expected_bytes {
-            let detail = format!(
-                "expected {} bytes, got {} bytes",
-                expected_bytes.len(),
-                actual_bytes.len()
-            );
-            return Some((
-                format!(
-                    "Golden output '{relative}' did not match the produced artifact ({detail})."
-                ),
-                FailureKind::StrictGoldenMismatch,
-            ));
-        }
-    }
-
-    None
-}
-
 /// Normalizes compiler-generated counter suffixes in JS/HTML text for comparison.
 ///
 /// WHAT: replaces unstable numeric counters in `bst_`-prefixed identifiers with the
@@ -820,11 +696,7 @@ pub(crate) fn normalize_text_for_comparison(text: &str) -> String {
     result
 }
 
-/// Normalizes line endings for text golden comparison.
-///
-/// WHAT: canonicalizes CRLF and bare CR sequences to LF (`\n`).
-/// WHY: text artifact line endings are platform-dependent and should not cause
-/// strict-vs-normalized false positives across Windows/macOS/Linux workflows.
+/// Normalizes line endings for text artifact comparison.
 fn normalize_text_line_endings(text: &str) -> String {
     let mut normalized = String::with_capacity(text.len());
     let mut chars = text.chars().peekable();
@@ -842,36 +714,6 @@ fn normalize_text_line_endings(text: &str) -> String {
     }
 
     normalized
-}
-
-/// Compares two text artifacts under the selected golden mode.
-///
-/// Returns `None` when text is equivalent under the mode, or a unified-style diff
-/// detail string when text differs.
-fn compare_text_golden(expected: &str, actual: &str, mode: GoldenMode) -> Option<String> {
-    let normalized_expected = normalize_text_line_endings(expected);
-    let normalized_actual = normalize_text_line_endings(actual);
-
-    match mode {
-        GoldenMode::Strict => {
-            if normalized_expected == normalized_actual {
-                return None;
-            }
-            Some(generate_text_diff(
-                &normalized_expected,
-                &normalized_actual,
-                8,
-            ))
-        }
-        GoldenMode::Normalized => {
-            let semantic_expected = normalize_text_for_comparison(&normalized_expected);
-            let semantic_actual = normalize_text_for_comparison(&normalized_actual);
-            if semantic_expected == semantic_actual {
-                return None;
-            }
-            Some(generate_text_diff(&semantic_expected, &semantic_actual, 8))
-        }
-    }
 }
 
 /// Strips the embedded core CSS block so golden files stay stable when
@@ -1229,31 +1071,6 @@ fn parse_harness_output(json: &str) -> Result<RenderedOutput, String> {
     })
 }
 
-fn collect_files_recursive(root: &Path) -> Vec<PathBuf> {
-    let mut discovered = Vec::new();
-    let mut queue = vec![root.to_path_buf()];
-
-    while let Some(directory) = queue.pop() {
-        let Ok(entries) = fs::read_dir(&directory) else {
-            continue;
-        };
-
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                queue.push(path);
-                continue;
-            }
-
-            if path.is_file() {
-                discovered.push(path);
-            }
-        }
-    }
-
-    discovered
-}
-
 fn contains_ordered_substrings(text: &str, substrings: &[String]) -> bool {
     let mut offset = 0usize;
 
@@ -1279,45 +1096,9 @@ fn count_occurrences(text: &str, needle: &str) -> usize {
     count
 }
 
-/// Produces a compact unified-style diff between `expected` and `actual` text.
-///
-/// Shows at most `max_pairs` differing line pairs (- expected / + actual).
-/// Truncates with a count of remaining differences if the limit is hit.
-fn generate_text_diff(expected: &str, actual: &str, max_pairs: usize) -> String {
-    let exp_lines: Vec<&str> = expected.lines().collect();
-    let act_lines: Vec<&str> = actual.lines().collect();
-    let max_len = exp_lines.len().max(act_lines.len());
-
-    let mut diff_lines: Vec<String> = Vec::new();
-    let mut extra = 0usize;
-
-    for i in 0..max_len {
-        let e = exp_lines.get(i).copied();
-        let a = act_lines.get(i).copied();
-        if e == a {
-            continue;
-        }
-        if diff_lines.len() >= max_pairs * 2 {
-            extra += 1;
-            continue;
-        }
-        if let Some(line) = e {
-            diff_lines.push(format!("- {line}"));
-        }
-        if let Some(line) = a {
-            diff_lines.push(format!("+ {line}"));
-        }
-    }
-
-    let mut out = format!("--- expected\n+++ actual\n{}", diff_lines.join("\n"));
-    if extra > 0 {
-        out.push_str(&format!("\n... ({extra} more differing lines)"));
-    }
-    out
-}
-
 #[cfg(test)]
 mod tests {
+    use super::super::GoldenMode;
     use super::*;
     use crate::build_system::build::{BuildResult, CleanupPolicy, FileKind, OutputFile, Project};
     use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -1346,14 +1127,19 @@ mod tests {
     #[test]
     fn strict_text_goldens_ignore_lf_vs_crlf_differences() {
         assert!(
-            compare_text_golden("<p>a\r\nb</p>\r\n", "<p>a\nb</p>\n", GoldenMode::Strict).is_none()
+            super::goldens::compare_text_golden(
+                "<p>a\r\nb</p>\r\n",
+                "<p>a\nb</p>\n",
+                GoldenMode::Strict,
+            )
+            .is_none()
         );
     }
 
     #[test]
     fn normalized_text_goldens_ignore_lf_vs_crlf_differences() {
         assert!(
-            compare_text_golden(
+            super::goldens::compare_text_golden(
                 "<p>bst_rhs_and_fn0\r\n</p>\r\n",
                 "<p>bst_rhs_and_fn7\n</p>\n",
                 GoldenMode::Normalized,
@@ -1396,7 +1182,9 @@ mod tests {
             .expect("should write CRLF golden");
 
         let build_result = build_result_with_index_html("<p>a\nb</p>\n");
-        let mismatch = validate_golden_outputs(&build_result, &golden_dir, GoldenMode::Strict);
+        let golden = discover_golden_expectation(&golden_dir, None)
+            .expect("golden inventory should be discovered");
+        let mismatch = super::goldens::validate_golden_outputs(&build_result, &golden);
         assert!(
             mismatch.is_none(),
             "strict text golden checks should ignore line-ending-only differences"
@@ -1414,11 +1202,44 @@ mod tests {
             .expect("should write CRLF golden");
 
         let build_result = build_result_with_index_html("bst_rhs_and_fn8\n");
-        let mismatch = validate_golden_outputs(&build_result, &golden_dir, GoldenMode::Normalized);
+        let golden = discover_golden_expectation(&golden_dir, Some(GoldenMode::Normalized))
+            .expect("golden inventory should be discovered");
+        let mismatch = super::goldens::validate_golden_outputs(&build_result, &golden);
         assert!(
             mismatch.is_none(),
             "normalized golden checks should ignore counter and line-ending drift"
         );
+
+        fs::remove_dir_all(&root).expect("should clean temp directory");
+    }
+
+    #[test]
+    fn nested_golden_validation_compares_relative_paths() {
+        let root = temp_dir("nested_golden_comparison");
+        let golden_dir = root.join("golden");
+        let golden_file = golden_dir.join("nested").join("page.html");
+        fs::create_dir_all(golden_file.parent().expect("nested parent should exist"))
+            .expect("should create nested golden directory");
+        fs::write(&golden_file, "<p>nested</p>\n").expect("should write nested golden");
+
+        let build_result = BuildResult {
+            project: Project {
+                output_files: vec![OutputFile::new(
+                    PathBuf::from("nested/page.html"),
+                    FileKind::Html("<p>nested</p>\n".to_owned()),
+                )],
+                entry_page_rel: None,
+                cleanup_policy: CleanupPolicy::html(),
+                warnings: Vec::new(),
+            },
+            config: Config::new(PathBuf::from("main.bst")),
+            warnings: Vec::new(),
+            string_table: StringTable::new(),
+        };
+        let golden = discover_golden_expectation(&golden_dir, None)
+            .expect("golden inventory should be discovered");
+
+        assert!(super::goldens::validate_golden_outputs(&build_result, &golden).is_none());
 
         fs::remove_dir_all(&root).expect("should clean temp directory");
     }

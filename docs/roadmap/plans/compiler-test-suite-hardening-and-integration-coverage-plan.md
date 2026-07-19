@@ -30,28 +30,28 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 2R2 — close golden-contract loopholes
-LAST_ACCEPTED_COMMIT: pending Phase 2R1 acceptance commit (previous `9ceb93a4a`)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 2R1 changes ready to commit
+CURRENT_SLICE: Phase 2R3 — give suite policy one owner
+LAST_ACCEPTED_COMMIT: pending Phase 2R2 acceptance commit (previous plan commit `5dc811a7c`; unrelated concurrent head `7a2172329` preserved)
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 2R2 changes ready to commit atop concurrent roadmap commit `7a2172329`
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: `testing.bd`, `validation.bd`, compiler/build-system overviews, and progress matrix govern runner contracts and gates
-- code: golden discovery and comparison in `fixture.rs` and `assertions.rs`, reporting inventory fields, and their focused self-tests
+- code: current policy reconstruction in `reporting.rs` and `manifest.rs`, invocation in `runner.rs`, typed suite metadata, and focused CLI/self-tests
 ACCEPTANCE_CRITERIA:
-- one recursive golden-file discovery owner supplies fixture validation and comparison
-- empty golden directories never count as contracts; nested files do
-- explicit golden mode without files is rejected and absent goldens report no mode
-- focused harness tests, canonical audit, and `just validate` pass
+- one narrow suite-policy evaluator owns cross-case and assertion-strength rules
+- list/execution reject hard findings before selection or compilation
+- audit writes its report then fails on hard findings; advisories remain non-fatal
+- deterministic focused harness/CLI tests, canonical audit, and `just validate` pass
 VALIDATION_STATE:
-- `cargo test --quiet integration_test_runner -- --format terse`: passed; 79 tests
+- `cargo test --quiet integration_test_runner -- --format terse`: passed; 84 tests
 - `cargo run --quiet -- tests --audit`: passed; 1,651 cases, 1,784 backend executions, 23 acceptance-only, 33 baseline-only, zero hard findings
-- `just validate`: passed; cross-target Clippy, 3,475 Rust tests, 1,784 integration executions, docs check, and 28 benchmark cases
+- `just validate`: passed; cross-target Clippy, 3,480 Rust tests, 1,784 integration executions, docs check, and 28 benchmark cases
 DOCS_IMPACT: progress matrix unchanged; workflow prose remains scheduled for Phase 2R8
 BLOCKERS_OR_OPEN_DECISIONS: none; compiler diagnostics Phase 4.1c remains serialized and untouched
 DELEGATION_DECISION: codex-cli — explicit user-selected provider for implementation workers
 NEXT_WORKER_ORDER: codex-cli only for this run-local override
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit accepted Phase 2R1, refresh its hash, then launch bounded Phase 2R2 through `codex-cli-beanstalk`
+NEXT_RESUME_ACTION: commit accepted Phase 2R2, refresh its hash, then launch bounded Phase 2R3 through `codex-cli-beanstalk`
 
 ---
 
@@ -125,7 +125,8 @@ This file is a reloadable execution plan, not a command transcript.
 |---|---:|---|---|
 | Foundation through Phase 2B11c | `ba3366218` | Accepted | 3,466 Rust tests; 1,784 integration executions; 23 current `compile_only`; 35 baseline-only; zero fallback |
 | Plan pause | `97d3174fd` | Accepted | No code change |
-| Phase 2R1 success intent and inventory | pending acceptance commit | Accepted | 3,475 Rust tests; 1,784 integration executions; 23 acceptance-only; 33 baseline-only; zero hard findings |
+| Phase 2R1 success intent and inventory | `5dc811a7c` | Accepted | 3,475 Rust tests; 1,784 integration executions; 23 acceptance-only; 33 baseline-only; zero hard findings |
+| Phase 2R2 golden inventory | pending acceptance commit | Accepted | 3,480 Rust tests; 1,784 integration executions; 38 file-backed golden blocks; 17 orphaned modes removed; zero hard findings |
 
 ---
 
@@ -269,31 +270,31 @@ Golden presence and golden comparison must use one file inventory. Empty directo
 
 ### Required implementation
 
-- [ ] Establish one recursive golden-file discovery owner used by both fixture validation and golden comparison.
-- [ ] If this requires creating `assertions/goldens.rs` early, move the existing golden logic rather than copying it; Phase 3 will complete the remaining assertion split.
-- [ ] Count files, not immediate directory entries.
-- [ ] An empty `golden/<backend>/` directory does not count as a contract.
-- [ ] An empty nested directory does not count as a contract.
-- [ ] Nested actual files do count.
-- [ ] Reject explicit `golden_mode` when the backend has no golden files.
-- [ ] Report `golden_mode = null` when no golden is present.
-- [ ] Preserve strict as the default only when golden files exist and no mode is authored.
-- [ ] Remove empty golden directories discovered during migration.
+- [x] Establish one recursive golden-file discovery owner used by both fixture validation and golden comparison.
+- [x] If this requires creating `assertions/goldens.rs` early, move the existing golden logic rather than copying it; Phase 3 will complete the remaining assertion split.
+- [x] Count files, not immediate directory entries.
+- [x] An empty `golden/<backend>/` directory does not count as a contract.
+- [x] An empty nested directory does not count as a contract.
+- [x] Nested actual files do count.
+- [x] Reject explicit `golden_mode` when the backend has no golden files.
+- [x] Report `golden_mode = null` when no golden is present.
+- [x] Preserve strict as the default only when golden files exist and no mode is authored.
+- [x] Remove empty golden directories discovered during migration.
 
 ### Self-tests
 
-- [ ] No golden directory.
-- [ ] Empty backend golden directory.
-- [ ] Empty nested golden directory.
-- [ ] Nested golden file.
-- [ ] Explicit `golden_mode` without files.
-- [ ] Audit JSON consistency between `golden_present` and `golden_mode`.
+- [x] No golden directory.
+- [x] Empty backend golden directory.
+- [x] Empty nested golden directory.
+- [x] Nested golden file.
+- [x] Explicit `golden_mode` without files.
+- [x] Audit JSON consistency between `golden_present` and `golden_mode`.
 
 ### Acceptance
 
-- [ ] A directory-only golden cannot bypass final success-contract enforcement.
-- [ ] Fixture validation and comparison use the same discovered file set.
-- [ ] Focused harness tests and the full gate pass.
+- [x] A directory-only golden cannot bypass final success-contract enforcement.
+- [x] Fixture validation and comparison use the same discovered file set.
+- [x] Focused harness tests and the full gate pass.
 
 ---
 

@@ -1,7 +1,6 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
-golden_mode = "normalized"
 rendered_output_contains = ["expected unit choice generic"]
 
 [backends.html_wasm]

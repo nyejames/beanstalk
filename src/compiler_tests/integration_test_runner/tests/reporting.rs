@@ -4,10 +4,10 @@
 //! WHY: both reporting modes must expose retained metadata without invoking case execution.
 
 use super::super::reporting::{build_suite_inventory_report, format_case_listing};
-use super::super::types::SuccessContract;
+use super::super::types::{GoldenExpectation, SuccessContract};
 use super::super::{
-    BackendId, CaseRole, ExpectedOutcome, FailureExpectation, GoldenMode, SuccessExpectation,
-    TestCaseSpec, WarningExpectation,
+    BackendId, CaseRole, ExpectedOutcome, FailureExpectation, SuccessExpectation, TestCaseSpec,
+    WarningExpectation,
 };
 use std::path::PathBuf;
 
@@ -28,7 +28,6 @@ fn case(
         role,
         backend_id,
         entry_path: PathBuf::from("input/#page.bst"),
-        golden_dir: PathBuf::from("golden"),
         flags: Vec::new(),
         expected,
     }
@@ -109,8 +108,7 @@ fn inventory_json_groups_backend_metadata_under_one_canonical_case() {
             warnings: WarningExpectation::Forbid,
             success_contract: None,
             artifact_assertions: Vec::new(),
-            golden_mode: GoldenMode::Strict,
-            has_golden: false,
+            golden: GoldenExpectation::default(),
             rendered_output_contains: vec!["ok".to_owned()],
             rendered_output_not_contains: Vec::new(),
             artifacts_must_not_exist: Vec::new(),
@@ -140,6 +138,11 @@ fn inventory_json_groups_backend_metadata_under_one_canonical_case() {
     );
     assert_eq!(json["cases"][0]["backends"][1]["backend"], "html_wasm");
     assert_eq!(json["cases"][0]["backends"][1]["baseline_applied"], true);
+    assert_eq!(json["cases"][0]["backends"][1]["golden_present"], false);
+    assert_eq!(
+        json["cases"][0]["backends"][1]["golden_mode"],
+        serde_json::Value::Null
+    );
     assert_eq!(json["summary"]["rendered_output_backend_blocks"], 1);
     assert_eq!(
         json["hard_policy_violations"].as_array().map(Vec::len),
@@ -160,8 +163,7 @@ fn inventory_distinguishes_acceptance_only_from_baseline_only() {
             warnings: WarningExpectation::Forbid,
             success_contract: Some(SuccessContract::AcceptanceOnly),
             artifact_assertions: Vec::new(),
-            golden_mode: GoldenMode::Strict,
-            has_golden: false,
+            golden: GoldenExpectation::default(),
             rendered_output_contains: Vec::new(),
             rendered_output_not_contains: Vec::new(),
             artifacts_must_not_exist: Vec::new(),
@@ -177,8 +179,7 @@ fn inventory_distinguishes_acceptance_only_from_baseline_only() {
             warnings: WarningExpectation::Forbid,
             success_contract: None,
             artifact_assertions: Vec::new(),
-            golden_mode: GoldenMode::Strict,
-            has_golden: false,
+            golden: GoldenExpectation::default(),
             rendered_output_contains: Vec::new(),
             rendered_output_not_contains: Vec::new(),
             artifacts_must_not_exist: Vec::new(),
@@ -217,8 +218,7 @@ fn inventory_counts_authored_expected_warning_as_a_contract() {
                 warnings: WarningExpectation::Exact(1),
                 success_contract: None,
                 artifact_assertions: Vec::new(),
-                golden_mode: GoldenMode::Strict,
-                has_golden: false,
+                golden: GoldenExpectation::default(),
                 rendered_output_contains: Vec::new(),
                 rendered_output_not_contains: Vec::new(),
                 artifacts_must_not_exist: Vec::new(),
@@ -249,8 +249,7 @@ fn whole_case_acceptance_only_requires_smoke_role() {
                 warnings: WarningExpectation::Forbid,
                 success_contract: Some(SuccessContract::AcceptanceOnly),
                 artifact_assertions: Vec::new(),
-                golden_mode: GoldenMode::Strict,
-                has_golden: false,
+                golden: GoldenExpectation::default(),
                 rendered_output_contains: Vec::new(),
                 rendered_output_not_contains: Vec::new(),
                 artifacts_must_not_exist: Vec::new(),
@@ -278,8 +277,7 @@ fn mixed_backend_acceptance_only_does_not_force_smoke_role() {
             warnings: WarningExpectation::Forbid,
             success_contract: Some(SuccessContract::AcceptanceOnly),
             artifact_assertions: Vec::new(),
-            golden_mode: GoldenMode::Strict,
-            has_golden: false,
+            golden: GoldenExpectation::default(),
             rendered_output_contains: Vec::new(),
             rendered_output_not_contains: Vec::new(),
             artifacts_must_not_exist: Vec::new(),
@@ -295,8 +293,7 @@ fn mixed_backend_acceptance_only_does_not_force_smoke_role() {
             warnings: WarningExpectation::Forbid,
             success_contract: None,
             artifact_assertions: Vec::new(),
-            golden_mode: GoldenMode::Strict,
-            has_golden: false,
+            golden: GoldenExpectation::default(),
             rendered_output_contains: vec!["marker".to_owned()],
             rendered_output_not_contains: Vec::new(),
             artifacts_must_not_exist: Vec::new(),
@@ -323,8 +320,7 @@ fn inventory_reports_missing_contract_and_role_as_advisories() {
                 warnings: WarningExpectation::Forbid,
                 success_contract: None,
                 artifact_assertions: Vec::new(),
-                golden_mode: GoldenMode::Strict,
-                has_golden: false,
+                golden: GoldenExpectation::default(),
                 rendered_output_contains: Vec::new(),
                 rendered_output_not_contains: Vec::new(),
                 artifacts_must_not_exist: Vec::new(),
@@ -361,8 +357,7 @@ fn inventory_keeps_duplicate_primary_contracts_in_hard_findings() {
                 warnings: WarningExpectation::Forbid,
                 success_contract: None,
                 artifact_assertions: Vec::new(),
-                golden_mode: GoldenMode::Strict,
-                has_golden: false,
+                golden: GoldenExpectation::default(),
                 rendered_output_contains: Vec::new(),
                 rendered_output_not_contains: Vec::new(),
                 artifacts_must_not_exist: Vec::new(),
@@ -378,8 +373,7 @@ fn inventory_keeps_duplicate_primary_contracts_in_hard_findings() {
                 warnings: WarningExpectation::Forbid,
                 success_contract: None,
                 artifact_assertions: Vec::new(),
-                golden_mode: GoldenMode::Strict,
-                has_golden: false,
+                golden: GoldenExpectation::default(),
                 rendered_output_contains: Vec::new(),
                 rendered_output_not_contains: Vec::new(),
                 artifacts_must_not_exist: Vec::new(),
