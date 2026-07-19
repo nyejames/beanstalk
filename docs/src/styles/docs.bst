@@ -2,8 +2,10 @@ import @html {table}
 -- Some basic testing styles for the documentation website
 
 theme_css #= [$css:
+
     body {
         background-color: light-dark(hsl(125, 67%, 97%), hsl(203, 68%, 8%));
+        font-family: "/fonts/cmunss.woff2"
     }
 
     a {
