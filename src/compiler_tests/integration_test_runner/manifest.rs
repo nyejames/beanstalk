@@ -4,6 +4,7 @@
 //! WHY: the manifest is the authoritative source for test execution order, so parsing it is
 //!      isolated here to keep the fixture loader free of TOML deserialization details.
 
+use super::path_validation::{CurrentDirectoryRule, validate_relative_path};
 use super::{CaseRole, ManifestCaseSpec};
 use serde::Deserialize;
 use std::collections::HashSet;
@@ -51,12 +52,31 @@ pub(crate) fn parse_manifest_file(path: &Path) -> Result<Vec<ManifestCaseSpec>, 
                 path.display()
             ));
         }
+        if case.id != case.id.trim() {
+            return Err(format!(
+                "Manifest '{}' case id '{}' must not have leading or trailing whitespace.",
+                path.display(),
+                case.id
+            ));
+        }
         if case.path.trim().is_empty() {
             return Err(format!(
                 "Manifest '{}' has a case with an empty path",
                 path.display()
             ));
         }
+        validate_relative_path(
+            &case.path,
+            "Manifest case path",
+            CurrentDirectoryRule::Forbid,
+        )
+        .map_err(|error| {
+            format!(
+                "Manifest '{}' case '{}' has an invalid path: {error}.",
+                path.display(),
+                case.id
+            )
+        })?;
         if case.tags.is_empty() {
             return Err(format!(
                 "Manifest '{}' case '{}' is missing required tags.",
@@ -64,23 +84,59 @@ pub(crate) fn parse_manifest_file(path: &Path) -> Result<Vec<ManifestCaseSpec>, 
                 case.id
             ));
         }
-        if case.tags.iter().any(|tag| tag.trim().is_empty()) {
-            return Err(format!(
-                "Manifest '{}' case '{}' has an empty tag value.",
-                path.display(),
-                case.id
-            ));
+        let mut seen_tags = HashSet::new();
+        for tag in &case.tags {
+            if tag.trim().is_empty() {
+                return Err(format!(
+                    "Manifest '{}' case '{}' has an empty tag value.",
+                    path.display(),
+                    case.id
+                ));
+            }
+            if tag != tag.trim() {
+                return Err(format!(
+                    "Manifest '{}' case '{}' tag '{}' must not have leading or trailing whitespace.",
+                    path.display(),
+                    case.id,
+                    tag
+                ));
+            }
+            if !seen_tags.insert(tag) {
+                return Err(format!(
+                    "Manifest '{}' case '{}' has duplicate tag '{}'.",
+                    path.display(),
+                    case.id,
+                    tag
+                ));
+            }
         }
 
-        if case
-            .contract
-            .as_deref()
-            .is_some_and(|contract| contract.trim().is_empty())
+        if let Some(contract) = case.contract.as_deref() {
+            if contract.trim().is_empty() {
+                return Err(format!(
+                    "Manifest '{}' case '{}' has an empty contract value.",
+                    path.display(),
+                    case.id
+                ));
+            }
+            if contract != contract.trim() {
+                return Err(format!(
+                    "Manifest '{}' case '{}' contract '{}' must not have leading or trailing whitespace.",
+                    path.display(),
+                    case.id,
+                    contract
+                ));
+            }
+        }
+
+        if let Some(role) = case.role.as_deref()
+            && role != role.trim()
         {
             return Err(format!(
-                "Manifest '{}' case '{}' has an empty contract value.",
+                "Manifest '{}' case '{}' role '{}' must not have leading or trailing whitespace.",
                 path.display(),
-                case.id
+                case.id,
+                role
             ));
         }
 

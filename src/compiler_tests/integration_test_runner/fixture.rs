@@ -5,6 +5,7 @@
 //! WHY: keeping fixture loading separate from expectation parsing and case execution gives
 //!      each piece a single clear responsibility.
 
+use super::path_validation::{CurrentDirectoryRule, validate_relative_path};
 use super::types::GoldenExpectation;
 use super::types::SuccessContract;
 use super::{
@@ -22,22 +23,33 @@ pub(super) fn load_test_suite() -> Result<TestSuiteSpec, String> {
 }
 
 pub(crate) fn load_test_suite_from_root(root: &Path) -> Result<TestSuiteSpec, String> {
+    let canonical_suite_root = fs::canonicalize(root).map_err(|error| {
+        format!(
+            "Failed to resolve canonical integration test root '{}': {error}",
+            root.display()
+        )
+    })?;
     let mut cases = Vec::new();
-    let manifest_path = root.join(MANIFEST_FILE_NAME);
+    let manifest_path = canonical_suite_root.join(MANIFEST_FILE_NAME);
     if !manifest_path.is_file() {
         return Err(format!(
             "Canonical integration root '{}' must define '{}'.",
-            root.display(),
+            canonical_suite_root.display(),
             MANIFEST_FILE_NAME
         ));
     }
 
     let manifest_cases = super::manifest::parse_manifest_file(&manifest_path)?;
-    validate_manifest_authoritativeness(root, &manifest_cases)?;
+    let canonical_fixture_roots = manifest_cases
+        .iter()
+        .map(|manifest_case| {
+            resolve_declared_fixture_root(&canonical_suite_root, &manifest_path, manifest_case)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    validate_manifest_authoritativeness(&canonical_suite_root, &canonical_fixture_roots)?;
 
-    for manifest_case in manifest_cases {
-        let fixture_root = root.join(&manifest_case.path);
-        let case_specs = load_canonical_case_specs(&fixture_root, Some(manifest_case))?;
+    for (manifest_case, fixture_root) in manifest_cases.into_iter().zip(canonical_fixture_roots) {
+        let case_specs = load_canonical_case_specs_at(&fixture_root, Some(manifest_case))?;
         cases.extend(case_specs);
     }
 
@@ -45,21 +57,28 @@ pub(crate) fn load_test_suite_from_root(root: &Path) -> Result<TestSuiteSpec, St
 }
 
 fn validate_manifest_authoritativeness(
-    root: &Path,
-    manifest_cases: &[ManifestCaseSpec],
+    canonical_suite_root: &Path,
+    canonical_fixture_roots: &[PathBuf],
 ) -> Result<(), String> {
-    let declared_paths = manifest_cases
+    let declared_paths = canonical_fixture_roots
         .iter()
-        .map(|case| {
-            fs::canonicalize(root.join(&case.path)).unwrap_or_else(|_| root.join(&case.path))
-        })
+        .cloned()
         .collect::<HashSet<_>>();
 
-    let discovered_roots = discover_canonical_fixture_roots(root)?;
+    let discovered_roots = discover_canonical_fixture_roots(canonical_suite_root)?;
     let mut undeclared_fixtures = Vec::new();
     for discovered_root in discovered_roots {
-        let canonical_discovered =
-            fs::canonicalize(&discovered_root).unwrap_or_else(|_| discovered_root.clone());
+        let canonical_discovered = fs::canonicalize(&discovered_root).map_err(|error| {
+            format!(
+                "Failed to resolve discovered canonical fixture '{}': {error}",
+                discovered_root.display()
+            )
+        })?;
+        ensure_strictly_inside(
+            &canonical_discovered,
+            canonical_suite_root,
+            &format!("discovered fixture '{}'", discovered_root.display()),
+        )?;
         if !declared_paths.contains(&canonical_discovered) {
             undeclared_fixtures.push(discovered_root);
         }
@@ -80,11 +99,37 @@ fn validate_manifest_authoritativeness(
             .join(", ");
         return Err(format!(
             "Manifest '{}' must list every canonical case; found undeclared fixtures: {preview}.",
-            root.join(MANIFEST_FILE_NAME).display()
+            canonical_suite_root.join(MANIFEST_FILE_NAME).display()
         ));
     }
 
     Ok(())
+}
+
+fn resolve_declared_fixture_root(
+    canonical_suite_root: &Path,
+    manifest_path: &Path,
+    manifest_case: &ManifestCaseSpec,
+) -> Result<PathBuf, String> {
+    let declared_path = canonical_suite_root.join(&manifest_case.path);
+    let canonical_fixture_root = fs::canonicalize(&declared_path).map_err(|error| {
+        format!(
+            "Manifest '{}' case '{}' path '{}' could not be resolved: {error}.",
+            manifest_path.display(),
+            manifest_case.id,
+            manifest_case.path.display()
+        )
+    })?;
+    ensure_strictly_inside(
+        &canonical_fixture_root,
+        canonical_suite_root,
+        &format!(
+            "manifest case '{}' path '{}'",
+            manifest_case.id,
+            manifest_case.path.display()
+        ),
+    )?;
+    Ok(canonical_fixture_root)
 }
 
 fn discover_canonical_fixture_roots(root: &Path) -> Result<Vec<PathBuf>, String> {
@@ -122,20 +167,46 @@ fn discover_canonical_fixture_roots(root: &Path) -> Result<Vec<PathBuf>, String>
     Ok(discovered_dirs)
 }
 
+#[cfg(test)]
 pub(crate) fn load_canonical_case_specs(
     fixture_root: &Path,
     manifest_case: Option<ManifestCaseSpec>,
 ) -> Result<Vec<TestCaseSpec>, String> {
-    let input_root = fixture_root.join(INPUT_DIR_NAME);
-    let expect_path = fixture_root.join(EXPECT_FILE_NAME);
+    let canonical_fixture_root = fs::canonicalize(fixture_root).map_err(|error| {
+        format!(
+            "Failed to resolve canonical fixture '{}': {error}",
+            fixture_root.display()
+        )
+    })?;
+    load_canonical_case_specs_at(&canonical_fixture_root, manifest_case)
+}
 
+fn load_canonical_case_specs_at(
+    fixture_root: &Path,
+    manifest_case: Option<ManifestCaseSpec>,
+) -> Result<Vec<TestCaseSpec>, String> {
+    let input_path = fixture_root.join(INPUT_DIR_NAME);
+    let input_root = fs::canonicalize(&input_path).map_err(|error| {
+        format!(
+            "Canonical fixture '{}' could not resolve '{}': {error}",
+            fixture_root.display(),
+            INPUT_DIR_NAME
+        )
+    })?;
+    ensure_strictly_inside(
+        &input_root,
+        fixture_root,
+        &format!("fixture '{}' input directory", fixture_root.display()),
+    )?;
     if !input_root.is_dir() {
         return Err(format!(
-            "Canonical fixture '{}' is missing '{}'",
+            "Canonical fixture '{}' is missing '{}', or it is not a directory",
             fixture_root.display(),
             INPUT_DIR_NAME
         ));
     }
+
+    let expect_path = fixture_root.join(EXPECT_FILE_NAME);
 
     if !expect_path.is_file() {
         let case_name = manifest_case
@@ -164,7 +235,11 @@ pub(crate) fn load_canonical_case_specs(
         })
         .collect::<Result<Vec<_>, _>>()?;
     validate_fixture_contract(fixture_root, &parsed_expectation, &golden_expectations)?;
-    let entry_path = resolve_case_entry_path(&input_root, parsed_expectation.entry.as_deref())?;
+    let entry_path = resolve_case_entry_path(
+        fixture_root,
+        &input_root,
+        parsed_expectation.entry.as_deref(),
+    )?;
     let manifest_relative_path = manifest_case
         .as_ref()
         .map(|case| normalize_manifest_relative_path(&case.path))
@@ -341,20 +416,34 @@ fn validate_fixture_contract(
 }
 
 fn resolve_case_entry_path(
+    fixture_root: &Path,
     input_root: &Path,
     configured_entry: Option<&str>,
 ) -> Result<PathBuf, String> {
     if let Some(entry) = configured_entry {
+        validate_relative_path(
+            entry,
+            "Configured entry",
+            CurrentDirectoryRule::AllowExactSentinel,
+        )
+        .map_err(|error| {
+            format!(
+                "Fixture '{}' has an invalid entry '{}': {error}.",
+                fixture_root.display(),
+                entry
+            )
+        })?;
+
         if entry == "." {
             return Ok(input_root.to_path_buf());
         }
 
-        return Ok(input_root.join(entry));
+        return canonicalize_contained_entry(fixture_root, input_root, entry);
     }
 
     let default_entry = input_root.join("#page.bst");
     if default_entry.is_file() {
-        return Ok(default_entry);
+        return canonicalize_contained_entry(fixture_root, input_root, "#page.bst");
     }
 
     Err(format!(
@@ -362,6 +451,45 @@ fn resolve_case_entry_path(
         input_root.display(),
         EXPECT_FILE_NAME
     ))
+}
+
+fn canonicalize_contained_entry(
+    fixture_root: &Path,
+    input_root: &Path,
+    authored_entry: &str,
+) -> Result<PathBuf, String> {
+    let entry_path = input_root.join(authored_entry);
+    let canonical_entry = fs::canonicalize(&entry_path).map_err(|error| {
+        format!(
+            "Fixture '{}' entry '{}' could not be resolved: {error}.",
+            fixture_root.display(),
+            authored_entry
+        )
+    })?;
+    ensure_strictly_inside(
+        &canonical_entry,
+        input_root,
+        &format!(
+            "fixture '{}' entry '{}'",
+            fixture_root.display(),
+            authored_entry
+        ),
+    )?;
+    Ok(canonical_entry)
+}
+
+fn ensure_strictly_inside(path: &Path, root: &Path, context: &str) -> Result<(), String> {
+    let is_strictly_inside = path
+        .strip_prefix(root)
+        .is_ok_and(|relative| !relative.as_os_str().is_empty());
+    if !is_strictly_inside {
+        return Err(format!(
+            "{context} resolves to '{}' outside the required root '{}'.",
+            path.display(),
+            root.display()
+        ));
+    }
+    Ok(())
 }
 
 /// Resolves backend-scoped golden directories for fixture assertions.

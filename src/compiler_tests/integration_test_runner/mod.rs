@@ -10,6 +10,7 @@ mod execution;
 mod expectations;
 mod fixture;
 mod manifest;
+mod path_validation;
 mod policy;
 mod reporting;
 mod runner;

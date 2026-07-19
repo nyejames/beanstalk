@@ -12,6 +12,7 @@ use super::super::{
 };
 use crate::compiler_tests::test_support::temp_dir;
 use std::fs;
+use std::path::Path;
 
 #[test]
 fn rejects_failure_fixture_without_diagnostic_codes() {
@@ -394,11 +395,13 @@ fn matrix_cases_resolve_backend_specific_golden_directories() {
     );
     assert_eq!(
         html_expectation.golden.inventory.files[0].absolute_path,
-        golden_html_root.join("index.html")
+        fs::canonicalize(golden_html_root.join("index.html"))
+            .expect("html golden should canonicalize")
     );
     assert_eq!(
         wasm_expectation.golden.inventory.files[0].absolute_path,
-        golden_wasm_root.join("index.html")
+        fs::canonicalize(golden_wasm_root.join("index.html"))
+            .expect("wasm golden should canonicalize")
     );
 
     fs::remove_dir_all(&root).expect("should clean up temp fixture root");
@@ -425,4 +428,179 @@ fn accepts_success_fixture_with_golden_only_assertion() {
     assert_eq!(cases[0].display_name, "case [html]");
 
     fs::remove_dir_all(&root).expect("should clean up temp fixture root");
+}
+
+#[test]
+fn rejects_unsafe_configured_entries() {
+    let unsafe_entries = [
+        "",
+        " /outside ",
+        "/outside",
+        "../outside",
+        "nested/./intro.bd",
+        "C:/outside",
+    ];
+
+    for entry in unsafe_entries {
+        let root = temp_dir("unsafe_configured_entry");
+        let case_root = root.join("case");
+        let input_root = case_root.join(INPUT_DIR_NAME);
+        fs::create_dir_all(&input_root).expect("should create fixture input directory");
+        fs::write(input_root.join("intro.bd"), "#[:ok]\n")
+            .expect("should write nested entry source");
+        fs::write(
+            case_root.join(EXPECT_FILE_NAME),
+            format!(
+                "entry = \"{entry}\"\n\n[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\n"
+            ),
+        )
+        .expect("should write expect file");
+
+        let Err(error) = load_canonical_case_specs(&case_root, None) else {
+            panic!("unsafe configured entry should be rejected: {entry}");
+        };
+        assert!(error.contains("invalid entry"), "unexpected: {error}");
+
+        fs::remove_dir_all(&root).expect("should clean up");
+    }
+}
+
+#[test]
+fn accepts_exact_directory_entry_and_returns_canonical_input() {
+    let root = temp_dir("exact_directory_entry");
+    let case_root = root.join("case");
+    let input_root = case_root.join(INPUT_DIR_NAME);
+    fs::create_dir_all(&input_root).expect("should create fixture input directory");
+    fs::write(input_root.join("intro.bd"), "#[:ok]\n").expect("should write entry source");
+    fs::write(
+        case_root.join(EXPECT_FILE_NAME),
+        "entry = \".\"\n\n[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\n",
+    )
+    .expect("should write expect file");
+
+    let cases = load_canonical_case_specs(&case_root, None)
+        .expect("exact directory entry should remain valid");
+    assert_eq!(
+        cases[0].entry_path,
+        fs::canonicalize(input_root).expect("input root should canonicalize")
+    );
+
+    fs::remove_dir_all(&root).expect("should clean up");
+}
+
+#[test]
+fn accepts_nested_contained_entry_and_returns_canonical_path() {
+    let root = temp_dir("nested_contained_entry");
+    let case_root = root.join("case");
+    let input_root = case_root.join(INPUT_DIR_NAME);
+    let entry_path = input_root.join("nested").join("intro.bd");
+    fs::create_dir_all(
+        entry_path
+            .parent()
+            .expect("nested input parent should exist"),
+    )
+    .expect("should create nested input directory");
+    fs::write(&entry_path, "#[:ok]\n").expect("should write nested entry source");
+    fs::write(
+        case_root.join(EXPECT_FILE_NAME),
+        "entry = \"nested/intro.bd\"\n\n[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\n",
+    )
+    .expect("should write expect file");
+
+    let cases =
+        load_canonical_case_specs(&case_root, None).expect("nested contained entry should load");
+    assert_eq!(
+        cases[0].entry_path,
+        fs::canonicalize(entry_path).expect("nested entry should canonicalize")
+    );
+
+    fs::remove_dir_all(&root).expect("should clean up");
+}
+
+#[cfg(unix)]
+fn symlink_file(target: &Path, link: &Path) -> std::io::Result<()> {
+    std::os::unix::fs::symlink(target, link)
+}
+
+#[cfg(windows)]
+fn symlink_file(target: &Path, link: &Path) -> std::io::Result<()> {
+    std::os::windows::fs::symlink_file(target, link)
+}
+
+#[cfg(unix)]
+fn symlink_directory(target: &Path, link: &Path) -> std::io::Result<()> {
+    std::os::unix::fs::symlink(target, link)
+}
+
+#[cfg(windows)]
+fn symlink_directory(target: &Path, link: &Path) -> std::io::Result<()> {
+    std::os::windows::fs::symlink_dir(target, link)
+}
+
+#[cfg(any(unix, windows))]
+#[test]
+fn rejects_input_directory_symlink_escape() {
+    let root = temp_dir("input_directory_symlink_escape");
+    let outside = temp_dir("input_directory_symlink_escape_target");
+    let case_root = root.join("case");
+    let input_link = case_root.join(INPUT_DIR_NAME);
+    fs::create_dir_all(&case_root).expect("should create fixture root");
+    fs::create_dir_all(&outside).expect("should create outside input root");
+    fs::write(outside.join("#page.bst"), "#[:ok]\n").expect("should write outside source");
+    if symlink_directory(&outside, &input_link).is_err() {
+        fs::remove_dir_all(&root).expect("should clean up root");
+        fs::remove_dir_all(&outside).expect("should clean up target");
+        return;
+    }
+    fs::write(
+        case_root.join(EXPECT_FILE_NAME),
+        "[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\n",
+    )
+    .expect("should write expect file");
+
+    let Err(error) = load_canonical_case_specs(&case_root, None) else {
+        panic!("input directory symlink escaping the fixture should be rejected");
+    };
+    assert!(
+        error.contains("input directory") && error.contains("outside"),
+        "unexpected: {error}"
+    );
+
+    fs::remove_dir_all(&root).expect("should clean up root");
+    fs::remove_dir_all(&outside).expect("should clean up target");
+}
+
+#[cfg(any(unix, windows))]
+#[test]
+fn rejects_entry_symlink_escape() {
+    let root = temp_dir("entry_symlink_escape");
+    let outside = temp_dir("entry_symlink_escape_target");
+    let case_root = root.join("case");
+    let input_root = case_root.join(INPUT_DIR_NAME);
+    let entry_link = input_root.join("escape.bd");
+    fs::create_dir_all(&input_root).expect("should create fixture input directory");
+    fs::create_dir_all(&outside).expect("should create outside root");
+    let outside_entry = outside.join("intro.bd");
+    fs::write(&outside_entry, "#[:ok]\n").expect("should write outside entry");
+    if symlink_file(&outside_entry, &entry_link).is_err() {
+        fs::remove_dir_all(&root).expect("should clean up root");
+        fs::remove_dir_all(&outside).expect("should clean up target");
+        return;
+    }
+    fs::write(
+        case_root.join(EXPECT_FILE_NAME),
+        "entry = \"escape.bd\"\n\n[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\n",
+    )
+    .expect("should write expect file");
+
+    let Err(error) = load_canonical_case_specs(&case_root, None) else {
+        panic!("entry symlink escaping the input directory should be rejected");
+    };
+    assert!(
+        error.contains("entry 'escape.bd'") && error.contains("outside"),
+        "unexpected: {error}"
+    );
+
+    fs::remove_dir_all(&root).expect("should clean up root");
+    fs::remove_dir_all(&outside).expect("should clean up target");
 }

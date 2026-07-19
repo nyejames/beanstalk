@@ -30,28 +30,28 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 2R4 — contain fixture and entry paths
-LAST_ACCEPTED_COMMIT: pending Phase 2R3 acceptance commit (previous plan commit `ca2d013ee`)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 2R3 changes ready to commit
+CURRENT_SLICE: Phase 2R5a — correct choice-construction fixture contracts
+LAST_ACCEPTED_COMMIT: pending Phase 2R4 acceptance commit (previous plan commit `7f9078329`)
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 2R4 changes ready to commit
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: `testing.bd`, `validation.bd`, compiler/build-system overviews, and progress matrix govern runner contracts and gates
-- code: path parsing in `manifest.rs`, fixture-root and entry resolution in `fixture.rs`, canonical discovery, and focused manifest/fixture tests
+- code: six named choice-construction fixtures, their expectations and manifest roles/contracts, plus nearby stronger choice-pattern owners
 ACCEPTANCE_CRITERIA:
-- manifest paths and non-sentinel entries reject absolute, parent, root, prefix, and current-directory components
-- canonicalized fixture and entry paths remain inside their owning roots, including symlink resolution where supported
-- identity metadata rejects leading/trailing whitespace and duplicate tags
-- focused path tests, canonical audit, and `just validate` pass
+- each reviewed case observes its constructed variant and payload through a context-rich marker, or becomes a truthful no-output smoke case
+- imported-constructor and local-constructor coverage remain distinct only where binding/visibility differs
+- no behavior-visible reviewed backend remains mislabeled acceptance-only
+- exact case runs, canonical audit, and `just validate` pass
 VALIDATION_STATE:
-- `cargo test --quiet integration_test_runner -- --format terse`: passed; 90 tests
+- `cargo test --quiet integration_test_runner -- --format terse`: passed; 100 tests
 - `cargo run --quiet -- tests --audit`: passed; 1,651 cases, 1,784 backend executions, 23 acceptance-only, 33 baseline-only, zero hard findings
-- `just validate`: passed; cross-target Clippy, 3,486 Rust tests, 1,784 integration executions, docs check, and 28 benchmark cases
+- `just validate`: passed; cross-target Clippy, 3,496 Rust tests, 1,784 integration executions, docs check, and 28 benchmark cases
 DOCS_IMPACT: progress matrix unchanged; workflow prose remains scheduled for Phase 2R8
 BLOCKERS_OR_OPEN_DECISIONS: none; compiler diagnostics Phase 4.1c remains serialized and untouched
 DELEGATION_DECISION: codex-cli — explicit user-selected provider for implementation workers
 NEXT_WORKER_ORDER: codex-cli only for this run-local override
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit accepted Phase 2R3, refresh its hash, then launch bounded Phase 2R4 through `codex-cli-beanstalk`
+NEXT_RESUME_ACTION: commit accepted Phase 2R4, refresh its hash, then launch bounded Phase 2R5a through `codex-cli-beanstalk`
 
 ---
 
@@ -127,7 +127,8 @@ This file is a reloadable execution plan, not a command transcript.
 | Plan pause | `97d3174fd` | Accepted | No code change |
 | Phase 2R1 success intent and inventory | `5dc811a7c` | Accepted | 3,475 Rust tests; 1,784 integration executions; 23 acceptance-only; 33 baseline-only; zero hard findings |
 | Phase 2R2 golden inventory | `ca2d013ee` | Accepted | 3,480 Rust tests; 1,784 integration executions; 38 file-backed golden blocks; 17 orphaned modes removed; zero hard findings |
-| Phase 2R3 suite policy owner | pending acceptance commit | Accepted | 3,486 Rust tests; 1,784 integration executions; 33 baseline-only advisories; zero hard findings |
+| Phase 2R3 suite policy owner | `7f9078329` | Accepted | 3,486 Rust tests; 1,784 integration executions; 33 baseline-only advisories; zero hard findings |
+| Phase 2R4 path containment | pending acceptance commit | Accepted | 3,496 Rust tests; 1,784 integration executions; canonical fixture/input/entry containment enforced; zero hard findings |
 
 ---
 
@@ -345,34 +346,34 @@ Canonical tests must be self-contained and deterministic.
 
 ### Required implementation
 
-- [ ] Reject absolute manifest case paths.
-- [ ] Reject `..`, root, and platform-prefix components in manifest case paths.
-- [ ] Reject `.` components unless a documented normalized form explicitly permits them.
-- [ ] Canonicalized fixture roots must remain inside the canonical suite root, including symlink resolution.
-- [ ] Preserve `entry = "."` as the one explicit directory-entry sentinel.
-- [ ] Otherwise reject absolute, parent, root, prefix, and current-directory components in `entry`.
-- [ ] Canonicalized entry paths must remain inside the case `input/` directory.
-- [ ] Reject leading/trailing whitespace in IDs, tags, contracts, paths, and entries rather than silently changing identity.
-- [ ] Reject duplicate tags within one case.
-- [ ] Keep lowercase/tag-family normalization for final Phase 14 unless a current duplicate requires immediate correction.
+- [x] Reject absolute manifest case paths.
+- [x] Reject `..`, root, and platform-prefix components in manifest case paths.
+- [x] Reject `.` components unless a documented normalized form explicitly permits them.
+- [x] Canonicalized fixture roots must remain inside the canonical suite root, including symlink resolution.
+- [x] Preserve `entry = "."` as the one explicit directory-entry sentinel.
+- [x] Otherwise reject absolute, parent, root, prefix, and current-directory components in `entry`.
+- [x] Canonicalized entry paths must remain inside the case `input/` directory.
+- [x] Reject leading/trailing whitespace in IDs, tags, contracts, paths, and entries rather than silently changing identity.
+- [x] Reject duplicate tags within one case.
+- [x] Keep lowercase/tag-family normalization for final Phase 14 unless a current duplicate requires immediate correction.
 
 ### Self-tests
 
-- [ ] Absolute manifest path.
-- [ ] Parent-traversing manifest path.
-- [ ] Symlink escape from suite root where supported by the test platform.
-- [ ] Absolute entry.
-- [ ] Parent-traversing entry.
-- [ ] Symlink escape from `input/` where supported.
-- [ ] Whitespace-padded metadata.
-- [ ] Duplicate tags.
-- [ ] Valid nested contained path.
+- [x] Absolute manifest path.
+- [x] Parent-traversing manifest path.
+- [x] Symlink escape from suite root where supported by the test platform.
+- [x] Absolute entry.
+- [x] Parent-traversing entry.
+- [x] Symlink escape from `input/` where supported.
+- [x] Whitespace-padded metadata.
+- [x] Duplicate tags.
+- [x] Valid nested contained path.
 
 ### Acceptance
 
-- [ ] A canonical case cannot load source outside its fixture.
-- [ ] Metadata identity is canonical and deterministic.
-- [ ] Focused harness tests and the full gate pass.
+- [x] A canonical case cannot load source outside its fixture.
+- [x] Metadata identity is canonical and deterministic.
+- [x] Focused harness tests and the full gate pass.
 
 ---
 

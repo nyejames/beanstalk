@@ -4,10 +4,24 @@
 //! WHY: manifest metadata controls which canonical fixtures the runner executes.
 
 use super::super::fixture::load_test_suite_from_root;
+use super::super::manifest::parse_manifest_file;
 use super::super::{CaseRole, EXPECT_FILE_NAME, INPUT_DIR_NAME, MANIFEST_FILE_NAME};
 use crate::compiler_tests::test_support::temp_dir;
 use std::fs;
 use std::path::Path;
+
+fn parse_manifest_source(
+    name: &str,
+    source: &str,
+) -> Result<Vec<super::super::ManifestCaseSpec>, String> {
+    let root = temp_dir(name);
+    fs::create_dir_all(&root).expect("should create manifest test root");
+    let path = root.join(MANIFEST_FILE_NAME);
+    fs::write(&path, source).expect("should write manifest");
+    let result = parse_manifest_file(&path);
+    fs::remove_dir_all(&root).expect("should clean up manifest test root");
+    result
+}
 
 fn write_success_fixture(root: &Path, case_name: &str) {
     let case_root = root.join(case_name);
@@ -241,4 +255,135 @@ fn manifest_must_declare_every_fixture_directory() {
     );
 
     fs::remove_dir_all(&root).expect("should clean up temp fixture root");
+}
+
+#[test]
+fn rejects_unsafe_manifest_case_paths() {
+    let unsafe_paths = [
+        "/outside",
+        "../outside",
+        "./case",
+        "nested/../case",
+        "nested/./case",
+        "C:/outside",
+    ];
+
+    for unsafe_path in unsafe_paths {
+        let result = parse_manifest_source(
+            "manifest_unsafe_case_path",
+            &format!("[[case]]\nid = \"case\"\npath = \"{unsafe_path}\"\ntags = [\"coverage\"]\n"),
+        );
+        let Err(error) = result else {
+            panic!("unsafe manifest path should be rejected: {unsafe_path}");
+        };
+        assert!(error.contains("invalid path"), "unexpected: {error}");
+        assert!(error.contains(unsafe_path), "unexpected: {error}");
+    }
+}
+
+#[test]
+fn rejects_whitespace_padded_manifest_metadata() {
+    let padded_fields = [
+        ("id", " case "),
+        ("path", " case "),
+        ("tags", " tag "),
+        ("contract", " contract "),
+    ];
+
+    for (field, value) in padded_fields {
+        let source = match field {
+            "tags" => format!("[[case]]\nid = \"case\"\npath = \"case\"\ntags = [\"{value}\"]\n"),
+            "contract" => format!(
+                "[[case]]\nid = \"case\"\npath = \"case\"\ntags = [\"coverage\"]\ncontract = \"{value}\"\n"
+            ),
+            "path" => {
+                format!("[[case]]\nid = \"case\"\npath = \"{value}\"\ntags = [\"coverage\"]\n")
+            }
+            _ => {
+                format!("[[case]]\n{field} = \"{value}\"\npath = \"case\"\ntags = [\"coverage\"]\n")
+            }
+        };
+        let result = parse_manifest_source("manifest_padded_metadata", &source);
+        let Err(error) = result else {
+            panic!("padded manifest metadata should be rejected: {field}");
+        };
+        assert!(
+            error.contains("leading or trailing whitespace"),
+            "unexpected: {error}"
+        );
+    }
+}
+
+#[test]
+fn rejects_duplicate_manifest_tags() {
+    let result = parse_manifest_source(
+        "manifest_duplicate_tags",
+        "[[case]]\nid = \"case\"\npath = \"case\"\ntags = [\"coverage\", \"coverage\"]\n",
+    );
+    let Err(error) = result else {
+        panic!("duplicate manifest tags should be rejected");
+    };
+    assert!(
+        error.contains("duplicate tag 'coverage'"),
+        "unexpected: {error}"
+    );
+}
+
+#[test]
+fn accepts_nested_manifest_path_and_preserves_metadata_order() {
+    let root = temp_dir("manifest_nested_path");
+    fs::create_dir_all(&root).expect("should create root");
+    write_success_fixture(&root, "nested/case");
+    fs::write(
+        root.join(MANIFEST_FILE_NAME),
+        "[[case]]\nid = \"case\"\npath = \"nested/case\"\ntags = [\"zeta\", \"alpha\"]\n",
+    )
+    .expect("should write manifest");
+
+    let suite = load_test_suite_from_root(&root).expect("nested manifest path should load");
+    assert_eq!(suite.cases[0].manifest_relative_path, "nested/case");
+    assert_eq!(suite.cases[0].tags, vec!["zeta", "alpha"]);
+
+    fs::remove_dir_all(&root).expect("should clean up temp fixture root");
+}
+
+#[cfg(unix)]
+fn symlink_directory(target: &Path, link: &Path) -> std::io::Result<()> {
+    std::os::unix::fs::symlink(target, link)
+}
+
+#[cfg(windows)]
+fn symlink_directory(target: &Path, link: &Path) -> std::io::Result<()> {
+    std::os::windows::fs::symlink_dir(target, link)
+}
+
+#[cfg(any(unix, windows))]
+#[test]
+fn rejects_manifest_fixture_symlink_escape() {
+    let root = temp_dir("manifest_fixture_symlink_escape");
+    let outside = temp_dir("manifest_fixture_symlink_escape_target");
+    fs::create_dir_all(&root).expect("should create root");
+    write_success_fixture(&outside, "case");
+    let link = root.join("link");
+    if symlink_directory(&outside.join("case"), &link).is_err() {
+        fs::remove_dir_all(&root).expect("should clean up root");
+        fs::remove_dir_all(&outside).expect("should clean up target");
+        return;
+    }
+    fs::write(
+        root.join(MANIFEST_FILE_NAME),
+        "[[case]]\nid = \"case\"\npath = \"link\"\ntags = [\"coverage\"]\n",
+    )
+    .expect("should write manifest");
+
+    let Err(error) = load_test_suite_from_root(&root) else {
+        panic!("fixture symlink escaping the suite root should be rejected");
+    };
+    assert!(
+        error.contains("case") && error.contains("outside"),
+        "unexpected: {error}"
+    );
+
+    fs::remove_dir_all(&root).expect("should clean up root");
+    fs::remove_dir_all(&outside).expect("should clean up target");
 }
