@@ -29,16 +29,17 @@ This ordering is mandatory. Do not begin broad pruning while the harness can sti
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 1B — retain case identity and metadata
-LAST_ACCEPTED_COMMIT: `58dd13f98` — split integration-runner self-tests by owner
-WORKTREE: parent `main` at `58dd13f98`; accepted Phase 1A worker retained at `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase1a` on `codex/test-hardening-phase1a`
+CURRENT_SLICE: Phase 1C — add filter and list options
+LAST_ACCEPTED_COMMIT: `d4daec916` — retain canonical integration case metadata
+WORKTREE: parent `main` at `d4daec916`; accepted Phase 1A and Phase 1B worker worktrees remain available under `/Users/aneirinjames/projects/beanstalk/.worktrees/`
 REQUIRED_RELOADS: startup files, this plan and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: `testing.bd` makes integration cases the primary owner of user-visible behaviour; `validation.bd` requires formatting and `just validate` for this code-bearing slice
-- code: `ManifestCaseToml` validates but discards tags, `ManifestCaseSpec` retains only ID/path, and `TestCaseSpec` retains only a display name rather than canonical metadata
+- docs: `build-system-design.md` owns command dispatch, `testing.bd` owns focused test workflow, and `validation.bd` requires formatting and `just validate`
+- code: canonical IDs, tags, contracts and typed roles now reach `TestCaseSpec`, while `TestRunnerOptions` and `bean tests` still support only an optional backend filter
 ACCEPTANCE_CRITERIA:
-- retain canonical case ID, tags, optional contract and optional typed role through manifest parsing and backend expansion
-- reject unknown roles, primary roles without contracts and duplicate primary contracts while preserving unclassified cases, manifest order and backend matrix expansion
+- add exact case, repeated tag (logical AND), contract, backend and list options using one named runner-options path
+- make composed filters deterministic, preserve canonical order, and list case ID, selected backends, tags, contract and role without compiling cases
+- reject incompatible or duplicate CLI arguments clearly and keep parser tests in the existing external test file
 - pass focused harness tests, formatting, diff checks and `just validate`
 VALIDATION_STATE:
 - final TIR at `dc81f7e53`: `just validate` passed with 3,433 Rust tests, 1,784 integration executions, docs checking and 28 benchmark sanity cases
@@ -46,12 +47,13 @@ VALIDATION_STATE:
 - Phase 0B operational evidence: three Rust and three integration runs passed; median wall times were 1.53s and 7.89s respectively
 - Phase 0B/0C documentation-only gate: `cargo run --quiet -- build docs --release` passed; 72 files built and no generated diff was produced
 - Phase 1A: focused 48-test integration-runner suite, `cargo fmt`, `git diff --check` and `just validate` passed; the full gate covered cross-target Clippy, 3,433 Rust tests, 1,784 integration executions, docs checking and 28 benchmark sanity cases
-DOCS_IMPACT: Phase 1A moved only harness self-tests and this plan; `index.md` already names the runner directory and the progress matrix remains unchanged
+- Phase 1B: focused 56-test integration-runner suite, `cargo fmt`, `git diff --check` and `just validate` passed; the full gate covered cross-target Clippy, 3,441 Rust tests, 1,784 integration executions, docs checking and 28 benchmark sanity cases
+DOCS_IMPACT: Phase 1B changed harness metadata and this plan only; current fixture outcomes/backend coverage and the progress matrix remain unchanged
 BLOCKERS_OR_OPEN_DECISIONS: diagnostics Phase 4.1c remains incomplete but is explicitly serialized at clean accepted commit `d7fb3654f`; no diagnostics, manifest or runner worker may overlap this plan
-DELEGATION_DECISION: codex-cli — use the user-requested Codex CLI implementation profile for Phase 1B
-NEXT_WORKER_ORDER: codex-cli only for the Phase 1B implementation slice
+DELEGATION_DECISION: codex-cli — use the user-requested Codex CLI implementation profile for Phase 1C
+NEXT_WORKER_ORDER: codex-cli only for the Phase 1C implementation slice
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit this Phase 1A plan checkpoint, create a dedicated Phase 1B worker worktree and launch the bounded Codex CLI implementation slice
+NEXT_RESUME_ACTION: commit this Phase 1B plan checkpoint, create a dedicated Phase 1C worker worktree and launch the bounded Codex CLI implementation slice
 
 ## Recommended roadmap placement and activation conditions
 
@@ -93,17 +95,17 @@ ACTIVE_PLAN:
 
 CURRENT_SLICE:
 - Phase: 1
-- Checklist item: 1B — retain case identity and metadata
-- Goal: carry canonical case identity, tags, optional contracts and typed roles from the manifest into every backend-expanded test case
-- Non-goals: no CLI filters/listing, audit report, expectation-schema, fixture outcome, diagnostic or assertion-policy changes
+- Checklist item: 1C — add filter and list options
+- Goal: select or list canonical cases by exact ID, repeated tags, contract and backend through one composable options path
+- Non-goals: no audit report, expectation-schema, fixture migration, diagnostic or assertion-policy changes
 
 LAST_GOOD_COMMIT:
-- `58dd13f98` — accepted Phase 1A integration-runner self-test split
+- `d4daec916` — accepted Phase 1B integration case metadata retention
 
 CURRENT_WORKTREE_STATE:
-- Clean / known changes: parent `main` is at `58dd13f98`; this accepted Phase 1A capsule update is parent-owned
+- Clean / known changes: parent `main` is at `d4daec916`; this accepted Phase 1B capsule update is parent-owned
 - Branch: local `main`
-- Dedicated worker worktrees: accepted Phase 1A at `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase1a` on `codex/test-hardening-phase1a` commit `48aece83e`; no Phase 1B worktree yet
+- Dedicated worker worktrees: accepted Phase 1A at `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase1a` on `codex/test-hardening-phase1a` commit `48aece83e`; accepted Phase 1B at `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase1b` on `codex/test-hardening-phase1b` commit `27386981d`; no Phase 1C worktree yet
 
 RELEVANT_DOCS_THIS_SLICE:
 - `AGENTS.md`
@@ -140,10 +142,11 @@ RELEVANT_CODE:
 - `src/compiler_frontend/ast/templates/tir/tests/`: accepted post-TIR hidden-invariant inventory; later suite-wide ownership review belongs to this plan and must not reopen final TIR architecture
 
 ACCEPTANCE_CRITERIA:
-- `TestCaseSpec` carries a first-class canonical ID instead of reconstructing it from `display_name`
-- tags, optional contract and optional typed role survive manifest parsing and backend expansion
-- unknown roles, primary-without-contract and duplicate classified primary contracts fail with clear harness errors
-- existing unclassified cases remain valid; manifest order and backend matrix expansion are unchanged
+- `TestRunnerOptions` carries exact case, repeated tags, contract, backend and list mode without boolean-heavy or parallel APIs
+- repeated tags use logical AND; all filters compose deterministically and preserve canonical manifest/backend order
+- `bean tests --case`, repeatable `--tag`, `--contract`, retained `--backend` and `--list` parse and dispatch through the same options path
+- list output contains canonical ID, selected backend blocks, tags, contract and role and does not compile cases
+- incompatible, duplicated or missing-value arguments fail clearly; external CLI tests and focused runner tests cover the contract
 - focused harness tests, formatting, diff checks and `just validate` pass
 
 DECISIONS_ALREADY_MADE:
@@ -177,13 +180,15 @@ BLOCKERS / RISKS:
 - the design documents describe accepted end state while the progress matrix describes current support
 
 VALIDATION_STATE:
-- last recorded command: `just validate`, run for accepted Phase 1A in the dedicated worker worktree
-- result: passed with cross-target Clippy, 3,433 Rust unit tests, 1,784 integration executions, docs checking, and 28 benchmark sanity cases
+- last recorded command: `just validate`, run for accepted Phase 1B in the dedicated worker worktree
+- result: passed with cross-target Clippy, 3,441 Rust unit tests, 1,784 integration executions, docs checking, and 28 benchmark sanity cases
 - known unrelated failures: none recorded
 - Phase 0A `cargo run --quiet -- build docs --release`: passed, 72 files built and no generated diff produced; direct `bean` invocation was unavailable in `PATH`
 - Phase 0B/0C `cargo run --quiet -- build docs --release`: passed, 72 files built and no generated diff produced
 - Phase 1A `cargo test --quiet integration_test_runner -- --format terse`: passed, 48 tests
 - Phase 1A `cargo fmt` and `git diff --check`: passed
+- Phase 1B `cargo test --quiet integration_test_runner -- --format terse`: passed, 56 tests
+- Phase 1B `cargo fmt` and `git diff --check`: passed
 
 DOCS_IMPACT:
 - progress matrix needed: review after every phase that adds, removes, or materially strengthens current coverage; update only when the coverage statement changes
@@ -191,7 +196,7 @@ DOCS_IMPACT:
 - authorized docs updates: this plan explicitly authorizes the documentation changes listed in each phase; do not broaden language or architecture docs without a discovered contradiction or an intentional accepted behaviour change
 
 NEXT_ACTION:
-- commit this Phase 1A plan checkpoint, create a dedicated Phase 1B worker worktree and launch the bounded Codex CLI implementation slice
+- commit this Phase 1B plan checkpoint, create a dedicated Phase 1C worker worktree and launch the bounded Codex CLI implementation slice
 
 ---
 
@@ -1037,15 +1042,21 @@ not require a locator update.
 
 ### 1B — Retain case identity and metadata
 
-- [ ] Add a distinct canonical case ID field to `TestCaseSpec`; do not parse IDs back out of display names.
-- [ ] Retain tags in `ManifestCaseSpec` and `TestCaseSpec`.
-- [ ] Add optional `contract`.
-- [ ] Add optional typed `role`.
-- [ ] Validate role spelling.
-- [ ] Validate that a primary role has a contract.
-- [ ] Validate duplicate primary contracts among currently classified cases.
-- [ ] Preserve manifest order.
-- [ ] Preserve one input with backend-specific expansions.
+- [x] Add a distinct canonical case ID field to `TestCaseSpec`; do not parse IDs back out of display names.
+- [x] Retain tags in `ManifestCaseSpec` and `TestCaseSpec`.
+- [x] Add optional `contract`.
+- [x] Add optional typed `role`.
+- [x] Validate role spelling.
+- [x] Validate that a primary role has a contract.
+- [x] Validate duplicate primary contracts among currently classified cases.
+- [x] Preserve manifest order.
+- [x] Preserve one input with backend-specific expansions.
+
+Accepted at `d4daec916`: manifest metadata is retained through every backend-expanded case using one
+typed `CaseRole`; existing unclassified cases remain valid. Focused tests cover all five role
+spellings, primary-contract requirements, duplicate-primary rejection, allowed shared non-primary
+contracts, metadata retention, ordering and backend expansion. `just validate` passed with 3,441
+Rust tests and the unchanged 1,784 integration executions.
 
 ### 1C — Add filter and list options
 
