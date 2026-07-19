@@ -29,17 +29,17 @@ This ordering is mandatory. Do not begin broad pruning while the harness can sti
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 1D — add the audit-report skeleton
-LAST_ACCEPTED_COMMIT: `a56133b0d` — add integration suite selection and listing
-WORKTREE: parent `main` at `a56133b0d`; accepted Phase 1A–1C worker worktrees remain available under `/Users/aneirinjames/projects/beanstalk/.worktrees/`
+CURRENT_SLICE: Phase 2A — add explicit success intent
+LAST_ACCEPTED_COMMIT: `120c4baea` — add the integration suite audit report
+WORKTREE: parent `main` at `120c4baea`; accepted Phase 1A–1D worker worktrees remain available under `/Users/aneirinjames/projects/beanstalk/.worktrees/`
 REQUIRED_RELOADS: startup files, this plan and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: `build-system-design.md` owns command dispatch, `testing.bd` owns test inventory workflow, and `validation.bd` requires formatting and `just validate`
-- code: one options-based runner now owns exact case/tag/contract/backend selection and metadata listing; reporting already owns failure JSON and is the correct audit-report owner
+- docs: `testing.bd` requires explicit authored assertions for visible behaviour; `validation.bd` requires formatting and `just validate`
+- code: `SuccessExpectation` has no typed intent, and fixture validation currently treats the implicit HTML/HTML-Wasm backend baseline as sufficient for success
 ACCEPTANCE_CRITERIA:
-- add `bean tests --audit`, reject filters/listing with audit, and load the entire suite without compiling cases
-- write the initial machine-readable inventory under `target/test-reports/` from reporting/test infrastructure using existing `serde_json`
-- include canonical case/backend metadata, hard-policy violations and advisory missing-classification findings without mutating fixtures
+- add a narrow typed `success_contract = "compile_only"` expectation and reject unknown or failure-mode use
+- reject compile-only mixed with artifact, golden, rendered-output or absence assertions
+- make the implicit backend baseline insufficient for an otherwise assertion-free success fixture and cover both explicit acceptance and implicit rejection
 - pass focused harness tests, formatting, diff checks and `just validate`
 VALIDATION_STATE:
 - final TIR at `dc81f7e53`: `just validate` passed with 3,433 Rust tests, 1,784 integration executions, docs checking and 28 benchmark sanity cases
@@ -49,12 +49,14 @@ VALIDATION_STATE:
 - Phase 1A: focused 48-test integration-runner suite, `cargo fmt`, `git diff --check` and `just validate` passed; the full gate covered cross-target Clippy, 3,433 Rust tests, 1,784 integration executions, docs checking and 28 benchmark sanity cases
 - Phase 1B: focused 56-test integration-runner suite, `cargo fmt`, `git diff --check` and `just validate` passed; the full gate covered cross-target Clippy, 3,441 Rust tests, 1,784 integration executions, docs checking and 28 benchmark sanity cases
 - Phase 1C: focused 61-test integration-runner and 57-test CLI suites, real list/case/tag commands, `cargo fmt`, `git diff --check` and `just validate` passed; the full gate covered cross-target Clippy, 3,451 Rust tests, 1,784 integration executions, docs checking and 28 benchmark sanity cases
-DOCS_IMPACT: Phase 1C changed the local test command workflow; update `testing.bd` and `CONTRIBUTING.md` together after Phase 1D adds audit, while the progress matrix remains unchanged
+- Phase 1D: focused 64-test integration-runner and 60-test CLI suites, real audit generation, `cargo fmt`, `git diff --check` and `just validate` passed; the full gate covered cross-target Clippy, 3,457 Rust tests, 1,784 integration executions, docs checking and 28 benchmark sanity cases
+- Phase 1 docs: `testing.bd` and `CONTRIBUTING.md` now document manifest metadata, composable filters, listing and audit; the release docs rebuilt successfully and the full `just validate` gate passed with 3,457 Rust tests, 1,784 integration executions and 28 benchmark sanity cases
+DOCS_IMPACT: Phase 1 workflow docs and generated release output are current; fixture outcomes/backend coverage and the progress matrix remain unchanged
 BLOCKERS_OR_OPEN_DECISIONS: diagnostics Phase 4.1c remains incomplete but is explicitly serialized at clean accepted commit `d7fb3654f`; no diagnostics, manifest or runner worker may overlap this plan
-DELEGATION_DECISION: codex-cli — use the user-requested Codex CLI implementation profile for Phase 1D
-NEXT_WORKER_ORDER: codex-cli only for the Phase 1D implementation slice
+DELEGATION_DECISION: codex-cli — use the user-requested Codex CLI implementation profile for Phase 2A
+NEXT_WORKER_ORDER: codex-cli only for the Phase 2A implementation slice
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit this Phase 1C plan checkpoint, create a dedicated Phase 1D worker worktree and launch the bounded Codex CLI implementation slice
+NEXT_RESUME_ACTION: complete the Phase 1 docs/checkpoint commit, create a dedicated Phase 2A worker worktree and launch the bounded Codex CLI implementation slice
 
 ## Recommended roadmap placement and activation conditions
 
@@ -95,59 +97,42 @@ ACTIVE_PLAN:
 - `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 
 CURRENT_SLICE:
-- Phase: 1
-- Checklist item: 1D — add the audit-report skeleton
-- Goal: load the complete suite without compilation and write its initial machine-readable metadata/policy inventory
-- Non-goals: no later assertion-strength policies, expectation-schema migration, fixture classification backfill, diagnostics or compiler changes
+- Phase: 2
+- Checklist item: 2A — add explicit success intent
+- Goal: make compile-only success explicit and reject assertion-free success that relies only on an implicit backend baseline
+- Non-goals: no missing-`expect.toml` enforcement, canonical fixture migration, diagnostics, warnings or runtime-order changes
 
 LAST_GOOD_COMMIT:
-- `a56133b0d` — accepted Phase 1C selection and listing workflow
+- `120c4baea` — accepted Phase 1D audit-report skeleton
 
 CURRENT_WORKTREE_STATE:
-- Clean / known changes: parent `main` is at `a56133b0d`; this accepted Phase 1C capsule update is parent-owned
+- Clean / known changes: parent `main` is at `120c4baea` with accepted Phase 1 documentation and this capsule update parent-owned
 - Branch: local `main`
-- Dedicated worker worktrees: accepted Phase 1A at commit `48aece83e`, Phase 1B at `27386981d`, and Phase 1C at `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase1c` commit `fc1761348`; no Phase 1D worktree yet
+- Dedicated worker worktrees: accepted Phase 1A at `48aece83e`, Phase 1B at `27386981d`, Phase 1C at `fc1761348`, and Phase 1D at `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase1d` commit `5d04a0ee3`; no Phase 2A worktree yet
 
 RELEVANT_DOCS_THIS_SLICE:
 - `AGENTS.md`
 - `docs/src/docs/codebase/style-guide/style-guide.bd`
 - `docs/src/docs/codebase/style-guide/testing.bd`
 - `docs/src/docs/codebase/style-guide/validation.bd`
-- `docs/compiler-design-overview.md`
-- `docs/build-system-design.md`
-- `docs/src/docs/codebase/language/overview.bd` and the canonical language leaves it selects when language semantics or diagnostics are touched
-- `docs/language-overview.md` for concepts not yet migrated to canonical language leaves
-- `docs/src/docs/codebase/memory-management/overview.bd` and selected memory leaves when access, aliasing, borrow validation, moves, drops, GC, or reactivity lifetime behaviour is touched
 - `docs/src/docs/progress/#page.bst`
 - `docs/roadmap/roadmap.md`
-- historical `docs/roadmap/plans/final-tir-completion-plan.md` from `691f3338d^`; the completed plan was removed at `691f3338d`
-- `docs/roadmap/plans/compiler-diagnostics-improvement-plan.md`
 
 RELEVANT_CODE:
-- `tests/cases/manifest.toml`: canonical integration case order and current free-form tags
-- `src/compiler_tests/integration_test_runner/manifest.rs`: manifest parsing; currently validates tags but does not retain them
-- `src/compiler_tests/integration_test_runner/types.rs`: runner options and expectation/result contracts
-- `src/compiler_tests/integration_test_runner/fixture.rs`: canonical fixture loading and implicit expectation fallback
-- `src/compiler_tests/integration_test_runner/expectations.rs`: `expect.toml` schema and parsing
-- `src/compiler_tests/integration_test_runner/assertions.rs`: success, failure, artifact, golden, Wasm, and Node-rendered-output validation
-- `src/compiler_tests/integration_test_runner/runner.rs`: execution filtering, ordering, reporting, and failure triage
-- `src/compiler_tests/integration_test_runner/tests/`: focused harness self-tests by manifest, fixture, expectation, assertion and execution owner
-- `src/projects/cli.rs::parse_tests_command`: currently supports only `--backend`
-- `tests/fixtures/stubs/expect.toml`: implicit success fallback slated for deletion
+- `src/compiler_tests/integration_test_runner/types.rs`: `SuccessExpectation` and `ParsedBackendExpectation` need one typed success-intent field
+- `src/compiler_tests/integration_test_runner/expectations.rs`: parse and validate the narrow `success_contract` spelling by expectation mode
+- `src/compiler_tests/integration_test_runner/fixture.rs`: replace implicit backend-baseline completeness with explicit authored intent/assertions
+- `src/compiler_tests/integration_test_runner/reporting.rs`: reflect explicit compile-only status without broadening later assertion-strength policy
+- `src/compiler_tests/integration_test_runner/tests/expectations.rs` and `tests/fixture.rs`: focused schema/completeness owners
+- `tests/fixtures/stubs/expect.toml`: inspect only in 2A; fallback removal belongs to 2B
 - `justfile::validate`: final code-bearing gate
-- `src/compiler_frontend/analysis/borrow_checker/tests/`: hidden borrow facts plus source-shaped semantic duplicates
-- `src/compiler_frontend/ast/**/tests/`: parser/type/semantic units requiring ownership audit
-- `src/compiler_frontend/hir/tests/`: HIR relationship and malformed-HIR owners
-- `src/backends/js/tests/`: lowering-text contracts requiring runtime-owner audit
-- `src/build_system/tests/` and `src/projects/check/tests/`: build/check policy owners
-- `src/compiler_frontend/ast/templates/tir/tests/`: accepted post-TIR hidden-invariant inventory; later suite-wide ownership review belongs to this plan and must not reopen final TIR architecture
 
 ACCEPTANCE_CRITERIA:
-- `bean tests --audit` is a distinct options-based runner mode and rejects case/tag/contract/backend/list combinations
-- audit loads and validates the full canonical suite, does not call case execution and does not mutate fixtures
-- reporting owns a serializable initial inventory with case/backend metadata, counts, hard-policy violations and advisory missing-classification findings
-- the report is written to `target/test-reports/integration_suite_inventory.json` using existing `serde_json`
-- focused audit/reporting and external CLI tests cover dispatch, incompatibility and stable JSON shape
+- one narrow typed success intent represents `success_contract = "compile_only"`
+- unknown values and any use on failure backends are rejected with clear fixture context
+- compile-only cannot coexist with golden, artifact, rendered-output or absence assertions
+- an assertion-free success backend is accepted only with explicit compile-only intent; the implicit backend baseline no longer satisfies fixture completeness
+- focused expectation/fixture/reporting tests, formatting, diff checks and `just validate` pass
 - focused harness tests, formatting, diff checks and `just validate` pass
 
 DECISIONS_ALREADY_MADE:
@@ -181,8 +166,8 @@ BLOCKERS / RISKS:
 - the design documents describe accepted end state while the progress matrix describes current support
 
 VALIDATION_STATE:
-- last recorded command: `just validate`, run for accepted Phase 1C in the dedicated worker worktree
-- result: passed with cross-target Clippy, 3,451 Rust unit tests, 1,784 integration executions, docs checking, and 28 benchmark sanity cases
+- last recorded command: `just validate`, run for accepted Phase 1D in the dedicated worker worktree
+- result: passed with cross-target Clippy, 3,457 Rust unit tests, 1,784 integration executions, docs checking, and 28 benchmark sanity cases
 - known unrelated failures: none recorded
 - Phase 0A `cargo run --quiet -- build docs --release`: passed, 72 files built and no generated diff produced; direct `bean` invocation was unavailable in `PATH`
 - Phase 0B/0C `cargo run --quiet -- build docs --release`: passed, 72 files built and no generated diff produced
@@ -194,6 +179,12 @@ VALIDATION_STATE:
 - Phase 1C `cargo test --quiet cli -- --format terse`: passed, 57 tests
 - Phase 1C real `--list`, exact-case/backend and tag/backend commands: passed
 - Phase 1C `cargo fmt` and `git diff --check`: passed
+- Phase 1D `cargo test --quiet integration_test_runner -- --format terse`: passed, 64 tests
+- Phase 1D `cargo test --quiet cli -- --format terse`: passed, 60 tests
+- Phase 1D real `bean tests --audit`: passed, 1,651 cases and 1,784 backend executions inventoried with no hard-policy violations and 3,302 missing-classification advisories
+- Phase 1D `cargo fmt` and `git diff --check`: passed
+- Phase 1 documentation `cargo run --quiet -- build docs --release`: passed, 72 files built
+- Phase 1 documentation checkpoint `just validate`: passed with cross-target Clippy, 3,457 Rust tests, 1,784 integration executions, docs checking and 28 benchmark sanity cases
 
 DOCS_IMPACT:
 - progress matrix needed: review after every phase that adds, removes, or materially strengthens current coverage; update only when the coverage statement changes
@@ -201,7 +192,7 @@ DOCS_IMPACT:
 - authorized docs updates: this plan explicitly authorizes the documentation changes listed in each phase; do not broaden language or architecture docs without a discovered contradiction or an intentional accepted behaviour change
 
 NEXT_ACTION:
-- commit this Phase 1C plan checkpoint, create a dedicated Phase 1D worker worktree and launch the bounded Codex CLI implementation slice
+- complete the Phase 1 docs/checkpoint commit, create a dedicated Phase 2A worker worktree and launch the bounded Codex CLI implementation slice
 
 ---
 
@@ -1085,33 +1076,39 @@ commands passed, followed by `just validate` with 3,451 Rust tests and 1,784 int
 
 ### 1D — Add the audit-report skeleton
 
-- [ ] Add `bean tests --audit`.
-- [ ] Make audit load and validate the entire suite without compiling cases.
-- [ ] Reject combining `--audit` with filters.
-- [ ] Write the initial machine-readable inventory report.
-- [ ] Include hard schema violations and advisory missing-classification findings.
-- [ ] Keep audit report construction in reporting/test infrastructure, not compiler semantics.
-- [ ] Reuse existing `serde_json`.
-- [ ] Do not add a new crate unless the current dependencies cannot express the report.
+- [x] Add `bean tests --audit`.
+- [x] Make audit load and validate the entire suite without compiling cases.
+- [x] Reject combining `--audit` with filters.
+- [x] Write the initial machine-readable inventory report.
+- [x] Include hard schema violations and advisory missing-classification findings.
+- [x] Keep audit report construction in reporting/test infrastructure, not compiler semantics.
+- [x] Reuse existing `serde_json`.
+- [x] Do not add a new crate unless the current dependencies cannot express the report.
+
+Accepted at `120c4baea`: audit branches after one complete suite load and before selection/execution,
+writes the versioned reporting-owned inventory, and records 1,651 cases plus 1,784 backend blocks.
+The current manifest has no hard-policy violations and intentionally reports 1,651 missing-contract
+plus 1,651 missing-role advisories for later classification. Focused tests and `just validate`
+passed with 3,457 Rust tests and unchanged integration outcomes.
 
 ## Phase 1 audit
 
-- [ ] Tags reach the runner and report.
-- [ ] Case IDs are first-class.
-- [ ] No code reconstructs metadata from display text.
-- [ ] One manifest parser remains.
-- [ ] Filtered execution preserves canonical order.
-- [ ] Backend expansion remains one expectation matrix per input.
-- [ ] Audit does not compile or mutate fixtures.
-- [ ] Existing unclassified cases continue to run, but duplicate classified primary contracts fail.
+- [x] Tags reach the runner and report.
+- [x] Case IDs are first-class.
+- [x] No code reconstructs metadata from display text.
+- [x] One manifest parser remains.
+- [x] Filtered execution preserves canonical order.
+- [x] Backend expansion remains one expectation matrix per input.
+- [x] Audit does not compile or mutate fixtures.
+- [x] Existing unclassified cases continue to run, but duplicate classified primary contracts fail.
 
 ## Style-guide review
 
-- [ ] New option state uses named structs/enums rather than boolean-heavy APIs.
-- [ ] CLI parsing remains explicit and readable.
-- [ ] Test modules have clear owners.
-- [ ] No broad utility module was created.
-- [ ] New files have concise WHAT/WHY documentation.
+- [x] New option state uses named structs/enums rather than boolean-heavy APIs.
+- [x] CLI parsing remains explicit and readable.
+- [x] Test modules have clear owners.
+- [x] No broad utility module was created.
+- [x] New files have concise WHAT/WHY documentation.
 
 ## Validation
 
@@ -1136,19 +1133,19 @@ just validate
 
 ## Documentation impact
 
-- [ ] Update `testing.bd` with manifest metadata, roles, contracts, filters, list, and audit.
-- [ ] Update `CONTRIBUTING.md` with focused test commands.
-- [ ] Update `index.md` if the harness test module path moves.
-- [ ] Review the progress matrix; no change is expected unless its coverage workflow text is materially affected.
+- [x] Update `testing.bd` with manifest metadata, roles, contracts, filters, list, and audit.
+- [x] Update `CONTRIBUTING.md` with focused test commands.
+- [x] Update `index.md` if the harness test module path moves. No edit was required because it already names the runner directory.
+- [x] Review the progress matrix; no change is expected unless its coverage workflow text is materially affected.
 
 ## Phase 1 acceptance
 
-- [ ] Case/tag/contract/backend filtering works.
-- [ ] Listing and audit are deterministic.
-- [ ] Tags are no longer discarded.
-- [ ] Existing fixture outcomes are unchanged.
-- [ ] Full validation passes.
-- [ ] Capsule points to Phase 2A.
+- [x] Case/tag/contract/backend filtering works.
+- [x] Listing and audit are deterministic.
+- [x] Tags are no longer discarded.
+- [x] Existing fixture outcomes are unchanged.
+- [x] Full validation passes.
+- [x] Capsule points to Phase 2A.
 
 ---
 

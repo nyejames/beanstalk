@@ -78,6 +78,26 @@ Run the integration suite during iteration with:
 cargo run --quiet -- tests
 ```
 
+Use retained manifest metadata to narrow local runs without changing fixtures:
+
+```sh
+cargo run --quiet -- tests --case arithmetic_operator_precedence --backend html
+cargo run --quiet -- tests --tag borrows --tag diagnostics --backend html
+cargo run --quiet -- tests --contract language.maps.get_alias_exclusivity
+cargo run --quiet -- tests --list --tag borrows
+```
+
+`--case` and `--contract` match exactly. Repeated `--tag` values use logical AND, and all filters
+compose in canonical manifest order. To validate and inventory the entire suite without compiling
+cases, run:
+
+```sh
+cargo run --quiet -- tests --audit
+```
+
+Audit cannot be combined with filters or `--list`; it writes
+`target/test-reports/integration_suite_inventory.json`.
+
 ## Validation
 
 The executable validation policy is summarized in [validation.bd](docs/src/docs/codebase/style-guide/validation.bd).
@@ -97,6 +117,10 @@ Run `cargo fmt` when Rust files changed.
 
 - `cargo run build docs --release` - required final gate for a strictly documentation-only change
 - `cargo run --quiet -- tests` - fast integration-suite iteration
+- `cargo run --quiet -- tests --case <id> [--backend <id>]` - exact focused integration run
+- `cargo run --quiet -- tests --tag <tag> [--tag <tag>]` - logical-AND tag selection
+- `cargo run --quiet -- tests --list [filters]` - list selected suite metadata without compiling
+- `cargo run --quiet -- tests --audit` - validate and write the complete suite inventory
 - `just validate` - required final gate for code-bearing changes
 - `just bench-check` - non-recording performance sanity check
 - `just bench` - intentional benchmark-history recording

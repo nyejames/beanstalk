@@ -153,8 +153,55 @@ Canonical fixture shape:
             └── html_wasm/
 ]
 
-- `manifest.toml` may order or tag cases during fixture migrations.
+- `manifest.toml` is the authoritative case order. Every case declares a unique canonical `id`,
+  unique fixture `path` and at least one non-empty tag.
+- `contract` and `role` are optional while classification is being backfilled. Supported roles are
+  `primary`, `boundary`, `backend`, `adversarial` and `smoke`.
+- A `primary` case requires a contract, and one contract may have at most one primary case.
+- Case IDs, tags, contracts and roles are retained as typed runner metadata. Do not reconstruct
+  them from display text or fixture paths.
 - One case folder owns all inputs and expectations for that scenario.
+
+Manifest entry shape:
+
+[codeblock, $code("text"):
+    [[case]]
+    id = "hashmap_get_alias_blocks_set"
+    path = "hashmap_get_alias_blocks_set"
+    tags = ["integration", "maps", "borrows"]
+    contract = "language.maps.get_alias_exclusivity"
+    role = "primary"
+]
+
+### Focused integration selection and inventory
+
+Use the canonical case ID and retained metadata for local iteration:
+
+[codeblock, $code("text"):
+    cargo run --quiet -- tests --case arithmetic_operator_precedence --backend html
+    cargo run --quiet -- tests --tag borrows --tag diagnostics --backend html
+    cargo run --quiet -- tests --contract language.maps.get_alias_exclusivity
+    cargo run --quiet -- tests --list --tag borrows
+]
+
+- `--case` and `--contract` are exact matches.
+- Repeatable `--tag` filters compose as logical AND.
+- Case, tag, contract and backend filters compose and preserve manifest/backend order.
+- `--list` accepts selection filters and reports canonical ID, selected backend blocks, tags,
+  contract and role without compiling cases.
+- Duplicate singleton options, duplicate tag values, missing values, unknown flags and positional
+  arguments are errors.
+
+Use the audit mode to validate and inventory the complete canonical suite without compiling cases:
+
+[codeblock, $code("text"):
+    cargo run --quiet -- tests --audit
+]
+
+Audit cannot be combined with filters or `--list`. It writes the reporting-owned JSON inventory to
+`target/test-reports/integration_suite_inventory.json`, including canonical metadata, backend
+expectation facts, hard-policy violations and advisory missing-classification findings. The report
+is review input only; it never deletes, merges or rewrites fixtures.
 
 ### Diagnostics assertions
 

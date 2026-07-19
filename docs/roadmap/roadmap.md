@@ -44,6 +44,26 @@ The final TIR completion plan remains the historical architecture source. Broad 
 work remains in the
 [frontend optimisation plan](docs/roadmap/plans/frontend-arena-semantic-invariant-optimization-plan.md).
 
+## Code-block highlighting follow-ups
+
+The built-in `$code` formatter already supports generic and plain-text blocks plus Beanstalk,
+JavaScript, TypeScript, Python, Rust and shell profiles. Future formats should extend the single
+`CodeLanguage` owner in `src/projects/html_project/styles/code.rs`, including its aliases,
+comment syntax, keyword/type rules, supported-values diagnostic and focused formatter tests.
+
+Suggested extension order:
+
+1. TOML and JSON, because they are common in project configuration, manifests and generated-data
+   examples throughout the codebase.
+2. YAML, HTML, CSS and Markdown for common configuration, web and documentation examples.
+3. SQL, C, C++, Go and Java when real documentation needs justify maintaining their highlighting
+   profiles.
+
+Prefer the conventional short and long aliases where both are widely used, such as `yaml`/`yml`,
+`markdown`/`md` and `cpp`/`c++`. Only add a profile when its language-specific rules improve on the
+generic formatter; preserve HTML escaping and add tests for aliases, comments, keywords and the
+rendered span classes.
+
 ## Genuinely deferred items
 
 - final builder selection syntax and a possible Beanstalk-native build script system
