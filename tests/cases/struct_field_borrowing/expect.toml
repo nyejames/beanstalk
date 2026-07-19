@@ -1,4 +1,4 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
-rendered_output_contains = ["Alice 30", "31"]
+rendered_output_contains = ["borrowed-person=Alice age=30", "mutated-age=31"]

@@ -4,4 +4,4 @@ Point = |
 |
 
 p = Point(x = 10, y = 20)
-io.line([: ([p.x], [p.y])])
+io.line([: all-named-point=([p.x], [p.y])])

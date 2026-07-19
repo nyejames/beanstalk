@@ -30,17 +30,17 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 2R5c4 — strengthen weak receiver, constructor, field, and multi-file observations
-LAST_ACCEPTED_COMMIT: pending Phase 2R5c3 acceptance commit (previous plan commit `f1ea28e3f`)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 2R5c3 changes ready to commit
+CURRENT_SLICE: Phase 2R5c5 — close the migrated-marker and role audit
+LAST_ACCEPTED_COMMIT: pending Phase 2R5c4 acceptance commit (previous plan commit `58ce37ee2`)
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 2R5c4 changes ready to commit
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: `testing.bd`, `validation.bd`, compiler/build-system overviews, and progress matrix govern runner contracts and gates
-- code: Phase 2-migrated receiver, struct-constructor, struct-field, and multi-file fixtures with numeric or repeated generic output
+- code: `choice_payload_match_rename_guard_success` and the manifest roles for `html_wasm_bool_conditional` and `html_wasm_multi_fragment_string`
 ACCEPTANCE_CRITERIA:
-- receiver, constructor, field-borrow, and multi-file values are context-labeled
-- the default-skipping constructor observes both the omitted `height = 100` default and supplied `width = 80`
-- current backend outcomes and distinct fixture ownership remain unchanged
+- the remaining short payload-guard marker names its guarded renamed capture contract
+- every whole-case acceptance-only fixture remains `smoke`; the two reviewed HTML-Wasm parity cases are classified `backend`
+- no primary contract is invented and backend outcomes remain unchanged
 - exact case runs, canonical audit, and `just validate` pass
 VALIDATION_STATE:
 - `cargo test --quiet integration_test_runner -- --format terse`: passed; 100 tests
@@ -51,7 +51,7 @@ BLOCKERS_OR_OPEN_DECISIONS: none; compiler diagnostics Phase 4.1c remains serial
 DELEGATION_DECISION: codex-cli — explicit user-selected provider for implementation workers
 NEXT_WORKER_ORDER: codex-cli only for this run-local override
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit accepted Phase 2R5c3, refresh its hash, then launch bounded Phase 2R5c4 through `codex-cli-beanstalk`
+NEXT_RESUME_ACTION: commit accepted Phase 2R5c4, refresh its hash, then launch bounded Phase 2R5c5 through `codex-cli-beanstalk`
 
 ---
 
@@ -133,7 +133,8 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 2R5b named fixture contracts | `dee1a6176` | Accepted | 17 acceptance-only; 528 rendered-output blocks; struct default, Bool branch, and current-config wording now observed; zero hard findings |
 | Phase 2R5c1 named weak runtime markers | `d036eef0d` | Accepted | 528 rendered-output blocks; ten named fixtures now use context-rich markers; zero hard findings |
 | Phase 2R5c2 borrow/adversarial markers | `f1ea28e3f` | Accepted | 528 rendered-output blocks; ten borrow/adversarial fixtures now use context-rich markers; zero hard findings |
-| Phase 2R5c3 call/result/option markers | pending acceptance commit | Accepted | 528 rendered-output blocks; ten call/result/option fixtures now observe context-labeled behavior; zero hard findings |
+| Phase 2R5c3 call/result/option markers | `58ce37ee2` | Accepted | 528 rendered-output blocks; ten call/result/option fixtures now observe context-labeled behavior; zero hard findings |
+| Phase 2R5c4 receiver/struct markers | pending acceptance commit | Accepted | 528 rendered-output blocks; six receiver/struct/multi-file fixtures now observe context-labeled values; zero hard findings |
 
 ---
 

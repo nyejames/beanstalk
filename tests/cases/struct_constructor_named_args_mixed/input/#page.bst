@@ -4,4 +4,4 @@ Point = |
 |
 
 p = Point(10, y = 20)
-io.line([: ([p.x], [p.y])])
+io.line([: mixed-point=([p.x], [p.y])])

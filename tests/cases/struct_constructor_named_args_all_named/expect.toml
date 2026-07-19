@@ -1,4 +1,4 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
-rendered_output_contains = ["(10, 20)"]
+rendered_output_contains = ["all-named-point=(10, 20)"]

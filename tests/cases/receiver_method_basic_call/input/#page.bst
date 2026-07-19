@@ -4,7 +4,7 @@ Point = |
 |
 
 describe |this Point| -> String:
-    return [: ([this.x], [this.y])]
+    return [: receiver-point=([this.x], [this.y])]
 ;
 
 p = Point(3, 4)

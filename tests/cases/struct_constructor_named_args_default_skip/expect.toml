@@ -1,4 +1,4 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
-rendered_output_contains = ["80"]
+rendered_output_contains = ["default-skip-height=100", "default-skip-width=80"]

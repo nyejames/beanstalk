@@ -5,4 +5,5 @@ Config = |
 
 -- Skip 'height' (uses default 100), provide only 'width' by name
 c = Config(width = 80)
-io.line([: [c.width]])
+io.line([: default-skip-height=[c.height]])
+io.line([: default-skip-width=[c.width]])

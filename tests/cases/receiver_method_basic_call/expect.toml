@@ -3,4 +3,4 @@ entry = "."
 [backends.html]
 mode = "success"
 warnings = "forbid"
-rendered_output_contains = ["3, 4"]
+rendered_output_contains = ["receiver-point=(3, 4)"]

@@ -1,4 +1,4 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
-rendered_output_contains = ["Hello, World"]
+rendered_output_contains = ["multi-file-greeting=Hello, World"]

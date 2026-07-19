@@ -1,3 +1,3 @@
 greet |name String|:
-    io.line([:Hello, [name]])
+    io.line([:multi-file-greeting=Hello, [name]])
 ;
