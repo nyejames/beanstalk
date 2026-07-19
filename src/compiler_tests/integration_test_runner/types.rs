@@ -86,7 +86,7 @@ pub(crate) struct SuccessExpectation {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum SuccessContract {
-    CompileOnly,
+    AcceptanceOnly,
 }
 
 #[derive(Clone)]
@@ -166,6 +166,10 @@ impl BackendId {
             Self::Html => "html",
             Self::HtmlWasm => "html_wasm",
         }
+    }
+
+    pub(crate) fn has_universal_baseline(self) -> bool {
+        matches!(self, Self::Html | Self::HtmlWasm)
     }
 
     pub(crate) fn default_flags(self) -> Vec<Flag> {

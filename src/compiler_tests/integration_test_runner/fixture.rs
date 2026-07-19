@@ -259,8 +259,7 @@ fn validate_fixture_contract(
         let golden_dir = golden_dir_for_backend(fixture_root, backend_expectation.backend_id);
         let has_golden_dir = golden_dir_has_files(&golden_dir);
         let has_artifact_assertions = !backend_expectation.artifact_assertions.is_empty();
-        let has_backend_baseline_contract =
-            backend_has_builtin_success_contract(backend_expectation.backend_id);
+        let has_backend_baseline = backend_expectation.backend_id.has_universal_baseline();
 
         match backend_expectation.mode {
             ExpectationMode::Failure => {
@@ -280,11 +279,11 @@ fn validate_fixture_contract(
                 }
             }
             ExpectationMode::Success => {
-                if backend_expectation.success_contract == Some(SuccessContract::CompileOnly)
+                if backend_expectation.success_contract == Some(SuccessContract::AcceptanceOnly)
                     && has_golden_dir
                 {
                     return Err(format!(
-                        "Fixture '{}' backend '{}' declares success_contract = \"compile_only\" but has golden artifacts in '{}'.",
+                        "Fixture '{}' backend '{}' declares success_contract = \"acceptance_only\" but has golden artifacts in '{}'.",
                         fixture_root.display(),
                         backend_expectation.backend_id.as_str(),
                         golden_dir.display()
@@ -295,7 +294,7 @@ fn validate_fixture_contract(
                     || !backend_expectation.rendered_output_not_contains.is_empty();
                 if !has_golden_dir
                     && !has_artifact_assertions
-                    && !has_backend_baseline_contract
+                    && !has_backend_baseline
                     && !has_rendered_output
                 {
                     return Err(format!(
@@ -320,14 +319,6 @@ fn validate_fixture_contract(
     }
 
     Ok(())
-}
-
-/// Declares whether a backend always has an implicit success contract.
-///
-/// WHAT: marks backends that always enforce baseline artifact checks.
-/// WHY: keeps fixture validation permissive while still guaranteeing minimum output checks.
-fn backend_has_builtin_success_contract(backend_id: BackendId) -> bool {
-    matches!(backend_id, BackendId::Html | BackendId::HtmlWasm)
 }
 
 fn resolve_case_entry_path(

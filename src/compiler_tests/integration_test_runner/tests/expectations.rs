@@ -23,20 +23,20 @@ fn write_fixture(name: &str, expectation_source: &str) -> (PathBuf, PathBuf) {
 }
 
 #[test]
-fn accepts_explicit_compile_only_and_retains_typed_intent() {
+fn accepts_explicit_acceptance_only_and_retains_typed_intent() {
     let (root, case_root) = write_fixture(
-        "explicit_compile_only",
-        "[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\nsuccess_contract = \"compile_only\"\n",
+        "explicit_acceptance_only",
+        "[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\nsuccess_contract = \"acceptance_only\"\n",
     );
 
     let cases = load_canonical_case_specs(&case_root, None)
-        .expect("explicit compile-only fixture should be accepted");
+        .expect("explicit acceptance-only fixture should be accepted");
     let ExpectedOutcome::Success(expectation) = &cases[0].expected else {
         panic!("case should have a success expectation");
     };
     assert_eq!(
         expectation.success_contract,
-        Some(SuccessContract::CompileOnly)
+        Some(SuccessContract::AcceptanceOnly)
     );
 
     fs::remove_dir_all(&root).expect("should clean up");
@@ -63,14 +63,14 @@ fn rejects_unknown_success_contract_value_with_backend_context() {
 }
 
 #[test]
-fn rejects_compile_only_on_failure_backend() {
+fn rejects_acceptance_only_on_failure_backend() {
     let (root, case_root) = write_fixture(
-        "compile_only_failure_mode",
-        "[backends.html]\nmode = \"failure\"\nwarnings = \"forbid\"\nsuccess_contract = \"compile_only\"\ndiagnostic_codes = [\"BST-RULE-0001\"]\n",
+        "acceptance_only_failure_mode",
+        "[backends.html]\nmode = \"failure\"\nwarnings = \"forbid\"\nsuccess_contract = \"acceptance_only\"\ndiagnostic_codes = [\"BST-RULE-0001\"]\n",
     );
 
     let Err(error) = load_canonical_case_specs(&case_root, None) else {
-        panic!("compile_only on a failure backend should be rejected");
+        panic!("acceptance_only on a failure backend should be rejected");
     };
     assert!(
         error.contains("mode = \"failure\"") && error.contains("success_contract"),
@@ -81,7 +81,7 @@ fn rejects_compile_only_on_failure_backend() {
 }
 
 #[test]
-fn rejects_compile_only_mixed_with_success_assertions() {
+fn rejects_acceptance_only_mixed_with_success_assertions() {
     let mixed_contracts = [
         (
             "artifact",
@@ -97,22 +97,61 @@ fn rejects_compile_only_mixed_with_success_assertions() {
 
     for (name, extra_contract) in mixed_contracts {
         let (root, case_root) = write_fixture(
-            &format!("compile_only_mixed_{name}"),
+            &format!("acceptance_only_mixed_{name}"),
             &format!(
-                "[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\nsuccess_contract = \"compile_only\"\n{extra_contract}"
+                "[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\nsuccess_contract = \"acceptance_only\"\n{extra_contract}"
             ),
         );
 
         let Err(error) = load_canonical_case_specs(&case_root, None) else {
-            panic!("compile-only mixed with {name} should be rejected");
+            panic!("acceptance-only mixed with {name} should be rejected");
         };
         assert!(
-            error.contains("compile_only") && error.contains("must not combine"),
+            error.contains("acceptance_only") && error.contains("must not combine"),
             "unexpected error for {name}: {error}"
         );
 
         fs::remove_dir_all(&root).expect("should clean up");
     }
+}
+
+#[test]
+fn rejects_removed_success_contract_spelling() {
+    let removed_contract = ["compile", "_only"].concat();
+    let (root, case_root) = write_fixture(
+        "removed_success_contract_spelling",
+        &format!(
+            "[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\nsuccess_contract = \"{removed_contract}\"\n"
+        ),
+    );
+
+    let Err(error) = load_canonical_case_specs(&case_root, None) else {
+        panic!("the removed success contract spelling should be rejected");
+    };
+    assert!(
+        error.contains(&removed_contract) && error.contains("acceptance_only"),
+        "unexpected error: {error}"
+    );
+
+    fs::remove_dir_all(&root).expect("should clean up");
+}
+
+#[test]
+fn rejects_acceptance_only_with_authored_expected_warning() {
+    let (root, case_root) = write_fixture(
+        "acceptance_only_expected_warning",
+        "[backends.html]\nmode = \"success\"\nwarnings = \"exact\"\nwarning_count = 1\nsuccess_contract = \"acceptance_only\"\n",
+    );
+
+    let Err(error) = load_canonical_case_specs(&case_root, None) else {
+        panic!("acceptance-only with an authored expected warning should be rejected");
+    };
+    assert!(
+        error.contains("acceptance_only") && error.contains("expected-warning"),
+        "unexpected error: {error}"
+    );
+
+    fs::remove_dir_all(&root).expect("should clean up");
 }
 
 #[test]

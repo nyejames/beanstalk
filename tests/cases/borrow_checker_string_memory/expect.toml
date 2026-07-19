@@ -1,4 +1,4 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
-success_contract = "compile_only"
+success_contract = "acceptance_only"

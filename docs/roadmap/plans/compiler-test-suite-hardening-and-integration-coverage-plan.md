@@ -26,24 +26,32 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ---
 
-## Active checkpoint
+## Current state
 
-- **Status:** active
-- **Repository:** `nyejames/beanstalk`
-- **Branch:** `main`
-- **Plan path:** `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
-- **Repository head:** `97d3174fd` — durable plan checkpoint
-- **Last code checkpoint:** `ba3366218` — strengthened config, static-output, and runtime contracts
-- **Worktrees:** parent and reusable worker were reported clean at handoff
-- **Current phase:** Phase 2R — review corrections
-- **Next slice:** 2R1 — success-contract semantics and inventory fidelity
-- **Current suite:** 1,651 canonical cases; 1,784 backend executions
-- **Current success audit:** 23 `compile_only`, 35 backend-baseline-only, zero fallback-backed, zero hard findings
-- **Latest recorded full gate:** 3,466 Rust tests, 1,784 integration executions, documentation checks, and 28 benchmark checks passed
-- **Serialized work:** compiler diagnostics Phase 4.1c remains parked at `d7fb3654f`; do not run a concurrent diagnostics-schema worker
-- **Roadmap dependency:** canonical module compilation remains blocked until this plan closes
-
-The current counts are review anchors, not permanent targets. Phase 2R intentionally changes the success-contract vocabulary and may reclassify several fixtures.
+ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
+STATUS: active
+CURRENT_SLICE: Phase 2R2 — close golden-contract loopholes
+LAST_ACCEPTED_COMMIT: pending Phase 2R1 acceptance commit (previous `9ceb93a4a`)
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 2R1 changes ready to commit
+REQUIRED_RELOADS: startup files, this plan, and current source/diff
+RELEVANT_CONTEXT_NOW:
+- docs: `testing.bd`, `validation.bd`, compiler/build-system overviews, and progress matrix govern runner contracts and gates
+- code: golden discovery and comparison in `fixture.rs` and `assertions.rs`, reporting inventory fields, and their focused self-tests
+ACCEPTANCE_CRITERIA:
+- one recursive golden-file discovery owner supplies fixture validation and comparison
+- empty golden directories never count as contracts; nested files do
+- explicit golden mode without files is rejected and absent goldens report no mode
+- focused harness tests, canonical audit, and `just validate` pass
+VALIDATION_STATE:
+- `cargo test --quiet integration_test_runner -- --format terse`: passed; 79 tests
+- `cargo run --quiet -- tests --audit`: passed; 1,651 cases, 1,784 backend executions, 23 acceptance-only, 33 baseline-only, zero hard findings
+- `just validate`: passed; cross-target Clippy, 3,475 Rust tests, 1,784 integration executions, docs check, and 28 benchmark cases
+DOCS_IMPACT: progress matrix unchanged; workflow prose remains scheduled for Phase 2R8
+BLOCKERS_OR_OPEN_DECISIONS: none; compiler diagnostics Phase 4.1c remains serialized and untouched
+DELEGATION_DECISION: codex-cli — explicit user-selected provider for implementation workers
+NEXT_WORKER_ORDER: codex-cli only for this run-local override
+STOP_REASON: none
+NEXT_RESUME_ACTION: commit accepted Phase 2R1, refresh its hash, then launch bounded Phase 2R2 through `codex-cli-beanstalk`
 
 ---
 
@@ -117,6 +125,7 @@ This file is a reloadable execution plan, not a command transcript.
 |---|---:|---|---|
 | Foundation through Phase 2B11c | `ba3366218` | Accepted | 3,466 Rust tests; 1,784 integration executions; 23 current `compile_only`; 35 baseline-only; zero fallback |
 | Plan pause | `97d3174fd` | Accepted | No code change |
+| Phase 2R1 success intent and inventory | pending acceptance commit | Accepted | 3,475 Rust tests; 1,784 integration executions; 23 acceptance-only; 33 baseline-only; zero hard findings |
 
 ---
 
@@ -217,40 +226,40 @@ The current `compile_only` name and audit output imply that only compilation is 
 
 ### Required implementation
 
-- [ ] Rename `SuccessContract::CompileOnly` to `SuccessContract::AcceptanceOnly`.
-- [ ] Change the schema spelling from `success_contract = "compile_only"` to `success_contract = "acceptance_only"`.
-- [ ] Migrate every current canonical occurrence atomically.
-- [ ] Delete the old spelling with no compatibility alias or fallback.
-- [ ] Define acceptance-only as: **no case-specific semantic, artifact, golden, absence, or expected-warning assertion beyond the always-on backend baseline**.
-- [ ] Continue applying the HTML and HTML-Wasm baselines to acceptance-only cases.
-- [ ] Keep acceptance-only mutually exclusive with case-specific assertions.
-- [ ] Treat a non-default expected-warning contract as authored behaviour rather than acceptance-only.
-- [ ] Do not require `role = "smoke"` for a mixed-backend case whose other backend owns a stronger boundary/backend contract.
-- [ ] Require `role = "smoke"` when the whole canonical case is acceptance-only or orchestration-only.
+- [x] Rename `SuccessContract::CompileOnly` to `SuccessContract::AcceptanceOnly`.
+- [x] Change the schema spelling from `success_contract = "compile_only"` to `success_contract = "acceptance_only"`.
+- [x] Migrate every current canonical occurrence atomically.
+- [x] Delete the old spelling with no compatibility alias or fallback.
+- [x] Define acceptance-only as: **no case-specific semantic, artifact, golden, absence, or expected-warning assertion beyond the always-on backend baseline**.
+- [x] Continue applying the HTML and HTML-Wasm baselines to acceptance-only cases.
+- [x] Keep acceptance-only mutually exclusive with case-specific assertions.
+- [x] Treat a non-default expected-warning contract as authored behaviour rather than acceptance-only.
+- [x] Do not require `role = "smoke"` for a mixed-backend case whose other backend owns a stronger boundary/backend contract.
+- [x] Require `role = "smoke"` when the whole canonical case is acceptance-only or orchestration-only.
 
 ### Inventory fidelity
 
-- [ ] Report the universal backend baseline independently from acceptance-only intent.
-- [ ] An acceptance-only backend must report both `backend_baseline` and `acceptance_only` assertion kinds.
-- [ ] Add explicit `baseline_applied` or an equivalent unambiguous field.
-- [ ] Rename report fields and finding codes that still say implicit/compile-only where the meaning changed.
-- [ ] Add summary counts for acceptance-only, baseline-only, rendered output, artifacts, goldens, absence, and expected-warning contracts.
-- [ ] Bump the audit schema version.
+- [x] Report the universal backend baseline independently from acceptance-only intent.
+- [x] An acceptance-only backend must report both `backend_baseline` and `acceptance_only` assertion kinds.
+- [x] Add explicit `baseline_applied` or an equivalent unambiguous field.
+- [x] Rename report fields and finding codes that still say implicit/compile-only where the meaning changed.
+- [x] Add summary counts for acceptance-only, baseline-only, rendered output, artifacts, goldens, absence, and expected-warning contracts.
+- [x] Bump the audit schema version.
 
 ### Self-tests
 
-- [ ] Acceptance-only HTML still fails a broken HTML baseline.
-- [ ] Acceptance-only HTML-Wasm still fails invalid Wasm or missing required baseline exports.
-- [ ] Acceptance-only does not require a fixture-specific source marker.
-- [ ] Inventory records both baseline and acceptance intent.
-- [ ] The removed `compile_only` spelling is rejected.
-- [ ] Mixed-backend acceptance-only parity remains valid without forcing the whole case to be smoke.
+- [x] Acceptance-only HTML still fails a broken HTML baseline.
+- [x] Acceptance-only HTML-Wasm still fails invalid Wasm or missing required baseline exports.
+- [x] Acceptance-only does not require a fixture-specific source marker.
+- [x] Inventory records both baseline and acceptance intent.
+- [x] The removed `compile_only` spelling is rejected.
+- [x] Mixed-backend acceptance-only parity remains valid without forcing the whole case to be smoke.
 
 ### Acceptance
 
-- [ ] No `compile_only` schema or enum spelling remains.
-- [ ] Audit output describes what actually runs.
-- [ ] Focused harness tests and the full gate pass.
+- [x] No `compile_only` schema or enum spelling remains.
+- [x] Audit output describes what actually runs.
+- [x] Focused harness tests and the full gate pass.
 
 ---
 

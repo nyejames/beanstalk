@@ -22,7 +22,7 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
-const SUITE_INVENTORY_SCHEMA_VERSION: u32 = 1;
+const SUITE_INVENTORY_SCHEMA_VERSION: u32 = 2;
 
 pub(crate) fn format_case_listing(cases: &[TestCaseSpec]) -> String {
     if cases.is_empty() {
@@ -83,9 +83,21 @@ pub(crate) struct SuiteInventoryReport {
     pub repository_commit: Option<String>,
     pub manifest_case_count: usize,
     pub expanded_backend_execution_count: usize,
+    pub summary: InventorySummary,
     pub cases: Vec<InventoryCase>,
     pub hard_policy_violations: Vec<AuditFinding>,
     pub advisory_findings: Vec<AuditFinding>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct InventorySummary {
+    pub acceptance_only_backend_blocks: usize,
+    pub baseline_only_backend_blocks: usize,
+    pub rendered_output_backend_blocks: usize,
+    pub artifact_backend_blocks: usize,
+    pub golden_backend_blocks: usize,
+    pub absence_backend_blocks: usize,
+    pub expected_warning_backend_blocks: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -102,7 +114,8 @@ pub(crate) struct InventoryCase {
 pub(crate) struct InventoryBackend {
     pub backend: String,
     pub mode: &'static str,
-    pub compile_only: bool,
+    pub baseline_applied: bool,
+    pub acceptance_only: bool,
     pub warning_mode: &'static str,
     pub diagnostic_match: Option<&'static str>,
     pub structured_diagnostic_assertions: bool,
@@ -166,6 +179,17 @@ pub(crate) fn build_suite_inventory_report(
             });
         }
 
+        if is_whole_case_acceptance_only(inventory_case)
+            && inventory_case.role != Some(CaseRole::Smoke)
+        {
+            hard_policy_violations.push(AuditFinding {
+                code: "acceptance_only_requires_smoke_role".to_owned(),
+                case_id: Some(inventory_case.canonical_id.clone()),
+                message: "Whole-case acceptance-only cases must declare role = \"smoke\"."
+                    .to_owned(),
+            });
+        }
+
         if inventory_case.role == Some(CaseRole::Primary) {
             if let Some(contract) = inventory_case.contract.as_ref()
                 && let Some(previous_case_id) =
@@ -193,10 +217,70 @@ pub(crate) fn build_suite_inventory_report(
         repository_commit,
         manifest_case_count: inventory_cases.len(),
         expanded_backend_execution_count: cases.len(),
+        summary: build_inventory_summary(&inventory_cases),
         cases: inventory_cases,
         hard_policy_violations,
         advisory_findings,
     }
+}
+
+fn is_whole_case_acceptance_only(inventory_case: &InventoryCase) -> bool {
+    !inventory_case.backends.is_empty()
+        && inventory_case
+            .backends
+            .iter()
+            .all(|backend| backend.mode == "success" && backend.acceptance_only)
+}
+
+fn build_inventory_summary(cases: &[InventoryCase]) -> InventorySummary {
+    let mut summary = InventorySummary {
+        acceptance_only_backend_blocks: 0,
+        baseline_only_backend_blocks: 0,
+        rendered_output_backend_blocks: 0,
+        artifact_backend_blocks: 0,
+        golden_backend_blocks: 0,
+        absence_backend_blocks: 0,
+        expected_warning_backend_blocks: 0,
+    };
+
+    for backend in cases.iter().flat_map(|case| &case.backends) {
+        let has_rendered_output = backend.rendered_output_assertion_count > 0;
+        let has_artifacts = backend.artifact_assertion_count > 0;
+        let has_golden = backend.golden_present;
+        let has_absence = backend.artifact_absence_assertion_count > 0;
+        let has_expected_warning = backend.assertion_kinds.contains(&"expected_warning");
+
+        if backend.acceptance_only {
+            summary.acceptance_only_backend_blocks += 1;
+        }
+        if backend.baseline_applied
+            && !backend.acceptance_only
+            && !has_rendered_output
+            && !has_artifacts
+            && !has_golden
+            && !has_absence
+            && !has_expected_warning
+        {
+            summary.baseline_only_backend_blocks += 1;
+        }
+        if has_rendered_output {
+            summary.rendered_output_backend_blocks += 1;
+        }
+        if has_artifacts {
+            summary.artifact_backend_blocks += 1;
+        }
+        if has_golden {
+            summary.golden_backend_blocks += 1;
+        }
+        if has_absence {
+            summary.absence_backend_blocks += 1;
+        }
+        if has_expected_warning {
+            summary.expected_warning_backend_blocks += 1;
+        }
+    }
+
+    summary
 }
 
 fn build_backend_inventory(case: &TestCaseSpec) -> InventoryBackend {
@@ -204,7 +288,8 @@ fn build_backend_inventory(case: &TestCaseSpec) -> InventoryBackend {
         ExpectedOutcome::Success(expectation) => InventoryBackend {
             backend: case.backend_id.as_str().to_owned(),
             mode: "success",
-            compile_only: expectation.success_contract == Some(SuccessContract::CompileOnly),
+            baseline_applied: case.backend_id.has_universal_baseline(),
+            acceptance_only: expectation.success_contract == Some(SuccessContract::AcceptanceOnly),
             warning_mode: warning_mode_label(expectation.warnings),
             diagnostic_match: None,
             structured_diagnostic_assertions: false,
@@ -219,7 +304,8 @@ fn build_backend_inventory(case: &TestCaseSpec) -> InventoryBackend {
         ExpectedOutcome::Failure(expectation) => InventoryBackend {
             backend: case.backend_id.as_str().to_owned(),
             mode: "failure",
-            compile_only: false,
+            baseline_applied: false,
+            acceptance_only: false,
             warning_mode: warning_mode_label(expectation.warnings),
             diagnostic_match: Some("contains"),
             structured_diagnostic_assertions: false,
@@ -239,10 +325,11 @@ fn success_assertion_kinds(
 ) -> Vec<&'static str> {
     let mut kinds = Vec::new();
 
-    if expectation.success_contract == Some(SuccessContract::CompileOnly) {
-        kinds.push("compile_only");
-    } else if matches!(case.backend_id, BackendId::Html | BackendId::HtmlWasm) {
+    if case.backend_id.has_universal_baseline() {
         kinds.push("backend_baseline");
+    }
+    if expectation.success_contract == Some(SuccessContract::AcceptanceOnly) {
+        kinds.push("acceptance_only");
     }
 
     if !expectation.artifact_assertions.is_empty() {
@@ -259,6 +346,9 @@ fn success_assertion_kinds(
     if !expectation.artifacts_must_not_exist.is_empty() {
         kinds.push("artifact_absence");
     }
+    if matches!(expectation.warnings, WarningExpectation::Exact(_)) {
+        kinds.push("expected_warning");
+    }
     kinds
 }
 
@@ -269,6 +359,9 @@ fn failure_assertion_kinds(expectation: &FailureExpectation) -> Vec<&'static str
     }
     if !expectation.message_contains.is_empty() {
         kinds.push("message_contains");
+    }
+    if matches!(expectation.warnings, WarningExpectation::Exact(_)) {
+        kinds.push("expected_warning");
     }
     kinds
 }

@@ -172,15 +172,17 @@ fn parse_matrix_expectation_file(
         let golden_mode =
             parse_golden_mode(path, &context, backend_expectation.golden_mode.as_deref())?;
 
+        let has_authored_expected_warning = matches!(warnings, WarningExpectation::Exact(_));
         if success_contract.is_some()
             && (!artifact_assertions.is_empty()
                 || backend_expectation.golden_mode.is_some()
                 || !backend_expectation.rendered_output_contains.is_empty()
                 || !backend_expectation.rendered_output_not_contains.is_empty()
-                || !backend_expectation.artifacts_must_not_exist.is_empty())
+                || !backend_expectation.artifacts_must_not_exist.is_empty()
+                || has_authored_expected_warning)
         {
             return Err(format!(
-                "Expectation file '{}' {} declares success_contract = \"compile_only\" and must not combine it with artifact assertions, golden_mode, rendered-output assertions, or artifact-absence assertions.",
+                "Expectation file '{}' {} declares success_contract = \"acceptance_only\" and must not combine it with artifact assertions, golden_mode, rendered-output assertions, artifact-absence assertions, or an authored expected-warning contract.",
                 path.display(),
                 context
             ));
@@ -452,9 +454,9 @@ fn parse_success_contract(
 ) -> Result<Option<SuccessContract>, String> {
     match raw {
         None => Ok(None),
-        Some("compile_only") => Ok(Some(SuccessContract::CompileOnly)),
+        Some("acceptance_only") => Ok(Some(SuccessContract::AcceptanceOnly)),
         Some(other) => Err(format!(
-            "Expectation file '{}' {} has unsupported success_contract '{other}'. Supported values: \"compile_only\".",
+            "Expectation file '{}' {} has unsupported success_contract '{other}'. Supported values: \"acceptance_only\".",
             path.display(),
             context
         )),

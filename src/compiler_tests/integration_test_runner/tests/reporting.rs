@@ -121,7 +121,7 @@ fn inventory_json_groups_backend_metadata_under_one_canonical_case() {
         build_suite_inventory_report(&[html_case, wasm_case], Some("0123456789abcdef".to_owned()));
     let json = serde_json::to_value(&report).expect("inventory should serialize");
 
-    assert_eq!(json["schema_version"], 1);
+    assert_eq!(json["schema_version"], 2);
     assert_eq!(json["repository_commit"], "0123456789abcdef");
     assert_eq!(json["manifest_case_count"], 1);
     assert_eq!(json["expanded_backend_execution_count"], 2);
@@ -133,11 +133,14 @@ fn inventory_json_groups_backend_metadata_under_one_canonical_case() {
         Some(2)
     );
     assert_eq!(json["cases"][0]["backends"][0]["backend"], "html");
+    assert_eq!(json["cases"][0]["backends"][0]["baseline_applied"], false);
     assert_eq!(
         json["cases"][0]["backends"][0]["diagnostic_match"],
         "contains"
     );
     assert_eq!(json["cases"][0]["backends"][1]["backend"], "html_wasm");
+    assert_eq!(json["cases"][0]["backends"][1]["baseline_applied"], true);
+    assert_eq!(json["summary"]["rendered_output_backend_blocks"], 1);
     assert_eq!(
         json["hard_policy_violations"].as_array().map(Vec::len),
         Some(0)
@@ -146,16 +149,16 @@ fn inventory_json_groups_backend_metadata_under_one_canonical_case() {
 }
 
 #[test]
-fn inventory_distinguishes_explicit_compile_only_from_baseline_only() {
+fn inventory_distinguishes_acceptance_only_from_baseline_only() {
     let explicit_case = case(
-        "explicit_compile_only",
+        "explicit_acceptance_only",
         BackendId::Html,
         &["integration"],
         None,
         None,
         ExpectedOutcome::Success(SuccessExpectation {
             warnings: WarningExpectation::Forbid,
-            success_contract: Some(SuccessContract::CompileOnly),
+            success_contract: Some(SuccessContract::AcceptanceOnly),
             artifact_assertions: Vec::new(),
             golden_mode: GoldenMode::Strict,
             has_golden: false,
@@ -185,16 +188,126 @@ fn inventory_distinguishes_explicit_compile_only_from_baseline_only() {
     let report = build_suite_inventory_report(&[explicit_case, baseline_only_case], None);
     let json = serde_json::to_value(&report).expect("inventory should serialize");
 
-    assert_eq!(json["cases"][0]["backends"][0]["compile_only"], true);
+    assert_eq!(json["cases"][0]["backends"][0]["baseline_applied"], true);
+    assert_eq!(json["cases"][0]["backends"][0]["acceptance_only"], true);
     assert_eq!(
         json["cases"][0]["backends"][0]["assertion_kinds"],
-        serde_json::json!(["compile_only"])
+        serde_json::json!(["backend_baseline", "acceptance_only"])
     );
-    assert_eq!(json["cases"][1]["backends"][0]["compile_only"], false);
+    assert_eq!(json["cases"][1]["backends"][0]["baseline_applied"], true);
+    assert_eq!(json["cases"][1]["backends"][0]["acceptance_only"], false);
     assert_eq!(
         json["cases"][1]["backends"][0]["assertion_kinds"],
         serde_json::json!(["backend_baseline"])
     );
+    assert_eq!(json["summary"]["acceptance_only_backend_blocks"], 1);
+    assert_eq!(json["summary"]["baseline_only_backend_blocks"], 1);
+}
+
+#[test]
+fn inventory_counts_authored_expected_warning_as_a_contract() {
+    let report = build_suite_inventory_report(
+        &[case(
+            "expected_warning",
+            BackendId::Html,
+            &["integration"],
+            None,
+            Some(CaseRole::Smoke),
+            ExpectedOutcome::Success(SuccessExpectation {
+                warnings: WarningExpectation::Exact(1),
+                success_contract: None,
+                artifact_assertions: Vec::new(),
+                golden_mode: GoldenMode::Strict,
+                has_golden: false,
+                rendered_output_contains: Vec::new(),
+                rendered_output_not_contains: Vec::new(),
+                artifacts_must_not_exist: Vec::new(),
+            }),
+        )],
+        None,
+    );
+    let json = serde_json::to_value(&report).expect("inventory should serialize");
+
+    assert_eq!(json["summary"]["expected_warning_backend_blocks"], 1);
+    assert_eq!(json["summary"]["baseline_only_backend_blocks"], 0);
+    assert_eq!(
+        json["cases"][0]["backends"][0]["assertion_kinds"],
+        serde_json::json!(["backend_baseline", "expected_warning"])
+    );
+}
+
+#[test]
+fn whole_case_acceptance_only_requires_smoke_role() {
+    let report = build_suite_inventory_report(
+        &[case(
+            "acceptance_only_case",
+            BackendId::Html,
+            &["integration"],
+            None,
+            Some(CaseRole::Backend),
+            ExpectedOutcome::Success(SuccessExpectation {
+                warnings: WarningExpectation::Forbid,
+                success_contract: Some(SuccessContract::AcceptanceOnly),
+                artifact_assertions: Vec::new(),
+                golden_mode: GoldenMode::Strict,
+                has_golden: false,
+                rendered_output_contains: Vec::new(),
+                rendered_output_not_contains: Vec::new(),
+                artifacts_must_not_exist: Vec::new(),
+            }),
+        )],
+        None,
+    );
+
+    assert_eq!(report.hard_policy_violations.len(), 1);
+    assert_eq!(
+        report.hard_policy_violations[0].code,
+        "acceptance_only_requires_smoke_role"
+    );
+}
+
+#[test]
+fn mixed_backend_acceptance_only_does_not_force_smoke_role() {
+    let acceptance_case = case(
+        "mixed_contracts",
+        BackendId::Html,
+        &["integration"],
+        None,
+        Some(CaseRole::Backend),
+        ExpectedOutcome::Success(SuccessExpectation {
+            warnings: WarningExpectation::Forbid,
+            success_contract: Some(SuccessContract::AcceptanceOnly),
+            artifact_assertions: Vec::new(),
+            golden_mode: GoldenMode::Strict,
+            has_golden: false,
+            rendered_output_contains: Vec::new(),
+            rendered_output_not_contains: Vec::new(),
+            artifacts_must_not_exist: Vec::new(),
+        }),
+    );
+    let stronger_case = case(
+        "mixed_contracts",
+        BackendId::HtmlWasm,
+        &["integration"],
+        None,
+        Some(CaseRole::Backend),
+        ExpectedOutcome::Success(SuccessExpectation {
+            warnings: WarningExpectation::Forbid,
+            success_contract: None,
+            artifact_assertions: Vec::new(),
+            golden_mode: GoldenMode::Strict,
+            has_golden: false,
+            rendered_output_contains: vec!["marker".to_owned()],
+            rendered_output_not_contains: Vec::new(),
+            artifacts_must_not_exist: Vec::new(),
+        }),
+    );
+
+    let report = build_suite_inventory_report(&[acceptance_case, stronger_case], None);
+
+    assert!(report.hard_policy_violations.is_empty());
+    assert_eq!(report.summary.acceptance_only_backend_blocks, 1);
+    assert_eq!(report.summary.rendered_output_backend_blocks, 1);
 }
 
 #[test]

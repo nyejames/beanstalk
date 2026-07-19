@@ -80,8 +80,8 @@ fn rejects_canonical_fixture_without_expectation_before_execution() {
 }
 
 #[test]
-fn rejects_compile_only_fixture_with_golden_artifacts() {
-    let root = temp_dir("compile_only_golden_artifacts");
+fn rejects_acceptance_only_fixture_with_golden_artifacts() {
+    let root = temp_dir("acceptance_only_golden_artifacts");
     let case_root = root.join("case");
     let input_root = case_root.join(INPUT_DIR_NAME);
     let golden_root = case_root.join(GOLDEN_DIR_NAME).join("html");
@@ -92,17 +92,37 @@ fn rejects_compile_only_fixture_with_golden_artifacts() {
         .expect("should write fixture golden");
     fs::write(
         case_root.join(EXPECT_FILE_NAME),
-        "[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\nsuccess_contract = \"compile_only\"\n",
+        "[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\nsuccess_contract = \"acceptance_only\"\n",
     )
     .expect("should write expect file");
 
     let Err(error) = load_canonical_case_specs(&case_root, None) else {
-        panic!("compile-only fixture with golden artifacts should be rejected");
+        panic!("acceptance-only fixture with golden artifacts should be rejected");
     };
     assert!(
-        error.contains("compile_only") && error.contains("golden artifacts"),
+        error.contains("acceptance_only") && error.contains("golden artifacts"),
         "unexpected error: {error}"
     );
+
+    fs::remove_dir_all(&root).expect("should clean up");
+}
+
+#[test]
+fn accepts_acceptance_only_without_fixture_specific_source_marker() {
+    let root = temp_dir("acceptance_only_without_source_marker");
+    let case_root = root.join("case");
+    let input_root = case_root.join(INPUT_DIR_NAME);
+    fs::create_dir_all(&input_root).expect("should create fixture input directory");
+    fs::write(input_root.join("#page.bst"), "#[:not_a_contract_marker]\n")
+        .expect("should write fixture source");
+    fs::write(
+        case_root.join(EXPECT_FILE_NAME),
+        "[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\nsuccess_contract = \"acceptance_only\"\n",
+    )
+    .expect("should write expect file");
+
+    load_canonical_case_specs(&case_root, None)
+        .expect("acceptance-only should not require a fixture-specific source marker");
 
     fs::remove_dir_all(&root).expect("should clean up");
 }

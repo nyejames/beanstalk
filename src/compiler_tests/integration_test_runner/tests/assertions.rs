@@ -6,6 +6,7 @@
 use super::super::assertions::{
     normalize_text_for_comparison, validate_failure_result, validate_success_result,
 };
+use super::super::types::SuccessContract;
 use super::super::{
     BackendId, ExpectedOutcome, FailureExpectation, GoldenMode, SuccessExpectation, TestCaseSpec,
     WarningExpectation,
@@ -205,6 +206,9 @@ fn normalization_preserves_base_name_segment() {
 }
 
 const VALID_HTML: &str = "<!DOCTYPE html><html><head></head><body></body></html>";
+const VALID_HTML_WASM: &str =
+    "<!DOCTYPE html><html><head></head><body><script src=\"./page.js\"></script></body></html>";
+const VALID_PAGE_JS: &str = "__bst_instantiate_wasm instance.exports.bst_start() \"./page.wasm\"";
 
 fn build_result_with_output_files(files: Vec<(PathBuf, FileKind)>) -> BuildResult {
     let output_files = files
@@ -237,6 +241,19 @@ fn absence_expectation(forbidden: Vec<String>) -> SuccessExpectation {
     }
 }
 
+fn acceptance_only_expectation() -> SuccessExpectation {
+    SuccessExpectation {
+        warnings: WarningExpectation::Forbid,
+        success_contract: Some(SuccessContract::AcceptanceOnly),
+        artifact_assertions: Vec::new(),
+        golden_mode: GoldenMode::Strict,
+        has_golden: false,
+        rendered_output_contains: Vec::new(),
+        rendered_output_not_contains: Vec::new(),
+        artifacts_must_not_exist: Vec::new(),
+    }
+}
+
 fn absence_test_case(expectation: SuccessExpectation) -> TestCaseSpec {
     TestCaseSpec {
         display_name: "absence-contract".to_string(),
@@ -251,6 +268,86 @@ fn absence_test_case(expectation: SuccessExpectation) -> TestCaseSpec {
         flags: Vec::new(),
         expected: ExpectedOutcome::Success(expectation),
     }
+}
+
+fn success_test_case(backend_id: BackendId, expectation: SuccessExpectation) -> TestCaseSpec {
+    TestCaseSpec {
+        display_name: "success-contract".to_string(),
+        case_id: "success-contract".to_string(),
+        manifest_relative_path: "success-contract".to_string(),
+        tags: Vec::new(),
+        contract: None,
+        role: None,
+        backend_id,
+        entry_path: PathBuf::from("."),
+        golden_dir: PathBuf::from("nonexistent-golden"),
+        flags: Vec::new(),
+        expected: ExpectedOutcome::Success(expectation),
+    }
+}
+
+#[test]
+fn acceptance_only_html_baseline_rejects_broken_html() {
+    let expectation = acceptance_only_expectation();
+    let case = success_test_case(BackendId::Html, expectation.clone());
+    let build_result = build_result_with_output_files(vec![(
+        PathBuf::from("index.html"),
+        FileKind::Html("<!DOCTYPE html><html><head></head><body></body>".to_owned()),
+    )]);
+
+    let result = validate_success_result(&case, build_result, &expectation);
+
+    assert!(!result.passed);
+    assert!(
+        result
+            .failure_reason
+            .as_deref()
+            .is_some_and(|reason| reason.contains("html baseline contract"))
+    );
+}
+
+#[test]
+fn acceptance_only_html_wasm_baseline_rejects_missing_output() {
+    let expectation = acceptance_only_expectation();
+    let case = success_test_case(BackendId::HtmlWasm, expectation.clone());
+    let build_result = build_result_with_output_files(Vec::new());
+
+    let result = validate_success_result(&case, build_result, &expectation);
+
+    assert!(!result.passed);
+    assert!(
+        result
+            .failure_reason
+            .as_deref()
+            .is_some_and(|reason| reason.contains("html_wasm baseline contract"))
+    );
+}
+
+#[test]
+fn acceptance_only_html_wasm_baseline_rejects_invalid_wasm() {
+    let expectation = acceptance_only_expectation();
+    let case = success_test_case(BackendId::HtmlWasm, expectation.clone());
+    let build_result = build_result_with_output_files(vec![
+        (
+            PathBuf::from("index.html"),
+            FileKind::Html(VALID_HTML_WASM.to_owned()),
+        ),
+        (
+            PathBuf::from("page.js"),
+            FileKind::Js(VALID_PAGE_JS.to_owned()),
+        ),
+        (PathBuf::from("page.wasm"), FileKind::Wasm(vec![0, 1, 2])),
+    ]);
+
+    let result = validate_success_result(&case, build_result, &expectation);
+
+    assert!(!result.passed);
+    assert!(
+        result
+            .failure_reason
+            .as_deref()
+            .is_some_and(|reason| reason.contains("valid wasm bytes"))
+    );
 }
 
 #[test]
