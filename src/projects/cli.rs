@@ -9,7 +9,7 @@ use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::display_messages::{print_compiler_messages, print_formatted_error};
 use crate::compiler_tests::integration_test_runner::{
-    IntegrationRunSummary, run_all_test_cases, run_all_test_cases_with_backend_filter,
+    BackendId, IntegrationRunSummary, TestRunnerOptions, run_all_test_cases,
 };
 use crate::projects::check::{self, CheckOptions};
 use crate::projects::dev_server::{self, DevServerOptions};
@@ -46,8 +46,8 @@ enum Command {
 
     Help,
     CompilerTests {
-        backend_filter: Option<String>,
-    }, // Runs all compiler integration tests, optionally filtered by backend
+        options: TestRunnerOptions,
+    }, // Runs or lists compiler integration tests with composable selection filters
 }
 
 pub fn start_cli() {
@@ -176,27 +176,19 @@ pub fn start_cli() {
             }
         }
 
-        Command::CompilerTests { backend_filter } => {
-            let summary_result = if let Some(backend_filter) = backend_filter.as_deref() {
-                run_all_test_cases_with_backend_filter(true, Some(backend_filter))
-            } else {
-                run_all_test_cases(true)
-            };
-
-            match summary_result {
-                Ok(summary) => {
-                    let exit_code = integration_tests_exit_code(summary);
-                    if exit_code != 0 {
-                        process::exit(exit_code);
-                    }
-                }
-                Err(error) => {
-                    say!(Red "Failed to run integration tests:");
-                    println!("  {error}");
-                    process::exit(1);
+        Command::CompilerTests { options } => match run_all_test_cases(options) {
+            Ok(summary) => {
+                let exit_code = integration_tests_exit_code(summary);
+                if exit_code != 0 {
+                    process::exit(exit_code);
                 }
             }
-        }
+            Err(error) => {
+                say!(Red "Failed to run integration tests:");
+                println!("  {error}");
+                process::exit(1);
+            }
+        },
     }
 }
 
@@ -338,35 +330,87 @@ fn parse_build_command(args: &[String]) -> Result<Command, String> {
 }
 
 fn parse_tests_command(args: &[String]) -> Result<Command, String> {
-    // Parse optional backend filtering flags for integration tests so local loops can
-    // focus on one backend profile without changing fixture contracts.
-    let mut backend_filter = None;
+    let mut options = TestRunnerOptions {
+        show_warnings: true,
+        ..TestRunnerOptions::default()
+    };
     let mut index = 1usize;
 
     while let Some(arg) = args.get(index) {
         match arg.as_str() {
-            "--backend" => {
-                let Some(backend_value) = args.get(index + 1) else {
-                    return Err(String::from(
-                        "Missing value for --backend. Supported values: html, html_wasm.",
-                    ));
+            "--case" => {
+                let Some(case_id) = args.get(index + 1) else {
+                    return Err(String::from("Missing value for --case."));
                 };
-                if backend_value.starts_with("--") {
+                if case_id.starts_with("--") || case_id.trim().is_empty() {
+                    return Err(String::from("Missing value for --case."));
+                }
+                if options.case_id.is_some() {
                     return Err(String::from(
-                        "Missing value for --backend. Supported values: html, html_wasm.",
+                        "Tests command accepts at most one --case value.",
                     ));
                 }
-                if backend_filter.is_some() {
+                options.case_id = Some(case_id.to_owned());
+                index += 2;
+            }
+            "--tag" => {
+                let Some(tag) = args.get(index + 1) else {
+                    return Err(String::from("Missing value for --tag."));
+                };
+                if tag.starts_with("--") || tag.trim().is_empty() {
+                    return Err(String::from("Missing value for --tag."));
+                }
+                if options.tag_filters.iter().any(|value| value == tag) {
+                    return Err(format!(
+                        "Tests command does not accept duplicate --tag value '{tag}'."
+                    ));
+                }
+                options.tag_filters.push(tag.to_owned());
+                index += 2;
+            }
+            "--contract" => {
+                let Some(contract) = args.get(index + 1) else {
+                    return Err(String::from("Missing value for --contract."));
+                };
+                if contract.starts_with("--") || contract.trim().is_empty() {
+                    return Err(String::from("Missing value for --contract."));
+                }
+                if options.contract.is_some() {
+                    return Err(String::from(
+                        "Tests command accepts at most one --contract value.",
+                    ));
+                }
+                options.contract = Some(contract.to_owned());
+                index += 2;
+            }
+            "--backend" => {
+                let Some(backend_value) = args.get(index + 1) else {
+                    return Err(String::from("Missing value for --backend."));
+                };
+                if backend_value.starts_with("--") || backend_value.trim().is_empty() {
+                    return Err(String::from("Missing value for --backend."));
+                }
+                if options.backend_filter.is_some() {
                     return Err(String::from(
                         "Tests command accepts at most one --backend value.",
                     ));
                 }
-                backend_filter = Some(backend_value.to_owned());
+                options.backend_filter = Some(
+                    BackendId::parse(backend_value)
+                        .map_err(|error| format!("Invalid value for --backend: {error}"))?,
+                );
                 index += 2;
+            }
+            "--list" => {
+                if options.list {
+                    return Err(String::from("Tests command accepts --list at most once."));
+                }
+                options.list = true;
+                index += 1;
             }
             _ if arg.starts_with("--") => {
                 return Err(format!(
-                    "Unknown tests flag: '{arg}'. Supported tests flag is --backend <html|html_wasm>."
+                    "Unknown tests flag: '{arg}'. Supported tests flags are --case <id>, --tag <tag>, --contract <id>, --backend <html|html_wasm>, and --list."
                 ));
             }
             _ => {
@@ -377,7 +421,7 @@ fn parse_tests_command(args: &[String]) -> Result<Command, String> {
         }
     }
 
-    Ok(Command::CompilerTests { backend_filter })
+    Ok(Command::CompilerTests { options })
 }
 
 fn parse_check_command(args: &[String]) -> Result<Command, String> {
@@ -518,14 +562,18 @@ fn print_help() {
     say!("  check [path]      - Runs frontend-only diagnostics (no artifacts)");
     say!("  dev [path]        - Runs the hot reloading dev server");
     say!("  new html [path] [--force] - Creates an HTML project scaffold");
-    say!("  tests [--backend <id>] - Runs the integration test suite");
+    say!("  tests [options]     - Runs or lists the integration test suite");
 
     say!(Green Bold "\nBuild and dev flags:");
     for entry in help_build_flag_entries() {
         say!(entry);
     }
     say!("\nTests command options:");
-    say!("  --backend <id>         (supported: html, html_wasm)");
+    say!("  --case <id>             (exact canonical case ID)");
+    say!("  --tag <tag>             (repeatable; all tags must match)");
+    say!("  --contract <id>         (exact contract ID)");
+    say!("  --backend <id>          (supported: html, html_wasm)");
+    say!("  --list                  (list selected metadata without compiling cases)");
     say!("\nCheck command options:");
     say!("  --terse                (compact one-line diagnostics)");
     say!("\nNew command options:");

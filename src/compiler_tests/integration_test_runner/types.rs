@@ -10,10 +10,14 @@ use std::path::PathBuf;
 
 pub(crate) const SUPPORTED_BACKEND_IDS: &[&str] = &["html", "html_wasm"];
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct TestRunnerOptions {
     pub show_warnings: bool,
+    pub case_id: Option<String>,
+    pub tag_filters: Vec<String>,
+    pub contract: Option<String>,
     pub backend_filter: Option<BackendId>,
+    pub list: bool,
 }
 
 pub(crate) struct TestSuiteSpec {
@@ -23,15 +27,9 @@ pub(crate) struct TestSuiteSpec {
 #[derive(Clone)]
 pub(crate) struct TestCaseSpec {
     pub display_name: String,
-    // Retained ahead of the selection and reporting phases; these fields are intentionally
-    // carried even while the current runner only executes the expanded cases.
-    #[allow(dead_code)]
     pub case_id: String,
-    #[allow(dead_code)]
     pub tags: Vec<String>,
-    #[allow(dead_code)]
     pub contract: Option<String>,
-    #[allow(dead_code)]
     pub role: Option<CaseRole>,
     pub backend_id: BackendId,
     pub entry_path: PathBuf,
@@ -266,6 +264,16 @@ impl CaseRole {
             other => Err(format!(
                 "unknown role '{other}'; supported roles: primary, boundary, backend, adversarial, smoke"
             )),
+        }
+    }
+
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Primary => "primary",
+            Self::Boundary => "boundary",
+            Self::Backend => "backend",
+            Self::Adversarial => "adversarial",
+            Self::Smoke => "smoke",
         }
     }
 }

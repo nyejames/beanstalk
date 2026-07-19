@@ -8,3 +8,5 @@ mod execution;
 mod expectations;
 mod fixture;
 mod manifest;
+mod reporting;
+mod selection;

@@ -17,8 +17,8 @@ mod types;
 #[cfg(test)]
 mod tests;
 
+pub(crate) use runner::run_all_test_cases;
 pub(crate) use runner::{normalize_relative_path, normalize_relative_path_text};
-pub use runner::{run_all_test_cases, run_all_test_cases_with_backend_filter};
 pub use types::IntegrationRunSummary;
 
 pub(crate) use types::{

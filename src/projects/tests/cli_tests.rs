@@ -11,7 +11,9 @@ use crate::compiler_frontend::compiler_messages::{
 };
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
-use crate::compiler_tests::integration_test_runner::IntegrationRunSummary;
+use crate::compiler_tests::integration_test_runner::{
+    BackendId, IntegrationRunSummary, TestRunnerOptions,
+};
 use crate::projects::dev_server::DevServerOptions;
 use crate::projects::html_project::new_html_project::NewHtmlProjectOptions;
 use crate::projects::settings::Config;
@@ -230,7 +232,10 @@ fn tests_command_uses_default_backend_selection() {
     assert_eq!(
         command,
         Command::CompilerTests {
-            backend_filter: None,
+            options: TestRunnerOptions {
+                show_warnings: true,
+                ..TestRunnerOptions::default()
+            },
         }
     );
 }
@@ -242,9 +247,95 @@ fn tests_command_parses_backend_filter() {
     assert_eq!(
         command,
         Command::CompilerTests {
-            backend_filter: Some(String::from("html_wasm")),
+            options: TestRunnerOptions {
+                show_warnings: true,
+                backend_filter: Some(BackendId::HtmlWasm),
+                ..TestRunnerOptions::default()
+            },
         }
     );
+}
+
+#[test]
+fn tests_command_parses_composable_selection_options() {
+    let command = get_command(&args(&[
+        "tests",
+        "--tag",
+        "integration",
+        "--case",
+        "arithmetic_operator_precedence",
+        "--tag",
+        "language",
+        "--contract",
+        "language.operator_precedence",
+        "--backend",
+        "html",
+        "--list",
+    ]))
+    .expect("tests selection options should parse");
+
+    assert_eq!(
+        command,
+        Command::CompilerTests {
+            options: TestRunnerOptions {
+                show_warnings: true,
+                case_id: Some(String::from("arithmetic_operator_precedence")),
+                tag_filters: vec![String::from("integration"), String::from("language")],
+                contract: Some(String::from("language.operator_precedence")),
+                backend_filter: Some(BackendId::Html),
+                list: true,
+            },
+        }
+    );
+}
+
+#[test]
+fn tests_command_rejects_duplicate_singleton_options() {
+    for duplicate in [
+        vec!["--case", "one", "--case", "two"],
+        vec!["--contract", "one", "--contract", "two"],
+        vec!["--backend", "html", "--backend", "html_wasm"],
+        vec!["--list", "--list"],
+    ] {
+        let mut values = vec!["tests"];
+        values.extend(duplicate);
+        let error = get_command(&args(&values)).expect_err("duplicate option should fail");
+        assert!(
+            error.contains("at most one") || error.contains("at most once"),
+            "{error}"
+        );
+    }
+}
+
+#[test]
+fn tests_command_rejects_duplicate_tag_values() {
+    let error = get_command(&args(&["tests", "--tag", "borrows", "--tag", "borrows"]))
+        .expect_err("duplicate tag should fail");
+    assert!(
+        error.contains("duplicate --tag"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn tests_command_rejects_missing_selection_values() {
+    for option in ["--case", "--tag", "--contract", "--backend"] {
+        let error = get_command(&args(&["tests", option]))
+            .expect_err("missing selection value should fail");
+        assert!(error.contains("Missing value"), "unexpected error: {error}");
+    }
+}
+
+#[test]
+fn tests_command_rejects_unknown_backend_and_positional_arguments() {
+    let backend_error = get_command(&args(&["tests", "--backend", "wasm"]))
+        .expect_err("unsupported backend should fail");
+    assert!(backend_error.contains("Invalid value for --backend"));
+    assert!(backend_error.contains("Unsupported backend"));
+
+    let positional_error = get_command(&args(&["tests", "case_id"]))
+        .expect_err("positional test argument should fail");
+    assert!(positional_error.contains("does not accept positional arguments"));
 }
 
 #[test]

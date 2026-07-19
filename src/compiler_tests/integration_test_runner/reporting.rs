@@ -14,8 +14,57 @@ use crate::compiler_frontend::compiler_messages::{
 };
 use saying::say;
 use std::collections::BTreeMap;
+use std::fmt::Write;
 use std::fs;
 use std::path::Path;
+
+pub(crate) fn format_case_listing(cases: &[TestCaseSpec]) -> String {
+    if cases.is_empty() {
+        return String::from("No test cases matched the selection filters.\n");
+    }
+
+    let mut listing = String::new();
+    let mut index = 0;
+    while index < cases.len() {
+        let case = &cases[index];
+        let case_id = &case.case_id;
+        let _ = writeln!(listing, "case_id: {case_id}");
+        let _ = writeln!(listing, "  backends:");
+
+        while index < cases.len() && cases[index].case_id == *case_id {
+            let backend_case = &cases[index];
+            let _ = writeln!(
+                listing,
+                "    - {} ({})",
+                backend_case.backend_id.as_str(),
+                expected_outcome_label(&backend_case.expected)
+            );
+            index += 1;
+        }
+
+        let _ = writeln!(
+            listing,
+            "  tags: {}",
+            if case.tags.is_empty() {
+                "<none>".to_string()
+            } else {
+                case.tags.join(", ")
+            }
+        );
+        let _ = writeln!(
+            listing,
+            "  contract: {}",
+            case.contract.as_deref().unwrap_or("<none>")
+        );
+        let _ = writeln!(
+            listing,
+            "  role: {}\n",
+            case.role.map_or("<none>", |role| role.as_str())
+        );
+    }
+
+    listing
+}
 
 pub(crate) fn render_case_result(
     case: &TestCaseSpec,

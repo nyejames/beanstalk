@@ -43,7 +43,7 @@ fn rejects_legacy_top_level_expectation_contract() {
     )
     .expect("should write expect file");
 
-    let Err(error) = load_canonical_case_specs(&case_root, None, None) else {
+    let Err(error) = load_canonical_case_specs(&case_root, None) else {
         panic!("legacy fixture should be rejected");
     };
     assert!(
@@ -109,7 +109,7 @@ fn rejects_unknown_backend_matrix_key() {
     )
     .expect("should write expect file");
 
-    let Err(error) = load_canonical_case_specs(&case_root, None, None) else {
+    let Err(error) = load_canonical_case_specs(&case_root, None) else {
         panic!("fixture should be rejected");
     };
     assert!(
@@ -136,7 +136,7 @@ fn accepts_normalized_golden_mode() {
     )
     .expect("should write expect file");
 
-    let cases = load_canonical_case_specs(&case_root, None, None)
+    let cases = load_canonical_case_specs(&case_root, None)
         .expect("normalized golden_mode fixture should be accepted");
     assert_eq!(cases.len(), 1);
 
@@ -156,7 +156,7 @@ fn rejects_unknown_golden_mode() {
     )
     .expect("should write expect file");
 
-    let Err(error) = load_canonical_case_specs(&case_root, None, None) else {
+    let Err(error) = load_canonical_case_specs(&case_root, None) else {
         panic!("unknown golden_mode should be rejected");
     };
     assert!(
@@ -180,7 +180,7 @@ fn accepts_success_fixture_with_rendered_output_only() {
     )
     .expect("should write expect file");
 
-    let cases = load_canonical_case_specs(&case_root, None, None)
+    let cases = load_canonical_case_specs(&case_root, None)
         .expect("rendered_output_contains-only fixture should be accepted");
     assert_eq!(cases.len(), 1);
 
@@ -200,7 +200,7 @@ fn rejects_rendered_output_in_failure_mode() {
     )
     .expect("should write expect file");
 
-    let Err(error) = load_canonical_case_specs(&case_root, None, None) else {
+    let Err(error) = load_canonical_case_specs(&case_root, None) else {
         panic!("rendered_output_contains in failure mode should be rejected");
     };
     assert!(
@@ -224,7 +224,7 @@ fn rejects_normalized_contains_on_wasm_artifact() {
     )
     .expect("should write expect file");
 
-    let Err(error) = load_canonical_case_specs(&case_root, None, None) else {
+    let Err(error) = load_canonical_case_specs(&case_root, None) else {
         panic!("normalized_contains on wasm should be rejected");
     };
     assert!(error.contains("text-only"), "unexpected error: {error}");
@@ -245,7 +245,7 @@ fn accepts_artifacts_must_not_exist_in_success_mode() {
     )
     .expect("should write expect file");
 
-    let cases = load_canonical_case_specs(&case_root, None, None)
+    let cases = load_canonical_case_specs(&case_root, None)
         .expect("artifacts_must_not_exist in success mode should be accepted");
     assert_eq!(cases.len(), 1);
 
@@ -274,7 +274,7 @@ fn rejects_artifacts_must_not_exist_in_failure_mode() {
     )
     .expect("should write expect file");
 
-    let Err(error) = load_canonical_case_specs(&case_root, None, None) else {
+    let Err(error) = load_canonical_case_specs(&case_root, None) else {
         panic!("artifacts_must_not_exist in failure mode should be rejected");
     };
     assert!(
@@ -298,7 +298,7 @@ fn rejects_empty_artifacts_must_not_exist_entry() {
     )
     .expect("should write expect file");
 
-    let Err(error) = load_canonical_case_specs(&case_root, None, None) else {
+    let Err(error) = load_canonical_case_specs(&case_root, None) else {
         panic!("empty artifacts_must_not_exist entry should be rejected");
     };
     assert!(

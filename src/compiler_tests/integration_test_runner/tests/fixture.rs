@@ -3,9 +3,11 @@
 //! WHAT: protects fixture loading, manifest-backed ordering, and backend selection.
 //! WHY: the loader translates repository fixtures into executable test cases.
 
-use super::super::fixture::{load_canonical_case_specs, load_test_suite_from_root_with_filter};
+use super::super::fixture::{load_canonical_case_specs, load_test_suite_from_root};
+use super::super::runner::select_cases;
 use super::super::{
     BackendId, CaseRole, EXPECT_FILE_NAME, GOLDEN_DIR_NAME, INPUT_DIR_NAME, MANIFEST_FILE_NAME,
+    TestRunnerOptions,
 };
 use crate::compiler_tests::test_support::temp_dir;
 use std::fs;
@@ -23,7 +25,7 @@ fn rejects_failure_fixture_without_diagnostic_codes() {
     )
     .expect("should write expect file");
 
-    let Err(error) = load_canonical_case_specs(&case_root, None, None) else {
+    let Err(error) = load_canonical_case_specs(&case_root, None) else {
         panic!("fixture should be rejected");
     };
     assert!(
@@ -47,7 +49,7 @@ fn accepts_failure_fixture_without_message_contains() {
     )
     .expect("should write expect file");
 
-    load_canonical_case_specs(&case_root, None, None)
+    load_canonical_case_specs(&case_root, None)
         .expect("diagnostic-code-only failure fixtures should be accepted");
 
     fs::remove_dir_all(&root).expect("should clean up temp fixture root");
@@ -66,8 +68,7 @@ fn accepts_success_fixture_without_explicit_artifact_assertions() {
     )
     .expect("should write expect file");
 
-    let cases =
-        load_canonical_case_specs(&case_root, None, None).expect("fixture should be accepted");
+    let cases = load_canonical_case_specs(&case_root, None).expect("fixture should be accepted");
     assert_eq!(cases.len(), 1);
     assert_eq!(cases[0].display_name, "case [html]");
 
@@ -87,8 +88,7 @@ fn accepts_backend_matrix_and_expands_case_variants() {
     )
     .expect("should write matrix expect file");
 
-    let cases =
-        load_canonical_case_specs(&case_root, None, None).expect("matrix case should parse");
+    let cases = load_canonical_case_specs(&case_root, None).expect("matrix case should parse");
     let names = cases
         .iter()
         .map(|case| case.display_name.as_str())
@@ -117,10 +117,16 @@ fn backend_filter_limits_loaded_case_variants() {
     )
     .expect("should write manifest");
 
-    let suite = load_test_suite_from_root_with_filter(&root, Some(BackendId::HtmlWasm))
-        .expect("suite should load");
-    assert_eq!(suite.cases.len(), 1);
-    assert_eq!(suite.cases[0].display_name, "case [html_wasm]");
+    let suite = load_test_suite_from_root(&root).expect("suite should load");
+    let suite_cases = select_cases(
+        suite.cases,
+        &TestRunnerOptions {
+            backend_filter: Some(BackendId::HtmlWasm),
+            ..TestRunnerOptions::default()
+        },
+    );
+    assert_eq!(suite_cases.len(), 1);
+    assert_eq!(suite_cases[0].display_name, "case [html_wasm]");
 
     fs::remove_dir_all(&root).expect("should clean up temp fixture root");
 }
@@ -143,8 +149,7 @@ fn manifest_metadata_survives_backend_expansion() {
     )
     .expect("should write manifest");
 
-    let suite = load_test_suite_from_root_with_filter(&root, None)
-        .expect("metadata matrix case should load");
+    let suite = load_test_suite_from_root(&root).expect("metadata matrix case should load");
     assert_eq!(suite.cases.len(), 2);
     assert_eq!(
         suite
@@ -190,7 +195,7 @@ fn matrix_cases_resolve_backend_specific_golden_directories() {
     )
     .expect("should write matrix expect file");
 
-    let cases = load_canonical_case_specs(&case_root, None, None).expect("cases should parse");
+    let cases = load_canonical_case_specs(&case_root, None).expect("cases should parse");
     assert_eq!(cases.len(), 2);
 
     let html_case = cases
@@ -224,8 +229,7 @@ fn accepts_success_fixture_with_golden_only_assertion() {
     )
     .expect("should write expect file");
 
-    let cases =
-        load_canonical_case_specs(&case_root, None, None).expect("fixture should be accepted");
+    let cases = load_canonical_case_specs(&case_root, None).expect("fixture should be accepted");
     assert_eq!(cases.len(), 1);
     assert_eq!(cases[0].display_name, "case [html]");
 

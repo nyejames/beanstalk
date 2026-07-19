@@ -3,7 +3,7 @@
 //! WHAT: runs the integration test suite and renders results.
 
 use crate::compiler_tests::integration_test_runner::{
-    BackendId, FailureTriageEntry, SummaryCounts, TestRunnerOptions,
+    BackendId, FailureTriageEntry, SummaryCounts, TestCaseSpec, TestRunnerOptions,
 };
 use rayon::prelude::*;
 use saying::say;
@@ -21,31 +21,26 @@ pub(crate) fn normalize_relative_path(path: &std::path::Path) -> String {
     path.to_string_lossy().replace('\\', "/")
 }
 
-/// Runs all test cases from the `tests/cases` directory.
-pub fn run_all_test_cases(show_warnings: bool) -> Result<super::IntegrationRunSummary, String> {
-    run_all_test_cases_with_backend_filter(show_warnings, None)
-}
-
-/// Runs all test cases with an optional backend filter.
-pub fn run_all_test_cases_with_backend_filter(
-    show_warnings: bool,
-    backend_filter: Option<&str>,
+/// Runs or lists the selected cases from the `tests/cases` directory.
+pub(crate) fn run_all_test_cases(
+    options: TestRunnerOptions,
 ) -> Result<super::IntegrationRunSummary, String> {
-    let backend_filter = match backend_filter {
-        Some(raw_backend) => Some(BackendId::parse(raw_backend)?),
-        None => None,
-    };
+    let suite = fixture::load_test_suite()?;
+    let cases = select_cases(suite.cases, &options);
 
-    println!("Running all Beanstalk test cases...\n");
+    if options.list {
+        print!("{}", reporting::format_case_listing(&cases));
+        return Ok(SummaryCounts::default().into());
+    }
+
+    if cases.is_empty() && has_selection_filters(&options) {
+        return Err(String::from(
+            "No integration test cases matched the requested selection filters.",
+        ));
+    }
+
+    println!("Running Beanstalk test cases...\n");
     let timer = std::time::Instant::now();
-    let options = TestRunnerOptions {
-        show_warnings,
-        backend_filter,
-    };
-
-    let suite = fixture::load_test_suite(options.backend_filter)?;
-
-    let cases = suite.cases;
     let mut indexed_results = if let Some(thread_count) = test_thread_count_from_env()? {
         let pool = rayon::ThreadPoolBuilder::new()
             .num_threads(thread_count)
@@ -184,6 +179,39 @@ pub fn run_all_test_cases_with_backend_filter(
 
     say!(Dark White "=".repeat(SEPARATOR_LINE_LENGTH));
     Ok(total_summary.into())
+}
+
+pub(crate) fn select_cases(
+    cases: Vec<TestCaseSpec>,
+    options: &TestRunnerOptions,
+) -> Vec<TestCaseSpec> {
+    cases
+        .into_iter()
+        .filter(|case| {
+            options
+                .case_id
+                .as_deref()
+                .is_none_or(|case_id| case.case_id == case_id)
+                && options
+                    .tag_filters
+                    .iter()
+                    .all(|tag| case.tags.iter().any(|case_tag| case_tag == tag))
+                && options
+                    .contract
+                    .as_deref()
+                    .is_none_or(|contract| case.contract.as_deref() == Some(contract))
+                && options
+                    .backend_filter
+                    .is_none_or(|backend| case.backend_id == backend)
+        })
+        .collect()
+}
+
+fn has_selection_filters(options: &TestRunnerOptions) -> bool {
+    options.case_id.is_some()
+        || !options.tag_filters.is_empty()
+        || options.contract.is_some()
+        || options.backend_filter.is_some()
 }
 
 fn test_thread_count_from_env() -> Result<Option<usize>, String> {

@@ -15,19 +15,11 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-pub(super) fn load_test_suite(backend_filter: Option<BackendId>) -> Result<TestSuiteSpec, String> {
-    load_test_suite_from_root_with_filter(Path::new(CANONICAL_TESTS_PATH), backend_filter)
+pub(super) fn load_test_suite() -> Result<TestSuiteSpec, String> {
+    load_test_suite_from_root(Path::new(CANONICAL_TESTS_PATH))
 }
 
-#[cfg(test)]
 pub(crate) fn load_test_suite_from_root(root: &Path) -> Result<TestSuiteSpec, String> {
-    load_test_suite_from_root_with_filter(root, None)
-}
-
-pub(crate) fn load_test_suite_from_root_with_filter(
-    root: &Path,
-    backend_filter: Option<BackendId>,
-) -> Result<TestSuiteSpec, String> {
     let mut cases = Vec::new();
     let manifest_path = root.join(MANIFEST_FILE_NAME);
     if !manifest_path.is_file() {
@@ -43,8 +35,7 @@ pub(crate) fn load_test_suite_from_root_with_filter(
 
     for manifest_case in manifest_cases {
         let fixture_root = root.join(&manifest_case.path);
-        let case_specs =
-            load_canonical_case_specs(&fixture_root, Some(manifest_case), backend_filter)?;
+        let case_specs = load_canonical_case_specs(&fixture_root, Some(manifest_case))?;
         cases.extend(case_specs);
     }
 
@@ -132,7 +123,6 @@ fn discover_canonical_fixture_roots(root: &Path) -> Result<Vec<PathBuf>, String>
 pub(crate) fn load_canonical_case_specs(
     fixture_root: &Path,
     manifest_case: Option<ManifestCaseSpec>,
-    backend_filter: Option<BackendId>,
 ) -> Result<Vec<TestCaseSpec>, String> {
     let input_root = fixture_root.join(INPUT_DIR_NAME);
     let expect_path = fixture_root.join(EXPECT_FILE_NAME);
@@ -180,12 +170,6 @@ pub(crate) fn load_canonical_case_specs(
 
     let mut case_specs = Vec::new();
     for backend_expectation in parsed_expectation.backend_expectations {
-        if let Some(selected_backend) = backend_filter
-            && selected_backend != backend_expectation.backend_id
-        {
-            continue;
-        }
-
         let expected = match backend_expectation.mode {
             ExpectationMode::Success => ExpectedOutcome::Success(SuccessExpectation {
                 warnings: backend_expectation.warnings,
