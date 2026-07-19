@@ -29,17 +29,17 @@ This ordering is mandatory. Do not begin broad pruning while the harness can sti
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 2B11b — classify choice constructors, constants and imported payload use
-LAST_ACCEPTED_COMMIT: `f3e10466a` — assert seven choice payload-match results
-WORKTREE: parent `main` has only this Phase 2B11b plan checkpoint diff atop `f3e10466a`; reusable worker branch is clean at `4e095cc68` in `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase2a`; do not create another worktree
+CURRENT_SLICE: Phase 2B11c — assert config, HTML runtime and receiver outputs
+LAST_ACCEPTED_COMMIT: `71ca50815` — classify choice construction contracts
+WORKTREE: parent `main` has only this Phase 2B11c plan checkpoint diff atop `71ca50815`; reusable worker branch is clean at `f74c6745c` in `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase2a`; do not create another worktree
 REQUIRED_RELOADS: startup files, this plan and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: acceptance-only constructors and compile-time choice constants need explicit compile-only intent; behavior-visible imported payload matching needs an observable result
-- code: six choice constructor/constant/import cases only prove legal compilation, while `choice_imported_alias_payload_capture_success` emits `captured`; all seven still use only the HTML backend baseline
+- docs: behavior-first page and console fixtures should assert their visible result; existing HTML-Wasm artifact contracts remain backend-specific and unchanged
+- code: six HTML success blocks have direct source-derived output but still rely only on the backend baseline; paired HTML-Wasm blocks already own artifact contracts where present
 ACCEPTANCE_CRITERIA:
-- mark the six acceptance-only cases `success_contract = "compile_only"` and assert only `captured` for the imported alias match
-- preserve sources, backend matrices and warning policy; keep `choice_import_visibility_non_exported` isolated
-- all seven exact HTML cases, focused runner tests, audit, diff checks and full gate pass
+- add the exact source-derived rendered output to only the six selected HTML backend blocks
+- preserve sources, HTML-Wasm blocks, artifacts and warning policy; leave `path_bst_template_warning` for warning-contract enforcement
+- all six exact HTML cases, focused runner tests, audit, diff checks and full gate pass
 VALIDATION_STATE:
 - final TIR at `dc81f7e53`: `just validate` passed with 3,433 Rust tests, 1,784 integration executions, docs checking and 28 benchmark sanity cases
 - Phase 0A documentation-only gate: `cargo run --quiet -- build docs --release` passed; 72 files built and no generated diff was produced (`bean` was unavailable in `PATH`)
@@ -68,13 +68,14 @@ VALIDATION_STATE:
 - Phase 2C1: missing expectations now fail with a case-owned error and the fallback parser path, constant and stub expectation are deleted; 70 runner tests, audit, formatting and diff checks passed in worker and parent review; worker `just validate` passed with 3,466 Rust tests and 1,784 integration executions; audit still reports 55 baseline-only blocks that must be migrated before final success-contract enforcement
 - Phase 2B11 exploration: Codex CLI accounted for all 55 remaining blocks in nine bounded batches; corrected detailed totals are 38 rendered-output, one artifact, two warning, 13 compile-only and one design-conflict investigation; no files changed
 - Phase 2B11a: all seven choice payload-match cases, 70 runner tests, audit and diff checks passed in worker and parent review; worker `just validate` passed with 3,466 Rust tests and 1,784 integration executions; audit reported 17 compile-only, 48 baseline-only, zero fallback and zero hard violations
+- Phase 2B11b: all seven choice constructor/constant/import cases, 70 runner tests, audit and diff checks passed in worker and parent review; worker `just validate` passed with 3,466 Rust tests and 1,784 integration executions; audit reported 23 compile-only, 41 baseline-only, zero fallback and zero hard violations
 - Phase 2B9 launch: both the optional `beanstalk-spark-explorer` and required `beanstalk-plan-worker` Codex CLI profiles selected `gpt-5.6-luna` but returned the account usage-limit error before repository edits; the service reported retry availability at 2026-07-25 11:08 AM
 DOCS_IMPACT: Phase 1 workflow docs, generated release output and the deferred code-block highlighting roadmap note are current; fixture outcomes/backend coverage and the progress matrix remain unchanged
 BLOCKERS_OR_OPEN_DECISIONS: none for this slice; diagnostics Phase 4.1c remains serialized at `d7fb3654f`; disk permits at most one additional worktree
-DELEGATION_DECISION: codex-cli implementation — explicit user-requested provider and the next seven choice contracts are source-bounded without the isolated visibility conflict
+DELEGATION_DECISION: codex-cli implementation — explicit user-requested provider and the six selected outputs are direct, backend-local and source-bounded
 NEXT_WORKER_ORDER: codex-cli only for this run
 STOP_REASON: none
-NEXT_RESUME_ACTION: launch the bounded Phase 2B11b choice constructor/constant/import expectation migration in the existing reusable worktree
+NEXT_RESUME_ACTION: launch the bounded Phase 2B11c config/runtime/receiver output migration in the existing reusable worktree
 
 ## Recommended roadmap placement and activation conditions
 
@@ -116,17 +117,17 @@ ACTIVE_PLAN:
 
 CURRENT_SLICE:
 - Phase: 2
-- Checklist item: 2B11b — classify choice constructors, constants and imported payload use
-- Goal: give six acceptance-only choice cases explicit compile-only intent and one imported alias match an observable output contract
-- Non-goals: no source edits, `choice_import_visibility_non_exported`, schema enforcement, assertion-module split, diagnostic multiplicity work, role/contract backfill or later phases
+- Checklist item: 2B11c — assert config, HTML runtime and receiver outputs
+- Goal: replace six HTML backend baselines with direct rendered-output contracts while preserving paired Wasm artifact ownership
+- Non-goals: no source edits, `path_bst_template_warning`, HTML-Wasm expectation changes, schema enforcement, assertion-module split, diagnostic multiplicity work, role/contract backfill or later phases
 
 LAST_GOOD_COMMIT:
-- `f3e10466a` — accepted Phase 2B11a choice payload-match output contracts
+- `71ca50815` — accepted Phase 2B11b choice construction, constant and imported-payload contracts
 
 CURRENT_WORKTREE_STATE:
-- Clean / known changes: parent `main` has only this Phase 2B11b plan checkpoint diff atop `f3e10466a`; the reusable worker branch is clean at `4e095cc68`
+- Clean / known changes: parent `main` has only this Phase 2B11c plan checkpoint diff atop `71ca50815`; the reusable worker branch is clean at `f74c6745c`
 - Branch: local `main`
-- Dedicated worker worktrees: reuse `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase2a`, currently clean at `4e095cc68`; do not create another worktree
+- Dedicated worker worktrees: reuse `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase2a`, currently clean at `f74c6745c`; do not create another worktree
 
 RELEVANT_DOCS_THIS_SLICE:
 - `AGENTS.md`
@@ -141,15 +142,17 @@ RELEVANT_DOCS_THIS_SLICE:
 - `docs/roadmap/roadmap.md`
 
 RELEVANT_CODE:
-- `tests/cases/choice_payload_constructor_{positional,named,mixed}_success/expect.toml`: explicit compile-only constructor acceptance
-- `tests/cases/choice_const_{unit,payload}_success/expect.toml`: explicit compile-only folded choice acceptance
-- `tests/cases/choice_imported_payload_constructor_success/expect.toml`: explicit compile-only imported constructor acceptance
-- `tests/cases/choice_imported_alias_payload_capture_success/expect.toml`: assert source-derived `captured`
+- `tests/cases/config_current_keys_success/expect.toml`: assert `<h1>Backward Compatibility Test</h1>`
+- `tests/cases/config_loading/expect.toml`: assert `<h1>Config Loading Test</h1>`
+- `tests/cases/html_wasm_bool_conditional/expect.toml`: HTML asserts `yes`; preserve Wasm exports
+- `tests/cases/html_wasm_flag_off_js_only_regression/expect.toml`: assert `js only default`
+- `tests/cases/html_wasm_multi_fragment_string/expect.toml`: HTML asserts `Hello World` and `entry`; preserve Wasm artifacts
+- `tests/cases/receiver_method_basic_call/expect.toml`: assert `3, 4`
 
 ACCEPTANCE_CRITERIA:
-- six selected HTML backends own explicit compile-only intent and the imported alias match owns `rendered_output_contains = ["captured"]`
-- no input source, manifest metadata, other backend or other fixture changes
-- exact cases, 70 runner tests, audit, formatting, diff checks and `just validate` pass; compile-only rises to 23 and baseline-only falls to 41
+- the six selected HTML backends own the exact source-derived rendered fragments
+- no input source, manifest metadata, HTML-Wasm contract or other fixture changes
+- exact cases, 70 runner tests, audit, formatting, diff checks and `just validate` pass; baseline-only falls from 41 to 35
 
 DECISIONS_ALREADY_MADE:
 - decision: harden the integration harness before pruning
@@ -241,7 +244,7 @@ DOCS_IMPACT:
 - authorized docs updates: this plan explicitly authorizes the documentation changes listed in each phase; do not broaden language or architecture docs without a discovered contradiction or an intentional accepted behaviour change
 
 NEXT_ACTION:
-- launch the bounded Phase 2B11b Codex CLI choice constructor/constant/import expectation migration in the existing reusable worktree
+- launch the bounded Phase 2B11c Codex CLI config/runtime/receiver output migration in the existing reusable worktree
 
 ---
 
@@ -1327,6 +1330,12 @@ Accepted batch 2B11a at `f3e10466a`: seven choice payload-match cases now assert
 branch results, including six `bad` payloads and the `forty-two` guard result. Audit baseline-only
 findings fell from 55 to 48, and the worker's full validation plus the parent's exact cases, focused
 tests, audit, formatting and diff checks passed.
+
+Accepted batch 2B11b at `71ca50815`: six choice constructor, constant and imported-constructor
+cases now declare intentional compile-only acceptance, while imported alias payload matching asserts
+its executed `captured` value. Audit compile-only findings rose from 17 to 23, baseline-only findings
+fell from 48 to 41, and the worker's full validation plus the parent's exact cases, focused tests,
+audit, formatting and diff checks passed.
 
 ### 2C — Enforce canonical expectations and remove the fallback
 
