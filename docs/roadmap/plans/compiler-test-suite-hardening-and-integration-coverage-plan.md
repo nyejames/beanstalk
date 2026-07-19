@@ -29,19 +29,18 @@ This ordering is mandatory. Do not begin broad pruning while the harness can sti
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 2B2 — migrate the lifetime and scoped-alias success family
-LAST_ACCEPTED_COMMIT: `713e44f9d` — make the first borrow-validation success contracts explicit
-WORKTREE: parent `main` at `713e44f9d`; Phase 1 worker worktrees were removed after patch-equivalence checks; reuse `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase2a` for subsequent serialized slices
+CURRENT_SLICE: Phase 2B3 — migrate the observable borrow-flow success family
+LAST_ACCEPTED_COMMIT: `e9b47908f` — make lifetime and scoped-alias success contracts explicit
+WORKTREE: parent `main` at `e9b47908f`; Phase 1 worker worktrees were removed after patch-equivalence checks; reuse `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase2a` for subsequent serialized slices
 REQUIRED_RELOADS: startup files, this plan and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: memory access/borrow-validation contracts define the selected cases' semantics; `testing.bd` requires explicit authored assertions for visible behaviour
-- code: Phase 2B1 reduced fallback-backed cases to 43 and backend-baseline-only blocks to 100; the corrected Phase 2B2 family has six fallback-backed plus two explicit weak blocks
+- code: Phase 2B2 reduced fallback-backed cases to 37 and backend-baseline-only blocks to 92; the next coherent family has four fallback-backed observable borrow-flow cases
 ACCEPTANCE_CRITERIA:
-- add authored HTML expectations to six fallback-backed lifetime/borrow-flow cases and strengthen two existing explicit weak expectations
-- use explicit compile-only intent and `role = "smoke"` for exactly five no-output cases
-- assert visible output for `lifetime_inference_integration_basic`, `borrow_checker_alias_not_live_after_scope` and `borrow_checker_loop_break_with_alias`
-- leave runner enforcement, fallback infrastructure, source inputs and unrelated classifications unchanged
-- pass all eight selected exact-case runs, audit, focused harness tests, formatting, diff checks and `just validate`
+- add authored HTML rendered-output expectations to `adversarial_borrow_after_result_handler`, `adversarial_borrow_nested_loop_aliases`, `path_dependent_reborrow` and `struct_field_borrowing`
+- assert the source-derived markers `value`, `shared`, `test_value`, `Alice 30` and `31`
+- add no smoke roles or broad contract IDs and leave source inputs, runner enforcement and fallback infrastructure unchanged
+- pass all four exact-case runs, audit, focused harness tests, formatting, diff checks and `just validate`
 VALIDATION_STATE:
 - final TIR at `dc81f7e53`: `just validate` passed with 3,433 Rust tests, 1,784 integration executions, docs checking and 28 benchmark sanity cases
 - Phase 0A documentation-only gate: `cargo run --quiet -- build docs --release` passed; 72 files built and no generated diff was produced (`bean` was unavailable in `PATH`)
@@ -55,12 +54,13 @@ VALIDATION_STATE:
 - Phase 2 sequencing exploration: Codex CLI Spark completed read-only at `f253b3733`; strict enforcement before migration would reject 110 current success blocks, split between 53 fallback-backed cases and 57 explicit weak blocks
 - Phase 2A: focused 70-test integration-runner suite, real 1,651-case audit, `cargo fmt`, `git diff --check` and `just validate` passed; main independently repeated the 70 focused tests and audit after integration
 - Phase 2B1: all 10 exact HTML cases, 70 focused runner tests, audit, formatting, diff checks and `just validate` passed; the full gate covered 3,463 Rust tests and 28 benchmark sanity cases
+- Phase 2B2: all eight exact HTML cases, 70 focused runner tests, audit, formatting, diff checks and `just validate` passed; the full gate covered 3,463 Rust tests, 1,784 integration executions, docs checking and 28 benchmark sanity cases
 DOCS_IMPACT: Phase 1 workflow docs, generated release output and the deferred code-block highlighting roadmap note are current; fixture outcomes/backend coverage and the progress matrix remain unchanged
-BLOCKERS_OR_OPEN_DECISIONS: diagnostics Phase 4.1c remains incomplete but is explicitly serialized at clean accepted commit `d7fb3654f`; no diagnostics, manifest or runner worker may overlap this plan; disk permits at most one additional worktree, so reuse the existing Phase 2 checkout and remove it when safely integrated
-DELEGATION_DECISION: codex-cli — reuse the existing dedicated worktree for the user-requested Codex CLI Phase 2B2 implementation slice
-NEXT_WORKER_ORDER: codex-cli only for the Phase 2B2 implementation slice
+BLOCKERS_OR_OPEN_DECISIONS: diagnostics Phase 4.1c remains serialized at `d7fb3654f`; disk permits at most one additional worktree; before Phase 2 closes, resolve `adversarial_multi_file_helper_chain` using unsupported `@./prefix` and review mutation-during-iteration semantics in `loop_borrow_mutation_conflict`
+DELEGATION_DECISION: codex-cli — reuse the existing dedicated worktree for the user-requested Codex CLI Phase 2B3 implementation slice
+NEXT_WORKER_ORDER: codex-cli only for the Phase 2B3 implementation slice
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit this Phase 2B1 checkpoint, synchronize the reusable worker branch with main and launch the bounded Phase 2B2 fixture slice
+NEXT_RESUME_ACTION: commit this Phase 2B2 checkpoint, synchronize the reusable worker branch with main and launch the bounded Phase 2B3 fixture slice
 
 ## Recommended roadmap placement and activation conditions
 
@@ -102,17 +102,17 @@ ACTIVE_PLAN:
 
 CURRENT_SLICE:
 - Phase: 2
-- Checklist item: 2B2 — migrate the lifetime and scoped-alias success family
-- Goal: replace the fallback for six lifetime/borrow-flow cases and strengthen two scoped-alias expectations with five compile-only and three rendered-output contracts
+- Checklist item: 2B3 — migrate the observable borrow-flow success family
+- Goal: replace the fallback for four borrow-flow cases with authored rendered-output contracts
 - Non-goals: no runner enforcement, fallback removal, unrelated fixture migration, diagnostic changes, exact runtime-event infrastructure or broad role/contract backfill
 
 LAST_GOOD_COMMIT:
-- `713e44f9d` — accepted Phase 2B1 borrow-validation expectation migration
+- `e9b47908f` — accepted Phase 2B2 lifetime and scoped-alias expectation migration
 
 CURRENT_WORKTREE_STATE:
-- Clean / known changes: parent `main` is at `713e44f9d`; this Phase 2B1 checkpoint update is parent-owned
+- Clean / known changes: parent `main` is at `e9b47908f`; this Phase 2B2 checkpoint update is parent-owned
 - Branch: local `main`
-- Dedicated worker worktrees: all accepted Phase 1 worktrees were clean and removed after `git cherry` confirmed their patches on main; reuse `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase2a` from worker commit `d93e06b46`
+- Dedicated worker worktrees: all accepted Phase 1 worktrees were clean and removed after `git cherry` confirmed their patches on main; reuse `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase2a` from worker commit `dd00f300a`
 
 RELEVANT_DOCS_THIS_SLICE:
 - `AGENTS.md`
@@ -127,17 +127,16 @@ RELEVANT_DOCS_THIS_SLICE:
 - `docs/roadmap/roadmap.md`
 
 RELEVANT_CODE:
-- `tests/cases/{lifetime_inference_control_flow,lifetime_inference_drop_insertion,lifetime_inference_error_precision,lifetime_inference_integration_basic,lifetime_inference_move_refinement,nested_borrowing_patterns}/expect.toml`: new explicit expectations
-- `tests/cases/{borrow_checker_alias_not_live_after_scope,borrow_checker_loop_break_with_alias}/expect.toml`: strengthen existing weak expectations with visible output
-- `tests/cases/manifest.toml`: add smoke role only to the five intentional compile-only cases
+- `tests/cases/{adversarial_borrow_after_result_handler,adversarial_borrow_nested_loop_aliases,path_dependent_reborrow,struct_field_borrowing}/expect.toml`: new explicit rendered-output expectations
+- `tests/cases/adversarial_multi_file_helper_chain/input/helper/compose.bst`: inspect-only design conflict; `@./prefix` is unsupported
+- `tests/cases/loop_borrow_mutation_conflict/input/#page.bst`: inspect-only pending mutation-during-iteration review
 - `tests/fixtures/stubs/expect.toml`: inspect only; fallback removal belongs to 2C after all migrations
 - `justfile::validate`: final code-bearing gate
 
 ACCEPTANCE_CRITERIA:
-- five no-output cases use explicit `success_contract = "compile_only"`: `lifetime_inference_control_flow`, `lifetime_inference_drop_insertion`, `lifetime_inference_error_precision`, `lifetime_inference_move_refinement`, `nested_borrowing_patterns`
-- those five and only those five receive `role = "smoke"`; broad contract identifiers remain for Phase 14
-- `lifetime_inference_integration_basic` asserts `Integration test completed`; `borrow_checker_alias_not_live_after_scope` asserts `10` and `20`; `borrow_checker_loop_break_with_alias` asserts `loop_value` and `true`
-- all eight exact cases pass on HTML; audit reports 11 total explicit compile-only blocks, 92 remaining backend-baseline-only blocks, 37 remaining fallback-backed cases and zero hard violations; full validation passes
+- `adversarial_borrow_after_result_handler` asserts `value`; `adversarial_borrow_nested_loop_aliases` asserts `shared`; `path_dependent_reborrow` asserts `test_value`; `struct_field_borrowing` asserts `Alice 30` and `31`
+- no manifest metadata, source input, runner, fallback or unrelated expectation changes
+- all four exact cases pass on HTML; audit reports 11 total explicit compile-only blocks, 88 remaining backend-baseline-only blocks, 33 remaining fallback-backed cases and zero hard violations; full validation passes
 
 DECISIONS_ALREADY_MADE:
 - decision: harden the integration harness before pruning
@@ -202,6 +201,8 @@ VALIDATION_STATE:
 - Phase 2B1 selection exploration: read-only Codex CLI Spark selected 10 fallback-backed borrow-validation cases; parent corrected the evidence to six compile-only and four observable cases, including disjoint-field output `30 21`
 - Phase 2B1 worker `just validate`: passed with 3,463 Rust tests, 1,784 integration executions, docs checking and 28 benchmark sanity cases; audit reported six compile-only, 100 backend-baseline-only and zero hard violations
 - Phase 2B2 selection exploration: read-only Codex CLI Spark selected eight borrow/lifetime cases; parent corrected two cases to existing explicit-weak expectations and corrected `lifetime_inference_integration_basic` from compile-only to observable output
+- Phase 2B2 worker `just validate`: passed with 3,463 Rust tests, 1,784 integration executions, docs checking and 28 benchmark sanity cases; audit reported 11 compile-only, 92 backend-baseline-only, 37 fallback-backed and zero hard violations
+- Phase 2B3 selection exploration: read-only Codex CLI Spark found 12 observable candidates but could not execute them; parent split the mixed owners, verified the four selected cases compile on current main, and excluded two design-conflict candidates from silent success migration
 
 DOCS_IMPACT:
 - progress matrix needed: review after every phase that adds, removes, or materially strengthens current coverage; update only when the coverage statement changes
@@ -209,7 +210,7 @@ DOCS_IMPACT:
 - authorized docs updates: this plan explicitly authorizes the documentation changes listed in each phase; do not broaden language or architecture docs without a discovered contradiction or an intentional accepted behaviour change
 
 NEXT_ACTION:
-- commit this Phase 2B1 checkpoint, synchronize the reusable worker branch with main and launch the bounded Phase 2B2 fixture slice
+- commit this Phase 2B2 checkpoint, synchronize the reusable worker branch with main and launch the bounded Phase 2B3 fixture slice
 
 ---
 
@@ -1233,6 +1234,12 @@ expectations. Six no-output acceptance cases are explicit compile-only smoke cas
 behavior-visible cases assert their current rendered markers. Audit baseline-only findings fell
 from 110 to 100 with six explicit compile-only blocks and no hard violations. Full validation
 passed with 3,463 Rust tests, 1,784 integration executions and 28 benchmark sanity cases.
+
+Accepted batch 2B2 at `e9b47908f`: six fallback-backed lifetime/borrow-flow cases now own
+expectations and two scoped-alias cases gained rendered-output assertions. Five no-output cases
+are explicit compile-only smoke cases. Audit baseline-only findings fell from 100 to 92, fallback
+use fell from 43 to 37, and full validation passed with 3,463 Rust tests, 1,784 integration
+executions and 28 benchmark sanity cases.
 
 ### 2C — Enforce canonical expectations and remove the fallback
 
