@@ -14,22 +14,6 @@ Use the [Progress Matrix](docs/src/docs/progress/#page.bst) as a reference for w
 - [Test Suite Hardening](docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md)
 - [Compiler diagnostics improvements](docs/roadmap/plans/compiler-diagnostics-improvement-plan.md)
 
-## Completed post-TIR plan review checkpoint
-
-The mandatory repository-wide refresh was completed against `1298da468` after final TIR
-architecture, validation and recorded performance evidence were accepted. The queued plans now
-consume one module-scoped store, exact views, one preparation owner, `fold_prepared_template`, folded
-owned strings and neutral owned runtime handoffs. They introduce no second template representation,
-preparation owner or folding path.
-
-The checkpoint refreshed source/current-state anchors, removed stale pre-TIR assumptions, verified
-the dependency chain and recorded the review anchor in each queued plan. It was documentation work,
-not a separate implementation architecture.
-
-## Queued non-blocking performance investigation
-
-- [Post-TIR `$md` and template-parser optimisation](docs/roadmap/plans/post-tir-template-parser-optimization-plan.md) — deferred until representative profiling identifies a material owner; it does not block the canonical implementation chain.
-
 ## Queued implementation chain
 
 - [Canonical module compilation and scoped packages](docs/roadmap/plans/canonical-module-compilation-and-scoped-packages-plan.md)
