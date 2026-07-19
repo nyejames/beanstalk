@@ -3,3 +3,8 @@ entry = "."
 [backends.html]
 mode = "success"
 warnings = "forbid"
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = ["<h1>Backward Compatibility Test</h1>"]
