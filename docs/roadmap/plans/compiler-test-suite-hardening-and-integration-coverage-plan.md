@@ -29,17 +29,18 @@ This ordering is mandatory. Do not begin broad pruning while the harness can sti
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 2A — add explicit success intent
-LAST_ACCEPTED_COMMIT: `120c4baea` — add the integration suite audit report
-WORKTREE: parent `main` at `120c4baea`; accepted Phase 1A–1D worker worktrees remain available under `/Users/aneirinjames/projects/beanstalk/.worktrees/`
+CURRENT_SLICE: Phase 2A — introduce the explicit success-contract schema
+LAST_ACCEPTED_COMMIT: `f253b3733` — document the Phase 1 workflow and deferred code-block highlighting extensions
+WORKTREE: parent `main` at `f253b3733`; accepted Phase 1A–1D worker worktrees remain available under `/Users/aneirinjames/projects/beanstalk/.worktrees/`
 REQUIRED_RELOADS: startup files, this plan and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: `testing.bd` requires explicit authored assertions for visible behaviour; `validation.bd` requires formatting and `just validate`
-- code: `SuccessExpectation` has no typed intent, and fixture validation currently treats the implicit HTML/HTML-Wasm backend baseline as sufficient for success
+- code: `SuccessExpectation` has no typed intent; 53 cases use the fallback expectation and another 57 explicit success blocks have no authored semantic assertion
 ACCEPTANCE_CRITERIA:
 - add a narrow typed `success_contract = "compile_only"` expectation and reject unknown or failure-mode use
 - reject compile-only mixed with artifact, golden, rendered-output or absence assertions
-- make the implicit backend baseline insufficient for an otherwise assertion-free success fixture and cover both explicit acceptance and implicit rejection
+- expose explicit compile-only intent in the audit report
+- retain the implicit baseline and fallback only as the bounded Phase 2 migration path so all canonical outcomes remain green until the 110 affected success blocks are explicit
 - pass focused harness tests, formatting, diff checks and `just validate`
 VALIDATION_STATE:
 - final TIR at `dc81f7e53`: `just validate` passed with 3,433 Rust tests, 1,784 integration executions, docs checking and 28 benchmark sanity cases
@@ -51,12 +52,13 @@ VALIDATION_STATE:
 - Phase 1C: focused 61-test integration-runner and 57-test CLI suites, real list/case/tag commands, `cargo fmt`, `git diff --check` and `just validate` passed; the full gate covered cross-target Clippy, 3,451 Rust tests, 1,784 integration executions, docs checking and 28 benchmark sanity cases
 - Phase 1D: focused 64-test integration-runner and 60-test CLI suites, real audit generation, `cargo fmt`, `git diff --check` and `just validate` passed; the full gate covered cross-target Clippy, 3,457 Rust tests, 1,784 integration executions, docs checking and 28 benchmark sanity cases
 - Phase 1 docs: `testing.bd` and `CONTRIBUTING.md` now document manifest metadata, composable filters, listing and audit; the release docs rebuilt successfully and the full `just validate` gate passed with 3,457 Rust tests, 1,784 integration executions and 28 benchmark sanity cases
-DOCS_IMPACT: Phase 1 workflow docs and generated release output are current; fixture outcomes/backend coverage and the progress matrix remain unchanged
-BLOCKERS_OR_OPEN_DECISIONS: diagnostics Phase 4.1c remains incomplete but is explicitly serialized at clean accepted commit `d7fb3654f`; no diagnostics, manifest or runner worker may overlap this plan
+- Phase 2 sequencing exploration: Codex CLI Spark completed read-only at `f253b3733`; strict enforcement before migration would reject 110 current success blocks, split between 53 fallback-backed cases and 57 explicit weak blocks
+DOCS_IMPACT: Phase 1 workflow docs, generated release output and the deferred code-block highlighting roadmap note are current; fixture outcomes/backend coverage and the progress matrix remain unchanged
+BLOCKERS_OR_OPEN_DECISIONS: diagnostics Phase 4.1c remains incomplete but is explicitly serialized at clean accepted commit `d7fb3654f`; no diagnostics, manifest or runner worker may overlap this plan; the Phase 2 migration dependency is resolved by adding schema before migration and enforcing only after all 110 blocks are explicit
 DELEGATION_DECISION: codex-cli — use the user-requested Codex CLI implementation profile for Phase 2A
 NEXT_WORKER_ORDER: codex-cli only for the Phase 2A implementation slice
 STOP_REASON: none
-NEXT_RESUME_ACTION: complete the Phase 1 docs/checkpoint commit, create a dedicated Phase 2A worker worktree and launch the bounded Codex CLI implementation slice
+NEXT_RESUME_ACTION: commit this sequencing correction, create a dedicated Phase 2A worker worktree and launch the bounded Codex CLI schema slice
 
 ## Recommended roadmap placement and activation conditions
 
@@ -98,15 +100,15 @@ ACTIVE_PLAN:
 
 CURRENT_SLICE:
 - Phase: 2
-- Checklist item: 2A — add explicit success intent
-- Goal: make compile-only success explicit and reject assertion-free success that relies only on an implicit backend baseline
-- Non-goals: no missing-`expect.toml` enforcement, canonical fixture migration, diagnostics, warnings or runtime-order changes
+- Checklist item: 2A — introduce the explicit success-contract schema
+- Goal: make compile-only intent authorable, validated and auditable before canonical fixture migration begins
+- Non-goals: no missing-`expect.toml` enforcement, implicit-baseline rejection, fallback removal, canonical fixture migration, diagnostics, warnings or runtime-order changes
 
 LAST_GOOD_COMMIT:
-- `120c4baea` — accepted Phase 1D audit-report skeleton
+- `f253b3733` — accepted Phase 1 documentation and deferred code-block highlighting roadmap note
 
 CURRENT_WORKTREE_STATE:
-- Clean / known changes: parent `main` is at `120c4baea` with accepted Phase 1 documentation and this capsule update parent-owned
+- Clean / known changes: parent `main` is at `f253b3733`; this sequencing correction is parent-owned
 - Branch: local `main`
 - Dedicated worker worktrees: accepted Phase 1A at `48aece83e`, Phase 1B at `27386981d`, Phase 1C at `fc1761348`, and Phase 1D at `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase1d` commit `5d04a0ee3`; no Phase 2A worktree yet
 
@@ -121,19 +123,19 @@ RELEVANT_DOCS_THIS_SLICE:
 RELEVANT_CODE:
 - `src/compiler_tests/integration_test_runner/types.rs`: `SuccessExpectation` and `ParsedBackendExpectation` need one typed success-intent field
 - `src/compiler_tests/integration_test_runner/expectations.rs`: parse and validate the narrow `success_contract` spelling by expectation mode
-- `src/compiler_tests/integration_test_runner/fixture.rs`: replace implicit backend-baseline completeness with explicit authored intent/assertions
-- `src/compiler_tests/integration_test_runner/reporting.rs`: reflect explicit compile-only status without broadening later assertion-strength policy
-- `src/compiler_tests/integration_test_runner/tests/expectations.rs` and `tests/fixture.rs`: focused schema/completeness owners
-- `tests/fixtures/stubs/expect.toml`: inspect only in 2A; fallback removal belongs to 2B
+- `src/compiler_tests/integration_test_runner/fixture.rs`: thread typed success intent without changing current completeness enforcement
+- `src/compiler_tests/integration_test_runner/reporting.rs`: report explicit compile-only status without broadening later assertion-strength policy
+- `src/compiler_tests/integration_test_runner/tests/expectations.rs`, `tests/fixture.rs` and `tests/reporting.rs`: focused schema and reporting owners
+- `tests/fixtures/stubs/expect.toml`: inspect only in 2A; fallback removal belongs to 2C after migration
 - `justfile::validate`: final code-bearing gate
 
 ACCEPTANCE_CRITERIA:
 - one narrow typed success intent represents `success_contract = "compile_only"`
 - unknown values and any use on failure backends are rejected with clear fixture context
 - compile-only cannot coexist with golden, artifact, rendered-output or absence assertions
-- an assertion-free success backend is accepted only with explicit compile-only intent; the implicit backend baseline no longer satisfies fixture completeness
+- the audit distinguishes explicit compile-only from the temporary implicit backend baseline
+- current implicit fixtures continue to load only until the Phase 2B migration is complete; Phase 2A does not edit canonical fixtures or the fallback
 - focused expectation/fixture/reporting tests, formatting, diff checks and `just validate` pass
-- focused harness tests, formatting, diff checks and `just validate` pass
 
 DECISIONS_ALREADY_MADE:
 - decision: harden the integration harness before pruning
@@ -154,6 +156,9 @@ DECISIONS_ALREADY_MADE:
 - decision: diagnostics schema migration must not race the active diagnostics plan
   - reason: both plans touch codes, reasons, labels, and canonical fixtures
   - source/user/date: current diagnostics plan state, 2026-07-18
+- decision: add the compile-only schema before migrating fixtures, then enforce explicitness and delete the fallback atomically
+  - reason: immediate enforcement would reject 110 canonical success blocks, so schema-first enables green family migrations without preserving the permissive path after phase acceptance
+  - source/user/date: Phase 1 audit and Codex CLI sequencing exploration, 2026-07-19
 
 BLOCKERS / RISKS:
 - final TIR is accepted and is no longer a blocker; do not reopen it during suite hardening
@@ -164,6 +169,7 @@ BLOCKERS / RISKS:
 - TIR unit-test paths and counts changed since the original interview anchor and must be re-inventoried from `1298da468`
 - a new integration case may reveal a real compiler bug; do not weaken the test to preserve a green gate
 - the design documents describe accepted end state while the progress matrix describes current support
+- Phase 2B must classify 53 fallback-backed cases and 57 explicit weak blocks; do not blanket-mark them compile-only
 
 VALIDATION_STATE:
 - last recorded command: `just validate`, run for accepted Phase 1D in the dedicated worker worktree
@@ -185,6 +191,7 @@ VALIDATION_STATE:
 - Phase 1D `cargo fmt` and `git diff --check`: passed
 - Phase 1 documentation `cargo run --quiet -- build docs --release`: passed, 72 files built
 - Phase 1 documentation checkpoint `just validate`: passed with cross-target Clippy, 3,457 Rust tests, 1,784 integration executions, docs checking and 28 benchmark sanity cases
+- Phase 2 sequencing exploration: read-only Codex CLI Spark completed; no tests were run and the worktree remained unchanged
 
 DOCS_IMPACT:
 - progress matrix needed: review after every phase that adds, removes, or materially strengthens current coverage; update only when the coverage statement changes
@@ -192,7 +199,7 @@ DOCS_IMPACT:
 - authorized docs updates: this plan explicitly authorizes the documentation changes listed in each phase; do not broaden language or architecture docs without a discovered contradiction or an intentional accepted behaviour change
 
 NEXT_ACTION:
-- complete the Phase 1 docs/checkpoint commit, create a dedicated Phase 2A worker worktree and launch the bounded Codex CLI implementation slice
+- commit this sequencing correction, create a dedicated Phase 2A worker worktree and launch the bounded Codex CLI schema slice
 
 ---
 
@@ -898,7 +905,7 @@ Accepted Phase 0B inventory at `b4503794e`:
 - Authored-contract analysis, which deliberately does not count the implicit backend baseline,
   finds 110 weak success blocks: the 53 fallback blocks plus 57 explicit blocks. The explicit set
   clusters around borrow/lifetime success, choice construction and matching, config/module/facade
-  smoke, HTML-Wasm parity, const-record access and Markdown/Beandown parity. Phase 2C must classify
+  smoke, HTML-Wasm parity, const-record access and Markdown/Beandown parity. Phase 2B must classify
   each as observable behaviour, artifact contract or intentional compile-only smoke rather than
   blanket-marking it compile-only.
 - All 979 failure blocks assert diagnostic codes. Of those, 739 use code presence alone and 240
@@ -1168,31 +1175,26 @@ This phase makes every success case explicit before stronger semantic consolidat
 
 ## Recommended slices
 
-### 2A — Add explicit success intent
+### 2A — Introduce explicit success intent
 
 - [ ] Add a typed `SuccessContract` or equivalent narrow field.
 - [ ] Support `success_contract = "compile_only"`.
 - [ ] Reject unknown values.
 - [ ] Reject compile-only on failure backends.
-- [ ] Define whether compile-only may coexist with artifact assertions; prefer rejecting mixed intent unless a concrete case proves it useful.
-- [ ] Make implicit backend baseline checks insufficient for fixture completeness.
-- [ ] Add self-tests for explicit compile-only acceptance and implicit-success rejection.
+- [ ] Reject compile-only mixed with artifact, golden, rendered-output or absence assertions.
+- [ ] Report explicit compile-only intent separately from the temporary implicit backend baseline.
+- [ ] Add self-tests for explicit compile-only acceptance, invalid combinations and audit classification.
+- [ ] Keep canonical outcomes unchanged in this schema slice; the implicit baseline and expectation fallback remain only until the 2B migration completes.
 
-### 2B — Require canonical `expect.toml`
+### 2B — Migrate existing implicit success cases
 
-- [ ] Make every manifest-listed case require its own `expect.toml`.
-- [ ] Return a clear harness error for a missing expectation file.
-- [ ] Keep direct test helpers explicit by writing their own expectation.
-- [ ] Remove the default-stub read path from canonical fixture loading.
-- [ ] Remove `DEFAULT_EXPECT_STUB_PATH` if no current owner remains.
-- [ ] Delete `tests/fixtures/stubs/expect.toml`.
-- [ ] Delete self-tests that bless implicit expectations.
-- [ ] Add self-tests proving missing expectations fail.
+The Phase 1 audit found 53 cases using the fallback expectation and 57 explicit success blocks with
+no authored semantic assertion. Migrate them under the still-permissive harness so every accepted
+batch remains green. Split the work by semantic family and validate every batch.
 
-### 2C — Migrate existing implicit success cases
+For each affected success block:
 
-For each case found by Phase 0:
-
+- [ ] Give every fallback-backed case its own `expect.toml`.
 - [ ] Determine whether behaviour is externally visible.
 - [ ] Add rendered output for behaviour-first cases.
 - [ ] Add narrow artifact assertions for artifact contracts.
@@ -1202,7 +1204,26 @@ For each case found by Phase 0:
 - [ ] Do not blanket-mark every weak case compile-only.
 - [ ] Update the audit report to classify assertion strength.
 
-Split migrations by semantic family and validate every accepted batch.
+Recommended family order:
+
+1. harness, smoke and syntax acceptance
+2. borrow, lifetime and access semantics
+3. choices, functions and control flow
+4. config, imports, modules and package facades
+5. HTML, JavaScript, Wasm and artifact contracts
+6. constants, records, templates and documentation parity
+
+### 2C — Enforce canonical expectations and remove the fallback
+
+- [ ] Make every manifest-listed case require its own `expect.toml`.
+- [ ] Return a clear harness error for a missing expectation file.
+- [ ] Keep direct test helpers explicit by writing their own expectation.
+- [ ] Make implicit backend baseline checks insufficient for success-fixture completeness.
+- [ ] Remove the default-stub read path from canonical fixture loading.
+- [ ] Remove `DEFAULT_EXPECT_STUB_PATH` if no current owner remains.
+- [ ] Delete `tests/fixtures/stubs/expect.toml`.
+- [ ] Delete self-tests that bless implicit expectations.
+- [ ] Add self-tests proving missing expectations and implicit success fail.
 
 ## Phase 2 audit
 
