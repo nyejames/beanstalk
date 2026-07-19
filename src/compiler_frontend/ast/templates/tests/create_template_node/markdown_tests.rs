@@ -12,7 +12,10 @@ fn markdown_formats_only_template_body_content() {
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("template should parse");
 
-    assert!(matches!(template.kind, TemplateType::String));
+    assert!(matches!(
+        effective_tir_kind(&template, &context),
+        TemplateType::String
+    ));
     let folded = fold_template_in_context(&template, &context, &mut string_table);
     let rendered = string_table.resolve(folded);
 

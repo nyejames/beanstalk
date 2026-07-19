@@ -60,7 +60,6 @@ use crate::compiler_frontend::value_mode::ValueMode;
 /// Builds a `Template` expression backed by a one-store Composed TIR root.
 fn template_with_reference(reference: TemplateTirReference, location: SourceLocation) -> Template {
     Template {
-        kind: TemplateType::StringFunction,
         tir_reference: reference,
         location,
     }

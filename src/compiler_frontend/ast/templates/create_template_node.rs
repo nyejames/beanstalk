@@ -11,9 +11,9 @@
 //! ## Runtime metadata ownership
 //!
 //! `Template::new()` is the authoritative owner of final runtime template metadata.
-//! It finalizes the parser-owned TIR root and refreshes the template kind before
-//! returning. AST finalization consumes that TIR reference rather than rebuilding
-//! parser structure.
+//! It finalizes the parser-owned TIR root and writes the classified kind to the
+//! owning TIR entry before returning. AST finalization consumes that TIR reference
+//! rather than rebuilding parser structure.
 
 use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::templates::error::TemplateError;
@@ -452,11 +452,45 @@ impl Template {
             )));
         }
 
-        // Construct the durable `Template` now that authoritative TIR identity
-        // exists. The classified kind is initialized once on both the durable
-        // cache and the authoritative TIR entry below.
+        // `$insert(...)` helpers are allowed to survive while a template still has
+        // unresolved `$slot` markers, because that template may later compose into
+        // an immediate parent and contribute upward. Once a template has no slots
+        // left, any remaining `$insert(...)` is out of scope and must error.
+        //
+        // Composed templates are exempt: head-chain composition routes insert
+        // contributions into the receiving wrapper's slots, leaving
+        // `InsertContribution` nodes in the composed tree. These are not
+        // orphaned — they were consumed by composition — so the check must not
+        // fire on a composed reference.
+        if !matches!(build_state.kind, TemplateType::SlotInsert(_))
+            && !template_classification.has_unresolved_slots
+            && template_classification.has_slot_insertions
+            && !tir_reference.phase.is_at_least(TemplateTirPhase::Composed)
+        {
+            return Err(Box::new(CompilerDiagnostic::invalid_template_slot(
+                InvalidTemplateSlotReason::InsertOutsideParentSlot,
+                None,
+                construction_context.location().to_owned(),
+            )));
+        }
+
+        // Write the parser-local classification through the store owner before
+        // constructing the durable handle. All later consumers read this TIR entry.
+        let template_id = tir_reference.root;
+        let mut template_ir_store = context.template_ir_store.borrow_mut();
+        if !template_ir_store.set_template_kind(template_id, build_state.kind.to_owned()) {
+            return Err(Box::new(
+                TemplateError::from(CompilerError::compiler_error(
+                    "Constructed template kind could not be initialized in its TIR store.",
+                ))
+                .into_diagnostic(),
+            ));
+        }
+        drop(template_ir_store);
+
+        // Construct the durable `Template` only after its authoritative TIR
+        // entry has received the final parser classification.
         let template = Template {
-            kind: build_state.kind,
             tir_reference,
             location: construction_context.location().to_owned(),
         };
@@ -469,47 +503,6 @@ impl Template {
 
             validate_runtime_template_control_flow_slot_artifacts(&template, &store)
                 .map_err(TemplateError::into_diagnostic)?;
-        }
-
-        // `$insert(...)` helpers are allowed to survive while a template still has
-        // unresolved `$slot` markers, because that template may later compose into
-        // an immediate parent and contribute upward. Once a template has no slots
-        // left, any remaining `$insert(...)` is out of scope and must error.
-        //
-        // Composed templates are exempt: head-chain composition routes insert
-        // contributions into the receiving wrapper's slots, leaving
-        // `InsertContribution` nodes in the composed tree. These are not
-        // orphaned — they were consumed by composition — so the check must not
-        // fire on a composed reference.
-        if !matches!(template.kind, TemplateType::SlotInsert(_))
-            && !template_classification.has_unresolved_slots
-            && template_classification.has_slot_insertions
-            && !template
-                .tir_reference
-                .phase
-                .is_at_least(TemplateTirPhase::Composed)
-        {
-            return Err(Box::new(CompilerDiagnostic::invalid_template_slot(
-                InvalidTemplateSlotReason::InsertOutsideParentSlot,
-                None,
-                template.location.clone(),
-            )));
-        }
-
-        // Align the final TIR entry's kind with the classification result.
-        // `finish()` was called with a provisional kind before composition; this
-        // ensures the authoritative TIR entry carries the classified kind. Both
-        // copies are initialized once here; later refresh goes through the
-        // single synchronization owner.
-        let template_id = template.tir_reference.root;
-        let mut template_ir_store = context.template_ir_store.borrow_mut();
-        if !template_ir_store.set_template_kind(template_id, template.kind.to_owned()) {
-            return Err(Box::new(
-                TemplateError::from(CompilerError::compiler_error(
-                    "Constructed template kind could not be initialized in its TIR store.",
-                ))
-                .into_diagnostic(),
-            ));
         }
 
         increment_frontend_counter(FrontendCounter::TemplateCount);

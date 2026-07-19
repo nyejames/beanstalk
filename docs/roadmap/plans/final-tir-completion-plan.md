@@ -29,17 +29,17 @@ TIR remains AST-local. No TIR store, ID, view, overlay or preparation type may c
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/final-tir-completion-plan.md
 STATUS: active
-CURRENT_SLICE: R4 accepted and ready to commit; next slice is the R5 ownership map
-LAST_ACCEPTED_COMMIT: 52f806697 (R3 semantic preparation)
-WORKTREE: main at 52f806697 with accepted uncommitted R4 source/tests plus this parent-owned plan update; concurrent user documentation remains untouched
+CURRENT_SLICE: R5B accepted and ready to commit; next slice is R5A reactive metadata exact-view consolidation
+LAST_ACCEPTED_COMMIT: a16cf5a1f (R4 prepared fold and runtime handoff)
+WORKTREE: main at a16cf5a1f with accepted uncommitted R5B source/tests plus this parent-owned plan update; concurrent user documentation remains untouched
 REQUIRED_RELOADS: startup files, this plan, and current TIR source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: compiler-design-overview.md one-preparation-owner and AST-to-HIR handoff contracts; this plan's R5 remaining-consumer, duplicate-state and test-ownership requirements
-- code: fold_prepared_template is the sole fold entry; exact Composed child and slot-source views reuse one cache owner; runtime handoff consumes PreparedRuntime plus the same view; FinalizedTemplateValue exclusively owns folded, runtime or helper outcomes
+- code: Template now contains only tir_reference and location; TemplateBuildState owns parser-local mutable kind and TemplateIr.kind is the sole durable authority; scalar string coercion no longer interprets templates; reactive metadata still has a raw-store walker for R5A
 ACCEPTANCE_CRITERIA:
-- map every R5 reactive, const-control-flow, final-view, Template.kind and test owner before editing
-- identify the smallest coherent R5 implementation slices without restoring raw-store authority helpers or implementation-shaped test duplication
-- preserve R4's prepared fold, exact cache and owned handoff boundaries
+- commit the accepted R5B hard migration with the plan checkpoint
+- reload the plan and map R5A's pre-final annotation caller plus post-final metadata caller onto one exact TirView traversal owner
+- preserve preparation/fold/handoff ownership and do not begin broad R5C test pruning or R6 work
 VALIDATION_STATE:
 - R2C just validate: passed; cross-target Clippy, 3421 unit tests, 1784 integration cases, docs check and 28 benchmark sanity cases; -7ms average, 23 faster and 0 slower
 - R3 ownership map: passed through Codex CLI simple-exploration; no repeated preparation proving a cache, new preparation.rs is the required final owner, and classification/control-flow predicates remain only where they answer earlier-stage questions
@@ -51,12 +51,16 @@ VALIDATION_STATE:
 - R4 Codex implementation and correction slices: accepted after parent review and final cache/handoff cleanup
 - R4 just validate: passed; cross-target Clippy, 3435 unit tests, 1784 integration cases, docs check and 28 benchmark sanity cases; -7ms average, 23 faster and 0 slower
 - TIR inventory: 18,851 production and 17,747 test lines (R3: 19,948 and 17,712; 069a29acb: 24,274 and 27,231)
+- R5 ownership/test map: passed through Codex CLI simple-exploration; remove Template.kind first, then consolidate reactive metadata, then perform primary-owner test cleanup
+- R5B Codex implementation and parent-review correction slices: accepted; Template has exactly two fields, missing kind authority remains an infrastructure error, scalar coercion is template-free and the synchronization-only test is deleted
+- R5B just validate: passed; cross-target Clippy, 3434 unit tests, 1784 integration cases, docs check and 28 benchmark sanity cases; -7ms average, 22 faster and 0 slower
+- TIR inventory: 18,858 production and 17,739 test lines (R4: 18,851 and 17,747; 069a29acb: 24,274 and 27,231)
 DOCS_IMPACT: index.md locator updated for preparation.rs; progress matrix unchanged because user-visible support did not change
 BLOCKERS_OR_OPEN_DECISIONS: none
-DELEGATION_DECISION: codex-cli simple-exploration next - user requires Codex CLI for worker slices and R5 needs an ownership/test map before implementation
+DELEGATION_DECISION: codex-cli implementation next - user requires Codex CLI for worker slices and R5A is a bounded remaining-consumer consolidation
 NEXT_WORKER_ORDER: codex-cli (user-required provider)
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit the accepted R4 checkpoint, reload, then launch the bounded Codex CLI R5 ownership map
+NEXT_RESUME_ACTION: commit the accepted R5B checkpoint, reload, then launch the bounded Codex CLI R5A implementation
 ```
 
 Use `069a29acb` as the implementation and regression base. Do not continue extending `FoldAuthorityWalk`, foreign-store traversal, external expression-overlay stacks or prepared foreign-wrapper proofs.
@@ -755,6 +759,15 @@ sanity cases.
 - Remove `Template.kind` and synchronization methods.
 - Read `TemplateIr.kind` through the shared store.
 - Keep mutable kind only in parser-local state before the `TemplateIr` entry is created.
+
+R5B accepted on the pre-commit `a16cf5a1f` worktree. `Template` now carries only its exact TIR
+reference and source location, `TemplateBuildState.kind` remains parser-local and `TemplateIr.kind`
+is the sole durable owner. Construction writes the final classification before returning the thin
+handle, missing store authority remains an internal error and the scalar value-to-string helper no
+longer interprets templates without TIR authority. Direct fixtures and semantic kind assertions now
+read the owning store, while the cache-synchronization-only test is deleted. The tracked TIR
+inventory is 18,858 production and 17,739 test lines. `just validate` passed with cross-target
+Clippy, 3,434 unit tests, 1,784 integration cases, docs checking and all 28 benchmark sanity cases.
 
 #### R5C - Assign test ownership
 

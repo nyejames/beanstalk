@@ -547,7 +547,6 @@ fn build_resolved_slot_template_store() -> (Template, Rc<RefCell<TemplateIrStore
     };
 
     let template = Template {
-        kind: TemplateType::String,
         tir_reference: TemplateTirReference {
             root: template_id,
             phase: TemplateTirPhase::Finalized,

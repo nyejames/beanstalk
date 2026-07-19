@@ -46,7 +46,6 @@ fn slot_template(store: &mut TemplateIrStore) -> Template {
     );
 
     Template {
-        kind: TemplateType::String,
         tir_reference: TemplateTirReference {
             root: template_id,
             phase: TemplateTirPhase::Composed,

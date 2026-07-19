@@ -1,7 +1,7 @@
 use super::*;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
-use crate::compiler_frontend::ast::templates::template::TemplateSegmentOrigin;
+use crate::compiler_frontend::ast::templates::template::{TemplateSegmentOrigin, TemplateType};
 use crate::compiler_frontend::ast::templates::template_folding::TemplateEmission;
 use crate::compiler_frontend::ast::templates::tir::{
     PreparedTemplate, TemplateIrNodeId, TemplateIrNodeKind, TemplateIrStore,
@@ -212,6 +212,15 @@ fn effective_tir_style(template: &Template, context: &ScopeContext) -> Style {
         .expect("template TIR entry should remain available");
 
     template_ir.style.clone()
+}
+
+fn effective_tir_kind(template: &Template, context: &ScopeContext) -> TemplateType {
+    let store = context.template_ir_store.borrow();
+    store
+        .get_template(template.tir_reference.root)
+        .expect("template TIR entry should remain available")
+        .kind
+        .clone()
 }
 
 fn runtime_template_context(scope: &InternedPath, string_table: &mut StringTable) -> ScopeContext {

@@ -194,5 +194,8 @@ fn template_kind_at_doc_fragment_boundary(
     template: &Template,
     store: &Rc<RefCell<TemplateIrStore>>,
 ) -> Option<TemplateType> {
-    template.tir_kind_from_store(&store.borrow())
+    store
+        .borrow()
+        .get_template(template.tir_reference.root)
+        .map(|template_ir| template_ir.kind.clone())
 }

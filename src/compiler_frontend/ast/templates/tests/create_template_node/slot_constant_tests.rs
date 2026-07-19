@@ -52,7 +52,10 @@ fn slot_wrappers_remain_compile_time_templates_until_filled() {
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("wrapper template should parse");
 
-    assert!(matches!(template.kind, TemplateType::String));
+    assert!(matches!(
+        effective_tir_kind(&template, &context),
+        TemplateType::String
+    ));
     assert!(
         classify_template_effective_tir(&template, &context.template_ir_store)
             .expect("wrapper classification should succeed")
@@ -119,7 +122,10 @@ fn wrapper_templates_with_runtime_references_are_not_compile_time_constants() {
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("runtime wrapper template should parse");
 
-    assert!(matches!(template.kind, TemplateType::StringFunction));
+    assert!(matches!(
+        effective_tir_kind(&template, &context),
+        TemplateType::StringFunction
+    ));
     assert!(
         classify_template_effective_tir(&template, &context.template_ir_store)
             .expect("runtime wrapper classification should succeed")
@@ -238,7 +244,10 @@ fn non_constant_context_template_head_keeps_runtime_template() {
         panic!("expected runtime template expression");
     };
 
-    assert!(matches!(template.kind, TemplateType::StringFunction));
+    assert!(matches!(
+        effective_tir_kind(&template, &context),
+        TemplateType::StringFunction
+    ));
 }
 
 fn assert_slot_is_tir_only_and_const(source: &str, slot_name: &str) {

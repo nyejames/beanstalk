@@ -7,16 +7,16 @@
 //! the policy explicit and reusable without touching template mechanics.
 
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
-use crate::compiler_frontend::ast::templates::template::TemplateType;
 use crate::compiler_frontend::numeric_text::format::format_finite_float;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 /// Attempts to coerce a constant expression kind to its string representation
 /// for use in template folding.
 ///
-/// WHAT: converts compile-time scalar and template expression kinds to their
-/// string content. Returns `None` for expression kinds that cannot be folded
-/// into a string at compile time.
+/// WHAT: converts compile-time scalar expression kinds to their string content.
+/// Returns `None` for expression kinds that cannot be folded into a string at
+/// compile time. Template values are handled by the TIR fold owner because
+/// their classification requires the module-local store.
 /// WHY: centralises the "what can fold to a string" decision that was
 /// previously inlined in `template_folding::fold_plan`.
 pub(crate) fn fold_expression_kind_to_string(
@@ -37,15 +37,6 @@ pub(crate) fn fold_expression_kind_to_string(
         ExpressionKind::Int(value) => Some(FoldedStringPiece::Text(value.to_string())),
         ExpressionKind::Bool(value) => Some(FoldedStringPiece::Text(value.to_string())),
         ExpressionKind::Char(value) => Some(FoldedStringPiece::Char(*value)),
-        ExpressionKind::Template(template) => {
-            // This store-less coercion boundary uses the durable kind cache.
-            // Classification always preserves the semantic Comment marker.
-            if matches!(template.kind, TemplateType::Comment(_)) {
-                Some(FoldedStringPiece::Skip)
-            } else {
-                Some(FoldedStringPiece::NestedTemplate)
-            }
-        }
         ExpressionKind::Coerced { value, .. } => {
             // Contextual coercion nodes do not change the rendered scalar value;
             // delegate to the inner expression so coerced literals fold the same
@@ -66,10 +57,6 @@ pub(crate) enum FoldedStringPiece {
     Text(String),
     /// A single character to push onto the string buffer.
     Char(char),
-    /// A nested template that must be recursively folded by the caller.
-    NestedTemplate,
-    /// Content that should be silently dropped (comments, omitted slots).
-    Skip,
 }
 
 #[cfg(test)]

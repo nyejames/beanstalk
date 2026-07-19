@@ -320,10 +320,13 @@ fn effective_template_kind_from_store(
     template: &Template,
     store: &TemplateIrStore,
 ) -> Result<TemplateType, TemplateNormalizationError> {
-    template.tir_kind_from_store(store).ok_or_else(|| {
-        CompilerError::compiler_error(
-            "Constant normalization template kind was not found in the module TIR store.",
-        )
-        .into()
-    })
+    store
+        .get_template(template.tir_reference.root)
+        .map(|template_ir| template_ir.kind.clone())
+        .ok_or_else(|| {
+            CompilerError::compiler_error(
+                "Constant normalization template kind was not found in the module TIR store.",
+            )
+            .into()
+        })
 }

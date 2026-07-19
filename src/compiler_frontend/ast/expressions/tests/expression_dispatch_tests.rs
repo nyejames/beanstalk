@@ -314,7 +314,6 @@ fn constant_identifier_uses_module_store_tir() {
     };
 
     let template = Template {
-        kind: TemplateType::String,
         tir_reference: TemplateTirReference {
             root: template_id,
             phase: TemplateTirPhase::Composed,

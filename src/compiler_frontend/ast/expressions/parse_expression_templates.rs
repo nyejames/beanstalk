@@ -54,11 +54,14 @@ pub(super) fn parse_template_expression(
 
     let template_kind = {
         let store = template_context.template_ir_store.borrow();
-        template.tir_kind_from_store(&store).ok_or_else(|| {
-            CompilerError::compiler_error(
-                "Parsed template kind was missing from its module-local TIR store.",
-            )
-        })?
+        store
+            .get_template(template.tir_reference.root)
+            .map(|template_ir| template_ir.kind.clone())
+            .ok_or_else(|| {
+                CompilerError::compiler_error(
+                    "Parsed template kind was missing from its module-local TIR store.",
+                )
+            })?
     };
 
     match template_kind {

@@ -63,7 +63,6 @@ pub(crate) fn raw_template_expression_for_hir_invariant(
         )
     };
     let template = Template {
-        kind,
         tir_reference: TemplateTirReference {
             root: template_id,
             phase: TemplateTirPhase::Parsed,

@@ -25,6 +25,7 @@ use crate::compiler_frontend::ast::templates::template::TemplateType;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::builtins::casts::traits::is_core_cast_trait_name;
+use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_messages::{
     CompileTimeEvaluationErrorReason, CompilerDiagnostic, InvalidAssignmentTargetReason,
     InvalidTemplateSlotReason, InvalidThisUsageReason, NameNamespace,
@@ -80,22 +81,30 @@ pub(super) fn parse_identifier_or_call(
     if let Some(binding) = context.get_reference(&identifier) {
         // Template slot inserts are only legal inside template bodies, constant
         // initializers, or constant headers.
-        // The binding value may carry a template whose module store is not
-        // borrowed at this parser boundary, so the durable kind cache is the
-        // only kind source available here.
-        if let ExpressionKind::Template(template_value) = &binding.value.kind
-            && matches!(template_value.kind, TemplateType::SlotInsert(_))
-            && !matches!(
-                context.kind,
-                ContextKind::Template | ContextKind::Constant | ContextKind::ConstantHeader
-            )
-        {
-            return Err(CompilerDiagnostic::invalid_template_slot(
-                InvalidTemplateSlotReason::InsertOutsideParentSlot,
-                None,
-                token_stream.current_location(),
-            )
-            .into());
+        if let ExpressionKind::Template(template_value) = &binding.value.kind {
+            let is_slot_insert = context
+                .template_ir_store
+                .borrow()
+                .get_template(template_value.tir_reference.root)
+                .map(|template_ir| matches!(template_ir.kind, TemplateType::SlotInsert(_)))
+                .ok_or_else(|| {
+                    CompilerError::compiler_error(
+                        "Identifier template reference pointed at a missing same-store template.",
+                    )
+                })?;
+            if is_slot_insert
+                && !matches!(
+                    context.kind,
+                    ContextKind::Template | ContextKind::Constant | ContextKind::ConstantHeader
+                )
+            {
+                return Err(CompilerDiagnostic::invalid_template_slot(
+                    InvalidTemplateSlotReason::InsertOutsideParentSlot,
+                    None,
+                    token_stream.current_location(),
+                )
+                .into());
+            }
         }
 
         // Const records are field-access-only in runtime contexts.

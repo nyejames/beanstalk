@@ -91,7 +91,6 @@ fn same_store_wrapper_reference_is_normalized_without_materialization() {
     let context = TemplateViewContext::default();
 
     let template = crate::compiler_frontend::ast::templates::template::Template {
-        kind: TemplateType::String,
         tir_reference: TemplateTirReference {
             root: template_id,
             phase: TemplateTirPhase::Parsed,
@@ -117,7 +116,6 @@ fn wrapper_with_missing_view_context_returns_error() {
     ));
     let template_id = push_template_entry(&mut store, root, TemplateType::String);
     let template = crate::compiler_frontend::ast::templates::template::Template {
-        kind: TemplateType::String,
         tir_reference: TemplateTirReference {
             root: template_id,
             phase: TemplateTirPhase::Parsed,
@@ -136,7 +134,6 @@ fn wrapper_with_missing_view_context_returns_error() {
 fn wrapper_with_missing_template_returns_error() {
     let store = TemplateIrStore::new();
     let template = crate::compiler_frontend::ast::templates::template::Template {
-        kind: TemplateType::String,
         tir_reference: TemplateTirReference {
             root: TemplateIrId::new(99),
             phase: TemplateTirPhase::Parsed,

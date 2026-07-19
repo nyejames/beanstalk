@@ -517,7 +517,6 @@ fn slot_field_default_template(template_ir_store: &mut TemplateIrStore) -> Templ
     );
 
     Template {
-        kind: TemplateType::String,
         tir_reference: TemplateTirReference {
             root: template_id,
             phase: TemplateTirPhase::Composed,

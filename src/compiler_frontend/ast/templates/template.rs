@@ -13,7 +13,7 @@ use crate::compiler_frontend::ast::templates::formatter_contract::{
 };
 use crate::compiler_frontend::ast::templates::styles::whitespace::TemplateWhitespacePassProfile;
 use crate::compiler_frontend::ast::templates::tir::{
-    TemplateIrStore, TemplateTirReference, TemplateWrapperReference,
+    TemplateTirReference, TemplateWrapperReference,
 };
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
@@ -275,32 +275,13 @@ impl Style {
 
 /// The central template representation in the AST.
 ///
-/// A `Template` is a narrow durable handle carrying its TIR identity, a cached
-/// kind marker, and source location. Effective style and wrapper context are
-/// owned by the `TemplateIr` entry resolved through `tir_reference`. The
-/// `Template` is the durable value passed between parsing, composition,
-/// formatting, folding and AST finalization.
-///
-/// ## Metadata lifecycle invariants
-///
-/// - **`kind`** is a cached construction-boundary marker. Construction
-///   initializes it alongside `TemplateIr.kind`. The cache is read only at
-///   parser boundaries before the shared module store is borrowed. Callers that
-///   already hold the module store or `TirView` read the authoritative
-///   `TemplateIr.kind` instead.
-/// - **`style`** is owned by `TemplateIr` and read through the module-store
-///   TIR view after construction.
-#[derive(Debug)]
+/// A `Template` is a narrow durable handle carrying its TIR identity and source
+/// location. Effective style, kind and wrapper context are owned by the
+/// `TemplateIr` entry resolved through `tir_reference`. The `Template` is the
+/// durable value passed between parsing, composition, formatting, folding and
+/// AST finalization.
+#[derive(Clone, Debug)]
 pub struct Template {
-    /// Cached template-kind boundary marker.
-    ///
-    /// WHAT: a durable copy of `TemplateIr.kind` available to parser routing
-    ///      before the shared module store is borrowed.
-    /// WHY: the cache supplies an early kind marker without becoming structural
-    ///      authority. Classification, folding, finalization, and render-unit
-    ///      work read `TemplateIr.kind` from the module store or exact view.
-    pub(crate) kind: TemplateType,
-
     /// Authoritative TIR reference.
     ///
     /// WHAT: holds the module-local root, pipeline phase, and value context.
@@ -309,33 +290,4 @@ pub struct Template {
     pub(crate) tir_reference: TemplateTirReference,
 
     pub location: SourceLocation,
-}
-
-impl Clone for Template {
-    fn clone(&self) -> Self {
-        Self {
-            kind: self.kind.to_owned(),
-            // `tir_reference` is a compact module-local identity; copying it
-            // preserves the exact root, phase, and overlay context.
-            tir_reference: self.tir_reference,
-            location: self.location.to_owned(),
-        }
-    }
-}
-
-// -------------------------
-//  Template Implementation
-// -------------------------
-
-impl Template {
-    /// Returns the authoritative template kind from the owning TIR store entry.
-    ///
-    /// WHAT: reads `TemplateIr.kind` from the module-local store.
-    /// WHY: all template references are local to the store supplied by the
-    ///      active AST phase, so no separate identity qualification is needed.
-    pub(crate) fn tir_kind_from_store(&self, store: &TemplateIrStore) -> Option<TemplateType> {
-        store
-            .get_template(self.tir_reference.root)
-            .map(|template_ir| template_ir.kind.clone())
-    }
 }

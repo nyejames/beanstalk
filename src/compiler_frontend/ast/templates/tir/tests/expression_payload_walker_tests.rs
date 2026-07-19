@@ -434,7 +434,6 @@ fn nested_expression_walker_enters_same_store_template_view() {
     let template_id = push_template(&mut store, root, TemplateType::StringFunction);
     let expression = Expression::template(
         Template {
-            kind: TemplateType::StringFunction,
             tir_reference: TemplateTirReference {
                 root: template_id,
                 phase: TemplateTirPhase::Finalized,
@@ -521,7 +520,6 @@ fn finalized_tir_reference(
 
 fn template_with_reference(reference: TemplateTirReference) -> Template {
     Template {
-        kind: TemplateType::StringFunction,
         tir_reference: reference,
         location: empty_location(),
     }

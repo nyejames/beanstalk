@@ -1181,7 +1181,6 @@ fn build_template_with_direct_tir_root(
     };
     let context = TemplateViewContext::default();
     Template {
-        kind,
         location,
         tir_reference: TemplateTirReference {
             root: template_id,
@@ -2223,52 +2222,6 @@ fn raw_directive_records_formatted_tir_phase() {
 }
 
 #[test]
-fn durable_kind_cache_matches_tir_kind_after_construction() {
-    let mut string_table = StringTable::new();
-
-    let (template, store) = parse_template(r#"["head": body]"#, &mut string_table);
-    let store = store.borrow();
-    let tir_kind = store
-        .get_template(template.tir_reference.root)
-        .expect("TIR entry should exist")
-        .kind
-        .clone();
-    assert_eq!(template.kind, TemplateType::String);
-    assert_eq!(
-        template.kind, tir_kind,
-        "durable cache must match TIR kind after construction"
-    );
-
-    let mut token_stream = template_tokens_from_source("[value: body]", &mut string_table);
-    let context = runtime_template_context(&token_stream.src_path, &mut string_table);
-    let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
-        .expect("runtime template should parse");
-    let store = context.template_ir_store.borrow();
-    let tir_kind = store
-        .get_template(template.tir_reference.root)
-        .expect("TIR entry should exist")
-        .kind
-        .clone();
-    assert_eq!(template.kind, TemplateType::StringFunction);
-    assert_eq!(
-        template.kind, tir_kind,
-        "durable cache must match TIR kind after construction"
-    );
-
-    let (template, store) = parse_template("[$doc: doc body]", &mut string_table);
-    let store = store.borrow();
-    let tir_kind = store
-        .get_template(template.tir_reference.root)
-        .expect("TIR entry should exist")
-        .kind
-        .clone();
-    assert_eq!(
-        template.kind, tir_kind,
-        "durable cache must match TIR kind for semantic markers after construction"
-    );
-}
-
-#[test]
 fn parser_tir_records_finalized_same_store_child_template_as_child_template_node() {
     let mut string_table = StringTable::new();
     let (template, store) =
@@ -2496,10 +2449,16 @@ fn doc_comment_with_formatter_reuses_formatted_tir_root() {
     // `$doc` applies markdown formatting automatically, so the same-store
     // `Formatted` TIR root can be reused.
     let mut string_table = StringTable::new();
-    let (template, _store) = parse_template("[$doc: doc body]", &mut string_table);
+    let (template, store) = parse_template("[$doc: doc body]", &mut string_table);
+    let store = store.borrow();
+    let template_kind = store
+        .get_template(template.tir_reference.root)
+        .expect("TIR entry should exist")
+        .kind
+        .clone();
 
     assert_eq!(
-        template.kind,
+        template_kind,
         TemplateType::Comment(CommentDirectiveKind::Doc),
         "$doc should produce a doc-comment template kind"
     );

@@ -383,7 +383,6 @@ fn preparation_reenters_nested_template_payload_authority() {
         empty_location(),
     ));
     let nested_template = Template {
-        kind: TemplateType::String,
         tir_reference: TemplateTirReference {
             root: nested_id,
             phase: TemplateTirPhase::Composed,
@@ -462,7 +461,6 @@ fn preparation_classifies_nested_value_cycle_as_runtime() {
     let context = TemplateViewContext::default();
     let nested_id = TemplateIrId::new(store.template_count());
     let nested_value = || Template {
-        kind: TemplateType::String,
         tir_reference: TemplateTirReference {
             root: nested_id,
             phase: TemplateTirPhase::Composed,

@@ -68,13 +68,8 @@ fn finalized_folded(value: FinalizedTemplateValue) -> StringId {
 }
 
 /// Constructs a `Template` directly from a real module-local TIR reference.
-fn template_with_reference(
-    reference: TemplateTirReference,
-    kind: TemplateType,
-    location: SourceLocation,
-) -> Template {
+fn template_with_reference(reference: TemplateTirReference, location: SourceLocation) -> Template {
     Template {
-        kind,
         tir_reference: reference,
         location,
     }
@@ -114,7 +109,6 @@ fn registered_text_template(
             phase: TemplateTirPhase::Composed,
             context,
         },
-        TemplateType::String,
         SourceLocation::default(),
     )
 }
@@ -389,7 +383,6 @@ fn nested_wrapper_finalization_fixture(
             phase: TemplateTirPhase::Finalized,
             context: parent_context,
         },
-        TemplateType::String,
         SourceLocation::default(),
     );
 
@@ -516,7 +509,6 @@ fn finalization_normalizes_dynamic_expression_payloads_into_expression_overlay()
             phase: TemplateTirPhase::Composed,
             context,
         },
-        TemplateType::StringFunction,
         SourceLocation::default(),
     );
 
@@ -654,7 +646,6 @@ fn finalization_merges_expression_overrides_without_duplicate_sites() {
             phase: TemplateTirPhase::Composed,
             context: initial_context,
         },
-        TemplateType::StringFunction,
         SourceLocation::default(),
     );
 
@@ -729,7 +720,6 @@ fn finalization_does_not_mark_parsed_expression_overlay_reference_finalized() {
             phase: TemplateTirPhase::Parsed,
             context,
         },
-        TemplateType::StringFunction,
         SourceLocation::default(),
     );
 
@@ -811,7 +801,6 @@ fn finalization_normalizes_branch_selector_payloads_into_expression_overlay() {
             phase: TemplateTirPhase::Composed,
             context,
         },
-        TemplateType::StringFunction,
         SourceLocation::default(),
     );
 
@@ -931,7 +920,6 @@ fn finalization_normalizes_loop_header_payloads_into_expression_overlay() {
             phase: TemplateTirPhase::Composed,
             context,
         },
-        TemplateType::StringFunction,
         SourceLocation::default(),
     );
 
@@ -1075,7 +1063,6 @@ fn finalization_fold_uses_finalized_expression_overlay_view() {
             phase: TemplateTirPhase::Finalized,
             context,
         },
-        TemplateType::String,
         SourceLocation::default(),
     );
 
@@ -1303,7 +1290,6 @@ fn finalization_classifies_root_expression_overlay_through_nested_same_store_chi
             phase: TemplateTirPhase::Finalized,
             context: root_context,
         },
-        TemplateType::String,
         SourceLocation::default(),
     );
 
@@ -1444,7 +1430,6 @@ fn finalization_ignores_parsed_child_overlay_before_later_composed_descendant() 
             phase: TemplateTirPhase::Finalized,
             context: root_context,
         },
-        TemplateType::String,
         SourceLocation::default(),
     );
 
@@ -1833,8 +1818,7 @@ fn finalization_fold_uses_resolved_slot_view_context() {
         }
     };
 
-    let template =
-        template_with_reference(reference, TemplateType::String, SourceLocation::default());
+    let template = template_with_reference(reference, SourceLocation::default());
 
     let folded = finalized_folded(
         finalize_template_value(
@@ -1899,8 +1883,7 @@ fn finalization_fold_composed_root_with_unfilled_slot_emits_no_slot_output() {
         }
     };
 
-    let template =
-        template_with_reference(reference, TemplateType::String, SourceLocation::default());
+    let template = template_with_reference(reference, SourceLocation::default());
 
     let folded = finalized_folded(
         finalize_template_value(
@@ -1969,8 +1952,7 @@ fn finalization_fold_formatted_root_with_unfilled_slot_emits_no_slot_output() {
         }
     };
 
-    let template =
-        template_with_reference(reference, TemplateType::String, SourceLocation::default());
+    let template = template_with_reference(reference, SourceLocation::default());
 
     #[cfg(feature = "benchmark_counters")]
     reset_ast_counters();
@@ -2071,7 +2053,6 @@ fn branch_tir_root_normalizes_into_owned_runtime_handoff() {
             phase: TemplateTirPhase::Composed,
             context,
         },
-        TemplateType::StringFunction,
         SourceLocation::default(),
     );
 
@@ -2172,7 +2153,6 @@ fn loop_tir_root_normalizes_into_owned_runtime_handoff() {
             phase: TemplateTirPhase::Composed,
             context,
         },
-        TemplateType::StringFunction,
         SourceLocation::default(),
     );
 
@@ -2360,7 +2340,6 @@ fn registered_runtime_template(
             phase: TemplateTirPhase::Composed,
             context,
         },
-        TemplateType::StringFunction,
         SourceLocation::default(),
     )
 }
@@ -2508,7 +2487,6 @@ fn runtime_template_expression_handoff_uses_finalized_expression_overlay_view() 
             phase: TemplateTirPhase::Composed,
             context: empty_context,
         },
-        TemplateType::StringFunction,
         SourceLocation::default(),
     );
     let mut expression = Expression::template(template, ValueMode::ImmutableOwned);
@@ -2590,7 +2568,6 @@ fn nested_runtime_template_normalizes_through_final_view() {
             phase: TemplateTirPhase::Composed,
             context,
         },
-        TemplateType::StringFunction,
         SourceLocation::default(),
     );
     let mut expression = Expression::template(template, ValueMode::ImmutableOwned);
@@ -2721,7 +2698,6 @@ fn nested_const_template_folds_through_final_view() {
             phase: TemplateTirPhase::Composed,
             context,
         },
-        TemplateType::String,
         SourceLocation::default(),
     );
 
@@ -2804,7 +2780,6 @@ fn reactive_metadata_derived_from_nested_final_view() {
             phase: TemplateTirPhase::Composed,
             context,
         },
-        TemplateType::StringFunction,
         SourceLocation::default(),
     );
     let mut expression = Expression::template(template, ValueMode::ImmutableOwned);
@@ -2879,7 +2854,6 @@ fn helper_artifact_rejected_after_final_view_traversal() {
             phase: TemplateTirPhase::Composed,
             context,
         },
-        TemplateType::SlotInsert(SlotKey::Default),
         SourceLocation::default(),
     );
 

@@ -312,7 +312,6 @@ fn option_capture_scalar_payload_does_not_require_tir_store() {
 
 fn store_qualified_template_with_tir_reference(tir_reference: TemplateTirReference) -> Template {
     Template {
-        kind: TemplateType::String,
         tir_reference,
         location: SourceLocation::default(),
     }
@@ -431,7 +430,6 @@ fn coerced_template_with_no_bindings_returns_inner_template_borrow() {
     };
 
     let nested_template = Template {
-        kind: TemplateType::String,
         tir_reference: TemplateTirReference {
             root: template_id,
             phase: TemplateTirPhase::Parsed,

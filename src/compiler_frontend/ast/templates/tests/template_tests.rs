@@ -278,7 +278,6 @@ fn formatted_doc_template_with_direct_tir(
     ));
 
     let template = Template {
-        kind: TemplateType::Comment(CommentDirectiveKind::Doc),
         tir_reference: TemplateTirReference {
             root: formatted_template_id,
             phase: TemplateTirPhase::Formatted,

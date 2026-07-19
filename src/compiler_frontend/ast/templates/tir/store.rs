@@ -316,13 +316,12 @@ impl TemplateIrStore {
         id
     }
 
-    /// Replaces the top-level kind for an already-materialized template.
+    /// Writes the final parser classification for an already-materialized TIR entry.
     ///
-    /// WHAT: keeps the TIR record's classification aligned with the AST
-    /// template after finalization refreshes the kind from current body shape.
-    /// WHY: HIR handoff construction copies the kind from TIR, so a caller that
-    /// materializes before refreshing `Template::kind` must update the store
-    /// entry before building the owned handoff.
+    /// WHAT: replaces the provisional kind supplied while parser TIR is being
+    /// assembled with the classification from the completed effective view.
+    /// WHY: `TemplateIr.kind` is the durable authority consumed by later AST
+    /// template operations and owned runtime handoff construction.
     pub(crate) fn set_template_kind(&mut self, id: TemplateIrId, kind: TemplateType) -> bool {
         let Some(template) = self.templates.get_mut(id.index()) else {
             return false;

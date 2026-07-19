@@ -588,14 +588,17 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
         // authoritative kind before mutating the construction context again.
         let child_kind = {
             let store = construction_context.store();
-            child_template.tir_kind_from_store(&store).ok_or_else(|| {
-                Box::new(
-                    TemplateError::from(CompilerError::compiler_error(
-                        "Nested template kind was missing from the parser's owning TIR store.",
-                    ))
-                    .into_diagnostic(),
-                )
-            })?
+            store
+                .get_template(child_template.tir_reference.root)
+                .map(|template_ir| template_ir.kind.clone())
+                .ok_or_else(|| {
+                    Box::new(
+                        TemplateError::from(CompilerError::compiler_error(
+                            "Nested template kind was missing from the parser's owning TIR store.",
+                        ))
+                        .into_diagnostic(),
+                    )
+                })?
         };
 
         match &child_kind {

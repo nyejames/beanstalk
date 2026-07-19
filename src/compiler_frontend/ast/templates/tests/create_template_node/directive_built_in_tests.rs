@@ -181,7 +181,10 @@ fn runtime_templates_format_static_body_strings_only() {
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("template should parse");
 
-    assert!(matches!(template.kind, TemplateType::StringFunction));
+    assert!(matches!(
+        effective_tir_kind(&template, &context),
+        TemplateType::StringFunction
+    ));
     let store = context.template_ir_store.borrow();
     assert!(tir_root_has_head_dynamic_expression(
         &template,

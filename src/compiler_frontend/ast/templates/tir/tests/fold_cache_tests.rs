@@ -1032,7 +1032,6 @@ fn fold_dynamic_ast_template_with_missing_root_authority() -> TemplateError {
         ));
 
         let nested_template = Template {
-            kind: TemplateType::String,
             tir_reference: TemplateTirReference {
                 root: nested_template_id,
                 phase: TemplateTirPhase::Composed,

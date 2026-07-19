@@ -101,8 +101,9 @@ pub(super) fn handle_template_value_in_template_head(
 ) -> HeadExpressionResult<()> {
     let template_kind = {
         let store = context.template_ir_store.borrow();
-        value
-            .tir_kind_from_store(&store)
+        store
+            .get_template(value.tir_reference.root)
+            .map(|template_ir| template_ir.kind.clone())
             .ok_or_else(|| {
                 TemplateError::from(
                     crate::compiler_frontend::compiler_errors::CompilerError::compiler_error(

@@ -450,7 +450,10 @@ fn insert_directive_can_coexist_with_other_meaningful_head_items() {
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("insert directive should coexist with other meaningful head items");
 
-    assert!(matches!(template.kind, TemplateType::SlotInsert(_)));
+    assert!(matches!(
+        effective_tir_kind(&template, &context),
+        TemplateType::SlotInsert(_)
+    ));
 }
 
 #[test]
@@ -522,7 +525,7 @@ fn doc_templates_are_markdown_formatted_by_default() {
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("doc template should parse");
     assert!(matches!(
-        template.kind,
+        effective_tir_kind(&template, &context),
         TemplateType::Comment(CommentDirectiveKind::Doc)
     ));
 

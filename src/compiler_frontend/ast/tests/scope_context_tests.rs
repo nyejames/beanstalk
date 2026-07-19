@@ -165,9 +165,9 @@ fn new_template_parsing_context_preserves_constant_kind() {
         vec![],
         0,
     );
-    let template = context.new_template_parsing_context();
+    let template_context = context.new_template_parsing_context();
     assert_eq!(
-        template.kind,
+        template_context.kind,
         ContextKind::Constant,
         "constant contexts must stay constant when creating a template child"
     );
@@ -185,9 +185,9 @@ fn new_template_parsing_context_converts_function_kind_to_template() {
         vec![],
         0,
     );
-    let template = context.new_template_parsing_context();
+    let template_context = context.new_template_parsing_context();
     assert_eq!(
-        template.kind,
+        template_context.kind,
         ContextKind::Template,
         "non-constant contexts must become Template kind in a template child"
     );

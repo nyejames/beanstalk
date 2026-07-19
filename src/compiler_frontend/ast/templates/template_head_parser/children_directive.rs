@@ -92,8 +92,10 @@ pub(super) fn parse_children_style_directive(
     let wrapper_reference = match directive_argument.kind {
         ExpressionKind::Template(child_template) => {
             let current_store = context.template_ir_store.borrow();
-            let child_kind = child_template
-                .tir_kind_from_store(&current_store)
+            let child_template_root = child_template.tir_reference.root;
+            let child_kind = current_store
+                .get_template(child_template_root)
+                .map(|template_ir| template_ir.kind.clone())
                 .ok_or_else(|| {
                     TemplateError::from(
                         crate::compiler_frontend::compiler_errors::CompilerError::compiler_error(

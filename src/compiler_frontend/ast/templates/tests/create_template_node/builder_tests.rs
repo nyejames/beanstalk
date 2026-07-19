@@ -98,7 +98,10 @@ fn builder_registered_style_directive_parses_as_noop_scaffold() {
         .expect("builder-registered directives should parse in scaffold mode");
 
     assert_eq!(effective_tir_style(&template, &context).id, "");
-    assert!(matches!(template.kind, TemplateType::String));
+    assert!(matches!(
+        effective_tir_kind(&template, &context),
+        TemplateType::String
+    ));
 }
 
 #[test]
@@ -190,7 +193,10 @@ fn builder_registered_handler_directive_accepts_declared_optional_argument_type(
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("provided directives should parse optional arguments when configured");
 
-    assert!(matches!(template.kind, TemplateType::String));
+    assert!(matches!(
+        effective_tir_kind(&template, &context),
+        TemplateType::String
+    ));
 }
 
 #[test]

@@ -107,7 +107,10 @@ fn single_item_template_head_with_close_is_foldable() {
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("single-item head template should parse");
 
-    assert!(matches!(template.kind, TemplateType::String));
+    assert!(matches!(
+        effective_tir_kind(&template, &context),
+        TemplateType::String
+    ));
     let folded = fold_template_in_context(&template, &context, &mut string_table);
     assert_eq!(string_table.resolve(folded), "3");
 }
@@ -2305,7 +2308,6 @@ fn const_required_option_capture_template_with_direct_tir(
     let context = TemplateViewContext::default();
 
     Template {
-        kind: TemplateType::String,
         tir_reference: TemplateTirReference {
             root: template_id,
             phase: TemplateTirPhase::Composed,
@@ -2393,7 +2395,6 @@ fn parse_control_flow_template_after_body_parse(
     );
 
     let template = Template {
-        kind: build_state.kind,
         tir_reference,
         location: construction_context.location().to_owned(),
     };
@@ -2505,7 +2506,6 @@ fn parse_runtime_template_without_validation(
         construction_context.finish(style, kind, TemplateTirPhase::Parsed, location);
 
     let template = Template {
-        kind: build_state.kind,
         tir_reference,
         location: construction_context.location().to_owned(),
     };
@@ -2741,7 +2741,6 @@ fn const_required_validation_ignores_referenced_child_expression_overlay() {
     };
 
     let recursive_template = Template {
-        kind: TemplateType::String,
         tir_reference: TemplateTirReference {
             root: recursive_template_id,
             phase: TemplateTirPhase::Finalized,
@@ -2858,7 +2857,6 @@ fn runtime_validation_uses_nested_child_overlay_identity() {
     };
     let parent_context = TemplateViewContext::default();
     let parent_template = Template {
-        kind: TemplateType::String,
         tir_reference: TemplateTirReference {
             root: parent_template_id,
             phase: TemplateTirPhase::Finalized,

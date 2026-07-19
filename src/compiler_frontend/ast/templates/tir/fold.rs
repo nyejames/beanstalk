@@ -621,6 +621,30 @@ fn fold_tir_dynamic_expression(
         return Ok(None);
     }
 
+    if let Some(template) = nested_template_value(expression_ref) {
+        let template_kind = nested_template_kind(template, store)?;
+
+        // Comments are compile-time metadata and intentionally contribute no
+        // rendered output. Slot inserts remain composition helpers and must be
+        // rejected if they reach this final nested-value fold boundary.
+        if matches!(template_kind, TemplateType::Comment(_)) {
+            return Ok(None);
+        }
+        reject_slot_insert_template(&template_kind)?;
+
+        return append_template_emission_to_buffer(
+            fold_template_reference(
+                store,
+                FoldTemplateReference::Nested(&template.tir_reference),
+                fold_context,
+                fold_input,
+            )?,
+            output_buffer,
+            emitted_output,
+            fold_context,
+        );
+    }
+
     match fold_expression_kind_to_string(&expression_ref.kind, fold_context.string_table) {
         Some(FoldedStringPiece::Text(text)) => {
             output_buffer.push_str(&text);
@@ -632,32 +656,6 @@ fn fold_tir_dynamic_expression(
             output_buffer.push(ch);
             *emitted_output = true;
             Ok(None)
-        }
-
-        Some(FoldedStringPiece::Skip) => Ok(None),
-
-        Some(FoldedStringPiece::NestedTemplate) => {
-            let ExpressionKind::Template(template) = &expression_ref.kind else {
-                return Err(CompilerError::compiler_error(
-                    "String coercion returned NestedTemplate for a non-Template expression kind.",
-                )
-                .into());
-            };
-
-            let template_kind = nested_template_kind(template, store, fold_context)?;
-            reject_slot_insert_template(&template_kind)?;
-
-            append_template_emission_to_buffer(
-                fold_template_reference(
-                    store,
-                    FoldTemplateReference::Nested(&template.tir_reference),
-                    fold_context,
-                    fold_input,
-                )?,
-                output_buffer,
-                emitted_output,
-                fold_context,
-            )
         }
 
         None => Err(CompilerDiagnostic::invalid_template_structure(
@@ -672,15 +670,26 @@ fn fold_tir_dynamic_expression(
 fn nested_template_kind(
     template: &Template,
     store: &TemplateIrStore,
-    _fold_context: &TemplateFoldContext<'_>,
 ) -> Result<TemplateType, TemplateError> {
-    template.tir_kind_from_store(store).ok_or_else(|| {
-        CompilerError::compiler_error(format!(
-            "TIR fold: nested template kind for {} was not found in the module store.",
-            template.tir_reference.root
-        ))
-        .into()
-    })
+    store
+        .get_template(template.tir_reference.root)
+        .map(|template_ir| template_ir.kind.clone())
+        .ok_or_else(|| {
+            CompilerError::compiler_error(format!(
+                "TIR fold: nested template kind for {} was not found in the module store.",
+                template.tir_reference.root
+            ))
+            .into()
+        })
+}
+
+/// Finds a nested template wrapped by contextual coercion nodes.
+fn nested_template_value(expression: &Expression) -> Option<&Template> {
+    match &expression.kind {
+        ExpressionKind::Template(template) => Some(template),
+        ExpressionKind::Coerced { value, .. } => nested_template_value(value),
+        _ => None,
+    }
 }
 
 /// Folds a module-local child-template reference against the module store.

@@ -68,7 +68,6 @@ fn template_with_dynamic_overlay(
         wrapper_context: None,
     };
     Template {
-        kind: TemplateType::StringFunction,
         tir_reference: TemplateTirReference {
             root,
             phase,
@@ -134,7 +133,6 @@ fn validation_rejects_non_finalized_template_reference() {
 fn validation_reports_missing_template_root() {
     let store = TemplateIrStore::new();
     let template = Template {
-        kind: TemplateType::StringFunction,
         tir_reference: TemplateTirReference {
             root: crate::compiler_frontend::ast::templates::tir::TemplateIrId::new(99),
             phase: TemplateTirPhase::Finalized,
@@ -185,7 +183,6 @@ fn finalized_template_with_site_overlay(
         wrapper_context: None,
     };
     Template {
-        kind: TemplateType::StringFunction,
         tir_reference: TemplateTirReference {
             root,
             phase: TemplateTirPhase::Finalized,

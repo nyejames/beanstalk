@@ -203,9 +203,8 @@ pub(crate) fn classify_effective_tir_view_template(
 ///       preserving semantic markers (`SlotInsert`, `SlotDefinition`, `Comment`)
 ///       that must not be overwritten by generic cleanup.
 /// WHY: `TemplateIr.kind` is the authoritative post-construction kind owner.
-///      The parser-local build state uses the same rule before the durable
-///      cache exists, while later refreshes go through the template's single
-///      synchronization method.
+///      The parser-local build state uses the same rule before the final
+///      construction boundary writes the classified value to that entry.
 pub(crate) fn refresh_kind_from_classification(
     kind: &mut TemplateType,
     classification: &TirTemplateClassification,

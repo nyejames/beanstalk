@@ -1093,7 +1093,6 @@ mod tests {
             location(),
         ));
         Template {
-            kind: TemplateType::StringFunction,
             tir_reference: TemplateTirReference {
                 root,
                 phase,
@@ -1203,7 +1202,6 @@ mod tests {
     fn missing_composed_root_returns_compiler_error() {
         let store = TemplateIrStore::new();
         let template = Template {
-            kind: TemplateType::StringFunction,
             tir_reference: TemplateTirReference {
                 root: TemplateIrId::new(99),
                 phase: TemplateTirPhase::Composed,
