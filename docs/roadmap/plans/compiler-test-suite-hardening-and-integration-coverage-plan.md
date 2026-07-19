@@ -30,28 +30,30 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 2R6a — align CFG future-use naming and projected-assignment actor identity
-LAST_ACCEPTED_COMMIT: pending Phase 2R5c5 acceptance commit (previous plan commit `1a3ff086c`)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 2R5c5 changes ready to commit
+CURRENT_SLICE: Phase 2R6b — complete the loop-borrow edge matrix and positive integration owner
+LAST_ACCEPTED_COMMIT: pending Phase 2R6a acceptance commit (previous plan commit `bd070da33`)
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 2R6a changes ready to commit
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: borrow-validation, access-and-aliasing, ownership, testing, validation, compiler overview, and progress matrix govern the semantic fix and gates
-- code: `transfer/access/conflicts.rs` owns CFG-carried alias activity; `transfer/access.rs::transfer_assign_target` owns projected writes and actor identity; focused borrow-checker tests own hidden CFG/origin facts
+- code: `borrow_checker_loop_tests.rs` owns hidden transfer/CFG edges; `loop_borrow_mutation_conflict` remains the primary negative integration owner; one positive case must observe unrelated-root and copied-root independence
 ACCEPTANCE_CRITERIA:
-- loop-only helper/comment names describe actual CFG future-use behavior
-- user-local projected assignment targets pass their root actor identity while compiler temporaries retain linear-expiry behavior
-- focused tests distinguish branch/join CFG carry, user-local projected writes, and compiler-temporary projected writes without HIR mutation
-- focused borrow tests, `cargo fmt`, `git diff --check`, and `just validate` pass
+- focused units cover mutable helper calls, iterable aliases, nested iterable aliases, and mutation after loop exit without duplicating integration behavior
+- the canonical negative case continues to fail with `SharedMutableConflict`
+- one positive integration case observes both unrelated-root mutation and copied-root independence with labeled output
+- exact cases, canonical audit, focused borrow tests, `cargo fmt`, `git diff --check`, and `just validate` pass
 VALIDATION_STATE:
-- `cargo test --quiet integration_test_runner -- --format terse`: passed; 100 tests
-- `cargo run --quiet -- tests --audit`: passed; 1,651 cases, 1,784 backend executions, 17 acceptance-only, 33 baseline-only, 528 rendered-output blocks, zero hard findings
-- `just validate`: passed; cross-target Clippy, 3,496 Rust tests, 1,784 integration executions, docs check, and 28 benchmark cases
-DOCS_IMPACT: Phase 2R5 requires no progress-matrix change; review Phase 2R6 coverage wording after the semantic edge matrix
+- `cargo fmt --check`: passed
+- `cargo test --quiet borrow_checker_loop_tests -- --format terse`: passed; 6 tests
+- `cargo test --quiet borrow_checker -- --format terse`: passed; 53 tests
+- `cargo run --quiet -- tests --case loop_borrow_mutation_conflict --backend html`: passed; 1/1 expected failure
+- `just validate`: passed; cross-target Clippy, 3,499 Rust tests, 1,784 integration executions, docs check, and 28 benchmark cases
+DOCS_IMPACT: progress matrix already says broad loop/borrow coverage; review again after Phase 2R6b, but no change is currently required
 BLOCKERS_OR_OPEN_DECISIONS: none; compiler diagnostics Phase 4.1c remains serialized and untouched
 DELEGATION_DECISION: codex-cli — explicit user-selected provider for implementation workers
 NEXT_WORKER_ORDER: codex-cli only for this run-local override
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit accepted Phase 2R5c5, refresh its hash, then launch bounded Phase 2R6a through `codex-cli-beanstalk`
+NEXT_RESUME_ACTION: commit accepted Phase 2R6a, refresh its hash, then launch bounded Phase 2R6b through `codex-cli-beanstalk`
 
 ---
 
@@ -135,7 +137,8 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 2R5c2 borrow/adversarial markers | `f1ea28e3f` | Accepted | 528 rendered-output blocks; ten borrow/adversarial fixtures now use context-rich markers; zero hard findings |
 | Phase 2R5c3 call/result/option markers | `58ce37ee2` | Accepted | 528 rendered-output blocks; ten call/result/option fixtures now observe context-labeled behavior; zero hard findings |
 | Phase 2R5c4 receiver/struct markers | `1a3ff086c` | Accepted | 528 rendered-output blocks; six receiver/struct/multi-file fixtures now observe context-labeled values; zero hard findings |
-| Phase 2R5c5 marker/role closure | pending acceptance commit | Accepted | 17 acceptance-only smoke cases; two HTML-Wasm parity cases are backend-role; 528 rendered-output blocks; zero hard findings |
+| Phase 2R5c5 marker/role closure | `bd070da33` | Accepted | 17 acceptance-only smoke cases; two HTML-Wasm parity cases are backend-role; 528 rendered-output blocks; zero hard findings |
+| Phase 2R6a CFG/projected actors | pending acceptance commit | Accepted | 3,499 Rust tests; CFG-accurate naming; projected user/compiler origin distinction; 1,784 integration executions |
 
 ---
 
@@ -461,23 +464,23 @@ The accepted fix uses CFG future-use facts and is in the correct compiler stage,
 
 ### Required implementation review
 
-- [ ] Rename `has_loop_carried_future_use` to a CFG-accurate name such as `has_cfg_future_use_after_linear_expiry` unless the implementation is narrowed to verified backedges.
-- [ ] Update adjacent comments and helper names to describe CFG-carried future use rather than loops only.
-- [ ] Review projected assignment targets that currently provide no actor identity.
-- [ ] Prefer passing `place_root_local_index(layout, target)` for user-local field/index writes.
-- [ ] If any projected target must intentionally have no actor identity, encode that distinction explicitly and test it.
-- [ ] Preserve compiler-temporary linear-expiry behavior.
-- [ ] Preserve the invariant that borrow validation reads HIR/future-use facts without mutating HIR.
+- [x] Rename `has_loop_carried_future_use` to a CFG-accurate name such as `has_cfg_future_use_after_linear_expiry` unless the implementation is narrowed to verified backedges.
+- [x] Update adjacent comments and helper names to describe CFG-carried future use rather than loops only.
+- [x] Review projected assignment targets that currently provide no actor identity.
+- [x] Prefer passing `place_root_local_index(layout, target)` for user-local field/index writes.
+- [x] If any projected target must intentionally have no actor identity, encode that distinction explicitly and test it.
+- [x] Preserve compiler-temporary linear-expiry behavior.
+- [x] Preserve the invariant that borrow validation reads HIR/future-use facts without mutating HIR.
 
 ### Focused unit coverage
 
-- [ ] Mutating the active iterable fails with `SharedMutableConflict`.
+- [x] Mutating the active iterable fails with `SharedMutableConflict`.
 - [ ] Mutating the iterable through a mutable helper call inside the loop fails.
 - [ ] Mutating through an alias of the iterable fails.
 - [ ] Nested collection loops preserve both active iterable aliases.
-- [ ] A branch/join case proves the intended CFG behavior after linear expiry.
-- [ ] A compiler-temporary projected target retains the intended linear-expiry behavior.
-- [ ] A user-local field/index projected target retains source-semantic conflict behavior.
+- [x] A branch/join case proves the intended CFG behavior after linear expiry.
+- [x] A compiler-temporary projected target retains the intended linear-expiry behavior.
+- [x] A user-local field/index projected target retains source-semantic conflict behavior.
 - [ ] Mutation after loop exit succeeds.
 
 ### Integration ownership

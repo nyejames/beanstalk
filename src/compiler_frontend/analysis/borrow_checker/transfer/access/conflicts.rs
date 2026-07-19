@@ -22,14 +22,14 @@ pub(super) fn check_shared_access(
     check: &mut AccessCheckContext<'_, '_>,
     roots: &RootSet,
 ) -> Result<(), BorrowCheckError> {
-    let preserve_loop_carried_activity =
-        preserves_loop_carried_alias_activity(check.context, check.layout, check.actor_index_hint);
+    let preserve_cfg_future_use_activity =
+        preserves_cfg_future_use_activity(check.context, check.layout, check.actor_index_hint);
     let alias_activity = AliasActivityContext {
         layout: check.layout,
         state: check.state,
         block_id: check.block_id,
         current_order: check.current_order,
-        preserve_loop_carried_activity,
+        preserve_cfg_future_use_activity,
     };
 
     for root_index in roots.iter_ones() {
@@ -90,14 +90,14 @@ pub(super) fn check_mutable_access(
     roots: &RootSet,
     policy: MutableAccessPolicy,
 ) -> Result<(), BorrowCheckError> {
-    let preserve_loop_carried_activity =
-        preserves_loop_carried_alias_activity(check.context, check.layout, check.actor_index_hint);
+    let preserve_cfg_future_use_activity =
+        preserves_cfg_future_use_activity(check.context, check.layout, check.actor_index_hint);
     let alias_activity = AliasActivityContext {
         layout: check.layout,
         state: check.state,
         block_id: check.block_id,
         current_order: check.current_order,
-        preserve_loop_carried_activity,
+        preserve_cfg_future_use_activity,
     };
 
     for root_index in roots.iter_ones() {
@@ -164,10 +164,10 @@ pub(super) fn check_mutable_access(
 
             if !policy.strict_move_exclusivity
                 && conflicting_local_index.is_some_and(|index| {
-                    // Compiler loop temporaries are mutable storage slots, but an iterable
+                    // CFG lowering may use mutable storage slots for iterable aliases, but the
                     // alias remains shared access from the source program's perspective.
-                    preserve_loop_carried_activity
-                        && has_loop_carried_future_use(
+                    preserve_cfg_future_use_activity
+                        && has_cfg_future_use_after_linear_expiry(
                             check.layout,
                             index,
                             check.block_id,
@@ -227,7 +227,7 @@ struct AliasActivityContext<'a> {
     state: &'a BorrowState,
     block_id: BlockId,
     current_order: i32,
-    preserve_loop_carried_activity: bool,
+    preserve_cfg_future_use_activity: bool,
 }
 
 fn active_alias_count_for_root(
@@ -376,8 +376,8 @@ fn is_local_active_for_alias_conflict(
             return false;
         }
 
-        if activity.preserve_loop_carried_activity
-            && has_loop_carried_future_use(
+        if activity.preserve_cfg_future_use_activity
+            && has_cfg_future_use_after_linear_expiry(
                 activity.layout,
                 local_index,
                 activity.block_id,
@@ -409,10 +409,10 @@ fn is_local_active_for_alias_conflict(
     activity.layout.local_mutable[local_index]
 }
 
-// WHAT: Limits loop-carried future-use retention to source-semantic access actors.
+// WHAT: Limits CFG future-use retention to source-semantic access actors.
 // WHY: compiler-temporary rebinding in template lowering is not a source mutation and must keep
 //      its existing linear-expiry behaviour.
-fn preserves_loop_carried_alias_activity(
+fn preserves_cfg_future_use_activity(
     context: &BorrowTransferContext<'_>,
     layout: &FunctionLayout,
     actor_index_hint: Option<usize>,
@@ -427,7 +427,7 @@ fn preserves_loop_carried_alias_activity(
     })
 }
 
-fn has_loop_carried_future_use(
+fn has_cfg_future_use_after_linear_expiry(
     layout: &FunctionLayout,
     local_index: usize,
     block_id: BlockId,

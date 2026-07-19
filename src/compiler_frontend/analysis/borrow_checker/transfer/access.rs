@@ -331,7 +331,7 @@ fn transfer_assign_target(
                 tracker,
                 location: location.clone(),
                 stats,
-                actor_index_hint: None,
+                actor_index_hint: place_root_local_index(layout, target),
                 current_order,
             };
             check_mutable_access(
