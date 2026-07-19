@@ -5,4 +5,4 @@ Palette = |
 
 palette #= Palette()
 
-io.line([: [palette.red]])
+io.line([: const_record_field_access_success direct-field=[palette.red]])

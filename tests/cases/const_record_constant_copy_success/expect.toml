@@ -1,3 +1,4 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
+rendered_output_contains = ["const_record_constant_copy_success copy=other.red value=red"]

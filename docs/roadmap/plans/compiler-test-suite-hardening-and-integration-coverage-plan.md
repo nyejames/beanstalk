@@ -30,27 +30,27 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 2D3d — migrate remaining const-record success contracts
-LAST_ACCEPTED_COMMIT: `747e8436d` (Phase 2D3b)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 2D3c HTML-Wasm content expectations ready to commit; unrelated docs work remains user-owned
+CURRENT_SLICE: Phase 2D3e — close final baseline-only borrow and receiver success contracts
+LAST_ACCEPTED_COMMIT: `b537bee80` (Phase 2D3c)
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 2D3d const-record fixture contracts ready to commit; unrelated docs work remains user-owned
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: workflow guidance now matches acceptance-only, baseline, golden, path-containment, audit-policy, and contract-filter behavior; progress coverage uses future-use/final-use terminology
-- code: Phase 2D3c leaves 7 baseline-only advisories; the next const-record family is `const_record_field_access_success`, `const_record_nested_field_access_success`, `const_record_constant_copy_success`, and `const_record_body_local_field_access_success`
+- code: Phase 2D3d leaves 3 baseline-only advisories: `borrow_conflict_resolved_by_copy`, `method_receiver_this_success`, and `valid_receiver_method`
 ACCEPTANCE_CRITERIA:
-- make each fixture observe context-rich field, nested-field, copied-constant, or body-local const-record values through the strongest runtime/static lane
-- preserve compile-time field-access-only semantics and each case's distinct declaration/body ownership reason
-- preserve manifest metadata, backend outcomes, and nearby negative const-record owners without adding runtime-record behavior
+- assert the existing copy-independence marker with both independent and mutated values
+- make the mutable `this` reset and immutable receiver getter cases emit context-rich observed results
+- preserve copy/access semantics, receiver mutability, source shapes, manifest metadata, and backend outcomes
 - exact cases, focused harness tests, audit, `git diff --check`, and the full code-bearing gate pass
 VALIDATION_STATE:
-- `just validate`: passed for Phase 2D3c; cross-target Clippy, 3,505 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
-- `cargo run --quiet -- tests --audit`: passed; 1,645 cases, 1,778 executions, 13 acceptance-only, 7 baseline-only, 541 rendered-output, 267 artifact, and zero hard findings
-DOCS_IMPACT: Phase 2D3c changes assertion coverage only; unrelated docs work remains outside this plan slice
-BLOCKERS_OR_OPEN_DECISIONS: none; inspect the four const-record cases before assigning exact value markers
+- `just validate`: passed for Phase 2D3d; cross-target Clippy, 3,505 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
+- `cargo run --quiet -- tests --audit`: passed; 1,645 cases, 1,778 executions, 13 acceptance-only, 3 baseline-only, 545 rendered-output, 267 artifact, and zero hard findings
+DOCS_IMPACT: Phase 2D3d changes assertion coverage only; unrelated docs work remains outside this plan slice
+BLOCKERS_OR_OPEN_DECISIONS: none; the three remaining source outcomes are directly observable
 DELEGATION_DECISION: codex-cli implementation — explicit user-selected provider
 NEXT_WORKER_ORDER: codex-cli only for this run-local override
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit accepted Phase 2D3c, refresh its hash, then inspect and launch bounded Phase 2D3d through `codex-cli-beanstalk`
+NEXT_RESUME_ACTION: commit accepted Phase 2D3d, refresh its hash, then launch bounded Phase 2D3e through `codex-cli-beanstalk`
 
 ---
 
@@ -145,7 +145,8 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 2D3a1 package/facade/import contracts | `7597f5106` | Accepted | 13 acceptance-only; 19 baseline-only; 538 rendered-output; 258 artifact; zero hard findings |
 | Phase 2D3a2 module-boundary contracts | `12c23040c` | Accepted | 13 acceptance-only; 16 baseline-only; 541 rendered-output; 258 artifact; zero hard findings |
 | Phase 2D3b canvas package contracts | `747e8436d` | Accepted | 13 acceptance-only; 13 baseline-only; 541 rendered-output; 261 artifact; zero hard findings |
-| Phase 2D3c HTML-Wasm content parity contracts | pending acceptance commit | Accepted | 13 acceptance-only; 7 baseline-only; 541 rendered-output; 267 artifact; zero hard findings |
+| Phase 2D3c HTML-Wasm content parity contracts | `b537bee80` | Accepted | 13 acceptance-only; 7 baseline-only; 541 rendered-output; 267 artifact; zero hard findings |
+| Phase 2D3d const-record contracts | pending acceptance commit | Accepted | 13 acceptance-only; 3 baseline-only; 545 rendered-output; 267 artifact; zero hard findings |
 
 ---
 

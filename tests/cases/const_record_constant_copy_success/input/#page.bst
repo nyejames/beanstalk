@@ -6,4 +6,4 @@ Palette = |
 palette #= Palette()
 other #= palette
 
-io.line([: [other.red]])
+io.line([: const_record_constant_copy_success copy=other.red value=[other.red]])

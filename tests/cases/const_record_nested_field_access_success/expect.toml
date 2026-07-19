@@ -1,3 +1,4 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
+rendered_output_contains = ["const_record_nested_field_access_success nested-field=red"]

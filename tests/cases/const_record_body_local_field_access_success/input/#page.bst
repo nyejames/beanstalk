@@ -8,4 +8,4 @@ show_red || -> String:
     return palette.red
 ;
 
-io.line([: [show_red()]])
+io.line([: const_record_body_local_field_access_success body-local-field=[show_red()]])
