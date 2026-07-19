@@ -30,27 +30,27 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 2D2 — correct the misclassified same-module choice visibility fixture contract
-LAST_ACCEPTED_COMMIT: `4fa34390c` (Phase 2R8)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 2D1 fixture migrations ready to commit
+CURRENT_SLICE: Phase 2D3a — migrate the remaining package, facade, and module-import success contracts
+LAST_ACCEPTED_COMMIT: `9a929d9d5` (Phase 2D1)
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 2D2 fixture rename and observable contract ready to commit
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: workflow guidance now matches acceptance-only, baseline, golden, path-containment, audit-policy, and contract-filter behavior; progress coverage uses future-use/final-use terminology
-- code: Phase 2D1 leaves 26 baseline-only advisories; `choice_import_visibility_non_exported` imports `choices.bst` inside the same module, so accepted same-module visibility rules permit its current success despite the stale cross-module wording in this plan
+- code: Phase 2D2 leaves 25 baseline-only advisories; the next coherent family is source-package facade exports, same-module imports, module-boundary facade access, and Core-package filesystem bypass
 ACCEPTANCE_CRITERIA:
-- preserve same-module private declaration visibility and do not introduce a cross-module rejection
-- give the choice construction/import success a meaningful observable contract and correct misleading fixture/plan terminology if needed
-- keep the manifest serialized and use the user-selected Codex CLI provider for the bounded fixture change
-- exact case, focused harness tests, audit, `git diff --check`, and the full code-bearing gate pass
+- inspect the fresh family against package/module ownership and identify the strongest truthful backend-local assertion for each case
+- preserve same-module private access and cross-module facade-only access without broadening module semantics
+- migrate one bounded fixture batch through the user-selected Codex CLI provider with no runner or production changes
+- exact cases, focused harness tests, audit, `git diff --check`, and the full code-bearing gate pass
 VALIDATION_STATE:
-- `just validate`: passed for Phase 2D1; cross-target Clippy, 3,505 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
-- `cargo run --quiet -- tests --audit`: passed; 1,645 cases, 1,778 executions, 13 acceptance-only, 26 baseline-only, 532 rendered-output, 257 artifact, and zero hard findings
-DOCS_IMPACT: Phase 2D1 changes assertion coverage only; Phase 2D2 requires correcting stale plan terminology, not accepted language docs
-BLOCKERS_OR_OPEN_DECISIONS: none; primary compiler/build/language docs agree that same-module imports see private declarations
-DELEGATION_DECISION: codex-cli — explicit user-selected provider for the bounded Phase 2D2 fixture correction
+- `just validate`: passed for Phase 2D2; cross-target Clippy, 3,505 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
+- `cargo run --quiet -- tests --audit`: passed; 1,645 cases, 1,778 executions, 13 acceptance-only, 25 baseline-only, 533 rendered-output, 257 artifact, and zero hard findings
+DOCS_IMPACT: Phase 2D2 corrects the active plan and fixture terminology only; Phase 2D3a is expected to change assertion coverage only
+BLOCKERS_OR_OPEN_DECISIONS: none; inspect the nine-case package/facade family before assigning exact mutations
+DELEGATION_DECISION: codex-cli simple-exploration, then codex-cli implementation — explicit user-selected provider
 NEXT_WORKER_ORDER: codex-cli only for this run-local override
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit accepted Phase 2D1, refresh its hash, then launch bounded Phase 2D2 through `codex-cli-beanstalk`
+NEXT_RESUME_ACTION: commit accepted Phase 2D2, refresh its hash, then launch the bounded Phase 2D3a exploration through `codex-cli-beanstalk`
 
 ---
 
@@ -140,7 +140,8 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 2R7b inferred assignment-move fact | `26a707729` | Accepted | 3,505 Rust tests; source `UNINIT`, target `SLOT`, and empty target aliases protected by one focused snapshot test |
 | Phase 2R7c lifetime/final-use ownership | `5fbf183a4` | Accepted | 1,645 cases and 1,778 executions; 12 acceptance-only; 32 baseline-only; 529 rendered-output; zero hard findings |
 | Phase 2R8 workflow documentation | `4fa34390c` | Accepted | 1,645 cases and 1,778 executions; 32 baseline-only; codebase-standards and progress routes rebuilt from corrected source |
-| Phase 2D1 trait/order/package/config contracts | pending acceptance commit | Accepted | 13 acceptance-only; 26 baseline-only; 532 rendered-output; 257 artifact; zero hard findings |
+| Phase 2D1 trait/order/package/config contracts | `9a929d9d5` | Accepted | 13 acceptance-only; 26 baseline-only; 532 rendered-output; 257 artifact; zero hard findings |
+| Phase 2D2 same-module choice visibility | pending acceptance commit | Accepted | 13 acceptance-only; 25 baseline-only; 533 rendered-output; 257 artifact; zero hard findings |
 
 ---
 
@@ -610,9 +611,9 @@ Formerly queued as 2B11d:
 
 - [x] Review `choice_import_visibility_non_exported` against current private cross-module import rules and the progress matrix.
 - [x] Confirm the fixture is not cross-module: `#page.bst` and `choices.bst` belong to one module, whose files may import private declarations directly.
-- [ ] Rename or otherwise correct misleading cross-module terminology while preserving same-module success.
-- [ ] Add a meaningful observable construction/import contract rather than acceptance-only intent.
-- [ ] Remove the stale canonical-module handoff after the corrected fixture is accepted.
+- [x] Rename or otherwise correct misleading cross-module terminology while preserving same-module success.
+- [x] Add a meaningful observable construction/import contract rather than acceptance-only intent.
+- [x] Remove the stale canonical-module handoff after the corrected fixture is accepted.
 
 ### 2D3 — Remaining families
 
@@ -1256,6 +1257,7 @@ Do not present lower counts or faster time as proof of correctness.
 | `lifetime_inference_use_after_move` | Mutable alias blocks later source access | `mutable_alias_blocks_later_source_access` | none | `5fbf183a4` |
 | `last_use_precision` | Alias final use permits mutation-capable rebinding | `borrow_conflict_resolved_by_reordering` | none | `5fbf183a4` |
 | `borrow_checker_use_after_move` → `mutable_alias_blocks_later_source_access` | Mutable alias blocks later source access | `mutable_alias_blocks_later_source_access` | none | `5fbf183a4` |
+| `choice_import_visibility_non_exported` → `choice_same_module_private_import_success` | Same-module import and construction of a private choice declaration | `choice_same_module_private_import_success` | none | pending Phase 2D2 acceptance commit |
 
 ### Coverage gap and handoff ledger
 
@@ -1267,7 +1269,6 @@ Do not present lower counts or faster time as proof of correctness.
 | `check`/build frontend parity | Same frontend diagnostics; `check` emits no artifacts | Command tests | Phase 10 |
 | Ordered root/fragment execution | Active root once; imported root dormant; source order preserved | Integration | Phases 5 and 10 |
 | Structured diagnostic remapping | Codes/reasons/locations survive supported file boundaries | Integration | Phases 4 and 9 |
-| `choice_import_visibility_non_exported` | Same-module imports may use private declarations; the old cross-module conflict premise was incorrect | Rename/correct the fixture and add an observable same-module choice construction contract | Phase 2D2 |
 | Removed misleading lifetime precision case | No valid location contract existed | Real negative path/line case | Phase 4 |
 
 ### Durable decision log
