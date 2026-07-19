@@ -55,7 +55,8 @@ fn parse_const_required_template(
     let template_ir_store = context.template_ir_store();
 
     let template = Template::new_const_required(&mut token_stream, &context, vec![], string_table)
-        .expect("const-required template should parse");
+        .expect("const-required template should parse")
+        .template;
 
     (template, template_ir_store)
 }

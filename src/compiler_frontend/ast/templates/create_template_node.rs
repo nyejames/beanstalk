@@ -38,8 +38,8 @@ use crate::compiler_frontend::ast::templates::template_render_units::{
     prepare_control_flow_render_units,
 };
 use crate::compiler_frontend::ast::templates::tir::{
-    TemplateConstructionContext, TemplateIr, TemplateTirPhase, TemplateTirReference,
-    TemplateWrapperReference, TirView, attach_wrapper_context_overlay,
+    PreparedTemplate, TemplateConstructionContext, TemplateIr, TemplateTirPhase,
+    TemplateTirReference, TemplateWrapperReference, TirView, attach_wrapper_context_overlay,
     classify_effective_tir_view_template, compose_tir_head_chain_with_overlays,
     merge_tir_slot_resolution_contexts,
 };
@@ -67,6 +67,21 @@ const SYNTHETIC_CONTENT_CONSTANT_NAME: &str = "content";
 /// Template construction owns this large diagnostic boundary. Plain diagnostics are boxed once
 /// here and existing boxed callers propagate without an unbox/rebox cycle.
 type TemplateConstructionResult = Result<Template, Box<CompilerDiagnostic>>;
+
+/// The immediate result of const-required construction.
+///
+/// `Template` remains the durable two-field handle. The preparation is carried
+/// only across the construction-to-fold boundary because it proves the exact
+/// view that construction just validated; storing it on the handle would make
+/// preparation part of durable template identity.
+#[derive(Debug)]
+pub(crate) struct ConstRequiredTemplateConstruction {
+    pub(crate) template: Template,
+    pub(crate) preparation: PreparedTemplate,
+}
+
+type ConstRequiredTemplateConstructionResult =
+    Result<ConstRequiredTemplateConstruction, Box<CompilerDiagnostic>>;
 
 // -------------------------
 //  Template Construction
@@ -110,7 +125,7 @@ impl Template {
         type_interner: &mut AstTypeInterner<'_>,
         direct_child_wrappers: Vec<TemplateWrapperReference>,
         string_table: &mut StringTable,
-    ) -> TemplateConstructionResult {
+    ) -> ConstRequiredTemplateConstructionResult {
         let default_style = default_nested_style_for_source_path(token_stream, string_table);
         let template = Self::new_nested_template(
             token_stream,
@@ -121,14 +136,15 @@ impl Template {
             NestedTemplateParseOptions::const_required().with_default_style(default_style),
         )?;
 
-        {
-            validate_const_required_template_control_flow(
-                &template,
-                &context.template_ir_store.borrow(),
-            )?;
-        }
+        let preparation = validate_const_required_template_control_flow(
+            &template,
+            &context.template_ir_store.borrow(),
+        )?;
 
-        Ok(template)
+        Ok(ConstRequiredTemplateConstruction {
+            template,
+            preparation,
+        })
     }
 
     #[cfg(test)]
@@ -157,7 +173,7 @@ impl Template {
         context: &ScopeContext,
         templates_inherited: Vec<TemplateWrapperReference>,
         string_table: &mut StringTable,
-    ) -> TemplateConstructionResult {
+    ) -> ConstRequiredTemplateConstructionResult {
         let mut type_environment = TypeEnvironment::new();
         let mut compatibility_cache = TypeCompatibilityCache::new();
         let mut type_interner =

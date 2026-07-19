@@ -10,8 +10,8 @@ use crate::compiler_frontend::ast::templates::error::TemplateError;
 use crate::compiler_frontend::ast::templates::template::Template;
 use crate::compiler_frontend::ast::templates::template::TemplateType;
 use crate::compiler_frontend::ast::templates::tir::{
-    TemplateIrNodeId, TemplateIrNodeKind, TemplateIrStore, TemplatePreparationMode,
-    TemplateTirPhase, TirView, TirViewIdentity, prepare_tir_view,
+    PreparedTemplate, TemplateIrNodeId, TemplateIrNodeKind, TemplateIrStore,
+    TemplatePreparationMode, TemplateTirPhase, TirView, TirViewIdentity, prepare_tir_view,
 };
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, InvalidTemplateStructureReason,
@@ -34,7 +34,7 @@ use std::collections::HashSet;
 pub(crate) fn validate_const_required_template_control_flow(
     template: &Template,
     tir_store: &TemplateIrStore,
-) -> Result<(), CompilerDiagnostic> {
+) -> Result<PreparedTemplate, CompilerDiagnostic> {
     let reference = &template.tir_reference;
     let view = TirView::with_minimum_phase(
         tir_store,
@@ -47,7 +47,6 @@ pub(crate) fn validate_const_required_template_control_flow(
     .map_err(TemplateError::into_diagnostic)?;
 
     prepare_tir_view(&view, tir_store, TemplatePreparationMode::ConstRequired)
-        .map(|_| ())
         .map_err(TemplateError::into_diagnostic)
 }
 

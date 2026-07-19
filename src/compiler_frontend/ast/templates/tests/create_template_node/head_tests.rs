@@ -26,6 +26,10 @@ use crate::compiler_frontend::ast::templates::tir::{
     TemplateIrSummary, TemplateLoopHeaderExpressionSites, TemplateTirPhase, TemplateTirReference,
     TemplateViewContext, TirExpressionOverlay, TirSlotResolution, TirSlotResolutionOverlay,
 };
+#[cfg(feature = "benchmark_counters")]
+use crate::compiler_frontend::ast::templates::tir::{
+    PreparedTemplate, TirView, fold_prepared_template,
+};
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_messages::{
     DiagnosticPayload, InvalidTemplateStructureReason, NameNamespace,
@@ -186,7 +190,8 @@ fn const_required_template_head_folds_const_record_instance_field() {
         vec![],
         &mut string_table,
     )
-    .expect("const-required template head should project const-record field values");
+    .expect("const-required template head should project const-record field values")
+    .template;
     let folded = fold_template_in_context(&template, &context, &mut string_table);
 
     assert_eq!(string_table.resolve(folded), "green");
@@ -1430,7 +1435,8 @@ fn const_required_template_if_inlines_same_file_source_const_bool() {
 
     let template =
         Template::new_const_required(&mut token_stream, &context, vec![], &mut string_table)
-            .expect("const-required template if should inline source const bool");
+            .expect("const-required template if should inline source const bool")
+            .template;
     let folded = fold_template_in_context(&template, &context, &mut string_table);
     let rendered = string_table.resolve(folded);
 
@@ -1464,7 +1470,8 @@ fn const_required_template_if_inlines_imported_source_const_bool() {
 
     let template =
         Template::new_const_required(&mut token_stream, &context, vec![], &mut string_table)
-            .expect("const-required template if should inline imported source const bool");
+            .expect("const-required template if should inline imported source const bool")
+            .template;
     let folded = fold_template_in_context(&template, &context, &mut string_table);
     let rendered = string_table.resolve(folded);
 
@@ -1502,7 +1509,8 @@ fn const_required_template_if_false_without_else_skips_shared_head_output() {
     context.template_ir_store = card_context.template_ir_store.clone();
     let template =
         Template::new_const_required(&mut token_stream, &context, vec![], &mut string_table)
-            .expect("const-required template if should parse");
+            .expect("const-required template if should parse")
+            .template;
 
     let folded = fold_template_in_context(&template, &context, &mut string_table);
 
@@ -1642,7 +1650,8 @@ fn const_required_template_loop_body_if_can_use_source_const_condition() {
 
     let template =
         Template::new_const_required(&mut token_stream, &context, vec![], &mut string_table)
-            .expect("nested const-required template if should inline source const bool");
+            .expect("nested const-required template if should inline source const bool")
+            .template;
     let folded = fold_template_in_context(&template, &context, &mut string_table);
 
     assert_eq!(string_table.resolve(folded), "01");
@@ -1688,7 +1697,8 @@ fn const_required_template_zero_iteration_loop_skips_shared_head_output() {
         .with_template_ir_store(card_context.template_ir_store.clone());
     let template =
         Template::new_const_required(&mut token_stream, &context, vec![], &mut string_table)
-            .expect("const-required zero loop should parse");
+            .expect("const-required zero loop should parse")
+            .template;
 
     let folded = fold_template_in_context(&template, &context, &mut string_table);
 
@@ -1722,7 +1732,8 @@ fn const_required_template_loop_wraps_aggregate_once() {
         .with_template_ir_store(card_context.template_ir_store.clone());
     let template =
         Template::new_const_required(&mut token_stream, &context, vec![], &mut string_table)
-            .expect("const-required loop should parse");
+            .expect("const-required loop should parse")
+            .template;
 
     let folded = fold_template_in_context(&template, &context, &mut string_table);
 
@@ -1918,6 +1929,56 @@ fn const_required_template_loop_validates_from_body_tir_root() {
         .expect("const-required loop validation should use module-local TIR body roots");
 }
 
+#[cfg(feature = "benchmark_counters")]
+#[test]
+fn const_required_construction_preparation_is_reused_by_folding() {
+    use crate::compiler_frontend::instrumentation::{
+        AstCounter, lock_counter_test, reset_ast_counters, test_read_ast_counter,
+    };
+
+    let _guard = lock_counter_test();
+    let mut string_table = StringTable::new();
+    let mut token_stream = template_tokens_from_source(
+        "[if true:
+            Visible
+        ]",
+        &mut string_table,
+    );
+    let context = new_constant_context(token_stream.src_path.clone());
+
+    reset_ast_counters();
+    let construction =
+        Template::new_const_required(&mut token_stream, &context, vec![], &mut string_table)
+            .expect("const-required template should parse");
+    let template = construction.template;
+    let PreparedTemplate::Foldable(prepared) = construction.preparation else {
+        panic!("const-required test template should be foldable");
+    };
+
+    let mut fold_context = context
+        .new_template_fold_context(&mut string_table, "const preparation reuse test")
+        .expect("test context should include fold dependencies");
+    let store = context.template_ir_store.borrow();
+    let reference = template.tir_reference;
+    let view = TirView::with_minimum_phase(
+        &store,
+        reference.root,
+        reference.phase,
+        TemplateTirPhase::Composed,
+        reference.context,
+    )
+    .expect("const-required construction view should remain valid for folding");
+    let emission = fold_prepared_template(&prepared, view, &mut fold_context)
+        .expect("returned const-required preparation should fold");
+
+    assert!(matches!(emission, TemplateEmission::Output(_)));
+    assert_eq!(
+        test_read_ast_counter(AstCounter::TirPreparationAttempts),
+        1,
+        "const-required construction and folding should prepare the view once"
+    );
+}
+
 #[test]
 fn const_required_template_loop_reports_expansion_limit() {
     let (template, context, mut string_table) = parse_const_required_template(
@@ -2076,7 +2137,8 @@ fn const_required_template_option_capture_inlines_present_source_const() {
         vec![],
         &mut string_table,
     )
-    .expect("const-required option capture should inline present source const");
+    .expect("const-required option capture should inline present source const")
+    .template;
     let folded = fold_template_in_context(&template, &context, &mut string_table);
 
     assert_eq!(string_table.resolve(folded), "Hello Ada");
@@ -2118,7 +2180,8 @@ fn const_required_template_option_capture_inlines_absent_source_const() {
         vec![],
         &mut string_table,
     )
-    .expect("const-required option capture should inline absent source const");
+    .expect("const-required option capture should inline absent source const")
+    .template;
     let folded = fold_template_in_context(&template, &context, &mut string_table);
 
     assert_eq!(string_table.resolve(folded), "Guest");
@@ -2520,7 +2583,8 @@ fn parse_const_required_template(source: &str) -> (Template, ScopeContext, Strin
 
     let template =
         Template::new_const_required(&mut token_stream, &context, vec![], &mut string_table)
-            .expect("const-required template should parse");
+            .expect("const-required template should parse")
+            .template;
 
     (template, context, string_table)
 }

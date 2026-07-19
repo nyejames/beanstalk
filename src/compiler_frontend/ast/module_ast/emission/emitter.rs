@@ -30,12 +30,12 @@ use crate::compiler_frontend::ast::statements::functions::{
 use crate::compiler_frontend::ast::statements::terminality::{
     terminality_policy_for_signature, validate_function_body_terminality,
 };
+use crate::compiler_frontend::ast::templates::create_template_node::ConstRequiredTemplateConstruction;
 use crate::compiler_frontend::ast::templates::error::TemplateError;
 use crate::compiler_frontend::ast::templates::template::Template;
 use crate::compiler_frontend::ast::templates::template_folding::TemplateEmission;
 use crate::compiler_frontend::ast::templates::tir::{
-    PreparedTemplate, TemplatePreparationMode, TemplateTirPhase, TirView, fold_prepared_template,
-    prepare_tir_view,
+    PreparedTemplate, TemplateTirPhase, TirView, fold_prepared_template,
 };
 use crate::compiler_frontend::ast::templates::top_level_templates::FoldedConstTemplateResult;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
@@ -1090,7 +1090,7 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
         template_tokens: &mut FileTokens,
         context: &ScopeContext,
         string_table: &mut StringTable,
-    ) -> Result<Template, CompilerMessages> {
+    ) -> Result<ConstRequiredTemplateConstruction, CompilerMessages> {
         let mut type_interner = AstTypeInterner::new(
             &mut self.environment.type_environment,
             &mut self.compatibility_cache,
@@ -1111,10 +1111,14 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
 
     fn fold_const_template(
         &mut self,
-        template: Template,
+        construction: ConstRequiredTemplateConstruction,
         context: &ScopeContext,
         string_table: &mut StringTable,
     ) -> Result<FoldedConstTemplateResult, CompilerMessages> {
+        let ConstRequiredTemplateConstruction {
+            template,
+            preparation,
+        } = construction;
         let reference = template.tir_reference;
         let store = context.template_ir_store.borrow();
         let view = TirView::with_minimum_phase(
@@ -1125,8 +1129,6 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
             reference.context,
         )
         .map_err(|error| self.error_messages(error, string_table))?;
-        let preparation = prepare_tir_view(&view, &store, TemplatePreparationMode::ConstRequired)
-            .map_err(|error| self.template_error_messages(error, string_table))?;
         let prepared = match preparation {
             PreparedTemplate::Foldable(prepared) => prepared,
             PreparedTemplate::Helper(_) => {

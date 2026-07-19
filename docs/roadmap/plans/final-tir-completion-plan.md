@@ -29,17 +29,15 @@ TIR remains AST-local. No TIR store, ID, view, overlay or preparation type may c
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/final-tir-completion-plan.md
 STATUS: active
-CURRENT_SLICE: R6A-R6B accepted and ready to commit; R6C instrumentation and recorded performance evidence is next
-LAST_ACCEPTED_COMMIT: e17b8a278 (R5C primary-owner test consolidation; R5 complete)
-WORKTREE: main at e17b8a278 with the accepted R6A-R6B source, compiler-design and plan diff; concurrent user documentation remains untouched
+CURRENT_SLICE: R6C record and review six current performance samples
+LAST_ACCEPTED_COMMIT: 4a1b80b26 (R6A-R6B final architecture maps, hard-grep hygiene and dead-surface deletion)
+WORKTREE: main at 4a1b80b26; clean before this parent-owned plan refresh; concurrent user documentation remains untouched
 REQUIRED_RELOADS: startup files, this plan, and current TIR source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: compiler-design-overview.md now records the exact identity, transition, preparation-mode and owned-handoff contracts; this plan's R6C counter and recorded-benchmark requirements
-- code: preparation/fold/wrapper/reservation/handoff instrumentation and every production prepare_tir_view caller; benchmark history/report tooling owns the six recorded samples
+- docs: this plan's R6C counter, caller-multiplicity and recorded-benchmark requirements
+- code: retained preparation/fold/wrapper/reservation/handoff instrumentation and the accepted one-preparation const-template handoff; benchmark history/report tooling owns the six recorded samples
 ACCEPTANCE_CRITERIA:
-- commit the accepted R6A-R6B checkpoint without unrelated or concurrent user-owned documentation changes
-- map every retained R6C counter to its production increment site and confirm the deliberate absence of a preparation cache after proving adjacent callers do not repeat preparation for the same exact view
-- run six recorded `just bench` samples followed by `just bench-report` only after the caller/counter review is accepted
+- run six recorded `just bench` samples followed by `just bench-report`
 - compare representative template, wrapper, slot, control-flow, Beandown and docs workloads against `c1ecc2c58` and `069a29acb`; attribute any consistent regression without restoring deleted architecture
 - do not begin the R6D downstream roadmap handoff until R6C evidence is reviewed
 VALIDATION_STATE:
@@ -68,12 +66,16 @@ VALIDATION_STATE:
 - R6B TIR identifier/phrase and HIR/backend import gates: passed; the four global `fallback path` hits are exact non-TIR owners in JS map/string safety, AST/HIR fallible return-shape handling and borrow-checker registry-drift protection
 - R6A-R6B just validate after the parent doctest correction: passed; cross-target Clippy, 3433 unit tests, 1784 integration cases, docs check and 28 benchmark sanity cases; -7ms average, 22 faster and 0 slower
 - final R6A-R6B TIR inventory: 18,740 production and 17,681 test lines (R5: 18,854 and 17,681; 069a29acb: 24,274 and 27,231)
+- R6C Codex CLI counter/caller review: every retained counter and production preparation caller mapped; no preparation cache exists; one exact same-identity, same-mode repeat was found where const-required construction prepares a top-level const template and the emitter immediately prepares it again before folding
+- R6C Codex CLI preparation-handoff slice: accepted after parent review; const-required construction returns the immediate Template plus PreparedTemplate result, emitter folding consumes it without a second preparation, expression parsing preserves the intentional ConstRequired-to-Value boundary and focused benchmark-counter coverage records one preparation attempt
+- R6C preparation-handoff just validate: passed; cross-target Clippy, 3433 unit tests, 1784 integration cases, docs check and 28 benchmark sanity cases; -7ms average, 22 faster and 0 slower
+- R6C benchmark-tooling review: ordinary recorded runs exercise representative end-to-end workloads with counters disabled; exact raw samples for `c1ecc2c58` and `069a29acb` are unavailable locally, so historical comparison must use the tracked summaries and record that attribution limit explicitly
 DOCS_IMPACT: compiler-design-overview.md and Rust module maps updated for the final architecture; index.md locator already names preparation.rs; progress matrix unchanged because user-visible support did not change
 BLOCKERS_OR_OPEN_DECISIONS: none
-DELEGATION_DECISION: parent checkpoint, then codex-cli simple-exploration - user requires Codex CLI for worker slices and R6C needs a bounded read-only counter/caller proof before recorded benchmarks
-NEXT_WORKER_ORDER: codex-cli (user-required provider)
+DELEGATION_DECISION: parent-direct evidence recording - benchmark history and the final report are parent-owned; no implementation worker is needed for the six prescribed samples
+NEXT_WORKER_ORDER: codex-cli (user-required provider for the next worker slice)
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit the accepted R6A-R6B checkpoint, refresh this state with its commit and launch the bounded R6C counter/caller review
+NEXT_RESUME_ACTION: commit the accepted preparation-handoff checkpoint, then run six recorded `just bench` samples and `just bench-report`
 ```
 
 Use `069a29acb` as the implementation and regression base. Do not continue extending `FoldAuthorityWalk`, foreign-store traversal, external expression-overlay stacks or prepared foreign-wrapper proofs.
@@ -913,8 +915,21 @@ just bench
 just bench
 just bench
 just bench
+just bench
 just bench-report
 ```
+
+The R6C caller review and correction are accepted on the pre-commit `4a1b80b26` worktree.
+Every retained counter and production preparation caller was mapped. The review found one exact
+same-identity, same-mode repeat between const-required construction and immediate top-level folding.
+Const-required construction now returns its immediate `PreparedTemplate` evidence alongside the
+thin durable `Template` handle, top-level folding consumes that evidence through the exact-view
+identity check, and expression parsing deliberately prepares again in `Value` mode because runtime
+dependence is valid at that distinct semantic boundary. No preparation cache or durable preparation
+field was added. Focused benchmark-counter coverage observes one preparation attempt across
+construction and folding. `just validate` passed with cross-target Clippy, 3,433 unit tests, 1,784
+integration cases, docs checking and all 28 benchmark sanity cases; the sanity result was `-7ms`
+average with 22 faster and no slower cases.
 
 Compare representative template, wrapper, slot, control-flow, Beandown and docs workloads against `c1ecc2c58` and `069a29acb`. Attribute consistent regressions with counters or profiling. Do not restore deleted architecture to hide a regression.
 

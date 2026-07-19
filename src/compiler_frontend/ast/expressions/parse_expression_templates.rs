@@ -41,6 +41,10 @@ pub(super) fn parse_template_expression(
             vec![],
             string_table,
         )
+        // Const-required preparation proves a distinct semantic mode. This
+        // expression path intentionally prepares the resulting template again
+        // in `Value` mode below because runtime dependence is valid here.
+        .map(|construction| construction.template)
     } else {
         Template::new_with_type_interner(
             token_stream,
