@@ -30,30 +30,29 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 2R7a — audit lifetime-prefixed fixture dispositions and replacement owners
-LAST_ACCEPTED_COMMIT: pending Phase 2R6b acceptance commit (previous plan commit `a6a1ad0a9`)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 2R6b changes ready to commit
+CURRENT_SLICE: Phase 2R7c — consolidate lifetime and final-use fixture ownership atomically
+LAST_ACCEPTED_COMMIT: pending Phase 2R7b acceptance commit (previous plan commit `8dc9f6049`)
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 2R7b changes ready to commit
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: borrow-validation, access-and-aliasing, ownership, testing, validation, compiler overview, and progress matrix govern the semantic fix and gates
-- code: seven `lifetime_inference_*` fixtures require source-semantic disposition; `borrow_checker_drop_site_tests.rs` and `borrow_checker_fact_tests.rs` own hidden drop/last-use facts; the manifest owns atomic case identity
+- code: the accepted Phase 2R7 disposition table owns seven lifetime-prefixed cases plus `last_use_precision`; manifest IDs/paths and case folders must change atomically; strengthened source-semantic owners need exact contracts and labeled output
 ACCEPTANCE_CRITERIA:
-- every lifetime-prefixed canonical case is mapped to a source-visible contract, a focused hidden-fact owner, or removal
-- misleading drop/move/diagnostic-precision claims are not retained as integration ownership
-- proposed renames/removals preserve real negative and observable final-use behavior without adding new semantics
-- the read-only audit returns exact file paths, replacement evidence, and the smallest implementation slice
+- no canonical integration ID, path, comment, tag, contract, or expectation claims to observe source lifetimes or hidden move/drop facts
+- the unique `BST-BORROW-0007` case and existing `BST-BORROW-0003` owner use source-semantic names with one primary contract each
+- final-use/reborrow success owners emit context-rich labeled values before and after mutation-capable rebinding
+- every deletion/rename is atomic, recorded in the pruning ledger, and exact cases, audit, focused tests, `cargo fmt`, `git diff --check`, and `just validate` pass
 VALIDATION_STATE:
-- `cargo fmt --check`: passed
-- `cargo test --quiet borrow_checker_loop_tests -- --format terse`: passed; 11 tests
-- exact negative and positive integration cases: passed; 2/2
-- `cargo run --quiet -- tests --audit`: passed; 1,652 cases, 1,785 executions, 17 acceptance-only, 33 baseline-only, 529 rendered-output blocks, zero hard findings
-- `just validate`: passed; cross-target Clippy, 3,504 Rust tests, 1,785 integration executions, docs check, and 28 benchmark cases
-DOCS_IMPACT: Phase 2R6 requires no progress-matrix change because its existing broad loop/borrow coverage wording remains accurate
+- inferred-assignment-move mutation probe: passed; disabling the move transition makes the new unit fail with source `SLOT` and target `ALIAS`
+- `cargo test --quiet borrow_checker_fact_tests -- --format terse`: passed; 4 tests
+- `cargo test --quiet borrow_checker -- --format terse`: passed; 59 tests
+- `just validate`: passed; cross-target Clippy, 3,505 Rust tests, 1,785 integration executions, docs check, and 28 benchmark cases
+DOCS_IMPACT: progress support is unchanged; stale `lifetime` coverage wording is scheduled for the authorized Phase 2R8 documentation pass
 BLOCKERS_OR_OPEN_DECISIONS: none; compiler diagnostics Phase 4.1c remains serialized and untouched
-DELEGATION_DECISION: codex-cli audit — explicit user-selected provider; Phase 2R7 needs a read-only ownership audit before fixture edits
+DELEGATION_DECISION: codex-cli — explicit user-selected provider for the bounded atomic fixture consolidation
 NEXT_WORKER_ORDER: codex-cli only for this run-local override
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit accepted Phase 2R6b, refresh its hash, then run the bounded Phase 2R7a audit through `codex-cli-beanstalk`
+NEXT_RESUME_ACTION: commit accepted Phase 2R7b, refresh its hash, then launch bounded Phase 2R7c through `codex-cli-beanstalk`
 
 ---
 
@@ -139,7 +138,8 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 2R5c4 receiver/struct markers | `1a3ff086c` | Accepted | 528 rendered-output blocks; six receiver/struct/multi-file fixtures now observe context-labeled values; zero hard findings |
 | Phase 2R5c5 marker/role closure | `bd070da33` | Accepted | 17 acceptance-only smoke cases; two HTML-Wasm parity cases are backend-role; 528 rendered-output blocks; zero hard findings |
 | Phase 2R6a CFG/projected actors | `a6a1ad0a9` | Accepted | 3,499 Rust tests; CFG-accurate naming; projected user/compiler origin distinction; 1,784 integration executions |
-| Phase 2R6b loop-borrow edge matrix | pending acceptance commit | Accepted | 3,504 Rust tests; 1,652 cases and 1,785 executions; one primary plus one boundary integration owner; zero hard findings |
+| Phase 2R6b loop-borrow edge matrix | `8dc9f6049` | Accepted | 3,504 Rust tests; 1,652 cases and 1,785 executions; one primary plus one boundary integration owner; zero hard findings |
+| Phase 2R7b inferred assignment-move fact | pending acceptance commit | Accepted | 3,505 Rust tests; source `UNINIT`, target `SLOT`, and empty target aliases protected by one focused snapshot test |
 
 ---
 
@@ -510,16 +510,29 @@ Beanstalk has no source-level lifetime system. Integration IDs and comments must
 
 ### Required review
 
-- [ ] Audit every canonical case with the `lifetime_inference_` prefix.
+- [x] Audit every canonical case with the `lifetime_inference_` prefix.
 - [ ] Do not retain a canonical integration case whose only claimed contract is a hidden drop site, move decision, or diagnostic precision fact.
 - [ ] Rename retained user-visible cases and paths to source-semantic terminology.
 - [ ] Update manifest IDs, paths, tags, expectations, and references atomically.
+
+### Accepted audit disposition
+
+| Current case | Disposition and owner |
+|---|---|
+| `lifetime_inference_conflict_detection` | Rename to `live_shared_alias_blocks_mutable_rebinding`; retain `BST-BORROW-0007` as the unique source-visible owner. |
+| `lifetime_inference_control_flow` | Remove after strengthening `branch_reborrow_after_last_use` with labeled branch reborrow output. |
+| `lifetime_inference_drop_insertion` | Remove; focused advisory return/break/block-exit drop-site tests own the hidden facts. |
+| `lifetime_inference_error_precision` | Remove; Phase 4 owns the missing structured negative path/line assertion. |
+| `lifetime_inference_integration_basic` | Remove; `borrow_checker_basic_variables` plus the pipeline report-storage sentinel cover its actual behavior. |
+| `lifetime_inference_move_refinement` | Remove only after Phase 2R7b adds the focused inferred-assignment-move state owner. |
+| `lifetime_inference_use_after_move` | Remove as a duplicate of the existing case renamed to `mutable_alias_blocks_later_source_access`; retain `BST-BORROW-0003`. |
+| `last_use_precision` | Remove after strengthening `borrow_conflict_resolved_by_reordering` with labeled final-use output. |
 
 ### Mandatory dispositions
 
 - [ ] `lifetime_inference_drop_insertion`: verify the focused drop-site fact owner; remove the canonical case when replacement evidence exists.
 - [ ] `lifetime_inference_error_precision`: remove the misleading success case; add a real structured location owner in Phase 4 if that gap remains.
-- [ ] `lifetime_inference_move_refinement`: verify the focused move-decision owner; retain or add an integration case only for an observable final-use transfer consequence, under a source-semantic name.
+- [x] `lifetime_inference_move_refinement`: verify the focused move-decision owner; retain or add an integration case only for an observable final-use transfer consequence, under a source-semantic name.
 - [ ] Review `lifetime_inference_control_flow` and other remaining prefixed cases for the same naming/ownership drift.
 - [ ] Record every removal or rename in the pruning ledger.
 

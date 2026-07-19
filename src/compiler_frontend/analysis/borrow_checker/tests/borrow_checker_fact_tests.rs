@@ -4,6 +4,7 @@
 //! WHY: these facts are the borrow checker's source of truth, so targeted tests catch drift
 //! before it reaches higher-level diagnostics.
 
+use crate::compiler_frontend::analysis::borrow_checker::LocalMode;
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
@@ -285,6 +286,99 @@ fn statement_entry_state_reflects_last_use_reborrow_window() {
     assert!(
         data_snapshot.alias_roots.is_empty(),
         "data local should not retain live alias roots at the reborrow point"
+    );
+}
+
+#[test]
+fn statement_entry_state_marks_source_uninitialized_after_inferred_assignment_move() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = entry_and_start(&mut string_table);
+    let external_package_registry = default_external_package_registry(&mut string_table);
+
+    let source = symbol("source", &mut string_table);
+    let target = symbol("target", &mut string_table);
+    let sentinel = symbol("sentinel", &mut string_table);
+
+    let start_fn = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![],
+        },
+        vec![
+            node(
+                NodeKind::VariableDeclaration(make_test_variable(
+                    source.clone(),
+                    Expression::int(7, test_location(10), ValueMode::MutableOwned),
+                )),
+                test_location(10),
+            ),
+            node(
+                NodeKind::VariableDeclaration(make_test_variable(
+                    target,
+                    Expression::reference(
+                        source,
+                        DataType::Int,
+                        test_location(11),
+                        ValueMode::MutableOwned,
+                    ),
+                )),
+                test_location(11),
+            ),
+            node(
+                NodeKind::VariableDeclaration(make_test_variable(
+                    sentinel,
+                    Expression::int(0, test_location(12), ValueMode::ImmutableOwned),
+                )),
+                test_location(12),
+            ),
+        ],
+        test_location(2),
+    );
+
+    let hir = lower_hir(build_ast(vec![start_fn], entry_path), &mut string_table);
+    let report = run_borrow_checker(&hir, &external_package_registry, &string_table)
+        .expect("inferred assignment move should pass");
+
+    let source_local = find_assigned_local_for_line(&hir, 10)
+        .expect("should locate the source local by declaration line");
+    let target_local = find_assigned_local_for_line(&hir, 11)
+        .expect("should locate the target local by declaration line");
+    let sentinel_statement_id =
+        find_statement_id_for_line(&hir, 12).expect("should locate the sentinel statement");
+    let entry_state = report
+        .analysis
+        .statement_entry_states
+        .get(&sentinel_statement_id)
+        .expect("sentinel statement should have an entry snapshot");
+    let source_snapshot = entry_state
+        .locals
+        .iter()
+        .find(|snapshot| snapshot.local == source_local)
+        .expect("entry snapshot should include the source local");
+    let target_snapshot = entry_state
+        .locals
+        .iter()
+        .find(|snapshot| snapshot.local == target_local)
+        .expect("entry snapshot should include the target local");
+
+    assert!(
+        source_snapshot.mode.contains(LocalMode::UNINIT),
+        "moved-from source should be uninitialized at the sentinel statement, got source mode {:?} with aliases {:?}; target mode {:?} with aliases {:?}",
+        source_snapshot.mode,
+        source_snapshot.alias_roots,
+        target_snapshot.mode,
+        target_snapshot.alias_roots
+    );
+    assert!(
+        target_snapshot.mode.contains(LocalMode::SLOT),
+        "move target should own an independent slot at the sentinel statement, got mode {:?} with aliases {:?}",
+        target_snapshot.mode,
+        target_snapshot.alias_roots
+    );
+    assert!(
+        target_snapshot.alias_roots.is_empty(),
+        "move target should not retain alias roots at the sentinel statement"
     );
 }
 
