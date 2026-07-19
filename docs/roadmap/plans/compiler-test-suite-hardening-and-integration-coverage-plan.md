@@ -29,17 +29,17 @@ This ordering is mandatory. Do not begin broad pruning while the harness can sti
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 2B10b — preserve loop-carried alias activity in borrow conflict checks
-LAST_ACCEPTED_COMMIT: `79d821a2b` — make the helper-chain contract explicit
-WORKTREE: parent `main` has the Phase 2B10a plan checkpoint at `b2fe445cb`; reusable worker branch is clean at merge commit `0e8031045` in `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase2a`; do not create another worktree
+CURRENT_SLICE: Phase 2C — enforce canonical expectations and remove the fallback
+LAST_ACCEPTED_COMMIT: `9f40480a9` — preserve loop-carried borrow conflicts
+WORKTREE: parent `main` has the Phase 2B10b code checkpoint at `9f40480a9`; reusable worker branch is clean at `6c02cf599` in `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase2a`; do not create another worktree
 REQUIRED_RELOADS: startup files, this plan and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: collection-loop iteration retains shared access to its source while the body executes; overlapping `~items.push(4)` must use the existing shared/mutable conflict diagnostic lane
-- code: HIR and `transfer_assign_target` preserve the iterable alias to `items`; `is_local_active_for_alias_conflict` incorrectly expires it using linear last-use order despite the CFG backedge
+- docs: canonical manifest cases must own explicit expectations and compile-only intent; temporary fallback infrastructure is no longer permitted once migration reaches zero
+- code: all 1,651 canonical cases now own `expect.toml`; audit reports zero fallback-backed cases, 17 compile-only and 55 backend-baseline-only blocks
 ACCEPTANCE_CRITERIA:
-- make alias-conflict activity consult existing block-aware future-use facts so loop-carried aliases remain active
-- add focused borrow-checker coverage and make `loop_borrow_mutation_conflict` require `BST-BORROW-0003`
-- preserve valid loops, nested/disjoint roots and copies; pass targeted tests, audit and full gate
+- missing canonical expectations fail with a clear case-owned error
+- delete the default-stub read path, constant and fixture without a compatibility wrapper
+- focused runner tests, audit and full gate pass with zero fallback-backed cases and zero hard violations
 VALIDATION_STATE:
 - final TIR at `dc81f7e53`: `just validate` passed with 3,433 Rust tests, 1,784 integration executions, docs checking and 28 benchmark sanity cases
 - Phase 0A documentation-only gate: `cargo run --quiet -- build docs --release` passed; 72 files built and no generated diff was produced (`bean` was unavailable in `PATH`)
@@ -64,13 +64,14 @@ VALIDATION_STATE:
 - Phase 2B10 exploration: Codex CLI read-only exploration confirmed the helper-chain fixture is stale and the loop mutation case exposes an existing `BST-BORROW-0003` analysis gap; no files changed
 - Phase 2B10a: exact helper-chain HTML case, 70 runner tests, audit and diff checks passed in worker and parent review; worker `just validate` passed; audit reported 17 compile-only, 56 backend-baseline-only, one fallback-backed and zero hard violations
 - Phase 2B10b exploration: Codex CLI traced the defect to linear expiry in `is_local_active_for_alias_conflict`; HIR aliasing is correct and existing CFG future-use facts own the fix; no files changed
+- Phase 2B10b: three focused borrow-loop tests, exact loop-conflict case, 70 runner tests, audit, formatting and diff checks passed in worker and parent review; worker `just validate` passed with 3,466 Rust tests and 1,784 integration executions; audit reported 17 compile-only, 55 backend-baseline-only, zero fallback-backed and zero hard violations
 - Phase 2B9 launch: both the optional `beanstalk-spark-explorer` and required `beanstalk-plan-worker` Codex CLI profiles selected `gpt-5.6-luna` but returned the account usage-limit error before repository edits; the service reported retry availability at 2026-07-25 11:08 AM
 DOCS_IMPACT: Phase 1 workflow docs, generated release output and the deferred code-block highlighting roadmap note are current; fixture outcomes/backend coverage and the progress matrix remain unchanged
 BLOCKERS_OR_OPEN_DECISIONS: none for this slice; diagnostics Phase 4.1c remains serialized at `d7fb3654f`; disk permits at most one additional worktree
-DELEGATION_DECISION: codex-cli implementation — explicit user-requested provider and the root cause is bounded to borrow transfer plus direct tests
+DELEGATION_DECISION: codex-cli implementation — explicit user-requested provider and fallback removal is an atomic runner/test-fixture cleanup
 NEXT_WORKER_ORDER: codex-cli only for this run
 STOP_REASON: none
-NEXT_RESUME_ACTION: launch the bounded Phase 2B10b implementation in the existing reusable worktree
+NEXT_RESUME_ACTION: launch the bounded Phase 2C implementation in the existing reusable worktree
 
 ## Recommended roadmap placement and activation conditions
 
@@ -112,17 +113,17 @@ ACTIVE_PLAN:
 
 CURRENT_SLICE:
 - Phase: 2
-- Checklist item: 2B10b — preserve loop-carried alias activity in borrow conflict checks
-- Goal: use existing block-aware future-use facts so mutation of the active iterable reports `BST-BORROW-0003`
-- Non-goals: no HIR metadata path, broad borrow-checker redesign, import changes, runner enforcement, fallback removal or new diagnostic family
+- Checklist item: 2C — enforce canonical expectations and remove the fallback
+- Goal: make expectation ownership mandatory and delete the temporary default-stub path atomically
+- Non-goals: no assertion-schema expansion, fixture-semantic changes, diagnostic multiplicity work, role/contract backfill or later phases
 
 LAST_GOOD_COMMIT:
-- `79d821a2b` — accepted Phase 2B10a helper-chain fixture migration
+- `9f40480a9` — accepted Phase 2B10b loop-carried borrow fix and final fallback fixture migration
 
 CURRENT_WORKTREE_STATE:
-- Clean / known changes: parent `main` has the Phase 2B10a plan checkpoint at `b2fe445cb`; the reusable worker branch is clean at merge commit `0e8031045`
+- Clean / known changes: parent `main` has the Phase 2B10b code checkpoint at `9f40480a9`; the reusable worker branch is clean at `6c02cf599`
 - Branch: local `main`
-- Dedicated worker worktrees: reuse `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase2a`, currently clean at worker commit `c300c18df`; do not create another worktree
+- Dedicated worker worktrees: reuse `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase2a`, currently clean at worker commit `6c02cf599`; do not create another worktree
 
 RELEVANT_DOCS_THIS_SLICE:
 - `AGENTS.md`
@@ -133,24 +134,19 @@ RELEVANT_DOCS_THIS_SLICE:
 - `docs/src/docs/codebase/style-guide/validation.bd`
 - `docs/src/docs/codebase/language/overview.bd`
 - `docs/language-overview.md`
-- `docs/src/docs/packages/import-paths.bd`
-- `docs/src/docs/codebase/memory-management/access-and-aliasing/overview.bd`
-- `docs/src/docs/codebase/memory-management/access-and-aliasing/access-and-aliasing.bd`
-- `docs/src/docs/codebase/memory-management/borrow-validation/overview.bd`
-- `docs/src/docs/codebase/memory-management/borrow-validation/borrow-validation.bd`
 - `docs/src/docs/progress/#page.bst`
 - `docs/roadmap/roadmap.md`
 
 RELEVANT_CODE:
-- `tests/cases/loop_borrow_mutation_conflict/`: current success-through-fallback case that should reject with `BST-BORROW-0003`
-- `src/compiler_frontend/analysis/borrow_checker/transfer/access.rs`: thread the current block through access checks
-- `src/compiler_frontend/analysis/borrow_checker/transfer/access/conflicts.rs`: use block-aware future-use facts when classifying active aliases
-- `src/compiler_frontend/analysis/borrow_checker/tests/`: focused loop-carried alias conflict and non-conflict invariants
+- `src/compiler_tests/integration_test_runner/fixture.rs`: require case-owned expectation loading
+- `src/compiler_tests/integration_test_runner/expectations.rs`, `types.rs` and self-tests: remove fallback assumptions and assert missing-expectation failure
+- `tests/fixtures/stubs/expect.toml`: delete once no test owner remains
+- canonical cases: inspect only; every manifest case already owns `expect.toml`
 
 ACCEPTANCE_CRITERIA:
-- `loop_borrow_mutation_conflict` fails with `BST-BORROW-0003` through the existing diagnostic constructor
-- loop-carried aliases remain active through CFG backedges without making every temporary permanently active
-- valid loops, nested/disjoint roots and copied collections retain focused coverage; audit reports no fallback-backed cases and zero hard violations
+- canonical fixture loading has one explicit expectation path and a missing file names the case/path
+- no `DEFAULT_EXPECT_STUB_PATH`, default-stub read path, fixture or self-test blessing fallback remains
+- 70+ focused runner tests, audit, formatting, diff checks and `just validate` pass with zero fallback-backed cases
 
 DECISIONS_ALREADY_MADE:
 - decision: harden the integration harness before pruning
@@ -239,7 +235,7 @@ DOCS_IMPACT:
 - authorized docs updates: this plan explicitly authorizes the documentation changes listed in each phase; do not broaden language or architecture docs without a discovered contradiction or an intentional accepted behaviour change
 
 NEXT_ACTION:
-- launch the bounded Phase 2B10b Codex CLI implementation task in the existing reusable worktree
+- launch the bounded Phase 2C Codex CLI implementation task in the existing reusable worktree
 
 ---
 
@@ -1308,6 +1304,12 @@ Accepted batch 2B10a at `79d821a2b`: the stale nested helper import now uses the
 module-root-relative `@helper/prefix` path and asserts its `A-hello-B` output. Audit baseline-only
 findings fell from 57 to 56, fallback use fell from two to one, and the worker's full validation
 plus the parent's exact case, 70 runner tests, audit and diff checks passed.
+
+Accepted batch 2B10b at `9f40480a9`: block-aware future-use facts now keep source-semantic
+loop-carried aliases active without changing HIR, mutation of the active iterable reports
+`BST-BORROW-0003`, and focused tests preserve unrelated and copied roots. Audit baseline-only
+findings fell from 56 to 55, fallback use reached zero, and the worker's full validation plus the
+parent's focused tests, exact cases, audit, formatting and diff checks passed.
 
 ### 2C — Enforce canonical expectations and remove the fallback
 
