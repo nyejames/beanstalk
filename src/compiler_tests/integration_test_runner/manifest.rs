@@ -1,12 +1,12 @@
 //! Manifest file parsing for the integration test suite.
 //!
-//! WHAT: reads and validates `manifest.toml`, which declares the canonical case order and tags.
+//! WHAT: reads and validates `manifest.toml`, which declares canonical case order and metadata.
 //! WHY: the manifest is the authoritative source for test execution order, so parsing it is
 //!      isolated here to keep the fixture loader free of TOML deserialization details.
 
-use super::ManifestCaseSpec;
+use super::{CaseRole, ManifestCaseSpec};
 use serde::Deserialize;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -24,6 +24,10 @@ pub(crate) struct ManifestCaseToml {
     pub path: String,
     #[serde(default)]
     pub tags: Vec<String>,
+    #[serde(default)]
+    pub contract: Option<String>,
+    #[serde(default)]
+    pub role: Option<String>,
 }
 
 pub(crate) fn parse_manifest_file(path: &Path) -> Result<Vec<ManifestCaseSpec>, String> {
@@ -39,6 +43,7 @@ pub(crate) fn parse_manifest_file(path: &Path) -> Result<Vec<ManifestCaseSpec>, 
 
     let mut seen_ids = HashSet::new();
     let mut seen_paths = HashSet::new();
+    let mut seen_primary_contracts = HashMap::<String, String>::new();
     let mut cases = Vec::with_capacity(parsed.case.len());
     for case in parsed.case {
         if case.id.trim().is_empty() {
@@ -67,6 +72,40 @@ pub(crate) fn parse_manifest_file(path: &Path) -> Result<Vec<ManifestCaseSpec>, 
                 case.id
             ));
         }
+
+        if case
+            .contract
+            .as_deref()
+            .is_some_and(|contract| contract.trim().is_empty())
+        {
+            return Err(format!(
+                "Manifest '{}' case '{}' has an empty contract value.",
+                path.display(),
+                case.id
+            ));
+        }
+
+        let role = case
+            .role
+            .as_deref()
+            .map(CaseRole::parse)
+            .transpose()
+            .map_err(|error| {
+                format!(
+                    "Manifest '{}' case '{}' has an invalid role: {error}.",
+                    path.display(),
+                    case.id
+                )
+            })?;
+
+        if role == Some(CaseRole::Primary) && case.contract.is_none() {
+            return Err(format!(
+                "Manifest '{}' case '{}' has role 'primary' but is missing a contract.",
+                path.display(),
+                case.id
+            ));
+        }
+
         if !seen_ids.insert(case.id.clone()) {
             return Err(format!(
                 "Manifest '{}' has duplicate case id '{}'.",
@@ -82,9 +121,25 @@ pub(crate) fn parse_manifest_file(path: &Path) -> Result<Vec<ManifestCaseSpec>, 
             ));
         }
 
+        if let (Some(CaseRole::Primary), Some(contract)) = (role, case.contract.as_ref())
+            && let Some(previous_case_id) =
+                seen_primary_contracts.insert(contract.clone(), case.id.clone())
+        {
+            return Err(format!(
+                "Manifest '{}' has duplicate primary contract '{}' on cases '{}' and '{}'.",
+                path.display(),
+                contract,
+                previous_case_id,
+                case.id
+            ));
+        }
+
         cases.push(ManifestCaseSpec {
             id: case.id,
             path: PathBuf::from(case.path),
+            tags: case.tags,
+            contract: case.contract,
+            role,
         });
     }
 

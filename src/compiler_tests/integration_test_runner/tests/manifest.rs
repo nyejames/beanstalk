@@ -4,7 +4,7 @@
 //! WHY: manifest metadata controls which canonical fixtures the runner executes.
 
 use super::super::fixture::load_test_suite_from_root;
-use super::super::{EXPECT_FILE_NAME, INPUT_DIR_NAME, MANIFEST_FILE_NAME};
+use super::super::{CaseRole, EXPECT_FILE_NAME, INPUT_DIR_NAME, MANIFEST_FILE_NAME};
 use crate::compiler_tests::test_support::temp_dir;
 use std::fs;
 use std::path::Path;
@@ -40,6 +40,155 @@ fn rejects_manifest_case_without_tags() {
         error.contains("missing required tags"),
         "unexpected: {error}"
     );
+
+    fs::remove_dir_all(&root).expect("should clean up temp fixture root");
+}
+
+#[test]
+fn rejects_manifest_case_with_unknown_role() {
+    let root = temp_dir("manifest_unknown_role");
+    fs::create_dir_all(&root).expect("should create root");
+    write_success_fixture(&root, "case");
+
+    fs::write(
+        root.join(MANIFEST_FILE_NAME),
+        "[[case]]\nid = \"case\"\npath = \"case\"\ntags = [\"coverage\"]\nrole = \"unknown\"\n",
+    )
+    .expect("should write manifest");
+
+    let Err(error) = load_test_suite_from_root(&root) else {
+        panic!("unknown manifest role should be rejected");
+    };
+    assert!(error.contains("case"), "unexpected: {error}");
+    assert!(error.contains("unknown"), "unexpected: {error}");
+    assert!(error.contains("role"), "unexpected: {error}");
+
+    fs::remove_dir_all(&root).expect("should clean up temp fixture root");
+}
+
+#[test]
+fn parses_every_supported_manifest_role() {
+    let supported_roles = [
+        ("primary", CaseRole::Primary),
+        ("boundary", CaseRole::Boundary),
+        ("backend", CaseRole::Backend),
+        ("adversarial", CaseRole::Adversarial),
+        ("smoke", CaseRole::Smoke),
+    ];
+
+    for (spelling, expected) in supported_roles {
+        assert_eq!(CaseRole::parse(spelling), Ok(expected));
+    }
+}
+
+#[test]
+fn rejects_primary_manifest_case_without_contract() {
+    let root = temp_dir("manifest_primary_without_contract");
+    fs::create_dir_all(&root).expect("should create root");
+    write_success_fixture(&root, "case");
+
+    fs::write(
+        root.join(MANIFEST_FILE_NAME),
+        "[[case]]\nid = \"case\"\npath = \"case\"\ntags = [\"coverage\"]\nrole = \"primary\"\n",
+    )
+    .expect("should write manifest");
+
+    let Err(error) = load_test_suite_from_root(&root) else {
+        panic!("primary case without a contract should be rejected");
+    };
+    assert!(error.contains("case"), "unexpected: {error}");
+    assert!(error.contains("primary"), "unexpected: {error}");
+    assert!(error.contains("contract"), "unexpected: {error}");
+
+    fs::remove_dir_all(&root).expect("should clean up temp fixture root");
+}
+
+#[test]
+fn rejects_manifest_case_with_empty_contract() {
+    let root = temp_dir("manifest_empty_contract");
+    fs::create_dir_all(&root).expect("should create root");
+    write_success_fixture(&root, "case");
+
+    fs::write(
+        root.join(MANIFEST_FILE_NAME),
+        "[[case]]\nid = \"case\"\npath = \"case\"\ntags = [\"coverage\"]\ncontract = \" \"\n",
+    )
+    .expect("should write manifest");
+
+    let Err(error) = load_test_suite_from_root(&root) else {
+        panic!("empty manifest contract should be rejected");
+    };
+    assert!(error.contains("case"), "unexpected: {error}");
+    assert!(error.contains("empty"), "unexpected: {error}");
+    assert!(error.contains("contract"), "unexpected: {error}");
+
+    fs::remove_dir_all(&root).expect("should clean up temp fixture root");
+}
+
+#[test]
+fn rejects_duplicate_primary_contracts() {
+    let root = temp_dir("manifest_duplicate_primary_contract");
+    fs::create_dir_all(&root).expect("should create root");
+    write_success_fixture(&root, "case_a");
+    write_success_fixture(&root, "case_b");
+
+    fs::write(
+        root.join(MANIFEST_FILE_NAME),
+        "[[case]]\nid = \"case_a\"\npath = \"case_a\"\ntags = [\"coverage\"]\ncontract = \"language.example\"\nrole = \"primary\"\n\n[[case]]\nid = \"case_b\"\npath = \"case_b\"\ntags = [\"coverage\"]\ncontract = \"language.example\"\nrole = \"primary\"\n",
+    )
+    .expect("should write manifest");
+
+    let Err(error) = load_test_suite_from_root(&root) else {
+        panic!("duplicate primary contracts should be rejected");
+    };
+    assert!(error.contains("duplicate"), "unexpected: {error}");
+    assert!(error.contains("language.example"), "unexpected: {error}");
+    assert!(error.contains("case_a"), "unexpected: {error}");
+    assert!(error.contains("case_b"), "unexpected: {error}");
+
+    fs::remove_dir_all(&root).expect("should clean up temp fixture root");
+}
+
+#[test]
+fn permits_shared_contracts_for_distinct_non_primary_roles() {
+    let root = temp_dir("manifest_shared_non_primary_contract");
+    fs::create_dir_all(&root).expect("should create root");
+    write_success_fixture(&root, "case_a");
+    write_success_fixture(&root, "case_b");
+
+    fs::write(
+        root.join(MANIFEST_FILE_NAME),
+        "[[case]]\nid = \"case_a\"\npath = \"case_a\"\ntags = [\"coverage\"]\ncontract = \"language.example\"\nrole = \"boundary\"\n\n[[case]]\nid = \"case_b\"\npath = \"case_b\"\ntags = [\"coverage\"]\ncontract = \"language.example\"\nrole = \"backend\"\n",
+    )
+    .expect("should write manifest");
+
+    let suite =
+        load_test_suite_from_root(&root).expect("non-primary cases may share a semantic contract");
+    assert_eq!(suite.cases.len(), 2);
+    assert_eq!(suite.cases[0].role, Some(CaseRole::Boundary));
+    assert_eq!(suite.cases[1].role, Some(CaseRole::Backend));
+
+    fs::remove_dir_all(&root).expect("should clean up temp fixture root");
+}
+
+#[test]
+fn retains_unclassified_manifest_metadata_as_optional() {
+    let root = temp_dir("manifest_unclassified_metadata");
+    fs::create_dir_all(&root).expect("should create root");
+    write_success_fixture(&root, "case");
+
+    fs::write(
+        root.join(MANIFEST_FILE_NAME),
+        "[[case]]\nid = \"case\"\npath = \"case\"\ntags = [\"coverage\"]\n",
+    )
+    .expect("should write manifest");
+
+    let suite = load_test_suite_from_root(&root).expect("unclassified case should load");
+    let case = &suite.cases[0];
+    assert_eq!(case.case_id, "case");
+    assert_eq!(case.tags, vec!["coverage"]);
+    assert_eq!(case.contract, None);
+    assert_eq!(case.role, None);
 
     fs::remove_dir_all(&root).expect("should clean up temp fixture root");
 }

@@ -2,7 +2,7 @@
 //!
 //! Supports:
 //! - canonical self-contained case folders under `tests/cases/<case>/`
-//! - required manifest-driven case ordering and tags
+//! - required manifest-driven case ordering and case metadata
 //! - backend-specific expectation matrices from a shared input fixture
 
 mod assertions;
@@ -22,7 +22,7 @@ pub use runner::{run_all_test_cases, run_all_test_cases_with_backend_filter};
 pub use types::IntegrationRunSummary;
 
 pub(crate) use types::{
-    ArtifactAssertion, ArtifactKind, BackendId, CaseExecutionResult, ExpectationMode,
+    ArtifactAssertion, ArtifactKind, BackendId, CaseExecutionResult, CaseRole, ExpectationMode,
     ExpectedOutcome, FailureExpectation, FailureKind, FailureTriageEntry, FailureTriageReport,
     GoldenMode, ManifestCaseSpec, ParsedBackendExpectation, ParsedExpectationFile,
     SuccessExpectation, SummaryCounts, TestCaseSpec, TestRunnerOptions, TestSuiteSpec,

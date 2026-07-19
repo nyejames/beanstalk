@@ -238,6 +238,10 @@ fn absence_expectation(forbidden: Vec<String>) -> SuccessExpectation {
 fn absence_test_case(expectation: SuccessExpectation) -> TestCaseSpec {
     TestCaseSpec {
         display_name: "absence-contract".to_string(),
+        case_id: "absence-contract".to_string(),
+        tags: Vec::new(),
+        contract: None,
+        role: None,
         backend_id: BackendId::Html,
         entry_path: PathBuf::from("."),
         golden_dir: PathBuf::from("nonexistent-golden"),

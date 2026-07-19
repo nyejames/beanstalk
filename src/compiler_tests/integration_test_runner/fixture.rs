@@ -44,7 +44,7 @@ pub(crate) fn load_test_suite_from_root_with_filter(
     for manifest_case in manifest_cases {
         let fixture_root = root.join(&manifest_case.path);
         let case_specs =
-            load_canonical_case_specs(&fixture_root, Some(manifest_case.id), backend_filter)?;
+            load_canonical_case_specs(&fixture_root, Some(manifest_case), backend_filter)?;
         cases.extend(case_specs);
     }
 
@@ -131,7 +131,7 @@ fn discover_canonical_fixture_roots(root: &Path) -> Result<Vec<PathBuf>, String>
 
 pub(crate) fn load_canonical_case_specs(
     fixture_root: &Path,
-    explicit_id: Option<String>,
+    manifest_case: Option<ManifestCaseSpec>,
     backend_filter: Option<BackendId>,
 ) -> Result<Vec<TestCaseSpec>, String> {
     let input_root = fixture_root.join(INPUT_DIR_NAME);
@@ -159,13 +159,24 @@ pub(crate) fn load_canonical_case_specs(
     };
     validate_fixture_contract(fixture_root, &parsed_expectation)?;
     let entry_path = resolve_case_entry_path(&input_root, parsed_expectation.entry.as_deref())?;
-    let case_id = explicit_id.unwrap_or_else(|| {
-        fixture_root
-            .file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or("unnamed_case")
-            .to_string()
-    });
+    let (case_id, tags, contract, role) = match manifest_case {
+        Some(manifest_case) => (
+            manifest_case.id,
+            manifest_case.tags,
+            manifest_case.contract,
+            manifest_case.role,
+        ),
+        None => (
+            fixture_root
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("unnamed_case")
+                .to_string(),
+            Vec::new(),
+            None,
+            None,
+        ),
+    };
 
     let mut case_specs = Vec::new();
     for backend_expectation in parsed_expectation.backend_expectations {
@@ -200,6 +211,10 @@ pub(crate) fn load_canonical_case_specs(
 
         case_specs.push(TestCaseSpec {
             display_name: format!("{case_id} [{backend_name}]"),
+            case_id: case_id.clone(),
+            tags: tags.clone(),
+            contract: contract.clone(),
+            role,
             backend_id: backend_expectation.backend_id,
             entry_path: entry_path.clone(),
             golden_dir,

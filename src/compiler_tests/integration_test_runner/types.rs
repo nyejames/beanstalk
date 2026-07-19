@@ -23,6 +23,16 @@ pub(crate) struct TestSuiteSpec {
 #[derive(Clone)]
 pub(crate) struct TestCaseSpec {
     pub display_name: String,
+    // Retained ahead of the selection and reporting phases; these fields are intentionally
+    // carried even while the current runner only executes the expanded cases.
+    #[allow(dead_code)]
+    pub case_id: String,
+    #[allow(dead_code)]
+    pub tags: Vec<String>,
+    #[allow(dead_code)]
+    pub contract: Option<String>,
+    #[allow(dead_code)]
+    pub role: Option<CaseRole>,
     pub backend_id: BackendId,
     pub entry_path: PathBuf,
     pub golden_dir: PathBuf,
@@ -231,6 +241,33 @@ pub(crate) struct FailureTriageReport {
 pub(crate) struct ManifestCaseSpec {
     pub id: String,
     pub path: PathBuf,
+    pub tags: Vec<String>,
+    pub contract: Option<String>,
+    pub role: Option<CaseRole>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum CaseRole {
+    Primary,
+    Boundary,
+    Backend,
+    Adversarial,
+    Smoke,
+}
+
+impl CaseRole {
+    pub(crate) fn parse(value: &str) -> Result<Self, String> {
+        match value {
+            "primary" => Ok(Self::Primary),
+            "boundary" => Ok(Self::Boundary),
+            "backend" => Ok(Self::Backend),
+            "adversarial" => Ok(Self::Adversarial),
+            "smoke" => Ok(Self::Smoke),
+            other => Err(format!(
+                "unknown role '{other}'; supported roles: primary, boundary, backend, adversarial, smoke"
+            )),
+        }
+    }
 }
 
 pub(crate) struct ParsedExpectationFile {

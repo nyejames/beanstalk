@@ -5,7 +5,7 @@
 
 use super::super::fixture::{load_canonical_case_specs, load_test_suite_from_root_with_filter};
 use super::super::{
-    BackendId, EXPECT_FILE_NAME, GOLDEN_DIR_NAME, INPUT_DIR_NAME, MANIFEST_FILE_NAME,
+    BackendId, CaseRole, EXPECT_FILE_NAME, GOLDEN_DIR_NAME, INPUT_DIR_NAME, MANIFEST_FILE_NAME,
 };
 use crate::compiler_tests::test_support::temp_dir;
 use std::fs;
@@ -121,6 +121,49 @@ fn backend_filter_limits_loaded_case_variants() {
         .expect("suite should load");
     assert_eq!(suite.cases.len(), 1);
     assert_eq!(suite.cases[0].display_name, "case [html_wasm]");
+
+    fs::remove_dir_all(&root).expect("should clean up temp fixture root");
+}
+
+#[test]
+fn manifest_metadata_survives_backend_expansion() {
+    let root = temp_dir("manifest_metadata_expansion");
+    let case_root = root.join("case");
+    let input_root = case_root.join(INPUT_DIR_NAME);
+    fs::create_dir_all(&input_root).expect("should create fixture input directory");
+    fs::write(input_root.join("#page.bst"), "#[:ok]\n").expect("should write fixture source");
+    fs::write(
+        case_root.join(EXPECT_FILE_NAME),
+        "entry = \".\"\n\n[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\n\n[backends.html_wasm]\nmode = \"success\"\nwarnings = \"forbid\"\n",
+    )
+    .expect("should write matrix expect file");
+    fs::write(
+        root.join(MANIFEST_FILE_NAME),
+        "[[case]]\nid = \"case\"\npath = \"case\"\ntags = [\"integration\", \"maps\"]\ncontract = \"language.maps.get_alias_exclusivity\"\nrole = \"primary\"\n",
+    )
+    .expect("should write manifest");
+
+    let suite = load_test_suite_from_root_with_filter(&root, None)
+        .expect("metadata matrix case should load");
+    assert_eq!(suite.cases.len(), 2);
+    assert_eq!(
+        suite
+            .cases
+            .iter()
+            .map(|case| case.display_name.as_str())
+            .collect::<Vec<_>>(),
+        vec!["case [html]", "case [html_wasm]"]
+    );
+
+    for case in &suite.cases {
+        assert_eq!(case.case_id, "case");
+        assert_eq!(case.tags, vec!["integration", "maps"]);
+        assert_eq!(
+            case.contract.as_deref(),
+            Some("language.maps.get_alias_exclusivity")
+        );
+        assert_eq!(case.role, Some(CaseRole::Primary));
+    }
 
     fs::remove_dir_all(&root).expect("should clean up temp fixture root");
 }
