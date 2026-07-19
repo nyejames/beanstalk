@@ -29,35 +29,30 @@ TIR remains AST-local. No TIR store, ID, view, overlay or preparation type may c
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/final-tir-completion-plan.md
 STATUS: active
-CURRENT_SLICE: R2C accepted; checkpoint ready to commit
-LAST_ACCEPTED_COMMIT: 144568587 (R2B complete root expression overlays)
-WORKTREE: main at 144568587 with the accepted uncommitted R2C source, tests and plan checkpoint; concurrent user documentation is the separate earlier commit 5fa9bb32f
+CURRENT_SLICE: R3 accepted; checkpoint ready to commit
+LAST_ACCEPTED_COMMIT: 5823343d4 (R2C exact TirView transitions)
+WORKTREE: main at 5823343d4 with accepted uncommitted R3 source, tests, index locator and plan checkpoint; concurrent user documentation remains untouched
 REQUIRED_RELOADS: startup files, this plan, and current TIR source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: compiler-design-overview.md one-store TIR contract and this plan's R2 exact-view contract
-- code: view.rs owns TirViewIdentity and every structural-child, wrapper, resolved-source, structural-helper and nested-value transition; fold, handoff, classification, validation, formatting, metadata and overlay completion use those transitions; the temporary overlay-completion precedence map is construction input only
+- docs: compiler-design-overview.md one-preparation-owner contract and this plan's R4 prepared fold, handoff, cache and finalization requirements
+- code: preparation.rs is the sole exact-view semantic preparation owner; fold_safety.rs and authority tokens are deleted; finalization still exposes temporary disposition results and runtime handoff still owns a narrow folded-child shortcut for R4 removal
 ACCEPTANCE_CRITERIA:
-- TirView owns TirViewIdentity and the only structural-child, wrapper, resolved-source, structural-helper and nested-value transitions
-- structural transitions retain the current complete expression overlay; Parsed references ignore referenced slot/wrapper context and Composed-or-later references use it; nested AST values use their full referenced context
-- delete generic child_view, all expression/context stacks used for overlay authority, store expression_for_context_stack and raw tuple cycle/cache identity
-- resolved slot sources, formatter children and all view-based cycle paths use named transitions and exact TirViewIdentity without synthetic child references or root-only keys
-- the root-overlay completion collector may keep only a temporary site-keyed precedence map required to merge pre-completion descendant overlays; it must not become a durable read context or alter the raw structural test collector contract
-- keep non-overlay algorithm stacks such as active nodes/templates and fold bindings when they have distinct ownership
-- preserve complete-overlay semantics and do not begin preparation, prepared fold/handoff or finalization redesign
+- commit the accepted R3 source, tests, plan and index locator without user-owned documentation
+- preserve the exact Value and ConstRequired preparation semantics, preparation counters, runtime-slot fold/cache rejection and net-negative TIR inventory
+- reload after commit and select the smallest coherent R4 prepared fold/handoff/finalization slice through Codex CLI
 VALIDATION_STATE:
-- R2C worker cargo fmt, cargo check and 3420 unit tests: passed
-- R2C parent focused transition, raw/effective overlay, control-flow and wrapper-handoff tests: passed
 - R2C just validate: passed; cross-target Clippy, 3421 unit tests, 1784 integration cases, docs check and 28 benchmark sanity cases; -7ms average, 23 faster and 0 slower
-- TIR line inventory: 19,963 production and 17,094 test lines (R2B: 20,102 and 16,851; 069a29acb: 24,274 and 27,231)
-- deleted overlay-set, stale ownership, compatibility-parameter, and HIR/backend TIR-boundary greps: passed
-- TIR line inventory: 20,102 production and 16,851 test lines (R2A: 20,048 and 16,727; 069a29acb: 24,274 and 27,231); R2C deletion remains before phase acceptance
-- R2B just validate: passed; cross-target Clippy, 3417 unit tests, 1784 integration cases, docs check, and 28 benchmark sanity cases; -7ms average, 23 faster and 0 slower
-DOCS_IMPACT: none beyond this parent-managed plan checkpoint; R2B is an internal refactor
+- R3 ownership map: passed through Codex CLI simple-exploration; no repeated preparation proving a cache, new preparation.rs is the required final owner, and classification/control-flow predicates remain only where they answer earlier-stage questions
+- R3 targeted preparation, const-required, runtime-slot cache and wrapper tests: passed
+- R3 just validate: passed; cross-target Clippy, 3434 unit tests, 1784 integration cases, docs check and 28 benchmark sanity cases; -7ms average, 22 faster and 0 slower
+- TIR inventory: 19,948 production and 17,712 test lines (R2C: 19,963 and 17,094; 069a29acb: 24,274 and 27,231)
+- deletion, stale-terminology, HIR/backend TIR-boundary and git diff checks: passed
+DOCS_IMPACT: index.md locator updated for preparation.rs; progress matrix unchanged because user-visible support did not change
 BLOCKERS_OR_OPEN_DECISIONS: none
 DELEGATION_DECISION: codex-cli implementation completed and parent corrections accepted
 NEXT_WORKER_ORDER: codex-cli (user-required provider)
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit the accepted R2C checkpoint, reload, then select the first coherent R3 preparation slice through Codex CLI
+NEXT_RESUME_ACTION: commit the accepted R3 checkpoint, reload, then select the first coherent R4 slice through Codex CLI
 ```
 
 Use `069a29acb` as the implementation and regression base. Do not continue extending `FoldAuthorityWalk`, foreign-store traversal, external expression-overlay stacks or prepared foreign-wrapper proofs.
@@ -682,6 +677,15 @@ sanity cases.
 - Runtime dependence is ordinary semantics, not a fallback.
 - `fold_safety.rs` and authority tokens are gone.
 - Common code gate passes.
+
+R3 accepted on the pre-commit `5823343d4` worktree. `preparation.rs` now owns one
+mode-aware exhaustive `PreparationWalk` over exact structural and nested-value views, returning
+only `Foldable`, `Runtime` or `Helper`. Missing authority remains internal after runtime discovery,
+only prepared foldable values enter folding or caching and runtime slot plans cannot disappear as
+empty output. `fold_safety.rs`, authority tokens and immediate full-template decision walks are
+deleted. The final tracked-file inventory is 19,948 production and 17,712 test lines. `just
+validate` passed with cross-target Clippy, 3,434 unit tests, 1,784 integration cases, docs checking
+and all 28 benchmark sanity cases.
 
 ### Phase R4 - Simplify fold, handoff and finalization
 

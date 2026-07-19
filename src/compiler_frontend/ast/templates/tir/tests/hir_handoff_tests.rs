@@ -873,7 +873,7 @@ fn folded_child_infrastructure_error_propagates_through_hir_handoff() {
         .expect_err("malformed child authority must reach the HIR handoff caller");
 
     assert!(
-        error.msg.contains("TIR fold safety: node"),
+        error.msg.contains("TIR preparation: node"),
         "expected a stable infrastructure lane, got: {}",
         error.msg
     );

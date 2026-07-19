@@ -328,9 +328,9 @@ pub(super) fn build_composed_wrapper_template(
 
     // If all slot placeholders were filled, the composed tree no longer behaves
     // as a wrapper receiver. Clear the slot flags so later composition passes
-    // and fold-safety checks see the actual tree shape. Other summary counts
-    // remain conservative (they may underestimate fill content), which is safe
-    // for capacity planning.
+    // and later fold preparation checks see the actual tree shape. Other
+    // summary counts remain conservative (they may underestimate fill content),
+    // which is safe for capacity planning.
     if !tir_tree_has_slots(store, expanded_root)? {
         summary.has_slots = false;
         summary.slot_count = 0;

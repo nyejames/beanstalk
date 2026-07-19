@@ -553,74 +553,63 @@ fn normalize_expression_templates_with_context(
         ExpressionKind::Template(template) => {
             normalize_template_for_hir(template, context)?;
 
-            let final_classification = classify_final_effective_template_view(template, context)?;
-            let template_const_kind = final_classification.const_value_kind;
+            let fold_result = try_fold_template_to_string(
+                template,
+                TemplateFinalizationFoldInputs {
+                    source_file_scope: context.source_file_scope,
+                    path_format_config: context.path_format_config,
+                    project_path_resolver: context.project_path_resolver,
+                    string_table: context.string_table,
+                    template_const_loop_iteration_limit: context
+                        .template_const_loop_iteration_limit,
+                    template_ir_store: &context.template_ir_store,
+                },
+            )?;
 
-            // Fold renderable values through the preparation owner. A renderable
-            // shape can still require runtime lowering when its prepared proof
-            // finds a runtime slot plan, so that disposition must reach the
-            // existing owned handoff materializer.
-            if matches!(
-                template_const_kind,
-                TemplateConstValueKind::RenderableString
-            ) {
-                let fold_result = try_fold_template_to_string(
-                    template,
-                    TemplateFinalizationFoldInputs {
-                        source_file_scope: context.source_file_scope,
-                        path_format_config: context.path_format_config,
-                        project_path_resolver: context.project_path_resolver,
-                        string_table: context.string_table,
-                        template_const_loop_iteration_limit: context
-                            .template_const_loop_iteration_limit,
-                        template_ir_store: &context.template_ir_store,
-                    },
-                )?;
-
-                match fold_result.disposition {
-                    TemplateFinalizationFoldDisposition::Folded => {
-                        let folded = fold_result.folded.ok_or_else(|| {
-                            CompilerError::compiler_error(
-                                "Renderable template folding completed without folded output.",
-                            )
-                        })?;
-                        Some(NormalizedTemplateExpression::Folded(folded))
-                    }
-
-                    TemplateFinalizationFoldDisposition::RuntimeHandoffRequired => {
-                        materialize_runtime_template_handoff_for_hir(
-                            template,
-                            context,
-                            &final_classification,
-                            reactive_template_metadata_from_current_store(template, context)?,
-                        )?
-                    }
-
-                    TemplateFinalizationFoldDisposition::NotFoldable => None,
-                }
-            } else {
-                // Nested helper-owned contribution structure can be legal inside wrapper
-                // templates. Reject only when this expression's final value itself is a
-                // standalone helper artifact after composition.
-                if helper_artifact_policy == HelperArtifactPolicy::RejectFinalHelperValue
-                    && is_illegal_final_template_helper_value(
-                        effective_template_kind(template, context)?,
-                        template_const_kind,
-                    )
-                {
-                    return Err(CompilerDiagnostic::invalid_template_structure(
-                        InvalidTemplateStructureReason::HelperOutsideWrapperSlot,
-                        template.location.to_owned(),
-                    )
-                    .into());
+            match fold_result.disposition {
+                TemplateFinalizationFoldDisposition::Folded => {
+                    let folded = fold_result.folded.ok_or_else(|| {
+                        CompilerError::compiler_error(
+                            "Renderable template folding completed without folded output.",
+                        )
+                    })?;
+                    Some(NormalizedTemplateExpression::Folded(folded))
                 }
 
-                materialize_runtime_template_handoff_for_hir(
-                    template,
-                    context,
-                    &final_classification,
-                    reactive_template_metadata_from_current_store(template, context)?,
-                )?
+                TemplateFinalizationFoldDisposition::RuntimeHandoffRequired => {
+                    let final_classification =
+                        classify_final_effective_template_view(template, context)?;
+                    materialize_runtime_template_handoff_for_hir(
+                        template,
+                        context,
+                        &final_classification,
+                        reactive_template_metadata_from_current_store(template, context)?,
+                    )?
+                }
+
+                TemplateFinalizationFoldDisposition::NotFoldable => {
+                    let final_classification =
+                        classify_final_effective_template_view(template, context)?;
+                    if helper_artifact_policy == HelperArtifactPolicy::RejectFinalHelperValue
+                        && is_illegal_final_template_helper_value(
+                            effective_template_kind(template, context)?,
+                            fold_result.const_value_kind,
+                        )
+                    {
+                        return Err(CompilerDiagnostic::invalid_template_structure(
+                            InvalidTemplateStructureReason::HelperOutsideWrapperSlot,
+                            template.location.to_owned(),
+                        )
+                        .into());
+                    }
+
+                    materialize_runtime_template_handoff_for_hir(
+                        template,
+                        context,
+                        &final_classification,
+                        reactive_template_metadata_from_current_store(template, context)?,
+                    )?
+                }
             }
         }
 
@@ -811,8 +800,8 @@ fn reactive_template_metadata_from_store(
 ///       expression, slot-resolution and wrapper-context overlays against the
 ///       live module store.
 /// WHY: finalization must make fold and runtime-handoff decisions from the same
-///      authoritative TIR identity. Reconstructing compatibility content here
-///      would ignore overlay semantics immediately before the AST/HIR boundary.
+///      authoritative TIR identity. Reconstructing source content here would
+///      ignore overlay semantics immediately before the AST/HIR boundary.
 fn classify_final_effective_template_view(
     template: &mut Template,
     context: &TemplateNormalizationContext<'_, '_>,
@@ -1013,7 +1002,7 @@ fn normalize_runtime_slot_template_expression_for_hir(
 ///       handoff from that same view.
 /// WHY: normalization has already finalized the module-owned TIR reference.
 ///      Rebuilding a fresh tree here could discard effective overlays and
-///      revive stale compatibility data at the AST/HIR boundary.
+///      revive stale source data at the AST/HIR boundary.
 fn materialize_runtime_template_handoff_for_hir(
     template: &Template,
     context: &mut TemplateNormalizationContext<'_, '_>,

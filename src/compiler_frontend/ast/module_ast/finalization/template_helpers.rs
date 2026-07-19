@@ -13,8 +13,8 @@ use crate::compiler_frontend::ast::templates::template_folding::{
     TemplateEmission, TemplateFoldContext,
 };
 use crate::compiler_frontend::ast::templates::tir::{
-    PreparedTirViewFold, TemplateIrStore, TemplateTirPhase, TirFoldCache, TirView,
-    classify_effective_tir_view_template, fold_tir_view_prepared, prepare_tir_view_fold,
+    PreparedTemplate, TemplateHelperKind, TemplateIrStore, TemplatePreparationMode,
+    TemplateTirPhase, TirFoldCache, TirView, fold_tir_view_prepared, prepare_tir_view,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::instrumentation::{AstCounter, increment_ast_counter};
@@ -33,14 +33,25 @@ use std::rc::Rc;
 /// WHY: This pattern is repeated in both AST node and module constant
 /// normalization. Consolidating it ensures consistent folding behavior.
 ///
-/// The result explicitly records when preparation found a semantic runtime
-/// fallback. Callers must route that disposition through the owned handoff
+/// The result explicitly records when preparation found semantic runtime
+/// dependence. Callers must route that disposition through the owned handoff
 /// materializer instead of inferring it from `TemplateConstValueKind`.
 pub(super) fn try_fold_template_to_string(
     template: &Template,
     mut fold_inputs: TemplateFinalizationFoldInputs<'_, '_>,
 ) -> Result<TemplateFinalizationFoldResult, TemplateNormalizationError> {
-    fold_template_view_to_string(template, &mut fold_inputs)
+    fold_template_view_to_string(template, &mut fold_inputs, TemplatePreparationMode::Value)
+}
+
+pub(super) fn try_fold_const_required_template_to_string(
+    template: &Template,
+    mut fold_inputs: TemplateFinalizationFoldInputs<'_, '_>,
+) -> Result<TemplateFinalizationFoldResult, TemplateNormalizationError> {
+    fold_template_view_to_string(
+        template,
+        &mut fold_inputs,
+        TemplatePreparationMode::ConstRequired,
+    )
 }
 
 /// Folds through the authoritative module-store `TirView`.
@@ -53,6 +64,7 @@ pub(super) fn try_fold_template_to_string(
 fn fold_template_view_to_string(
     template: &Template,
     fold_inputs: &mut TemplateFinalizationFoldInputs<'_, '_>,
+    preparation_mode: TemplatePreparationMode,
 ) -> Result<TemplateFinalizationFoldResult, TemplateNormalizationError> {
     let reference = &template.tir_reference;
 
@@ -77,85 +89,35 @@ fn fold_template_view_to_string(
         reference.context,
     )?;
 
-    // Complete authority validation and view-native preparation before making
-    // any semantic fallback decision. The preparation proof is tied to this
-    // exact root, phase, view context, and module store.
-    increment_ast_counter(AstCounter::TirReadOnlyFoldAttempts);
-    let fold_preparation: PreparedTirViewFold = {
+    // Preparation validates and classifies the exact view before cache lookup
+    // or folding. Its compact result is the sole final-value decision source.
+    let preparation = {
         let store_borrow = fold_inputs.template_ir_store.borrow();
-        prepare_tir_view_fold(&view, &store_borrow, fold_inputs.string_table)?
+        prepare_tir_view(&view, &store_borrow, preparation_mode)?
     };
 
-    // Classification and folding must observe the same effective overlays.
-    // Non-const and helper-only shapes stop here without entering the fold
-    // walker. Renderable slots with no contribution remain valid and fold to
-    // empty output at their structural position.
-    let template_const_kind = {
-        let store = fold_inputs.template_ir_store.borrow();
-        classify_effective_tir_view_template(&view, &store)?.const_value_kind
-    };
-
-    match template_const_kind {
-        TemplateConstValueKind::LoopControlSignal
-        | TemplateConstValueKind::SlotInsertHelper
-        | TemplateConstValueKind::NonConst => {
+    let (fold_preparation, template_const_kind) = match preparation {
+        PreparedTemplate::Helper(kind) => {
             increment_ast_counter(AstCounter::TirFinalizationFoldSuccesses);
+            let const_value_kind = match kind {
+                TemplateHelperKind::LoopControl => TemplateConstValueKind::LoopControlSignal,
+                TemplateHelperKind::SlotInsert => TemplateConstValueKind::SlotInsertHelper,
+            };
             return Ok(TemplateFinalizationFoldResult {
                 folded: None,
-                const_value_kind: template_const_kind,
+                const_value_kind,
                 disposition: TemplateFinalizationFoldDisposition::NotFoldable,
             });
         }
-
-        TemplateConstValueKind::RenderableString | TemplateConstValueKind::WrapperTemplate => {}
-    }
-
-    // --- Prepared fold path ---
-    //
-    // Attempt to fold without cloning the store. The preparation proof covers
-    // the exact structural and overlay shape, rejecting runtime plans,
-    // reactive content, and unsupported wrapper/slot paths. A read-only proof
-    // additionally guarantees that the fold walker only reads the live store
-    // and never pushes synthetic wrapper nodes.
-    //
-    // The fold context retains the store handle so module-local child
-    // references keep their exact overlay identity through the view path.
-    let read_only_safe = fold_preparation.read_only_safe();
-
-    if !fold_preparation.fold_eligible() {
-        increment_ast_counter(AstCounter::TirReadOnlyFoldFallbacks);
-        return Ok(TemplateFinalizationFoldResult {
-            folded: None,
-            const_value_kind: template_const_kind,
-            disposition: TemplateFinalizationFoldDisposition::RuntimeHandoffRequired,
-        });
-    }
-
-    if read_only_safe {
-        let store = fold_inputs.template_ir_store.borrow();
-
-        let mut fold_context = make_fold_context(
-            fold_inputs.source_file_scope,
-            fold_inputs.path_format_config,
-            fold_inputs.project_path_resolver,
-            fold_inputs.string_table,
-            fold_inputs.template_const_loop_iteration_limit,
-            Some(Rc::clone(&store_handle)),
-        );
-
-        let result = fold_tir_view_prepared(&view, &store, &mut fold_context, fold_preparation)?;
-        let folded = template_emission_to_string_id(result, &mut fold_context)?;
-        increment_ast_counter(AstCounter::TemplatesFoldedDuringFinalization);
-        increment_ast_counter(AstCounter::TirReadOnlyFoldSuccesses);
-        increment_ast_counter(AstCounter::TirFinalizationFoldSuccesses);
-        return Ok(TemplateFinalizationFoldResult {
-            folded: Some(folded),
-            const_value_kind: template_const_kind,
-            disposition: TemplateFinalizationFoldDisposition::Folded,
-        });
-    }
-
-    increment_ast_counter(AstCounter::TirReadOnlyFoldFallbacks);
+        PreparedTemplate::Runtime(_) => {
+            return Ok(TemplateFinalizationFoldResult {
+                folded: None,
+                const_value_kind: TemplateConstValueKind::NonConst,
+                disposition: TemplateFinalizationFoldDisposition::RuntimeHandoffRequired,
+            });
+        }
+        PreparedTemplate::Foldable(prepared) => (prepared, prepared.value_kind),
+    };
 
     let store = fold_inputs.template_ir_store.borrow();
     let mut fold_context = make_fold_context(
@@ -193,9 +155,8 @@ pub(super) enum TemplateFinalizationFoldDisposition {
 
 /// Classification and optional folded output from one authoritative TIR view.
 ///
-/// Returning both facts keeps module-constant finalization from reclassifying
-/// the template through the compatibility-content materialization API after a
-/// non-foldable result.
+/// Returning both facts keeps module-constant finalization from rebuilding the
+/// effective value after a non-foldable result.
 pub(super) struct TemplateFinalizationFoldResult {
     pub(super) folded: Option<StringId>,
     pub(super) const_value_kind: TemplateConstValueKind,

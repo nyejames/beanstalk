@@ -102,7 +102,8 @@ Flow: [projects](src/projects/) → [build_system](src/build_system/) → [compi
         - [finalize_sync.rs](src/compiler_frontend/ast/templates/tir/finalize_sync.rs): mirror finalized Template state into TIR.
         - [expression_payload_walker.rs](src/compiler_frontend/ast/templates/tir/expression_payload_walker.rs): shared read-only expression-payload traversal.
         - [classification.rs](src/compiler_frontend/ast/templates/tir/classification.rs): store-aware TIR shape queries.
-        - [fold.rs](src/compiler_frontend/ast/templates/tir/fold.rs), [formatter_view.rs](src/compiler_frontend/ast/templates/tir/formatter_view.rs), [render_unit.rs](src/compiler_frontend/ast/templates/tir/render_unit.rs): TIR-native fold/format/render-unit prep.
+        - [preparation.rs](src/compiler_frontend/ast/templates/tir/preparation.rs): exact-view semantic preparation for foldable, runtime and helper values.
+        - [fold.rs](src/compiler_frontend/ast/templates/tir/fold.rs), [formatter_view.rs](src/compiler_frontend/ast/templates/tir/formatter_view.rs), [render_unit.rs](src/compiler_frontend/ast/templates/tir/render_unit.rs): TIR-native fold, format and render-unit preparation.
         - [slot_plan.rs](src/compiler_frontend/ast/templates/tir/slot_plan.rs), [slot_composition/](src/compiler_frontend/ast/templates/tir/slot_composition/), [wrapper_sets.rs](src/compiler_frontend/ast/templates/tir/wrapper_sets.rs): slot routing and wrapper reuse.
         - [handoff_materialization.rs](src/compiler_frontend/ast/templates/tir/handoff_materialization.rs): owned runtime-template trees for HIR lowering.
 - [generic_functions](src/compiler_frontend/ast/generic_functions/): generic templates, calls, inference, instances, diagnostics.

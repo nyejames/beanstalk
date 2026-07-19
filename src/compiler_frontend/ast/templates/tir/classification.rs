@@ -67,6 +67,10 @@ pub(crate) struct TirTemplateClassification {
 #[derive(Clone, Copy)]
 enum StringFunctionChildConstPolicy {
     Strict,
+    #[allow(
+        dead_code,
+        reason = "the structural-head policy is retained for focused const-body tests"
+    )]
     StructuralHeadFunction,
 }
 
@@ -678,44 +682,6 @@ pub(crate) fn tir_view_subtree_is_const_evaluable_value(
         string_function_child_policy: StringFunctionChildConstPolicy::Strict,
     };
     tir_view_tree_is_const_evaluable_value(&mut context, node_id, loop_binding_paths)
-}
-
-/// Classifies an expression through the same effective view used by its TIR node.
-pub(crate) fn tir_view_expression_is_const_evaluable_value_with_bindings(
-    view: &TirView<'_>,
-    store: &TemplateIrStore,
-    expression: &Expression,
-    loop_binding_paths: &[InternedPath],
-) -> Result<bool, TemplateError> {
-    let mut context = TirViewConstEvaluationContext {
-        view: view.clone(),
-        store,
-        visiting_templates: HashSet::new(),
-        string_function_child_policy: StringFunctionChildConstPolicy::StructuralHeadFunction,
-    };
-
-    tir_view_expression_is_const_evaluable(&mut context, expression, loop_binding_paths)
-}
-
-/// Checks whether an option-capture scrutinee is decidable from an effective view.
-pub(crate) fn tir_view_option_capture_presence_is_const_decidable(
-    view: &TirView<'_>,
-    store: &TemplateIrStore,
-    scrutinee: &Expression,
-    loop_binding_paths: &[InternedPath],
-) -> Result<bool, TemplateError> {
-    let mut context = TirViewConstEvaluationContext {
-        view: view.clone(),
-        store,
-        visiting_templates: HashSet::new(),
-        string_function_child_policy: StringFunctionChildConstPolicy::StructuralHeadFunction,
-    };
-
-    tir_view_option_capture_presence_is_const_decidable_with_context(
-        &mut context,
-        scrutinee,
-        loop_binding_paths,
-    )
 }
 
 fn tir_child_template_is_const_evaluable_value(
@@ -1486,6 +1452,38 @@ fn tir_view_expression_is_const_evaluable(
     expression: &Expression,
     loop_binding_paths: &[InternedPath],
 ) -> Result<bool, TemplateError> {
+    let mut visit_nested_template =
+        |reference: TemplateTirReference, nested_binding_paths: &[InternedPath]| {
+            tir_view_nested_template_value_is_const_evaluable_value(
+                context,
+                reference,
+                nested_binding_paths,
+            )
+        };
+
+    classify_expression_const_evaluable_with_nested_template(
+        expression,
+        loop_binding_paths,
+        &mut visit_nested_template,
+    )
+}
+
+/// Classifies one expression while delegating nested template values to the
+/// caller's exact-view traversal.
+///
+/// WHAT: owns the expression-kind rules shared by TIR classification and
+///      semantic preparation, but never traverses a nested TIR root itself.
+/// WHY: preparation must enter `ExpressionKind::Template` through its same
+///      `PreparationWalk`; a callback keeps this classifier local to expression
+///      structure while preserving one owner for the expression-kind match.
+pub(crate) fn classify_expression_const_evaluable_with_nested_template(
+    expression: &Expression,
+    loop_binding_paths: &[InternedPath],
+    nested_template: &mut impl FnMut(
+        TemplateTirReference,
+        &[InternedPath],
+    ) -> Result<bool, TemplateError>,
+) -> Result<bool, TemplateError> {
     match &expression.kind {
         ExpressionKind::Int(_)
         | ExpressionKind::Float(_)
@@ -1500,66 +1498,78 @@ fn tir_view_expression_is_const_evaluable(
 
         #[cfg(test)]
         ExpressionKind::FallibleCarrierConstruct { value, .. } => {
-            tir_view_expression_is_const_evaluable(context, value, loop_binding_paths)
+            classify_expression_const_evaluable_with_nested_template(
+                value,
+                loop_binding_paths,
+                nested_template,
+            )
         }
 
         ExpressionKind::Coerced { value, .. } => {
-            tir_view_expression_is_const_evaluable(context, value, loop_binding_paths)
+            classify_expression_const_evaluable_with_nested_template(
+                value,
+                loop_binding_paths,
+                nested_template,
+            )
         }
 
         ExpressionKind::Runtime(rpn) => {
+            let mut const_evaluable = true;
             for item in &rpn.items {
-                if let ExpressionRpnItem::Operand(operand) = item
-                    && !tir_view_expression_is_const_evaluable(
-                        context,
+                if let ExpressionRpnItem::Operand(operand) = item {
+                    const_evaluable &= classify_expression_const_evaluable_with_nested_template(
                         operand,
                         loop_binding_paths,
-                    )?
-                {
-                    return Ok(false);
+                        nested_template,
+                    )?;
                 }
             }
 
-            Ok(true)
+            Ok(const_evaluable)
         }
 
         ExpressionKind::Template(template) => {
-            tir_view_nested_template_value_is_const_evaluable_value(
-                context,
-                template.tir_reference,
-                loop_binding_paths,
-            )
+            nested_template(template.tir_reference, loop_binding_paths)
         }
 
         ExpressionKind::ChoiceConstruct { fields, .. } | ExpressionKind::StructInstance(fields) => {
+            let mut const_evaluable = true;
             for field in fields {
-                if !tir_view_expression_is_const_evaluable(
-                    context,
+                const_evaluable &= classify_expression_const_evaluable_with_nested_template(
                     &field.value,
                     loop_binding_paths,
-                )? {
-                    return Ok(false);
-                }
+                    nested_template,
+                )?;
             }
 
-            Ok(true)
+            Ok(const_evaluable)
         }
 
         ExpressionKind::Collection(items) => {
+            let mut const_evaluable = true;
             for item in items {
-                if !tir_view_expression_is_const_evaluable(context, item, loop_binding_paths)? {
-                    return Ok(false);
-                }
+                const_evaluable &= classify_expression_const_evaluable_with_nested_template(
+                    item,
+                    loop_binding_paths,
+                    nested_template,
+                )?;
             }
 
-            Ok(true)
+            Ok(const_evaluable)
         }
 
         ExpressionKind::Range(start, end) => {
-            Ok(
-                tir_view_expression_is_const_evaluable(context, start, loop_binding_paths)?
-                    && tir_view_expression_is_const_evaluable(context, end, loop_binding_paths)?,
-            )
+            let start_const = classify_expression_const_evaluable_with_nested_template(
+                start,
+                loop_binding_paths,
+                nested_template,
+            )?;
+            let end_const = classify_expression_const_evaluable_with_nested_template(
+                end,
+                loop_binding_paths,
+                nested_template,
+            )?;
+            Ok(start_const && end_const)
         }
 
         ExpressionKind::NoValue

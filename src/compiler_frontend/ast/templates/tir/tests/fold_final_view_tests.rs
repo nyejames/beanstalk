@@ -1,8 +1,8 @@
 //! Final-view TIR folding tests.
 //!
 //! WHAT: exercises `fold_tir_view` for final effective views rooted at
-//!       control-flow bodies, aggregate wrappers, formatted text, and foldable
-//!       runtime slot applications. These tests prove the store-backed fold
+//!       control-flow bodies, aggregate wrappers, formatted text, and runtime
+//!       slot application rejection. These tests prove the store-backed fold
 //!       path handles the shapes that `try_classify_final_effective_template_view`
 //!       deems sufficient.
 //!
@@ -24,7 +24,7 @@ use crate::compiler_frontend::ast::templates::template_folding::{
 };
 use crate::compiler_frontend::ast::templates::tir::builder::TemplateIrBuilder;
 use crate::compiler_frontend::ast::templates::tir::fold::fold_tir_view;
-use crate::compiler_frontend::ast::templates::tir::fold_cache::TirFoldCache;
+use crate::compiler_frontend::ast::templates::tir::fold_cache::{TirFoldCache, TirFoldCacheKey};
 use crate::compiler_frontend::ast::templates::tir::node::{
     TemplateIrBranch, TemplateIrNode, TemplateIrNodeKind,
 };
@@ -365,8 +365,8 @@ fn final_view_fold_zero_iteration_loop_rejects_missing_body_authority() {
         panic!("missing loop-body authority should remain on the infrastructure lane");
     };
     assert!(
-        error.msg.contains("TIR fold safety: node"),
-        "expected a stable fold-safety node error, got: {}",
+        error.msg.contains("TIR preparation: node"),
+        "expected a stable preparation node error, got: {}",
         error.msg
     );
 }
@@ -492,7 +492,7 @@ fn final_view_fold_validates_present_aggregate_wrapper_without_body_output() {
         panic!("missing aggregate-wrapper authority should remain on the infrastructure lane");
     };
     assert!(
-        error.msg.contains("TIR fold safety: node"),
+        error.msg.contains("TIR preparation: node"),
         "expected a stable aggregate-wrapper authority error, got: {}",
         error.msg
     );
@@ -641,13 +641,41 @@ fn final_view_fold_runtime_slot_application_is_no_output() {
         )
     });
 
-    let emission =
-        fold_final_view_fixture(&fixture, &mut string_table, TemplateTirPhase::Finalized)
-            .expect("final view fold should succeed");
-
-    assert_eq!(
-        emission,
-        TemplateEmission::NoOutput,
-        "runtime slot application should fold to no output in a const context"
+    let resolver = test_project_path_resolver();
+    let path_format = PathStringFormatConfig::default();
+    let source_scope = InternedPath::new();
+    let store = fixture.store.borrow();
+    let view = TirView::new(
+        &store,
+        fixture.template_id,
+        TemplateTirPhase::Finalized,
+        fixture.context,
+    )
+    .expect("final view should construct");
+    let mut fold_context = build_test_fold_context(
+        &mut string_table,
+        &resolver,
+        &path_format,
+        &source_scope,
+        &fixture.store,
     );
+
+    let first = fold_tir_view(&view, &store, &mut fold_context)
+        .expect_err("runtime slot application must not enter the fold walker");
+    assert!(matches!(first, TemplateError::Diagnostic(_)));
+
+    let key = TirFoldCacheKey {
+        identity: view.identity(),
+        loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
+        bindings_empty: true,
+    };
+    assert!(
+        fold_context.fold_cache.get(&key).is_none(),
+        "runtime slot application must not populate the fold cache"
+    );
+
+    let second = fold_tir_view(&view, &store, &mut fold_context)
+        .expect_err("runtime slot application must remain outside the fold cache");
+    assert!(matches!(second, TemplateError::Diagnostic(_)));
+    assert!(fold_context.fold_cache.get(&key).is_none());
 }

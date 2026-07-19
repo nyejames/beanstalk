@@ -30,9 +30,6 @@ use crate::compiler_frontend::ast::templates::template_folding::{
     template_emission_from_output_and_signal,
 };
 use crate::compiler_frontend::ast::templates::tir::fold_cache::TirFoldCacheKey;
-use crate::compiler_frontend::ast::templates::tir::fold_safety::{
-    FoldAuthorityResult, FoldAuthorityToken, PreparedTirViewFold, validate_tir_fold_authority,
-};
 use crate::compiler_frontend::ast::templates::tir::ids::{
     ExpressionSiteId, TemplateIrId, TemplateIrNodeId, TemplateWrapperSetId,
 };
@@ -41,6 +38,10 @@ use crate::compiler_frontend::ast::templates::tir::node::{
 };
 use crate::compiler_frontend::ast::templates::tir::overlays::{
     TirSlotResolutionKind, TirWrapperApplicationMode, TirWrapperContext,
+};
+use crate::compiler_frontend::ast::templates::tir::preparation::{
+    PreparedFold, PreparedTemplate, RuntimeTemplateReason, TemplateHelperKind,
+    TemplatePreparationMode, prepare_tir_view,
 };
 use crate::compiler_frontend::ast::templates::tir::refs::TemplateTirReference;
 use crate::compiler_frontend::ast::templates::tir::refs::{
@@ -115,7 +116,7 @@ fn record_tir_fold_output_intern(byte_len: usize) {
 /// entry points before its root is walked, including slot-resolution sources,
 /// wrapper-context wrappers and child-template references.
 /// WHY: checking the selected template entry avoids scratch materialization,
-/// compatibility-content reads and repeated whole-descendant prepasses. Raw
+/// stale-source reads and repeated whole-descendant prepasses. Raw
 /// consumed `InsertContribution` nodes that aren't reachable from the effective
 /// fold path remain correctly ignored.
 fn reject_slot_insert_template(kind: &TemplateType) -> Result<(), TemplateError> {
@@ -131,14 +132,13 @@ fn reject_slot_insert_template(kind: &TemplateType) -> Result<(), TemplateError>
 
 /// Borrowed effective-view inputs shared by recursive fold walkers.
 ///
-/// WHAT: couples optional overlay reads with the validated authority token for
+/// WHAT: couples optional overlay reads with the active exact view for
 ///       the store currently being traversed.
 /// WHY: recursive node, control-flow, and wrapper folds must preserve both
 ///      pieces of traversal state without expanding `TemplateFoldContext`.
 struct FoldTraversalInput<'view, 'store> {
     effective_view: Option<&'view TirView<'store>>,
     active_views: Vec<super::view::TirViewIdentity>,
-    authority: Option<FoldAuthorityToken>,
 }
 
 impl<'view, 'store> FoldTraversalInput<'view, 'store> {
@@ -163,7 +163,7 @@ impl<'view, 'store> FoldTraversalInput<'view, 'store> {
 ///
 /// WHAT: carries exact view identities across nested fold boundaries so
 ///       recursive child references cannot re-enter an active view.
-/// WHY: the fold walker and authority pass share this exact root identity.
+/// WHY: the fold walker and preparation walk share this exact root identity.
 fn push_active_fold_view(
     active_views: &[super::view::TirViewIdentity],
     identity: super::view::TirViewIdentity,
@@ -217,30 +217,20 @@ fn prepare_wrapper_references(
 //  Public entry point
 // -------------------------
 
-/// Folds a view after a caller-owned safety preparation has validated its
-/// authority graph.
+/// Folds a view after a caller-owned preparation has validated its identity.
 ///
-/// WHAT: consumes the private preparation result produced by the fold-safety
-///      owner and enters the cache/fold walker without repeating exhaustive
-///      authority validation.
-/// WHY: finalization already needs the same authority result to choose its
-///      read-only path. Reusing that token keeps validation before cache lookup
-///      without a second exhaustive walk.
+/// WHAT: consumes the compact fold result and enters the cache/fold walker
+///      without repeating the preparation walk.
 pub(crate) fn fold_tir_view_prepared(
     view: &TirView<'_>,
     store: &TemplateIrStore,
     fold_context: &mut TemplateFoldContext<'_>,
-    preparation: PreparedTirViewFold,
+    preparation: PreparedFold,
 ) -> Result<TemplateEmission, TemplateError> {
-    // The preparation is a proof for one exact view identity. Validate it
-    // before checking phase, extracting its reusable authority token, or
-    // reaching the cache.
-    preparation.validate_identity(view, store)?;
-
-    if let Some(reason) = preparation.fallback_reason() {
-        return Err(CompilerError::compiler_error(format!(
-            "fold_tir_view_prepared: prepared view is semantically non-foldable ({reason:?})."
-        ))
+    if preparation.identity != view.identity() {
+        return Err(CompilerError::compiler_error(
+            "TIR fold preparation root/phase/context identity does not match the supplied view.",
+        )
         .into());
     }
 
@@ -253,13 +243,10 @@ pub(crate) fn fold_tir_view_prepared(
         .into());
     }
 
-    let root = view.root_ref();
     let active_views = push_active_fold_view(&[], view.identity(), store)?;
-    let authority = fold_authority_token(preparation.into_authority(), store, root)?;
     let fold_input = FoldTraversalInput {
         effective_view: Some(view),
         active_views,
-        authority: Some(authority),
     };
 
     fold_tir_view_prevalidated(store, fold_context, &fold_input)
@@ -284,13 +271,13 @@ pub(crate) fn fold_tir_view(
     fold_tir_view_with_active_views(view, store, fold_context, Vec::new())
 }
 
-/// Folds a view after validating its own authority while carrying existing
+/// Folds a view after preparing its own exact identity while carrying existing
 /// exact view identities into the nested fold.
 ///
-/// WHAT: gives nested AST templates a fresh authority token without dropping
+/// WHAT: gives nested AST templates a fresh prepared identity without dropping
 ///      same-store outer expression overlays.
 /// WHY: dynamic AST-template expressions are independent fold boundaries, and
-///      their durable references provide their complete expression authority.
+///      their durable references provide their complete expression input.
 fn fold_tir_view_with_active_views(
     view: &TirView<'_>,
     store: &TemplateIrStore,
@@ -311,30 +298,51 @@ fn fold_tir_view_with_active_views(
         .into());
     }
 
-    // Validate all current-store authority before consulting the cache. A
-    // cached emission must not hide a malformed branch, loop body, wrapper or
-    // other node that the fold boundary still claims to own.
-    let authority = fold_authority_token(
-        validate_tir_fold_authority(Some(view), store, root)?,
-        store,
-        root,
-    )?;
+    let prepared = prepare_tir_view(view, store, TemplatePreparationMode::Value)?;
+    match prepared {
+        PreparedTemplate::Foldable(_) => {}
+        PreparedTemplate::Helper(TemplateHelperKind::SlotInsert) => {
+            return Err(CompilerError::compiler_error(
+                "Invalid template content reached string folding: unresolved slot insertions cannot be rendered directly.",
+            )
+            .into());
+        }
+        PreparedTemplate::Runtime(
+            crate::compiler_frontend::ast::templates::tir::preparation::PreparedRuntime {
+                reason: RuntimeTemplateReason::SlotContribution,
+                ..
+            },
+        ) => {
+            return Err(CompilerError::compiler_error(
+                "Invalid template content reached string folding: unresolved slot insertions cannot be rendered directly.",
+            )
+            .into());
+        }
+        PreparedTemplate::Helper(TemplateHelperKind::LoopControl)
+        | PreparedTemplate::Runtime(_) => {
+            let location = view.root_template()?.location.clone();
+            return Err(CompilerDiagnostic::invalid_template_structure(
+                InvalidTemplateStructureReason::NonFoldableConstTemplate,
+                location,
+            )
+            .into());
+        }
+    };
 
     let fold_input = FoldTraversalInput {
         effective_view: Some(view),
         active_views,
-        authority: Some(authority),
     };
 
     fold_tir_view_prevalidated(store, fold_context, &fold_input)
 }
 
-/// Folds a view after the owning top-level fold boundary has completed its
-/// authority preflight.
+/// Folds a view after the owning top-level fold boundary has completed
+/// preparation.
 ///
 /// WHAT: keeps cache lookup and view-fold attribution after validation while
-///       allowing recursive same-store references to reuse the completed pass.
-/// WHY: a child fold cannot invalidate the root preflight, and re-walking every
+///       allowing recursive same-store references to reuse the completed walk.
+/// WHY: a child fold cannot invalidate the root preparation, and re-walking every
 ///      same-store subtree would make a long child chain needlessly quadratic.
 fn fold_tir_view_prevalidated(
     store: &TemplateIrStore,
@@ -346,15 +354,6 @@ fn fold_tir_view_prevalidated(
             "TIR fold: prevalidated view fold requires an effective TirView input.",
         )
     })?;
-    // The fold authority token is an internal invariant of view-native
-    // folding: its presence is required even though the bound value is not
-    // read directly here.
-    fold_input.authority.as_ref().ok_or_else(|| {
-        CompilerError::compiler_error(
-            "TIR fold: prevalidated view fold requires a fold authority token.",
-        )
-    })?;
-
     let root = view.root_ref();
     if fold_input.active_views.last() != Some(&view.identity()) {
         return Err(CompilerError::compiler_error(format!(
@@ -428,13 +427,6 @@ fn fold_tir_template_with_view(
 ) -> Result<TemplateEmission, TemplateError> {
     add_ast_counter(AstCounter::TirFoldTemplatesFolded, 1);
 
-    // The fold authority token is an internal invariant of view-native
-    // folding: its presence is required even though the bound value is not
-    // read directly here.
-    fold_input.authority.as_ref().ok_or_else(|| {
-        CompilerError::compiler_error("TIR fold: template fold requires a fold authority token.")
-    })?;
-
     let template_ref = template_id;
     if fold_input
         .active_views
@@ -502,27 +494,6 @@ fn fold_tir_template_with_view(
         fold_context,
         fold_input,
     )
-}
-
-fn fold_authority_token(
-    result: FoldAuthorityResult,
-    store: &TemplateIrStore,
-    template_id: TemplateIrId,
-) -> Result<FoldAuthorityToken, TemplateError> {
-    match result {
-        FoldAuthorityResult::Valid(token) => Ok(token),
-        FoldAuthorityResult::ChildTemplateCycle => {
-            let location = store
-                .get_template(template_id)
-                .map(|template| template.location.clone())
-                .unwrap_or_default();
-            Err(CompilerDiagnostic::invalid_template_structure(
-                InvalidTemplateStructureReason::NonFoldableConstTemplate,
-                location,
-            )
-            .into())
-        }
-    }
 }
 
 // -------------------------
@@ -914,19 +885,13 @@ fn fold_template_reference(
     let structural_fold_input = FoldTraversalInput {
         effective_view: Some(&child_view),
         active_views: child_active_views,
-        authority: fold_input.authority.clone(),
     };
     if child_view.phase().is_at_least(TemplateTirPhase::Composed) {
-        if fold_input.authority.is_some() {
-            return fold_tir_view_prevalidated(store, fold_context, &structural_fold_input);
-        }
-
-        return fold_tir_view_with_active_views(
-            &child_view,
-            store,
-            fold_context,
-            fold_input.active_views.clone(),
-        );
+        // The enclosing preparation traverses every exact child view before
+        // the walker starts. Reuse that proof here so loop bindings remain a
+        // fold-walker concern and structural children do not trigger a second
+        // preparation scan.
+        return fold_tir_view_prevalidated(store, fold_context, &structural_fold_input);
     }
 
     fold_tir_template_with_view(store, child_root, fold_context, &structural_fold_input)
@@ -949,7 +914,6 @@ fn fold_resolved_slot_source(
     let source_fold_input = FoldTraversalInput {
         effective_view: Some(&source_view),
         active_views: child_active_views,
-        authority: fold_input.authority.clone(),
     };
     fold_tir_view_prevalidated(store, fold_context, &source_fold_input)
 }
@@ -1059,8 +1023,6 @@ fn fold_conditional_child_wrappers_around_emission(
     fold_context: &mut TemplateFoldContext<'_>,
     fold_input: &FoldTraversalInput<'_, '_>,
 ) -> Result<TemplateEmission, TemplateError> {
-    // Wrappers retain the enclosing authority token and need no separate
-    // preparation pass.
     let prepared_wrappers = prepare_wrapper_references(wrapper_references)?;
 
     let (output, signal_kind) = match emission {
@@ -1166,11 +1128,6 @@ fn fold_tir_wrapper_around_child_output(
             ))
         })?;
 
-    let authority = fold_input.authority.as_ref().ok_or_else(|| {
-        CompilerError::compiler_error(
-            "TIR wrapper fold: same-store wrapper requires the enclosing fold authority token.",
-        )
-    })?;
     let parent_view = fold_input.effective_view.ok_or_else(|| {
         CompilerError::compiler_error(
             "TIR wrapper fold: wrapper transition requires an enclosing TirView.",
@@ -1185,7 +1142,6 @@ fn fold_tir_wrapper_around_child_output(
     let wrapper_fold_input = FoldTraversalInput {
         effective_view: Some(&wrapper_view),
         active_views: wrapper_active_views,
-        authority: Some(authority.clone()),
     };
 
     fold_tir_wrapper_with_input(
@@ -1384,7 +1340,6 @@ fn fold_tir_wrapper_node_with_child_output(
                 let child_fold_input = FoldTraversalInput {
                     effective_view: Some(&child_view),
                     active_views: child_active_views,
-                    authority: fold_input.authority.clone(),
                 };
                 fold_tir_wrapper_node_to_emission(
                     store,
@@ -2232,7 +2187,6 @@ fn fold_tir_aggregate_wrapper_child_template(
     let child_fold_input = FoldTraversalInput {
         effective_view: Some(&child_view),
         active_views: child_active_views,
-        authority: fold_input.authority.clone(),
     };
     fold_tir_aggregate_wrapper_node(
         store,

@@ -19,7 +19,6 @@ use crate::compiler_frontend::ast::templates::template_folding::{
 use crate::compiler_frontend::ast::templates::tir::builder::TemplateIrBuilder;
 use crate::compiler_frontend::ast::templates::tir::fold::fold_tir_view;
 use crate::compiler_frontend::ast::templates::tir::fold_cache::{TirFoldCache, TirFoldCacheKey};
-use crate::compiler_frontend::ast::templates::tir::fold_safety::prepare_tir_view_fold;
 use crate::compiler_frontend::ast::templates::tir::ids::{
     SlotOccurrenceId, TemplateIrId, TemplateIrNodeId, TemplateSlotPlanId,
 };
@@ -37,6 +36,9 @@ use crate::compiler_frontend::ast::templates::tir::store::TemplateIrStore;
 use crate::compiler_frontend::ast::templates::tir::summary::TemplateIrSummary;
 use crate::compiler_frontend::ast::templates::tir::view::{
     TemplateTirPhase, TirView, TirViewIdentity,
+};
+use crate::compiler_frontend::ast::templates::tir::{
+    PreparedTemplate, TemplatePreparationMode, prepare_tir_view,
 };
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -303,8 +305,18 @@ fn prepared_view_rejects_identity_mismatch() {
         fixture.context,
     )
     .expect("alternate view should construct");
-    let preparation = prepare_tir_view_fold(&original_view, &fixture.store, &string_table)
-        .expect("preparation should succeed");
+    let preparation = match prepare_tir_view(
+        &original_view,
+        &fixture.store,
+        TemplatePreparationMode::Value,
+    )
+    .expect("preparation should succeed")
+    {
+        PreparedTemplate::Foldable(preparation) => preparation,
+        PreparedTemplate::Runtime(_) | PreparedTemplate::Helper(_) => {
+            panic!("text fixture should be foldable")
+        }
+    };
 
     let resolver = crate::compiler_frontend::paths::path_resolution::ProjectPathResolver::new(
         std::env::temp_dir(),
@@ -337,7 +349,7 @@ fn prepared_view_rejects_identity_mismatch() {
 }
 
 #[test]
-fn read_only_preparation_accepts_simple_text() {
+fn foldable_preparation_accepts_simple_text() {
     let mut string_table = StringTable::new();
     let fixture = build_text_fixture(&mut string_table, "safe");
     let view = TirView::new(
@@ -347,11 +359,11 @@ fn read_only_preparation_accepts_simple_text() {
         fixture.context,
     )
     .expect("view should construct");
-    let preparation = prepare_tir_view_fold(&view, &fixture.store, &string_table)
+    let preparation = prepare_tir_view(&view, &fixture.store, TemplatePreparationMode::Value)
         .expect("simple text should have a valid preparation");
     assert!(
-        preparation.read_only_safe(),
-        "text-only view should use the read-only fold decision"
+        matches!(preparation, PreparedTemplate::Foldable(_)),
+        "text-only view should produce a foldable result"
     );
 }
 
@@ -901,7 +913,7 @@ fn fold_tir_view_cache_hit_still_validates_malformed_authority() {
         panic!("missing cached node should remain on the infrastructure lane");
     };
     assert!(
-        error.msg.contains("TIR fold safety: node"),
+        error.msg.contains("TIR preparation: node"),
         "expected a stable cache-boundary authority error, got: {}",
         error.msg
     );
@@ -929,7 +941,7 @@ fn fold_tir_view_runtime_plan_early_return_validates_plan_authority() {
         panic!("missing runtime slot plan should remain on the infrastructure lane");
     };
     assert!(
-        error.msg.contains("TIR fold safety: slot plan"),
+        error.msg.contains("TIR preparation: slot plan"),
         "expected a stable runtime-plan authority error, got: {}",
         error.msg
     );
@@ -1021,7 +1033,7 @@ fn fold_tir_view_dynamic_ast_template_validates_malformed_root_authority() {
         panic!("malformed dynamic template root should remain on the infrastructure lane");
     };
     assert!(
-        error.msg.contains("not present in the store"),
+        error.msg.contains("does not exist in the module store"),
         "expected dynamic-template root authority failure, got: {}",
         error.msg
     );

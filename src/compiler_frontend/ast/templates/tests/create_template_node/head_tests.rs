@@ -1889,7 +1889,7 @@ fn const_required_template_loop_reports_non_const_body() {
 
 #[test]
 fn const_required_template_if_validates_from_body_tir_roots() {
-    let (template, context, string_table) = parse_const_required_template(
+    let (template, context, _string_table) = parse_const_required_template(
         "[if true:
             Visible
         [else]
@@ -1898,20 +1898,20 @@ fn const_required_template_if_validates_from_body_tir_roots() {
     );
 
     let store = context.template_ir_store.borrow();
-    validate_const_required_template_control_flow(&template, &store, &string_table)
+    validate_const_required_template_control_flow(&template, &store)
         .expect("const-required branch validation should use same-store TIR body roots");
 }
 
 #[test]
 fn const_required_template_loop_validates_from_body_tir_root() {
-    let (template, context, string_table) = parse_const_required_template(
+    let (template, context, _string_table) = parse_const_required_template(
         "[loop 0 to 1 |i|:
             [i]
         ]",
     );
 
     let store = context.template_ir_store.borrow();
-    validate_const_required_template_control_flow(&template, &store, &string_table)
+    validate_const_required_template_control_flow(&template, &store)
         .expect("const-required loop validation should use same-store TIR body roots");
 }
 
@@ -1990,7 +1990,7 @@ fn const_required_template_option_capture_present_folds_then_branch() {
 
     {
         let store = context.template_ir_store.borrow();
-        validate_const_required_template_control_flow(&template, &store, &string_table)
+        validate_const_required_template_control_flow(&template, &store)
             .expect("present const option capture should validate");
     }
 
@@ -2028,7 +2028,7 @@ fn const_required_template_option_capture_absent_folds_else_branch() {
 
     {
         let store = context.template_ir_store.borrow();
-        validate_const_required_template_control_flow(&template, &store, &string_table)
+        validate_const_required_template_control_flow(&template, &store)
             .expect("absent const option capture should validate");
     }
 
@@ -2566,7 +2566,7 @@ fn const_required_template_if_validates_branch_condition_through_tir_view_overla
 
     drop(store);
     let store = context.template_ir_store.borrow();
-    let error = validate_const_required_template_control_flow(&template, &store, &string_table)
+    let error = validate_const_required_template_control_flow(&template, &store)
         .expect_err("TirView overlay should make the branch condition non-const");
 
     assert_invalid_template_structure(
@@ -2578,7 +2578,7 @@ fn const_required_template_if_validates_branch_condition_through_tir_view_overla
 
 #[test]
 fn const_required_template_loop_validates_header_through_tir_view_overlay() {
-    let (mut template, context, string_table) = parse_const_required_template(
+    let (mut template, context, _string_table) = parse_const_required_template(
         "[loop false:
             body
         ]",
@@ -2611,7 +2611,7 @@ fn const_required_template_loop_validates_header_through_tir_view_overlay() {
 
     drop(store);
     let store = context.template_ir_store.borrow();
-    let error = validate_const_required_template_control_flow(&template, &store, &string_table)
+    let error = validate_const_required_template_control_flow(&template, &store)
         .expect_err("TirView overlay should turn the conditional loop into const true");
 
     assert_invalid_template_structure(
@@ -2626,7 +2626,7 @@ fn const_required_validation_reports_missing_effective_node_as_internal_error() 
     // A const-required template whose root node has been corrupted to reference
     // a non-existent node must propagate the missing-node error through the
     // internal-error lane instead of silently returning success.
-    let (mut template, context, string_table) = parse_const_required_template("[if true: body]");
+    let (mut template, context, _string_table) = parse_const_required_template("[if true: body]");
     let source_template_id = template.tir_reference.root;
 
     let malformed_template_id = {
@@ -2642,7 +2642,7 @@ fn const_required_validation_reports_missing_effective_node_as_internal_error() 
     template.tir_reference.root = malformed_template_id;
 
     let store = context.template_ir_store.borrow();
-    let error = validate_const_required_template_control_flow(&template, &store, &string_table)
+    let error = validate_const_required_template_control_flow(&template, &store)
         .expect_err("missing root node should be an internal error, not a silent success");
 
     let DiagnosticPayload::InfrastructureError { msg, .. } = &error.payload else {
@@ -2652,7 +2652,7 @@ fn const_required_validation_reports_missing_effective_node_as_internal_error() 
         );
     };
     assert!(
-        msg.contains("does not exist in the store"),
+        msg.contains("does not exist in the module store"),
         "error message should mention missing node, got: {msg}"
     );
 }
@@ -2745,7 +2745,7 @@ fn const_required_validation_ignores_referenced_child_expression_overlay() {
     };
 
     let store = context.template_ir_store.borrow();
-    validate_const_required_template_control_flow(&recursive_template, &store, &string_table)
+    validate_const_required_template_control_flow(&recursive_template, &store)
         .expect("referenced child expression overlays must be ignored by structural validation");
 }
 

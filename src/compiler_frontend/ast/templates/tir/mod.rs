@@ -115,7 +115,7 @@ mod summary;
 mod builder;
 mod construction_context;
 mod fold;
-mod fold_safety;
+mod preparation;
 
 // Fold-cache types are production plumbing for `fold_tir_view`.
 mod fold_cache;
@@ -237,17 +237,17 @@ pub(crate) use subtree_copy::copy_tir_subtree_with_active_slot_plan;
 // Classification: store-aware TIR shape queries for template classification.
 pub(crate) use classification::{
     TirTemplateClassification, classify_effective_tir_view_template,
-    effective_branch_selector_for_view, effective_loop_header_for_view,
     refresh_kind_from_classification, tir_node_is_const_evaluable_value,
-    tir_subtree_has_unresolved_slots, tir_view_expression_is_const_evaluable_value_with_bindings,
-    tir_view_option_capture_presence_is_const_decidable, tir_view_subtree_is_const_evaluable_value,
+    tir_subtree_has_unresolved_slots,
 };
 // TirView-aware fold entrypoint is used internally by recursive child folding
 // and by production template folding paths.
 pub(crate) use fold::fold_tir_view;
 pub(crate) use fold::fold_tir_view_prepared;
-pub(crate) use fold_safety::tir_view_is_empty_overlay_linear_fold_safe;
-pub(crate) use fold_safety::{PreparedTirViewFold, prepare_tir_view_fold};
+pub(crate) use preparation::tir_view_is_empty_overlay_linear;
+pub(crate) use preparation::{
+    PreparedTemplate, TemplateHelperKind, TemplatePreparationMode, prepare_tir_view,
+};
 
 // Fold cache: AST-phase-local cache for TIR fold results. The primary cache is
 // production state used by template folding and HIR handoff.

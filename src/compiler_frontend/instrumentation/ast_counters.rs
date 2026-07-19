@@ -82,6 +82,8 @@ pub(crate) enum AstCounter {
     TirWrapperSetReuseHits,
     #[cfg(any(test, feature = "benchmark_counters"))]
     TirValidationNodesVisited,
+    TirPreparationAttempts,
+    TirPreparationNodesVisited,
 
     // TIR fold counters.
     TirFoldTemplatesFolded,
@@ -181,17 +183,6 @@ pub(crate) enum AstCounter {
     /// Full `TemplateIrStore` clones during HIR runtime-template handoff
     /// folding.
     TirStoreCloneHirHandoff,
-
-    /// TirView roots tested for the read-only, no-clone fold path.
-    TirReadOnlyFoldAttempts,
-
-    /// Read-only no-clone path attempts that completed without falling back to
-    /// the clone-backed path.
-    TirReadOnlyFoldSuccesses,
-
-    /// Read-only no-clone path attempts rejected before finalization continued
-    /// through the general module-store view fold.
-    TirReadOnlyFoldFallbacks,
 }
 #[cfg(feature = "benchmark_counters")]
 use crate::compiler_frontend::compiler_messages::compiler_dev_logging::log_benchmark_counter;
@@ -202,7 +193,7 @@ mod detailed {
     use super::log_benchmark_counter;
     use std::cell::RefCell;
 
-    const COUNTER_COUNT: usize = AstCounter::TirReadOnlyFoldFallbacks as usize + 1;
+    const COUNTER_COUNT: usize = AstCounter::TirStoreCloneHirHandoff as usize + 1;
 
     thread_local! {
         /// Per-thread AST counter store.
@@ -322,6 +313,8 @@ mod detailed {
             AstCounter::TirWrapperSetReuseHits,
             #[cfg(any(test, feature = "benchmark_counters"))]
             AstCounter::TirValidationNodesVisited,
+            AstCounter::TirPreparationAttempts,
+            AstCounter::TirPreparationNodesVisited,
             AstCounter::TirFoldTemplatesFolded,
             AstCounter::TirFoldNodesVisited,
             AstCounter::TirFoldOutputBytes,
@@ -341,9 +334,6 @@ mod detailed {
             AstCounter::TirStoreCloneFinalization,
             AstCounter::TirStoreCloneDocFragments,
             AstCounter::TirStoreCloneHirHandoff,
-            AstCounter::TirReadOnlyFoldAttempts,
-            AstCounter::TirReadOnlyFoldSuccesses,
-            AstCounter::TirReadOnlyFoldFallbacks,
         ]
     }
 
@@ -423,6 +413,8 @@ mod detailed {
             AstCounter::TirWrapperSetReuseHits => "TIR wrapper set reuse hits",
             #[cfg(any(test, feature = "benchmark_counters"))]
             AstCounter::TirValidationNodesVisited => "TIR validation nodes visited",
+            AstCounter::TirPreparationAttempts => "TIR preparation attempts",
+            AstCounter::TirPreparationNodesVisited => "TIR preparation nodes visited",
 
             AstCounter::TirFoldTemplatesFolded => "TIR fold templates folded",
             AstCounter::TirFoldNodesVisited => "TIR fold nodes visited",
@@ -448,9 +440,6 @@ mod detailed {
             AstCounter::TirStoreCloneFinalization => "TIR store clone: finalization",
             AstCounter::TirStoreCloneDocFragments => "TIR store clone: doc fragments",
             AstCounter::TirStoreCloneHirHandoff => "TIR store clone: HIR handoff",
-            AstCounter::TirReadOnlyFoldAttempts => "TIR read-only fold attempts",
-            AstCounter::TirReadOnlyFoldSuccesses => "TIR read-only fold successes",
-            AstCounter::TirReadOnlyFoldFallbacks => "TIR read-only fold fallbacks",
         }
     }
 
@@ -546,6 +535,8 @@ mod detailed {
             AstCounter::TirWrapperSetReuseHits => "ast_tir_wrapper_set_reuse_hits",
             #[cfg(any(test, feature = "benchmark_counters"))]
             AstCounter::TirValidationNodesVisited => "ast_tir_validation_nodes_visited",
+            AstCounter::TirPreparationAttempts => "ast_tir_preparation_attempts",
+            AstCounter::TirPreparationNodesVisited => "ast_tir_preparation_nodes_visited",
 
             AstCounter::TirFoldTemplatesFolded => "ast_tir_fold_templates_folded",
             AstCounter::TirFoldNodesVisited => "ast_tir_fold_nodes_visited",
@@ -575,9 +566,6 @@ mod detailed {
             AstCounter::TirStoreCloneFinalization => "ast_tir_store_clone_finalization",
             AstCounter::TirStoreCloneDocFragments => "ast_tir_store_clone_doc_fragments",
             AstCounter::TirStoreCloneHirHandoff => "ast_tir_store_clone_hir_handoff",
-            AstCounter::TirReadOnlyFoldAttempts => "ast_tir_read_only_fold_attempts",
-            AstCounter::TirReadOnlyFoldSuccesses => "ast_tir_read_only_fold_successes",
-            AstCounter::TirReadOnlyFoldFallbacks => "ast_tir_read_only_fold_fallbacks",
         }
     }
 

@@ -125,7 +125,6 @@ impl Template {
             validate_const_required_template_control_flow(
                 &template,
                 &context.template_ir_store.borrow(),
-                string_table,
             )?;
         }
 

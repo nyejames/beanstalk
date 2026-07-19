@@ -31,15 +31,16 @@ use super::finalizer::AstFinalizer;
 use super::normalize_ast::TemplateNormalizationError;
 use super::template_helpers::{
     TemplateFinalizationFoldDisposition, TemplateFinalizationFoldInputs,
-    try_fold_template_to_string,
+    try_fold_const_required_template_to_string,
 };
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
-use crate::compiler_frontend::ast::const_values::resolver::classify_template_from_effective_tir;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::templates::template::Template;
 use crate::compiler_frontend::ast::templates::template::{TemplateConstValueKind, TemplateType};
-use crate::compiler_frontend::ast::templates::template_control_flow::validate_const_required_template_control_flow;
-use crate::compiler_frontend::ast::templates::tir::TemplateIrStore;
+use crate::compiler_frontend::ast::templates::tir::{
+    PreparedTemplate, TemplateHelperKind, TemplateIrStore, TemplatePreparationMode,
+    TemplateTirPhase, TirView, prepare_tir_view,
+};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, InvalidTemplateStructureReason,
@@ -198,7 +199,7 @@ impl AstFinalizer<'_, '_> {
 /// Normalizes one template-valued module constant through the shared fold owner.
 ///
 /// WHAT: converts a folded template to `StringSlice` and rejects a valid runtime
-///       fallback before it can be mistaken for HIR constant metadata.
+///       runtime dependence before it can be mistaken for HIR constant metadata.
 /// WHY: HIR's module-constant pool stores only `HirConstValue`; runtime handoffs
 ///      are executable AST expressions and therefore cannot cross this boundary.
 pub(super) fn normalize_module_constant_template_expression(
@@ -206,13 +207,7 @@ pub(super) fn normalize_module_constant_template_expression(
     template: &Template,
     fold_inputs: TemplateFinalizationFoldInputs<'_, '_>,
 ) -> Result<Expression, TemplateNormalizationError> {
-    {
-        let store = fold_inputs.template_ir_store.borrow();
-        validate_const_required_template_control_flow(template, &store, fold_inputs.string_table)
-            .map_err(|diagnostic| TemplateNormalizationError::Diagnostic(Box::new(diagnostic)))?;
-    }
-
-    let fold_result = try_fold_template_to_string(template, fold_inputs)?;
+    let fold_result = try_fold_const_required_template_to_string(template, fold_inputs)?;
     let mut normalized = expression.to_owned();
 
     match fold_result.disposition {
@@ -270,21 +265,24 @@ impl AstFinalizer<'_, '_> {
     ) -> Result<bool, TemplateNormalizationError> {
         let contains_helper = match &expression.kind {
             ExpressionKind::Template(template) => {
-                let template_kind = effective_template_kind_from_store(
-                    template,
-                    &self.context.template_ir_store.borrow(),
-                )?;
+                let store = self.context.template_ir_store.borrow();
+                let template_kind = effective_template_kind_from_store(template, &store)?;
                 if !matches!(template_kind, TemplateType::SlotInsert(_)) {
                     return Ok(false);
                 }
 
-                let template_const_kind = classify_template_from_effective_tir(
-                    template,
-                    &self.context.template_ir_store,
+                let reference = &template.tir_reference;
+                let view = TirView::with_minimum_phase(
+                    &store,
+                    reference.root,
+                    reference.phase,
+                    TemplateTirPhase::Composed,
+                    reference.context,
                 )?;
+                let preparation = prepare_tir_view(&view, &store, TemplatePreparationMode::Value)?;
                 matches!(
-                    template_const_kind,
-                    TemplateConstValueKind::SlotInsertHelper
+                    preparation,
+                    PreparedTemplate::Helper(TemplateHelperKind::SlotInsert)
                 )
             }
 

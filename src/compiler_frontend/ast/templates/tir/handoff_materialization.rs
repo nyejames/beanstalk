@@ -46,7 +46,7 @@ use crate::compiler_frontend::ast::templates::tir::view::{
     TemplateTirPhase, TirView, TirViewIdentity,
 };
 use crate::compiler_frontend::ast::templates::tir::{
-    fold_tir_view, tir_view_is_empty_overlay_linear_fold_safe,
+    fold_tir_view, tir_view_is_empty_overlay_linear,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::instrumentation::{AstCounter, increment_ast_counter};
@@ -1052,10 +1052,10 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
         // Propagate child root, phase and view context authority failures.
         // A malformed child overlay must not silently fall through to
         // structural materialization.
-        // Unsafe fold shape: non-linear or overlay-bearing shapes that the
+        // Non-foldable shape: non-linear or overlay-bearing shapes that the
         // const-fold shortcut cannot handle fall through to structural handoff.
-        let fold_safe = tir_view_is_empty_overlay_linear_fold_safe(child_view, self.store)?;
-        if !fold_safe {
+        let is_linear_foldable = tir_view_is_empty_overlay_linear(child_view, self.store)?;
+        if !is_linear_foldable {
             return Ok(None);
         }
 

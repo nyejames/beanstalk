@@ -1923,16 +1923,6 @@ fn finalization_fold_formatted_root_with_unfilled_slot_emits_no_slot_output() {
             "slot-bearing formatted roots are now real store fold attempts"
         );
         assert_eq!(
-            test_read_ast_counter(AstCounter::TirReadOnlyFoldAttempts),
-            1,
-            "read-only fold safety is attempted before view-native overlay classification"
-        );
-        assert_eq!(
-            test_read_ast_counter(AstCounter::TirReadOnlyFoldFallbacks),
-            1,
-            "slot nodes reject read-only fold safety"
-        );
-        assert_eq!(
             test_read_ast_counter(AstCounter::TirFinalizationFoldSuccesses),
             1,
             "the store-backed fold completes directly"

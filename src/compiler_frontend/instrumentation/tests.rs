@@ -62,10 +62,8 @@ fn ast_counters_record_stable_metrics_when_stdout_is_suppressed() {
     add_ast_counter(AstCounter::TirStoreCloneFinalization, 379);
     add_ast_counter(AstCounter::TirStoreCloneDocFragments, 397);
     add_ast_counter(AstCounter::TirStoreCloneHirHandoff, 401);
-
-    add_ast_counter(AstCounter::TirReadOnlyFoldAttempts, 409);
-    add_ast_counter(AstCounter::TirReadOnlyFoldSuccesses, 419);
-    add_ast_counter(AstCounter::TirReadOnlyFoldFallbacks, 421);
+    add_ast_counter(AstCounter::TirPreparationAttempts, 409);
+    add_ast_counter(AstCounter::TirPreparationNodesVisited, 419);
 
     // TIR wrapper-set counters must also flow through the stable metric path.
     add_ast_counter(AstCounter::TirWrapperSetReuseHits, 47);
@@ -209,18 +207,13 @@ fn ast_counters_record_stable_metrics_when_stdout_is_suppressed() {
     );
     assert_counter_value(
         &observations.counters,
-        "ast_tir_read_only_fold_attempts",
+        "ast_tir_preparation_attempts",
         409.0,
     );
     assert_counter_value(
         &observations.counters,
-        "ast_tir_read_only_fold_successes",
+        "ast_tir_preparation_nodes_visited",
         419.0,
-    );
-    assert_counter_value(
-        &observations.counters,
-        "ast_tir_read_only_fold_fallbacks",
-        421.0,
     );
     assert_counter_value(
         &observations.counters,
