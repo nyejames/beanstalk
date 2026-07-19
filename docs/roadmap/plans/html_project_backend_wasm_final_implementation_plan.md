@@ -11,13 +11,14 @@ ACTIVE_PLAN: docs/roadmap/plans/html_project_backend_wasm_final_implementation_p
 STATUS: queued
 CURRENT_SLICE: Phase 0 - current owner and test baseline
 LAST_GOOD_COMMIT: none until the first implementation slice is accepted
+POST_TIR_REVIEW_COMMIT: 1298da468
 BRANCH: main
 IMPLEMENTATION_SCOPE: HTML project builder, JS backend, Wasm backend, output writing
 ```
 
 ## Hard prerequisites
 
-- final TIR completion
+- final TIR one-store/exact-view architecture and post-TIR roadmap review accepted at `1298da468`
 - canonical module compilation with immutable artefacts and graph-aware backend handoff
 - per-function link facts and target validation roots
 
@@ -156,7 +157,8 @@ Each phase must leave one coherent path. Reference `docs/build-system-design.md`
 
 Context: refresh all code anchors and establish a test baseline before the structural refactor.
 
-- Confirm final TIR and canonical module compilation are accepted.
+- Confirm the `1298da468` post-TIR review and canonical module compilation are accepted.
+- Confirm the backend consumes only neutral owned runtime template payloads and ordinary HIR string operations; no TIR identity, view, overlay or preparation state reaches link planning or lowering.
 - Record `git rev-parse HEAD`, branch and `git status --short`.
 - Inventory current `BackendBuilder::build_backend`, `HtmlProjectBuilder`, JS backend, Wasm backend, LIR, emission and runtime owners.
 - Run baseline `just validate` and `just bench-check`. Record results.
@@ -234,7 +236,7 @@ Context: define the Wasm ABI type mapping and replace bridge instructions.
 - Define Wasm ABI type mapping for scalars, handles, strings, collections, structs, choices, options and errors.
 - Define Wasm layout for structs: field offsets, alignment, construction, field access, mutation and ownership hooks.
 - Define Wasm layout for choices: unit variants, payload variants, tag representation, payload storage, equality, matching and generic choices.
-- Design runtime string model: allocation, UTF-8 layout, interpolation helpers, host string extraction and release hooks.
+- Design runtime string model: allocation, UTF-8 layout, interpolation helpers, host string extraction and release hooks. Keep backend ownership here; cross-link profiling and string-building experiments from `post-tir-template-parser-optimization-plan.md` without moving output assembly into TIR.
 - Remove helper-export boolean structs. Replace with runtime capability and helper import plans.
 
 ### Phase 8: External packages and cross-target glue

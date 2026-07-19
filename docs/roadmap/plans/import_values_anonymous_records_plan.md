@@ -11,13 +11,14 @@ ACTIVE_PLAN: docs/roadmap/plans/import_values_anonymous_records_plan.md
 STATUS: queued
 CURRENT_SLICE: Phase 0 - refresh current config, schema, CLI and anonymous-record owners
 LAST_GOOD_COMMIT: none until the first implementation slice is accepted
+POST_TIR_REVIEW_COMMIT: 1298da468
 BRANCH: main
 IMPLEMENTATION_SCOPE: build system config, frontend declaration syntax, CLI, anonymous records
 ```
 
 ## Hard prerequisites
 
-- final TIR
+- final TIR one-store/exact-view architecture and post-TIR roadmap review accepted at `1298da468`
 - canonical module and package graphs
 - stable source and semantic identities
 - prepared source `#Import` contract shells
@@ -161,9 +162,12 @@ Each phase must leave one coherent path. Reference the named sections in `docs/b
 
 ### Phase 1: Refresh current config, schema, CLI and anonymous-record owners
 
-Context: this plan depends on canonical module work and final TIR. Refresh all code anchors before implementation.
+Context: this plan depends on canonical module work and the accepted final TIR boundaries. The
+mandatory review anchored those boundaries at `1298da468`; refresh ordinary code paths again before
+implementation without reopening TIR.
 
-- Confirm final TIR, canonical module and package graphs, stable identities and prepared source `#Import` contract shells are accepted.
+- Confirm the `1298da468` post-TIR review, canonical module and package graphs, stable identities and prepared source `#Import` contract shells are accepted.
+- Preserve folded imported constants as owned values and neutral runtime template payloads at the AST boundary; no TIR identity, view, overlay or preparation state enters a module interface, HIR or backend.
 - Record `git rev-parse HEAD`, branch and `git status --short` in the context capsule.
 - Refresh the current config parser, schema registry, CLI parser, anonymous-record and const-record owners.
 - Run baseline `just validate` and record results.

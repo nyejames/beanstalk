@@ -11,25 +11,28 @@ Use the [Progress Matrix](docs/src/docs/progress/#page.bst) as a reference for w
 
 ## Active implementation work
 
-- [Final TIR completion](docs/roadmap/plans/final-tir-completion-plan.md)
 - [Test Suite Hardening](docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md)
 - [Compiler diagnostics improvements](docs/roadmap/plans/compiler-diagnostics-improvement-plan.md)
 
-## Mandatory post-TIR plan review checkpoint
+## Completed architecture work
 
-After final TIR completion is accepted and before the canonical module plan becomes active, perform one repository-wide roadmap refresh.
+- [Final TIR completion](docs/roadmap/plans/final-tir-completion-plan.md) — R0-R6C accepted and retained as historical architecture, validation and performance evidence.
 
-The checkpoint must:
+## Completed post-TIR plan review checkpoint
 
-- refresh every queued plan against the completed TIR owners and deleted APIs
-- remove every legacy template fallback, multi-store or foreign-store assumption
-- refresh source paths and current-state capsules
-- verify the queued dependency order
-- confirm that no plan introduces a second template representation, preparation owner or folding path
-- confirm that Number, entry config, canonical modules and mixed JavaScript/Wasm work consume the final exact-view TIR handoff
-- record the reviewed commit in each queued plan before implementation begins
+The mandatory repository-wide refresh was completed against `1298da468` after final TIR
+architecture, validation and recorded performance evidence were accepted. The queued plans now
+consume one module-scoped store, exact views, one preparation owner, `fold_prepared_template`, folded
+owned strings and neutral owned runtime handoffs. They introduce no second template representation,
+preparation owner or folding path.
 
-This is a documentation checkpoint rather than a separate implementation plan. Canonical module implementation must not begin until it is recorded as complete.
+The checkpoint refreshed source/current-state anchors, removed stale pre-TIR assumptions, verified
+the dependency chain and recorded the review anchor in each queued plan. It was documentation work,
+not a separate implementation architecture.
+
+## Queued non-blocking performance investigation
+
+- [Post-TIR `$md` and template-parser optimisation](docs/roadmap/plans/post-tir-template-parser-optimization-plan.md) — deferred until representative profiling identifies a material owner; it does not block the canonical implementation chain.
 
 ## Queued implementation chain
 
@@ -51,18 +54,15 @@ These items are genuinely deferred. They are not current implementation work. Ea
 
 ## Post-TIR template performance follow-ups
 
-The final TIR architecture creates safe extension hooks, but the actual optimisations below are deferred until profiling or broader compiler infrastructure justifies them:
+The [post-TIR `$md` and template-parser optimisation plan](docs/roadmap/plans/post-tir-template-parser-optimization-plan.md)
+is the single deferred owner for source-span template text, parse and formatter reuse, source-hash
+keys, imported-constant/directive invalidation, incremental template prerequisites, profiling-gated
+parallel folding and cross-owner backend string-assembly investigation. It requires profiles and a
+complete semantic key/invalidation model before any cache or scheduling implementation.
 
-- source-span-backed template body text instead of eager `StringId` interning
-- per-template parse cache
-- formatter-output cache
-- dev-mode source-hash keyed template reuse
-- dependency-aware invalidation for imported consts and directives
-- formatter algorithm rewrites only if post-TIR profiling justifies them
-- incremental module and template compilation after module-boundary incremental builds exist
-- parallel nested-template folding after a separate profiling-backed plan
-
-See the [final TIR completion plan](docs/roadmap/plans/final-tir-completion-plan.md) for TIR ownership and the [frontend optimisation plan](docs/roadmap/plans/frontend-arena-semantic-invariant-optimization-plan.md) for arena and invariant work.
+The [final TIR completion plan](docs/roadmap/plans/final-tir-completion-plan.md) remains the historical
+architecture source. Broad arena and invariant work remains in the
+[frontend optimisation plan](docs/roadmap/plans/frontend-arena-semantic-invariant-optimization-plan.md).
 
 ## Genuinely deferred items
 
@@ -74,7 +74,7 @@ See the [final TIR completion plan](docs/roadmap/plans/final-tir-completion-plan
 - direct normal-sibling imports if real project evidence justifies them
 - broader reactivity source design
 - additional target builders and capability surfaces
-- profiling-backed frontend or TIR optimisations
+- profiling-backed frontend optimisations and the deferred post-TIR template investigations linked above
 - future Component Model integration
 - ownership optimisation deferred until after GC-first correctness
 - external non-scalar constant design: string slices, collections and opaque-type external constants in const contexts

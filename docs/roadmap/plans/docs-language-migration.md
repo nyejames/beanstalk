@@ -16,6 +16,11 @@ The unsuffixed file intentionally has no `-advanced` suffix. It feeds the websit
 
 Presentation belongs to the page entry. Reusable teaching and semantic content belongs in Beandown.
 
+This plan was reviewed against the accepted final TIR checkpoint `1298da468`. Its template,
+constant, Beandown and raw Markdown language distinctions remain current. Parser, formatter, cache,
+fold-scheduling and backend string-assembly performance work is outside this documentation plan and
+belongs to `docs/roadmap/plans/post-tir-template-parser-optimization-plan.md`.
+
 `AGENTS.md` remains protected throughout the migration. Ordinary route workers must not edit it or the monoliths. A dedicated, explicitly authorised parity or terminology synchronisation plan may update `docs/language-overview.md` and `docs/compiler-design-overview.md` after focused compiler verification. Canonical split compiler-design pages must be updated before the legacy compiler-design monolith.
 
 ---

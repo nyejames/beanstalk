@@ -11,13 +11,14 @@ ACTIVE_PLAN: docs/roadmap/plans/number_type_numeric_plan.md
 STATUS: queued
 CURRENT_SLICE: Phase 0 - refresh current numeric, TIR, HIR, target-validation and JS owners
 LAST_GOOD_COMMIT: none until the first implementation slice is accepted
+POST_TIR_REVIEW_COMMIT: 1298da468
 BRANCH: main
 IMPLEMENTATION_SCOPE: frontend types, AST folding, HIR numeric ops, JS lowering, backend validation
 ```
 
 ## Hard prerequisites
 
-- final TIR completion so template folding and handoff are stable
+- final TIR one-store/exact-view architecture and post-TIR roadmap review accepted at `1298da468`
 - canonical module artefacts so per-function link facts and target validation roots exist
 
 ## Required authority documents
@@ -171,9 +172,10 @@ Each phase must leave one coherent path. Reference `docs/compiler-design-overvie
 
 ### Phase 1: Refresh current numeric, TIR, HIR, target-validation and JS owners
 
-Context: refresh all code anchors before implementation. The TIR branch and earlier plans may have moved owners.
+Context: refresh all code anchors before implementation. Final TIR owners are fixed by the
+`1298da468` review; consume them without reopening template architecture.
 
-- Confirm final TIR and canonical module artefacts are accepted.
+- Confirm the `1298da468` post-TIR review and canonical module artefacts are accepted.
 - Record `git rev-parse HEAD`, branch and `git status --short`.
 - Refresh current `numeric_text`, `TypeEnvironment`, HIR numeric, JS lowering and backend validation owners.
 - Run baseline `just validate` and record results.
@@ -203,7 +205,7 @@ See `docs/compiler-design-overview.md` "Numeric ownership" for the value-to-stri
 
 - Add AST expression variants for `Number` and `Byte` values.
 - Add contextual literal materialisation: whole numbers to `Number` or `NumberN` (exact), decimals to `NumberN` (exact only), `Byte` `0..255` only.
-- Add one shared compile-time value-to-string formatter used by const template folding, TIR fold output, `cast` folding and runtime lowering.
+- Add one shared value-to-string formatter used by `fold_prepared_template`, const/cast folding and runtime lowering; do not add another TIR fold or template-formatting path.
 - Do not add Number-specific TIR node kinds.
 - Add scale-aware builtin cast policy with a single cast policy context struct (not scale-pair enumeration).
 - Implement const-foldable Number casts: `Int -> NumberN`, `NumberN -> Int`, `NumberN -> NumberM` widening and narrowing, `NumberN -> String`, `String -> NumberN`.
@@ -284,21 +286,22 @@ Context: documentation, tests and implementation status must agree.
 - Add required integration cases: Number literals and diagnostics, arithmetic, mixed Int and Number, cross-scale and Float diagnostics, casts, Error recovery vs trap, Wasm rejection, Byte scaffold, Int check-elision.
 - Rebuild generated documentation through the compiler.
 
-### Phase 10: Delete legacy Number or template fallback paths
+### Phase 10: Delete legacy Number and duplicate formatting paths
 
 Context: the refactor is not complete while old Decimal naming or duplicate template formatting paths remain.
 
 - Delete inactive `Decimal` naming, comments and compatibility paths.
 - Delete old `HirNumericOp` enum variants.
-- Delete duplicate template formatting in both TIR and legacy template paths (keep one shared value-to-string formatter).
+- Delete any duplicate value-to-string formatting found by the current ownership review; final TIR has no legacy template path.
+- Route allocation, formatter-output caching and backend string-building performance ideas to `post-tir-template-parser-optimization-plan.md` rather than implementing them as Number compatibility work.
 - Delete whole-module backend gate assumptions for numeric types (use per-function link facts and explicit validation roots).
-- Search and confirm no stale `Decimal`, `BigInt`, `IntAdd`, `FloatAdd` or legacy template fallback references remain.
+- Search and confirm no stale `Decimal`, `BigInt`, `IntAdd`, `FloatAdd` or duplicate template-formatting references remain.
 
 ## Old owners and paths to remove
 
 - inactive `Decimal` naming, comments and compatibility paths
 - old `HirNumericOp` enum variants such as `IntAdd` and `FloatAdd`
-- duplicate template formatting in both TIR and legacy template paths
+- duplicate value-to-string formatting outside the shared current owner
 - whole-module backend gate assumptions for numeric types
 
 ## Required tests
@@ -347,7 +350,7 @@ Before marking this plan complete, verify:
 - target validation rejects unsupported reachable Number on Wasm
 - JS check elision is side-table only and does not mutate HIR
 - `Byte` is scaffold-only with clean backend rejection
-- no `Decimal` compatibility or legacy template fallback path remains
+- no `Decimal` compatibility or duplicate template-formatting path remains
 
 ## Deliberately deferred work
 

@@ -11,13 +11,14 @@ ACTIVE_PLAN: docs/roadmap/plans/entry-config-blocks-runtime-title-plan.md
 STATUS: queued
 CURRENT_SLICE: Phase 0 - refresh module-root, metadata, schema and HTML document owners
 LAST_GOOD_COMMIT: none until the first implementation slice is accepted
+POST_TIR_REVIEW_COMMIT: 1298da468
 BRANCH: main
 IMPLEMENTATION_SCOPE: frontend header parsing, AST folding, module metadata, HTML builder, Core IO
 ```
 
 ## Hard prerequisites
 
-- final TIR
+- final TIR one-store/exact-view architecture and post-TIR roadmap review accepted at `1298da468`
 - canonical modules
 - project config and `@project`
 - section-aware builder schemas
@@ -140,9 +141,13 @@ Each phase must leave one coherent path. Reference `docs/build-system-design.md`
 
 ### Phase 1: Refresh module-root, metadata, schema and HTML document owners
 
-Context: this plan depends on canonical modules, project config, `@project`, section-aware schemas, anonymous const records and source `#Import`. Refresh all anchors before implementation.
+Context: this plan depends on canonical modules, project config, `@project`, section-aware schemas,
+anonymous const records and source `#Import`. Its template boundary was reviewed against
+`1298da468`; refresh ordinary implementation anchors before code starts without adding a TIR-facing
+entry-config API.
 
 - Confirm all hard prerequisites are accepted.
+- Confirm entry metadata consumes folded owned values or neutral owned runtime template payloads; no TIR identity, view, overlay or preparation state enters module metadata, HIR or the HTML builder.
 - Record `git rev-parse HEAD`, branch and `git status --short` in the context capsule.
 - Inventory current module-root header parser, config schema registry, HTML page metadata resolution, Core IO registration and JS helper emission.
 - Search and count legacy `page_title`, `page_head`, `page_description`, `page_lang`, `page_favicon`, `page_body_style` usage across source, fixtures and docs.

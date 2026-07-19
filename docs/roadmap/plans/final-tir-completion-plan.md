@@ -29,17 +29,17 @@ TIR remains AST-local. No TIR store, ID, view, overlay or preparation type may c
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/final-tir-completion-plan.md
 STATUS: active
-CURRENT_SLICE: R6D downstream roadmap handoff and dedicated post-TIR optimisation plan
-LAST_ACCEPTED_COMMIT: e4aef3987 (R6C exact const-required preparation handoff and one-attempt regression coverage)
-WORKTREE: main at e4aef3987; clean before this parent-owned benchmark-state refresh; concurrent user documentation remains untouched
+CURRENT_SLICE: final architecture audit, closure validation and historical handoff
+LAST_ACCEPTED_COMMIT: 1298da468 (R6C six-run recorded performance evidence and historical-summary review)
+WORKTREE: main at 1298da468; clean before this parent-owned R6D state refresh; concurrent user documentation remains untouched
 REQUIRED_RELOADS: startup files, this plan, and current TIR source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: roadmap and queued plans touching templates, AST finalization, HIR handoff, module compilation, diagnostics or performance
-- code: final one-store/exact-view/prepared fold and owned runtime-handoff owners established by accepted R0-R6C checkpoints
+- docs: final-review instructions, this completed R0-R6 record, compiler design, roadmap and post-TIR handoffs
+- code: final one-store/exact-view/prepared fold and owned runtime-handoff implementation plus the complete accepted diff from 069a29acb
 ACCEPTANCE_CRITERIA:
-- review every queued plan against final TIR owners and remove stale multi-store, fallback, duplicate-preparation and deleted-API assumptions
-- create one dedicated post-TIR `$md` and template-parser optimisation plan owning source-slice text, formatter allocation, incremental caching, parallel folding and backend string-build work
-- refresh queued dependency/current-state capsules against the accepted repository checkpoint and update roadmap sequencing without reopening final TIR architecture
+- run the orchestrator final audit against the complete final TIR change and resolve every confirmed finding
+- rerun the required final validation and architecture/hard-grep gates after any correction
+- mark this plan historical/complete in its capsule, keep the roadmap handoffs accurate and clean `.codex-worker` only after the entire plan is accepted
 VALIDATION_STATE:
 - R2C just validate: passed; cross-target Clippy, 3421 unit tests, 1784 integration cases, docs check and 28 benchmark sanity cases; -7ms average, 23 faster and 0 slower
 - R3 ownership map: passed through Codex CLI simple-exploration; no repeated preparation proving a cache, new preparation.rs is the required final owner, and classification/control-flow predicates remain only where they answer earlier-stage questions
@@ -74,12 +74,14 @@ VALIDATION_STATE:
 - R6C representative current workload means/ranges: template 9.010ms (8.858-9.109), wrapper/slot 6.745ms (6.552-6.911), control-flow 4.056ms (3.991-4.187), collection/control 14.953ms (14.846-15.023), Beandown/docs 199.144ms (196.023-204.026)
 - R6C historical summary comparison: both c1ecc2c58 and 069a29acb carry the same July baseline of all/core/docs/stress/module/borrow ~21/5/228/16/13/10ms; the current summary is ~15/5/201/8/8/6ms, with no raw per-commit samples available for exact individual-case attribution
 - R6C just bench-report: latest comparison 0ms with 28/28 cases, no counters, ratios or investigation candidates; the six samples show no consistent stage regression, so no profiling or architectural restoration is warranted
+- R6D Codex CLI roadmap review: accepted; roadmap, five queued-chain plans, test-suite hardening, diagnostics, frontend optimisation and docs migration were checked against 1298da468 and current source owners
+- R6D documentation handoff: roadmap records final TIR and the mandatory review as complete; every queued plan records 1298da468 and consumes folded owned values or neutral runtime handoffs; the dedicated non-blocking post-TIR optimisation plan owns source-text/parser/formatter/cache/invalidation/fold-scheduling/backend-string investigations
 DOCS_IMPACT: compiler-design-overview.md and Rust module maps updated for the final architecture; index.md locator already names preparation.rs; progress matrix unchanged because user-visible support did not change
 BLOCKERS_OR_OPEN_DECISIONS: none
-DELEGATION_DECISION: codex-cli read-only roadmap review - user requires Codex CLI for worker slices and R6D needs a bounded cross-plan stale-assumption/dependency map before parent documentation edits
+DELEGATION_DECISION: codex-cli audit - user requires Codex CLI for worker slices and the orchestrator requires an independent final review before closure
 NEXT_WORKER_ORDER: codex-cli (user-required provider for the next worker slice)
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit accepted R6C benchmark evidence, then launch the bounded Codex CLI R6D queued-plan review
+NEXT_RESUME_ACTION: review and commit the R6D documentation handoff, then run the Codex CLI final audit and closure gate
 ```
 
 Use `069a29acb` as the implementation and regression base. Do not continue extending `FoldAuthorityWalk`, foreign-store traversal, external expression-overlay stacks or prepared foreign-wrapper proofs.
@@ -960,7 +962,26 @@ Compare representative template, wrapper, slot, control-flow, Beandown and docs 
 - Remove stale pre-TIR assumptions.
 - Create one dedicated post-TIR `$md` and template-parser optimisation plan.
 - Move source-slice text, formatter allocation, incremental caching, parallel folding and backend string-build work into that owner.
-- Delete this temporary completion plan after final architecture docs own the contract.
+- Retain this completion plan as historical architecture, validation and performance evidence unless the user explicitly requests deletion; the roadmap and compiler-design document own the continuing contracts.
+
+R6D is accepted against `1298da468`. A Codex CLI read-only review mapped the roadmap, every
+queued-chain plan, test-suite hardening, diagnostics, frontend optimisation and documentation
+migration against the final source owners. The roadmap now records final TIR and the mandatory
+post-TIR checkpoint as complete. Canonical modules, imported values/config, entry config, Number
+and mixed HTML JavaScript/Wasm each record the review anchor and consume folded owned values or
+neutral owned runtime handoffs without a TIR-facing module, HIR or backend API. Test-suite hardening
+now treats R5C ownership as accepted rather than pending; diagnostics and language-documentation
+semantics remain with their existing owners.
+
+`post-tir-template-parser-optimization-plan.md` is the single queued/deferred, non-blocking owner
+for source-span template text, parse/source-hash reuse, formatter allocation/output reuse,
+dependency-aware invalidation, incremental template prerequisites, profiling-gated fold scheduling
+and cross-owner backend string assembly. It requires profiling plus a complete semantic key and
+invalidation model and preserves the final module store, exact view, preparation, fold and neutral
+handoff boundaries. The pre-TIR template-arena sketch now links to that owner, while canonical
+module caching, broad frontend arenas, diagnostics, docs semantics and backend implementation remain
+separate. Under the orchestrator retention rule this plan remains as historical evidence instead of
+being deleted without an explicit user request.
 
 #### R6 acceptance
 

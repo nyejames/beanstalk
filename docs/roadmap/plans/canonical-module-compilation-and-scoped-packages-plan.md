@@ -11,14 +11,15 @@ ACTIVE_PLAN: docs/roadmap/plans/canonical-module-compilation-and-scoped-packages
 STATUS: queued
 CURRENT_SLICE: Phase 0 - refresh repository and freeze current owner maps
 LAST_GOOD_COMMIT: none until the first implementation slice is accepted
+POST_TIR_REVIEW_COMMIT: 1298da468
 BRANCH: main
 IMPLEMENTATION_SCOPE: compiler frontend, build system, backends
 ```
 
 ## Hard prerequisites
 
-- final TIR completion must be accepted so template folding and handoff are stable
-- the mandatory post-TIR roadmap review checkpoint must be complete and recorded against the current repository
+- final TIR completion and its one-store, exact-view folding/handoff architecture are accepted at `1298da468`
+- the mandatory post-TIR roadmap review checkpoint is complete and recorded against `1298da468`
 - this plan must land before the HTML Wasm backend plan so backend work consumes a stable graph
 
 ## Required authority documents
@@ -99,7 +100,7 @@ Project compilation (see `docs/build-system-design.md` "Success-only ProjectComp
 
 ## Risks and blockers
 
-- the active TIR plan may move template folding and handoff owners before this plan begins
+- final TIR owners are fixed for this plan: consume the accepted preparation, fold and owned-handoff boundaries without reopening TIR architecture
 - cross-module type identity, generic instances, trait evidence and receiver-method visibility are tightly coupled, so one boundary must not leak donor-local IDs through another
 - current backend metadata is filtered from entry `start` reachability, but canonical reusable modules need per-function link facts
 - a repository-wide import migration is unavoidable because current code and docs use `@./` and global entry-root paths
@@ -168,12 +169,14 @@ Each phase must leave one coherent path and include focused tests. Reference the
 
 ### Phase 1: Refresh the repository and freeze current owner maps
 
-Context: this plan was authored while the TIR plan was active. Starting from stale paths would create bad APIs around code that no longer exists.
+Context: this plan was authored while TIR was active and was refreshed against `1298da468` after
+the mandatory review. Phase 1 still rechecks current paths before code starts, but it must consume
+the accepted owners rather than redesign them.
 
-- Confirm TIR finalisation is accepted, the mandatory post-TIR roadmap review checkpoint is complete and template folding and handoff are stable.
+- Confirm the `1298da468` post-TIR review remains the current accepted anchor and no later accepted architecture change supersedes it.
 - Record `git rev-parse HEAD`, branch and `git status --short` in the context capsule.
 - Re-read every path in the current implementation inventory above and replace stale files or symbols.
-- Reconcile the final TIR handoff: exported const templates cross module interfaces only as folded owned facts, never TIR identities.
+- Preserve the final TIR handoff: exported const templates cross module interfaces only as folded owned facts or neutral owned runtime payloads, never TIR identities, views, overlays or preparation state.
 - Search current source for `DiscoveredModule`, reachable entry closures, `Vec<Module>` backend handoff, `package_folders`, `@./` and `@` import resolution.
 - Classify each old owner as replace, extend or delete. Record the result before code starts.
 

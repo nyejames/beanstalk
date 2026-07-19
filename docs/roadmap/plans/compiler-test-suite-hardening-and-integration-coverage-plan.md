@@ -45,8 +45,8 @@ This plan should be completed before the canonical module compilation plan begin
 
 Activation prerequisites:
 
-- [ ] `docs/roadmap/plans/final-tir-completion-plan.md` has completed its final architecture, test-ownership, documentation, and validation phases.
-- [ ] The mandatory post-TIR roadmap review has refreshed all queued plans against the final one-store, exact-`TirView` architecture.
+- [x] `docs/roadmap/plans/final-tir-completion-plan.md` completed its final architecture, test-ownership, documentation, validation and recorded-performance phases at the `1298da468` review anchor.
+- [x] The mandatory post-TIR roadmap review refreshed all queued plans against the final one-store, exact-`TirView` architecture at `1298da468`.
 - [ ] `docs/roadmap/plans/compiler-diagnostics-improvement-plan.md` is complete or explicitly parked at a clean accepted commit.
 - [ ] No concurrent worker is changing `tests/cases/manifest.toml`, the integration expectation schema, diagnostic payload identity, or the integration runner.
 - [ ] The repository is on a clean branch/worktree and the current head is recorded in the capsule below.
@@ -70,11 +70,11 @@ CURRENT_SLICE:
 - Non-goals: no compiler behaviour changes, no fixture deletion, no unit-test pruning, no expectation-schema migration
 
 LAST_GOOD_COMMIT:
-- `14456858799607aba43b88d681625e9957ee7dff` — interview-time remote `main` anchor only; replace this before activating the plan
+- `1298da468` — accepted post-TIR roadmap-review anchor; no test-suite implementation slice has been accepted yet
 
 CURRENT_WORKTREE_STATE:
-- Clean / known changes: remote GitHub state inspected; local worktree cleanliness is unknown and must be checked before activation
-- Branch: remote default branch `main`
+- Clean / known changes: `main` was clean at `1298da468`; the final-TIR R6D documentation refresh followed from that anchor and must be committed or otherwise known before activation
+- Branch: local `main`
 - Dedicated worker worktrees: none known; create or record any worker worktree before implementation
 
 RELEVANT_DOCS_THIS_SLICE:
@@ -109,7 +109,7 @@ RELEVANT_CODE:
 - `src/compiler_frontend/hir/tests/`: HIR relationship and malformed-HIR owners
 - `src/backends/js/tests/`: lowering-text contracts requiring runtime-owner audit
 - `src/build_system/tests/` and `src/projects/check/tests/`: build/check policy owners
-- `src/compiler_frontend/ast/templates/tir/tests/`: post-TIR inventory only; TIR-owned pruning remains in the TIR plan until that plan closes
+- `src/compiler_frontend/ast/templates/tir/tests/`: accepted post-TIR hidden-invariant inventory; later suite-wide ownership review belongs to this plan and must not reopen final TIR architecture
 
 ACCEPTANCE_CRITERIA:
 - the plan is re-anchored to the actual current head after TIR and diagnostics work
@@ -131,26 +131,26 @@ DECISIONS_ALREADY_MADE:
 - decision: no arbitrary deletion quota or coverage-percentage target
   - reason: density and ownership matter more than raw counts
   - source/user/date: user request and test-suite review, 2026-07-18
-- decision: TIR-specific test consolidation stays owned by the final TIR plan until it closes
-  - reason: TIR test ownership and APIs are still changing
-  - source/user/date: current TIR plan and repository state, 2026-07-18
+- decision: final TIR R5C owns the completed TIR-specific consolidation; this plan owns only later suite-wide ownership review against those accepted semantics
+  - reason: TIR APIs and primary test owners are stable at `1298da468`, so later pruning must treat them like any other subsystem rather than continue migration-only ownership
+  - source/user/date: final TIR R5C/R6D and repository review, 2026-07-18
 - decision: diagnostics schema migration must not race the active diagnostics plan
   - reason: both plans touch codes, reasons, labels, and canonical fixtures
   - source/user/date: current diagnostics plan state, 2026-07-18
 
 BLOCKERS / RISKS:
-- final TIR completion is still active at the interview anchor; R2C is next
+- final TIR is accepted and is no longer a blocker; do not reopen it during suite hardening
 - compiler diagnostics work is still active and changes fixture expectations
 - `tests/cases/manifest.toml` is a high-conflict serialized file
 - exact diagnostic matching may expose existing cascades and unintended extra diagnostics
 - changing the Node runtime harness can alter ordering assumptions if event capture is not designed first
-- TIR unit-test paths and counts have changed since the original review and must be re-inventoried
+- TIR unit-test paths and counts changed since the original interview anchor and must be re-inventoried from `1298da468`
 - a new integration case may reveal a real compiler bug; do not weaken the test to preserve a green gate
 - the design documents describe accepted end state while the progress matrix describes current support
 
 VALIDATION_STATE:
-- last recorded command: `just validate`, recorded by the current TIR plan for its R2B checkpoint
-- result: passed with 3,417 Rust unit tests, 1,784 integration executions, docs checking, and 28 benchmark sanity cases
+- last recorded command: `just validate`, recorded by final TIR R6C before the `1298da468` roadmap-review anchor
+- result: passed with cross-target Clippy, 3,433 Rust unit tests, 1,784 integration executions, docs checking, and 28 benchmark sanity cases
 - known unrelated failures: none recorded
 - this downloadable planning artifact did not run repository validation independently
 
@@ -160,7 +160,7 @@ DOCS_IMPACT:
 - authorized docs updates: this plan explicitly authorizes the documentation changes listed in each phase; do not broaden language or architecture docs without a discovered contradiction or an intentional accepted behaviour change
 
 NEXT_ACTION:
-- after final TIR completion and a clean diagnostics checkpoint, refresh this capsule, compare the new head to `14456858799607aba43b88d681625e9957ee7dff`, and execute Phase 0A only
+- after a clean diagnostics checkpoint, refresh this capsule, compare the new head to both `14456858799607aba43b88d681625e9957ee7dff` and `1298da468`, and execute the remaining Phase 0A inventory only
 
 ---
 
@@ -411,9 +411,12 @@ A stable reason key, when added, is produced by the compiler diagnostic owner fr
 
 Do not add a second Node harness. Extend the existing harness to retain one ordered event stream and derive exact, ordered, contains, and not-contains assertions from that result.
 
-### TIR remains separately owned until complete
+### Accepted TIR ownership handoff
 
-Do not prune or reorganize TIR tests under this plan before the final TIR plan's own test-ownership phase and closure. After closure, include TIR in the suite-wide audit like any other subsystem.
+Final TIR R5C completed the TIR-specific test consolidation and recorded the primary owners. Include
+TIR in the later suite-wide audit like any other subsystem, preserve hidden exact-view/preparation/
+handoff invariants where integration output cannot expose them, and do not reopen the accepted
+architecture merely to reduce test count.
 
 ---
 
@@ -758,8 +761,8 @@ This phase is documentation and analysis only. Temporary inventory scripts belon
 
 ## Preconditions
 
-- [ ] Final TIR completion is accepted.
-- [ ] The mandatory post-TIR plan refresh is complete.
+- [x] Final TIR completion is accepted at the `1298da468` review anchor.
+- [x] The mandatory post-TIR plan refresh is complete.
 - [ ] Diagnostics work is complete or parked cleanly.
 - [ ] No fixture/harness worker is active.
 - [ ] Local worktree state is known.
@@ -2052,7 +2055,7 @@ This phase begins only after final TIR completion.
 - memory reactive invalidation/liveness
 - compiler reactivity boundary
 - HTML-JS current progress status
-- final TIR runtime handoff
+- final neutral owned runtime-template handoff at the AST-to-HIR boundary
 
 ## Checklist
 
@@ -2096,7 +2099,7 @@ This phase begins only after final TIR completion.
 - [ ] Subscription is not modeled as a borrow in tests.
 - [ ] No deferred reactive surface was introduced.
 - [ ] Ordered assertions do not pin incidental scheduler internals.
-- [ ] TIR does not leak into completed AST/HIR/backend expectations.
+- [ ] No TIR identity, view, overlay or preparation state leaks into completed AST/HIR/backend expectations; assert only neutral owned runtime-template semantics at that boundary.
 
 ## Style-guide review
 
@@ -2425,7 +2428,7 @@ Advisory findings to resolve or explicitly document:
 - [ ] Review every remaining full-source unit.
 - [ ] Record why each remains.
 - [ ] Delete stale test-only helpers and production APIs.
-- [ ] Confirm TIR tests match the final TIR plan.
+- [ ] Confirm TIR tests match the accepted one-store/exact-view owners recorded at `1298da468` without reopening internal architecture.
 - [ ] Confirm build-system units remain policy-focused.
 - [ ] Confirm HIR tests use semantic relationships.
 

@@ -1009,6 +1009,13 @@ meaningful AST emit/finalize time and large template counts, but the stack sampl
 unsymbolicated and the counters did not isolate template/render-plan clone pressure. Phase 7 is
 deferred as a broad arena migration until narrower docs/template attribution justifies it.
 
+The final TIR work subsequently established one module store, exact views, one preparation owner,
+one fold entry and neutral owned runtime handoff. The template/text/parser/formatter/fold portion of
+this phase is therefore superseded by
+`docs/roadmap/plans/post-tir-template-parser-optimization-plan.md`. The evidence below remains useful,
+but future template work must begin from that final architecture rather than the pre-TIR arena
+sketch.
+
 ### Entry criteria
 
 - [ ] Samply or counters show template/render-plan clone/allocation pressure after earlier phases.
@@ -1018,62 +1025,16 @@ deferred as a broad arena migration until narrower docs/template attribution jus
       clone pressure specifically.
 - [ ] Existing template semantics and goldens are stable.
 
-### Implementation steps
+### Handoff
 
-- [ ] Add focused arena files:
-
-```text
-src/compiler_frontend/ast/templates/arena.rs
-src/compiler_frontend/ast/templates/render_plan_arena.rs
-```
-
-- [ ] Add stable IDs/ranges for:
-  - [ ] template atoms;
-  - [ ] render pieces;
-  - [ ] slot contribution lists;
-  - [ ] child template lists.
-
-- [ ] Keep the state model explicit:
-
-```text
-ParsedTemplate -> ComposedTemplate -> FinalizedTemplate
-```
-
-or equivalent current-project names.
-
-- [ ] Avoid re-walking finalized templates except where required for HIR lowering or diagnostics.
-- [ ] Replace obvious `to_vec()` / clone-for-composition paths only after tests show equivalent output.
-- [ ] Add counters:
-  - [ ] template atoms allocated;
-  - [ ] render pieces allocated;
-  - [ ] template clone count;
-  - [ ] render-plan clone count;
-  - [ ] finalized-template reuse count.
-
-### Tests
-
-- [ ] Run all template integration tests.
-- [ ] Add targeted cases if not already covered:
-  - [ ] nested `$children`;
-  - [ ] `$fresh`;
-  - [ ] named/positional/default slots;
-  - [ ] runtime template `if`/`loop`;
-  - [ ] const template folding;
-  - [ ] markdown formatting;
-  - [ ] reactive subscriptions.
-
-### Audit / style guide review / validation
-
-- [ ] Confirm compile-time and runtime template output is unchanged.
-- [ ] Confirm builder-facing const fragments are unchanged.
-- [ ] Confirm HIR still receives finalized runtime template plans only.
-- [ ] Run `just validate`.
-- [ ] Run targeted template profiles and benchmark medians.
-
-### Backtrack criteria
-
-- [ ] If template arena conversion introduces semantic fragility, revert and retain only measured low-risk clone reductions.
-- [ ] If output equivalence is hard to prove, pause and add stronger goldens/tests before continuing.
+- [ ] Use the dedicated post-TIR plan for fresh profiles, current owner maps, source/text storage,
+      formatter allocation, cache keys, invalidation and fold scheduling.
+- [ ] Keep broad AST/expression/HIR arena work in this plan only when profiling identifies those
+      owners independently of template semantics.
+- [ ] Do not add the pre-TIR `arena.rs`, `render_plan_arena.rs` or parallel template state model as a
+      compatibility layer.
+- [ ] Any later low-risk allocation reduction must preserve the accepted exact-view preparation,
+      folding and neutral handoff boundaries and pass the dedicated plan's validation/evidence gate.
 
 ---
 
@@ -1154,9 +1115,9 @@ Add these as deferred until profiling justifies them:
 - [x] Full template/render-plan arena migration.
 - [x] HIR arena conversion.
 - [x] Borrow fact compaction and snapshot reduction.
-- [x] Source-backed package HIR caching.
-- [x] Incremental compiler caching.
-- [x] Whole-project persistent semantic cache.
+- [x] Source-backed package HIR caching remains with canonical module/build-system work.
+- [x] Incremental module/template cache prerequisites move to `post-tir-template-parser-optimization-plan.md`; broader incremental compilation remains build-system owned.
+- [x] Whole-project persistent semantic cache remains canonical/build-system deferred work.
 
 ### Documentation updates
 
