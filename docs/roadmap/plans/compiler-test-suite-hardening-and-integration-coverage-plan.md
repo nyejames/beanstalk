@@ -29,17 +29,17 @@ This ordering is mandatory. Do not begin broad pruning while the harness can sti
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 2B11d — classify trait, ordering, package-alias and config-package contracts
-LAST_ACCEPTED_COMMIT: `ba3366218` — assert config and runtime outputs
-WORKTREE: parent `main` has only this Phase 2B11d plan checkpoint diff atop `ba3366218`; reusable worker branch is clean at `10122ba94`; do not create another worktree
+CURRENT_SLICE: Phase 2B11d correction — make HTML-Wasm trait-facade parity explicitly compile-only
+LAST_ACCEPTED_COMMIT: `a3dcc580c` — queue trait and package contracts
+WORKTREE: parent `main` has only this Phase 2B11d correction plan diff atop `a3dcc580c`; reusable worker branch is clean at merge commit `119138639` after reverting the blocked attempt; do not create another worktree
 REQUIRED_RELOADS: startup files, this plan and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: static page content uses artifact assertions, executed `io.line` behavior uses rendered output, and acceptance-only external package alias calls need explicit compile-only intent
-- code: six cases across seven backend blocks have source-bounded contracts; warning-only and mutable-receiver fixtures remain outside this batch
+- docs: backend matrices need the strongest supported backend-local contract, not artificial runtime symmetry; HTML-Wasm compilation parity may be explicit compile-only when its current `index.html` does not expose the HTML marker
+- code: the first attempt passed the focused HTML trait cases but the trait-facade HTML-Wasm artifact lacked the required marker, so all edits were reverted cleanly
 ACCEPTANCE_CRITERIA:
-- add runtime output to trait-parse, sorted-entry and config-package cases; add HTML and HTML-Wasm `index.html` assertions to the static trait-facade case; mark package aliases compile-only
+- add runtime output to trait-parse, sorted-entry and config-package cases; add an HTML `index.html` assertion and HTML-Wasm compile-only intent to the trait-facade case; mark package aliases compile-only
 - preserve sources, existing backend outcomes and warning policy; exclude `identifier_naming_warnings_mixed` and `method_receiver_this_success`
-- all seven backend blocks, focused runner tests, audit, diff checks and full gate pass
+- all six backend blocks, focused runner tests, audit, diff checks and full gate pass
 VALIDATION_STATE:
 - final TIR at `dc81f7e53`: `just validate` passed with 3,433 Rust tests, 1,784 integration executions, docs checking and 28 benchmark sanity cases
 - Phase 0A documentation-only gate: `cargo run --quiet -- build docs --release` passed; 72 files built and no generated diff was produced (`bean` was unavailable in `PATH`)
@@ -71,13 +71,14 @@ VALIDATION_STATE:
 - Phase 2B11b: all seven choice constructor/constant/import cases, 70 runner tests, audit and diff checks passed in worker and parent review; worker `just validate` passed with 3,466 Rust tests and 1,784 integration executions; audit reported 23 compile-only, 41 baseline-only, zero fallback and zero hard violations
 - Phase 2B11c first attempt: receiver rendered output passed, five static/folded page assertions failed with empty dynamic output, and the worker reverted all edits; runner tests, audit and full gate were not run because the stop rule fired; worktree remained clean
 - Phase 2B11c corrected retry: all six exact HTML cases, 70 runner tests, audit and diff checks passed in worker and parent review; worker `just validate` passed with 3,466 Rust tests and 1,784 integration executions; audit reported 23 compile-only, 35 baseline-only, zero fallback and zero hard violations
+- Phase 2B11d first attempt: focused HTML trait checks passed, but the trait-facade HTML-Wasm `index.html` lacked the required marker; the worker reverted all edits and stopped before broad validation; worktree remained clean
 - Phase 2B9 launch: both the optional `beanstalk-spark-explorer` and required `beanstalk-plan-worker` Codex CLI profiles selected `gpt-5.6-luna` but returned the account usage-limit error before repository edits; the service reported retry availability at 2026-07-25 11:08 AM
 DOCS_IMPACT: Phase 1 workflow docs, generated release output and the deferred code-block highlighting roadmap note are current; fixture outcomes/backend coverage and the progress matrix remain unchanged
 BLOCKERS_OR_OPEN_DECISIONS: none for this slice; diagnostics Phase 4.1c remains serialized at `d7fb3654f`; disk permits at most one additional worktree
 DELEGATION_DECISION: codex-cli implementation — explicit user-requested provider and the seven selected backend contracts are source-bounded with assertion lanes established by 2B11c
 NEXT_WORKER_ORDER: codex-cli only for this run
-STOP_REASON: none
-NEXT_RESUME_ACTION: launch the bounded Phase 2B11d trait/ordering/package expectation migration
+STOP_REASON: context is too low to safely launch, review, validate and checkpoint another full worker slice
+NEXT_RESUME_ACTION: relaunch Phase 2B11d with HTML artifact and HTML-Wasm compile-only trait-facade contracts
 
 ## Recommended roadmap placement and activation conditions
 
@@ -120,16 +121,16 @@ ACTIVE_PLAN:
 CURRENT_SLICE:
 - Phase: 2
 - Checklist item: 2B11d — classify trait, ordering, package-alias and config-package contracts
-- Goal: replace seven backend baselines with the narrow observable, artifact or compile-only contract owned by each fixture
+- Goal: replace six backend baselines with the narrow observable, artifact or compile-only contract supported by each backend
 - Non-goals: no source edits, warning-only fixtures, `method_receiver_this_success`, backend outcome changes, schema enforcement, assertion-module split, diagnostic multiplicity work, role/contract backfill or later phases
 
 LAST_GOOD_COMMIT:
-- `ba3366218` — accepted corrected Phase 2B11c config/runtime output contracts
+- `a3dcc580c` — accepted corrected Phase 2B11c checkpoint and Phase 2B11d launch state
 
 CURRENT_WORKTREE_STATE:
-- Clean / known changes: parent `main` has only this Phase 2B11d plan checkpoint diff atop `ba3366218`; the reusable worker branch is clean at `10122ba94`
+- Clean / known changes: parent `main` has only this Phase 2B11d correction plan diff atop `a3dcc580c`; the reusable worker branch is clean at merge commit `119138639` after reverting the blocked attempt
 - Branch: local `main`
-- Dedicated worker worktrees: reuse `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase2a`, currently clean at `10122ba94`; do not create another worktree
+- Dedicated worker worktrees: reuse `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase2a`, currently clean at merge commit `119138639`; do not create another worktree
 
 RELEVANT_DOCS_THIS_SLICE:
 - `AGENTS.md`
@@ -145,15 +146,15 @@ RELEVANT_DOCS_THIS_SLICE:
 
 RELEVANT_CODE:
 - `tests/cases/trait_incompatibility_parse_success/expect.toml`: HTML runtime output `ok`; preserve Wasm `BST-RULE-0058`
-- `tests/cases/trait_relation_facade_private_private_success/expect.toml`: both backends' `index.html` contain the fixture marker and `ok`
+- `tests/cases/trait_relation_facade_private_private_success/expect.toml`: HTML `index.html` contains the fixture marker and `ok`; HTML-Wasm is explicit compile-only parity
 - `tests/cases/entry_start_sees_sorted_declarations/expect.toml`: runtime output `Hello, World`
 - `tests/cases/two_package_symbols_same_name_aliases/expect.toml`: explicit compile-only alias resolution/calls
 - `tests/cases/config_package_folder_missing_default_ignored/expect.toml`: runtime output `ok`
 
 ACCEPTANCE_CRITERIA:
-- three HTML runtime outputs, two backend-local static artifact contracts and one compile-only HTML intent are explicit
+- three HTML runtime outputs, one HTML static artifact contract and two backend-local compile-only intents are explicit
 - no input source, manifest metadata, failure backend contract or other fixture changes
-- exact backend blocks, 70 runner tests, audit, formatting, diff checks and `just validate` pass; compile-only rises to 24 and baseline-only falls from 35 to 28
+- exact backend blocks, 70 runner tests, audit, formatting, diff checks and `just validate` pass; compile-only rises to 25 and baseline-only falls from 35 to 29
 
 DECISIONS_ALREADY_MADE:
 - decision: harden the integration harness before pruning
@@ -192,6 +193,9 @@ DECISIONS_ALREADY_MADE:
 - decision: keep static/folded page content out of dynamic rendered-output assertions
   - reason: the runner deliberately executes scripts and combines runtime slot/console output only; five static-page assertions returned empty output while the receiver console assertion passed
   - source/user/date: Phase 2B11c Codex CLI blocked attempt and `validate_rendered_output`, 2026-07-19
+- decision: classify trait-facade HTML-Wasm parity as compile-only instead of inventing an HTML marker contract
+  - reason: focused validation proved the HTML-Wasm `index.html` does not contain the source marker, while the backend still compiles successfully; backend matrices should not force unsupported artifact symmetry
+  - source/user/date: Phase 2B11d Codex CLI blocked attempt and testing standards, 2026-07-19
 
 BLOCKERS / RISKS:
 - final TIR is accepted and is no longer a blocker; do not reopen it during suite hardening
@@ -248,7 +252,7 @@ DOCS_IMPACT:
 - authorized docs updates: this plan explicitly authorizes the documentation changes listed in each phase; do not broaden language or architecture docs without a discovered contradiction or an intentional accepted behaviour change
 
 NEXT_ACTION:
-- launch the bounded Phase 2B11d Codex CLI trait/ordering/package expectation migration
+- relaunch the bounded Phase 2B11d Codex CLI migration with corrected HTML/HTML-Wasm trait-facade ownership
 
 ---
 
