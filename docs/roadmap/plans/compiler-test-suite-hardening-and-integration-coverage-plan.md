@@ -28,18 +28,18 @@ This ordering is mandatory. Do not begin broad pruning while the harness can sti
 ## Current state
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
-STATUS: blocked
-CURRENT_SLICE: Phase 2B9 — migrate the remaining unambiguous fallback-backed runtime and package cases
-LAST_ACCEPTED_COMMIT: `00435b923` — make choice and optional success explicit
-WORKTREE: parent `main` has the Phase 2B8 checkpoint at `7031419de`; reusable worker branch is clean at merge commit `9113f06fc` in `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase2a`; do not create another worktree
+STATUS: active
+CURRENT_SLICE: Phase 2B10 exploration — resolve the two remaining fallback-backed design-review cases
+LAST_ACCEPTED_COMMIT: `612439169` — make runtime and package contracts explicit
+WORKTREE: parent `main` has the Phase 2B9 code checkpoint at `612439169`; reusable worker branch is clean at `c300c18df` in `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase2a`; do not create another worktree
 REQUIRED_RELOADS: startup files, this plan and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: `testing.bd` routes runtime behaviour to rendered output and backend structure to artifact assertions; package imports use their resolved package-scoped lowering
-- code: Phase 2B8 reduced fallback-backed cases to six and backend-baseline-only blocks to 61; four are unambiguous and two remain explicit design reviews
+- docs: import authorities reject `@./prefix`; memory access authorities and current compiler behaviour must decide whether mutation during collection iteration is a supported recovery path or a missing diagnostic
+- code: Phase 2B9 reduced fallback-backed cases to `adversarial_multi_file_helper_chain` and `loop_borrow_mutation_conflict`; audit reports 17 compile-only and 57 backend-baseline-only blocks
 ACCEPTANCE_CRITERIA:
-- assert the package-A runtime symbol and exclude package B for `external_package_import_selects_correct_package`
-- assert the authored console markers for `implicit_main_call`, `multi_file_fixture_only_counts_entry_case` and `print_special_chars`
-- leave source inputs, manifest metadata, runner enforcement and fallback infrastructure unchanged and pass all four exact cases plus the full gate
+- determine the current outcome and accepted owner for both remaining fallback-backed cases
+- identify any docs/code/test conflict without editing repository sources
+- return an exact Phase 2B10 implementation recommendation or a concrete user-facing design blocker
 VALIDATION_STATE:
 - final TIR at `dc81f7e53`: `just validate` passed with 3,433 Rust tests, 1,784 integration executions, docs checking and 28 benchmark sanity cases
 - Phase 0A documentation-only gate: `cargo run --quiet -- build docs --release` passed; 72 files built and no generated diff was produced (`bean` was unavailable in `PATH`)
@@ -60,13 +60,14 @@ VALIDATION_STATE:
 - Phase 2B6: all four exact HTML cases, 70 focused runner tests, audit, formatting, diff checks and `just validate` passed; the full gate covered 3,463 Rust tests, 1,784 integration executions and 28 benchmark sanity cases
 - Phase 2B7: all six exact HTML cases, 70 focused runner tests, audit, formatting, diff checks and `just validate` passed; `struct_using_constant` uses the correct static HTML artifact lane and the full gate passed
 - Phase 2B8: all seven exact HTML cases, 70 focused runner tests, audit, diff checks and `just validate` passed; audit reported 17 compile-only, 61 backend-baseline-only, six fallback-backed and zero hard violations
+- Phase 2B9: all four exact HTML cases, 70 focused runner tests, audit and diff checks passed in worker and parent review; worker `just validate` passed; audit reported 17 compile-only, 57 backend-baseline-only, two fallback-backed and zero hard violations
 - Phase 2B9 launch: both the optional `beanstalk-spark-explorer` and required `beanstalk-plan-worker` Codex CLI profiles selected `gpt-5.6-luna` but returned the account usage-limit error before repository edits; the service reported retry availability at 2026-07-25 11:08 AM
 DOCS_IMPACT: Phase 1 workflow docs, generated release output and the deferred code-block highlighting roadmap note are current; fixture outcomes/backend coverage and the progress matrix remain unchanged
-BLOCKERS_OR_OPEN_DECISIONS: diagnostics Phase 4.1c remains serialized at `d7fb3654f`; disk permits at most one additional worktree; before Phase 2 closes, resolve `adversarial_multi_file_helper_chain` using unsupported `@./prefix` and review mutation-during-iteration semantics in `loop_borrow_mutation_conflict`
-DELEGATION_DECISION: codex-cli blocked — the user-requested provider returned an account usage-limit error before B9 edits; do not substitute Ollama or parent-direct
-NEXT_WORKER_ORDER: none until the requested Codex CLI profile is available
-STOP_REASON: the exact requested Codex CLI provider is unavailable before edits for both simple exploration and implementation because the account usage limit is exhausted until 2026-07-25 11:08 AM
-NEXT_RESUME_ACTION: retry `codex-cli-beanstalk .codex-worker/tasks/test-hardening-phase2b9.md` in the existing reusable worktree after Codex CLI capacity returns or the user changes the selected profile to one with available capacity
+BLOCKERS_OR_OPEN_DECISIONS: determine whether the two remaining fallback-backed fixtures conflict with accepted import and mutation semantics; diagnostics Phase 4.1c remains serialized at `d7fb3654f`; disk permits at most one additional worktree
+DELEGATION_DECISION: codex-cli simple-exploration — explicit user-requested provider and the next slice is read-only design evidence
+NEXT_WORKER_ORDER: codex-cli only for this run
+STOP_REASON: none
+NEXT_RESUME_ACTION: launch the bounded Phase 2B10 read-only exploration in the existing reusable worktree
 
 ## Recommended roadmap placement and activation conditions
 
@@ -108,17 +109,17 @@ ACTIVE_PLAN:
 
 CURRENT_SLICE:
 - Phase: 2
-- Checklist item: 2B9 — migrate the remaining unambiguous fallback-backed runtime and package cases
-- Goal: replace the fallback for four cases with one package-lowering artifact contract and three rendered-output contracts
-- Non-goals: no runner enforcement, fallback removal, unrelated fixture migration, diagnostic changes, exact runtime-event infrastructure or broad role/contract backfill
+- Checklist item: 2B10 exploration — resolve the two remaining fallback-backed design-review cases
+- Goal: determine the accepted current contract for `adversarial_multi_file_helper_chain` and `loop_borrow_mutation_conflict` before the final expectation migration
+- Non-goals: no repository edits, runner enforcement, fallback removal, diagnostics implementation, exact runtime-event infrastructure or broad role/contract backfill
 
 LAST_GOOD_COMMIT:
-- `00435b923` — accepted Phase 2B8 choice, optional and syntax expectation migration
+- `612439169` — accepted Phase 2B9 runtime and package expectation migration
 
 CURRENT_WORKTREE_STATE:
-- Clean / known changes: parent `main` has the Phase 2B8 checkpoint at `7031419de`; the reusable worker branch is clean at merge commit `9113f06fc` and B9 changed no repository files
+- Clean / known changes: parent `main` has the Phase 2B9 code checkpoint at `612439169`; the reusable worker branch is clean at `c300c18df`
 - Branch: local `main`
-- Dedicated worker worktrees: all accepted Phase 1 worktrees were clean and removed after `git cherry` confirmed their patches on main; reuse `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase2a` from worker commit `7a438ba5d`
+- Dedicated worker worktrees: reuse `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase2a`, currently clean at worker commit `c300c18df`; do not create another worktree
 
 RELEVANT_DOCS_THIS_SLICE:
 - `AGENTS.md`
@@ -129,25 +130,22 @@ RELEVANT_DOCS_THIS_SLICE:
 - `docs/src/docs/codebase/style-guide/validation.bd`
 - `docs/src/docs/codebase/language/overview.bd`
 - `docs/language-overview.md`
-- `docs/src/docs/functions/calls-and-access.bd`
 - `docs/src/docs/packages/import-paths.bd`
-- `docs/src/docs/packages/grouped-and-namespace-imports.bd`
+- `docs/src/docs/codebase/memory-management/access-and-aliasing/overview.bd`
+- `docs/src/docs/codebase/memory-management/access-and-aliasing/access-and-aliasing.bd`
 - `docs/src/docs/progress/#page.bst`
 - `docs/roadmap/roadmap.md`
 
 RELEVANT_CODE:
-- `tests/cases/{external_package_import_selects_correct_package,implicit_main_call,multi_file_fixture_only_counts_entry_case,print_special_chars}/expect.toml`: new explicit artifact or rendered-output expectations
-- `src/compiler_frontend/external_packages/packages/test_packages.rs`: inspect only; owns the distinct package-A and package-B runtime lowering symbols
-- `src/compiler_tests/integration_test_runner/assertions.rs`: inspect only; owns current unordered rendered-output and artifact assertions
-- `tests/cases/adversarial_multi_file_helper_chain/input/helper/compose.bst`: inspect-only design conflict; `@./prefix` is unsupported
-- `tests/cases/loop_borrow_mutation_conflict/input/#page.bst`: inspect-only pending mutation-during-iteration review
+- `tests/cases/adversarial_multi_file_helper_chain/`: inspect-only import-path design conflict and current runner outcome
+- `tests/cases/loop_borrow_mutation_conflict/`: inspect-only mutation-during-iteration contract and current runner outcome
+- current import resolution, collection-loop HIR and borrow-validation owners: inspect only to identify whether behaviour matches accepted semantics
 - `tests/fixtures/stubs/expect.toml`: inspect only; fallback removal belongs to 2C after all migrations
-- `justfile::validate`: final code-bearing gate
 
 ACCEPTANCE_CRITERIA:
-- `external_package_import_selects_correct_package` asserts that `index.html` contains `__bs_test_pkg_a_open` and excludes `__bs_test_pkg_b_open`
-- `implicit_main_call` asserts all five authored console markers; `multi_file_fixture_only_counts_entry_case` asserts `Hello, World`; `print_special_chars` asserts its newline, tab, quote and backslash values
-- no source or manifest metadata changes; all four exact cases pass on HTML; audit reports 17 compile-only, 57 backend-baseline-only, two fallback-backed and zero hard violations; full validation passes
+- determine the current outcome and accepted owner for both remaining fallback-backed cases
+- identify any docs/code/test conflict without editing repository sources
+- return exact expectation/source/diagnostic recommendations or a concrete user-facing design blocker
 
 DECISIONS_ALREADY_MADE:
 - decision: harden the integration harness before pruning
@@ -185,7 +183,7 @@ BLOCKERS / RISKS:
 - a new integration case may reveal a real compiler bug; do not weaken the test to preserve a green gate
 - the design documents describe accepted end state while the progress matrix describes current support
 - Phase 2B must classify 53 fallback-backed cases and 57 explicit weak blocks; do not blanket-mark them compile-only
-- the user-requested Codex CLI provider is unavailable before Phase 2B9 edits because both selected `gpt-5.6-luna` profiles returned an account usage-limit error with a 2026-07-25 11:08 AM retry time; do not substitute another provider without user direction
+- the prior Codex CLI capacity blocker cleared for the successful Phase 2B9 retry; continue to use only the explicitly requested Codex CLI provider for this run
 
 VALIDATION_STATE:
 - last recorded command: `just validate`, run for accepted Phase 1D in the dedicated worker worktree
@@ -221,8 +219,8 @@ VALIDATION_STATE:
 - Phase 2B6 worker `just validate` passed with 3,463 Rust tests, 1,784 integration executions and 28 benchmark sanity cases; audit reported 13 compile-only, 74 backend-baseline-only, 19 fallback-backed and zero hard violations
 - Phase 2B7 worker changed `struct_using_constant` from an inapplicable runtime assertion to an `index.html` artifact assertion; `just validate` passed and audit reported 13 compile-only, 68 backend-baseline-only, 13 fallback-backed and zero hard violations
 - Phase 2B8 worker `just validate` passed; parent repeated the 70 focused runner tests and audit, which reported 17 compile-only, 61 backend-baseline-only, six fallback-backed and zero hard violations
-- Phase 2B9 optional Codex CLI Spark selection attempt hit its usage limit before producing a handoff; the worktree remained unchanged and the parent bounded the slice from the four sources and current package/assertion owners
-- Phase 2B9 Codex CLI implementation launch also hit the same usage limit before edits; no Phase 2B9 validation ran and the reusable worktree remains clean
+- Phase 2B9 initial Codex CLI exploration and implementation attempts hit their usage limit before edits; the later retry completed through the same requested provider
+- Phase 2B9 worker `just validate` passed; parent repeated all four exact HTML cases, 70 runner tests, audit and diff checks; audit reported 17 compile-only, 57 backend-baseline-only, two fallback-backed and zero hard violations
 
 DOCS_IMPACT:
 - progress matrix needed: review after every phase that adds, removes, or materially strengthens current coverage; update only when the coverage statement changes
@@ -230,7 +228,7 @@ DOCS_IMPACT:
 - authorized docs updates: this plan explicitly authorizes the documentation changes listed in each phase; do not broaden language or architecture docs without a discovered contradiction or an intentional accepted behaviour change
 
 NEXT_ACTION:
-- retry the existing Phase 2B9 Codex CLI task after capacity returns or the user supplies an available Codex CLI profile; do not create a new worktree
+- launch a bounded Codex CLI simple-exploration task for the two remaining fallback-backed cases; do not create a new worktree
 
 ---
 
@@ -1289,6 +1287,11 @@ Accepted batch 2B8 at `00435b923`: four no-output choice and syntax cases are ex
 compile-only smoke tests, while three optional-`none` cases assert their observable `ok` marker.
 Audit baseline-only findings fell from 68 to 61, fallback use fell from 13 to six, and full
 validation passed.
+
+Accepted batch 2B9 at `612439169`: the package-selection case now asserts its package-A runtime
+lowering and excludes package B, while three runtime cases assert their authored console values.
+Audit baseline-only findings fell from 61 to 57, fallback use fell from six to two, and the worker's
+full validation plus the parent's focused cases, 70 runner tests, audit and diff checks passed.
 
 ### 2C — Enforce canonical expectations and remove the fallback
 
