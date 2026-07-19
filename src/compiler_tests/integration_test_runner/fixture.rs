@@ -5,6 +5,7 @@
 //! WHY: keeping fixture loading separate from expectation parsing and case execution gives
 //!      each piece a single clear responsibility.
 
+use super::types::SuccessContract;
 use super::{
     BackendId, CANONICAL_TESTS_PATH, DEFAULT_EXPECT_STUB_PATH, EXPECT_FILE_NAME, ExpectationMode,
     ExpectedOutcome, FailureExpectation, GOLDEN_DIR_NAME, INPUT_DIR_NAME, MANIFEST_FILE_NAME,
@@ -184,6 +185,7 @@ pub(crate) fn load_canonical_case_specs(
         let expected = match backend_expectation.mode {
             ExpectationMode::Success => ExpectedOutcome::Success(SuccessExpectation {
                 warnings: backend_expectation.warnings,
+                success_contract: backend_expectation.success_contract,
                 artifact_assertions: backend_expectation.artifact_assertions,
                 golden_mode: backend_expectation.golden_mode,
                 has_golden: golden_dir_has_files(&golden_dir),
@@ -275,6 +277,17 @@ fn validate_fixture_contract(
                 }
             }
             ExpectationMode::Success => {
+                if backend_expectation.success_contract == Some(SuccessContract::CompileOnly)
+                    && has_golden_dir
+                {
+                    return Err(format!(
+                        "Fixture '{}' backend '{}' declares success_contract = \"compile_only\" but has golden artifacts in '{}'.",
+                        fixture_root.display(),
+                        backend_expectation.backend_id.as_str(),
+                        golden_dir.display()
+                    ));
+                }
+
                 let has_rendered_output = !backend_expectation.rendered_output_contains.is_empty()
                     || !backend_expectation.rendered_output_not_contains.is_empty();
                 if !has_golden_dir

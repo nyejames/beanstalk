@@ -6,8 +6,8 @@
 use super::super::fixture::{load_canonical_case_specs, load_test_suite_from_root};
 use super::super::runner::select_cases;
 use super::super::{
-    BackendId, CaseRole, EXPECT_FILE_NAME, GOLDEN_DIR_NAME, INPUT_DIR_NAME, MANIFEST_FILE_NAME,
-    TestRunnerOptions,
+    BackendId, CaseRole, EXPECT_FILE_NAME, ExpectedOutcome, GOLDEN_DIR_NAME, INPUT_DIR_NAME,
+    MANIFEST_FILE_NAME, TestRunnerOptions,
 };
 use crate::compiler_tests::test_support::temp_dir;
 use std::fs;
@@ -71,8 +71,40 @@ fn accepts_success_fixture_without_explicit_artifact_assertions() {
     let cases = load_canonical_case_specs(&case_root, None).expect("fixture should be accepted");
     assert_eq!(cases.len(), 1);
     assert_eq!(cases[0].display_name, "case [html]");
+    let ExpectedOutcome::Success(expectation) = &cases[0].expected else {
+        panic!("case should have a success expectation");
+    };
+    assert!(expectation.success_contract.is_none());
 
     fs::remove_dir_all(&root).expect("should clean up temp fixture root");
+}
+
+#[test]
+fn rejects_compile_only_fixture_with_golden_artifacts() {
+    let root = temp_dir("compile_only_golden_artifacts");
+    let case_root = root.join("case");
+    let input_root = case_root.join(INPUT_DIR_NAME);
+    let golden_root = case_root.join(GOLDEN_DIR_NAME).join("html");
+    fs::create_dir_all(&input_root).expect("should create fixture input directory");
+    fs::create_dir_all(&golden_root).expect("should create fixture golden directory");
+    fs::write(input_root.join("#page.bst"), "#[:ok]\n").expect("should write fixture source");
+    fs::write(golden_root.join("index.html"), "<h1>ok</h1>\n")
+        .expect("should write fixture golden");
+    fs::write(
+        case_root.join(EXPECT_FILE_NAME),
+        "[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\nsuccess_contract = \"compile_only\"\n",
+    )
+    .expect("should write expect file");
+
+    let Err(error) = load_canonical_case_specs(&case_root, None) else {
+        panic!("compile-only fixture with golden artifacts should be rejected");
+    };
+    assert!(
+        error.contains("compile_only") && error.contains("golden artifacts"),
+        "unexpected error: {error}"
+    );
+
+    fs::remove_dir_all(&root).expect("should clean up");
 }
 
 #[test]

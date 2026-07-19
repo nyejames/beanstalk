@@ -75,12 +75,18 @@ pub(crate) enum ExpectationMode {
 #[derive(Clone)]
 pub(crate) struct SuccessExpectation {
     pub warnings: WarningExpectation,
+    pub success_contract: Option<SuccessContract>,
     pub artifact_assertions: Vec<ArtifactAssertion>,
     pub golden_mode: GoldenMode,
     pub has_golden: bool,
     pub rendered_output_contains: Vec<String>,
     pub rendered_output_not_contains: Vec<String>,
     pub artifacts_must_not_exist: Vec<String>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SuccessContract {
+    CompileOnly,
 }
 
 #[derive(Clone)]
@@ -311,6 +317,7 @@ pub(crate) struct ParsedBackendExpectation {
     pub flags: Vec<Flag>,
     pub mode: ExpectationMode,
     pub warnings: WarningExpectation,
+    pub success_contract: Option<SuccessContract>,
     pub message_contains: Vec<String>,
     pub diagnostic_codes: Vec<String>,
     pub artifact_assertions: Vec<ArtifactAssertion>,

@@ -4,6 +4,7 @@
 //! WHY: both reporting modes must expose retained metadata without invoking case execution.
 
 use super::super::reporting::{build_suite_inventory_report, format_case_listing};
+use super::super::types::SuccessContract;
 use super::super::{
     BackendId, CaseRole, ExpectedOutcome, FailureExpectation, GoldenMode, SuccessExpectation,
     TestCaseSpec, WarningExpectation,
@@ -106,6 +107,7 @@ fn inventory_json_groups_backend_metadata_under_one_canonical_case() {
         Some(CaseRole::Primary),
         ExpectedOutcome::Success(SuccessExpectation {
             warnings: WarningExpectation::Forbid,
+            success_contract: None,
             artifact_assertions: Vec::new(),
             golden_mode: GoldenMode::Strict,
             has_golden: false,
@@ -144,6 +146,58 @@ fn inventory_json_groups_backend_metadata_under_one_canonical_case() {
 }
 
 #[test]
+fn inventory_distinguishes_explicit_compile_only_from_backend_baseline() {
+    let explicit_case = case(
+        "explicit_compile_only",
+        BackendId::Html,
+        &["integration"],
+        None,
+        None,
+        ExpectedOutcome::Success(SuccessExpectation {
+            warnings: WarningExpectation::Forbid,
+            success_contract: Some(SuccessContract::CompileOnly),
+            artifact_assertions: Vec::new(),
+            golden_mode: GoldenMode::Strict,
+            has_golden: false,
+            rendered_output_contains: Vec::new(),
+            rendered_output_not_contains: Vec::new(),
+            artifacts_must_not_exist: Vec::new(),
+        }),
+    );
+    let implicit_case = case(
+        "implicit_backend_baseline",
+        BackendId::HtmlWasm,
+        &["integration"],
+        None,
+        None,
+        ExpectedOutcome::Success(SuccessExpectation {
+            warnings: WarningExpectation::Forbid,
+            success_contract: None,
+            artifact_assertions: Vec::new(),
+            golden_mode: GoldenMode::Strict,
+            has_golden: false,
+            rendered_output_contains: Vec::new(),
+            rendered_output_not_contains: Vec::new(),
+            artifacts_must_not_exist: Vec::new(),
+        }),
+    );
+
+    let report = build_suite_inventory_report(&[explicit_case, implicit_case], None);
+    let json = serde_json::to_value(&report).expect("inventory should serialize");
+
+    assert_eq!(json["cases"][0]["backends"][0]["compile_only"], true);
+    assert_eq!(
+        json["cases"][0]["backends"][0]["assertion_kinds"],
+        serde_json::json!(["compile_only"])
+    );
+    assert_eq!(json["cases"][1]["backends"][0]["compile_only"], false);
+    assert_eq!(
+        json["cases"][1]["backends"][0]["assertion_kinds"],
+        serde_json::json!(["backend_baseline"])
+    );
+}
+
+#[test]
 fn inventory_reports_missing_contract_and_role_as_advisories() {
     let report = build_suite_inventory_report(
         &[case(
@@ -154,6 +208,7 @@ fn inventory_reports_missing_contract_and_role_as_advisories() {
             None,
             ExpectedOutcome::Success(SuccessExpectation {
                 warnings: WarningExpectation::Forbid,
+                success_contract: None,
                 artifact_assertions: Vec::new(),
                 golden_mode: GoldenMode::Strict,
                 has_golden: false,
@@ -191,6 +246,7 @@ fn inventory_keeps_duplicate_primary_contracts_in_hard_findings() {
             Some(CaseRole::Primary),
             ExpectedOutcome::Success(SuccessExpectation {
                 warnings: WarningExpectation::Forbid,
+                success_contract: None,
                 artifact_assertions: Vec::new(),
                 golden_mode: GoldenMode::Strict,
                 has_golden: false,
@@ -207,6 +263,7 @@ fn inventory_keeps_duplicate_primary_contracts_in_hard_findings() {
             Some(CaseRole::Primary),
             ExpectedOutcome::Success(SuccessExpectation {
                 warnings: WarningExpectation::Forbid,
+                success_contract: None,
                 artifact_assertions: Vec::new(),
                 golden_mode: GoldenMode::Strict,
                 has_golden: false,

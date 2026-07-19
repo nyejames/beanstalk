@@ -4,6 +4,7 @@
 //! WHY: isolating TOML parsing here keeps fixture loading free of deserialization details and
 //!      makes expectation format changes easy to find and update.
 
+use super::types::SuccessContract;
 use super::{
     ArtifactAssertion, ArtifactKind, BackendId, ExpectationMode, GoldenMode,
     ParsedBackendExpectation, ParsedExpectationFile, WarningExpectation,
@@ -39,6 +40,7 @@ struct BackendExpectationToml {
     mode: ExpectationMode,
     #[serde(default)]
     flags: Vec<String>,
+    success_contract: Option<String>,
     warnings: Option<String>,
     warning_count: Option<usize>,
     #[serde(default)]
@@ -165,9 +167,36 @@ fn parse_matrix_expectation_file(
         let flags = parse_case_flags(&backend_expectation.flags, path, &context)?;
         let artifact_assertions =
             parse_artifact_assertions(path, &context, &backend_expectation.artifact_assertions)?;
+        let success_contract = parse_success_contract(
+            path,
+            &context,
+            backend_expectation.success_contract.as_deref(),
+        )?;
+
+        if backend_expectation.mode == ExpectationMode::Failure && success_contract.is_some() {
+            return Err(format!(
+                "Expectation file '{}' {} uses mode = \"failure\" and must not set 'success_contract'.",
+                path.display(),
+                context
+            ));
+        }
 
         let golden_mode =
             parse_golden_mode(path, &context, backend_expectation.golden_mode.as_deref())?;
+
+        if success_contract.is_some()
+            && (!artifact_assertions.is_empty()
+                || backend_expectation.golden_mode.is_some()
+                || !backend_expectation.rendered_output_contains.is_empty()
+                || !backend_expectation.rendered_output_not_contains.is_empty()
+                || !backend_expectation.artifacts_must_not_exist.is_empty())
+        {
+            return Err(format!(
+                "Expectation file '{}' {} declares success_contract = \"compile_only\" and must not combine it with artifact assertions, golden_mode, rendered-output assertions, or artifact-absence assertions.",
+                path.display(),
+                context
+            ));
+        }
 
         // rendered_output_* is only valid for success mode; validate here so the
         // error message can reference the backend context.
@@ -221,6 +250,7 @@ fn parse_matrix_expectation_file(
             flags,
             mode: backend_expectation.mode,
             warnings,
+            success_contract,
             message_contains: backend_expectation.message_contains,
             diagnostic_codes: backend_expectation.diagnostic_codes,
             artifact_assertions,
@@ -421,6 +451,22 @@ fn parse_golden_mode(path: &Path, context: &str, raw: Option<&str>) -> Result<Go
         Some(other) => Err(format!(
             "Expectation file '{}' {} has unsupported golden_mode '{other}'. \
              Supported values: \"strict\", \"normalized\".",
+            path.display(),
+            context
+        )),
+    }
+}
+
+fn parse_success_contract(
+    path: &Path,
+    context: &str,
+    raw: Option<&str>,
+) -> Result<Option<SuccessContract>, String> {
+    match raw {
+        None => Ok(None),
+        Some("compile_only") => Ok(Some(SuccessContract::CompileOnly)),
+        Some(other) => Err(format!(
+            "Expectation file '{}' {} has unsupported success_contract '{other}'. Supported values: \"compile_only\".",
             path.display(),
             context
         )),

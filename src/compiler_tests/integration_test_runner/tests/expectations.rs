@@ -5,9 +5,115 @@
 
 use super::super::expectations::parse_expectation_file;
 use super::super::fixture::load_canonical_case_specs;
+use super::super::types::SuccessContract;
 use super::super::{EXPECT_FILE_NAME, ExpectedOutcome, GOLDEN_DIR_NAME, INPUT_DIR_NAME};
 use crate::compiler_tests::test_support::temp_dir;
 use std::fs;
+use std::path::PathBuf;
+
+fn write_fixture(name: &str, expectation_source: &str) -> (PathBuf, PathBuf) {
+    let root = temp_dir(name);
+    let case_root = root.join("case");
+    let input_root = case_root.join(INPUT_DIR_NAME);
+    fs::create_dir_all(&input_root).expect("should create fixture input directory");
+    fs::write(input_root.join("#page.bst"), "#[:ok]\n").expect("should write fixture source");
+    fs::write(case_root.join(EXPECT_FILE_NAME), expectation_source)
+        .expect("should write expect file");
+    (root, case_root)
+}
+
+#[test]
+fn accepts_explicit_compile_only_and_retains_typed_intent() {
+    let (root, case_root) = write_fixture(
+        "explicit_compile_only",
+        "[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\nsuccess_contract = \"compile_only\"\n",
+    );
+
+    let cases = load_canonical_case_specs(&case_root, None)
+        .expect("explicit compile-only fixture should be accepted");
+    let ExpectedOutcome::Success(expectation) = &cases[0].expected else {
+        panic!("case should have a success expectation");
+    };
+    assert_eq!(
+        expectation.success_contract,
+        Some(SuccessContract::CompileOnly)
+    );
+
+    fs::remove_dir_all(&root).expect("should clean up");
+}
+
+#[test]
+fn rejects_unknown_success_contract_value_with_backend_context() {
+    let (root, case_root) = write_fixture(
+        "unknown_success_contract",
+        "[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\nsuccess_contract = \"typecheck_only\"\n",
+    );
+
+    let Err(error) = load_canonical_case_specs(&case_root, None) else {
+        panic!("unknown success_contract should be rejected");
+    };
+    assert!(
+        error.contains("success_contract")
+            && error.contains("typecheck_only")
+            && error.contains("[backends.html]"),
+        "unexpected error: {error}"
+    );
+
+    fs::remove_dir_all(&root).expect("should clean up");
+}
+
+#[test]
+fn rejects_compile_only_on_failure_backend() {
+    let (root, case_root) = write_fixture(
+        "compile_only_failure_mode",
+        "[backends.html]\nmode = \"failure\"\nwarnings = \"forbid\"\nsuccess_contract = \"compile_only\"\ndiagnostic_codes = [\"BST-RULE-0001\"]\n",
+    );
+
+    let Err(error) = load_canonical_case_specs(&case_root, None) else {
+        panic!("compile_only on a failure backend should be rejected");
+    };
+    assert!(
+        error.contains("mode = \"failure\"") && error.contains("success_contract"),
+        "unexpected error: {error}"
+    );
+
+    fs::remove_dir_all(&root).expect("should clean up");
+}
+
+#[test]
+fn rejects_compile_only_mixed_with_success_assertions() {
+    let mixed_contracts = [
+        (
+            "artifact",
+            "\n[[backends.html.artifact_assertions]]\npath = \"index.html\"\nkind = \"html\"\nmust_contain = [\"ok\"]\n",
+        ),
+        ("golden_mode", "\ngolden_mode = \"normalized\"\n"),
+        ("rendered_output", "\nrendered_output_contains = [\"ok\"]\n"),
+        (
+            "artifact_absence",
+            "\nartifacts_must_not_exist = [\"unexpected.html\"]\n",
+        ),
+    ];
+
+    for (name, extra_contract) in mixed_contracts {
+        let (root, case_root) = write_fixture(
+            &format!("compile_only_mixed_{name}"),
+            &format!(
+                "[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\nsuccess_contract = \"compile_only\"\n{extra_contract}"
+            ),
+        );
+
+        let Err(error) = load_canonical_case_specs(&case_root, None) else {
+            panic!("compile-only mixed with {name} should be rejected");
+        };
+        assert!(
+            error.contains("compile_only") && error.contains("must not combine"),
+            "unexpected error for {name}: {error}"
+        );
+
+        fs::remove_dir_all(&root).expect("should clean up");
+    }
+}
 
 #[test]
 fn rejects_error_type_expectation_key() {

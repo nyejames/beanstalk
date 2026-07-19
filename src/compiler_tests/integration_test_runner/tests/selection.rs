@@ -30,6 +30,7 @@ fn case(
         flags: Vec::new(),
         expected: ExpectedOutcome::Success(SuccessExpectation {
             warnings: WarningExpectation::Ignore,
+            success_contract: None,
             artifact_assertions: Vec::new(),
             golden_mode: GoldenMode::Strict,
             has_golden: false,

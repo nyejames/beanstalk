@@ -4,6 +4,7 @@
 //!       stable output shapes.
 //! WHY: keeping reporting here means the runner only coordinates loading, selection and execution.
 
+use super::types::SuccessContract;
 use super::{
     BackendId, CaseExecutionResult, CaseRole, ExpectedOutcome, FailureExpectation, FailureKind,
     FailureTriageEntry, FailureTriageReport, SEPARATOR_LINE_LENGTH, SuccessExpectation,
@@ -203,7 +204,7 @@ fn build_backend_inventory(case: &TestCaseSpec) -> InventoryBackend {
         ExpectedOutcome::Success(expectation) => InventoryBackend {
             backend: case.backend_id.as_str().to_owned(),
             mode: "success",
-            compile_only: false,
+            compile_only: expectation.success_contract == Some(SuccessContract::CompileOnly),
             warning_mode: warning_mode_label(expectation.warnings),
             diagnostic_match: None,
             structured_diagnostic_assertions: false,
@@ -238,7 +239,9 @@ fn success_assertion_kinds(
 ) -> Vec<&'static str> {
     let mut kinds = Vec::new();
 
-    if matches!(case.backend_id, BackendId::Html | BackendId::HtmlWasm) {
+    if expectation.success_contract == Some(SuccessContract::CompileOnly) {
+        kinds.push("compile_only");
+    } else if matches!(case.backend_id, BackendId::Html | BackendId::HtmlWasm) {
         kinds.push("backend_baseline");
     }
 

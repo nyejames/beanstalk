@@ -227,6 +227,7 @@ fn build_result_with_output_files(files: Vec<(PathBuf, FileKind)>) -> BuildResul
 fn absence_expectation(forbidden: Vec<String>) -> SuccessExpectation {
     SuccessExpectation {
         warnings: WarningExpectation::Forbid,
+        success_contract: None,
         artifact_assertions: Vec::new(),
         golden_mode: GoldenMode::Strict,
         has_golden: false,
