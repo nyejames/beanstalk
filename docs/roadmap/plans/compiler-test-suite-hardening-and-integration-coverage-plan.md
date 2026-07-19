@@ -30,28 +30,28 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 2R5c5 — close the migrated-marker and role audit
-LAST_ACCEPTED_COMMIT: pending Phase 2R5c4 acceptance commit (previous plan commit `58ce37ee2`)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 2R5c4 changes ready to commit
+CURRENT_SLICE: Phase 2R6a — align CFG future-use naming and projected-assignment actor identity
+LAST_ACCEPTED_COMMIT: pending Phase 2R5c5 acceptance commit (previous plan commit `1a3ff086c`)
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 2R5c5 changes ready to commit
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: `testing.bd`, `validation.bd`, compiler/build-system overviews, and progress matrix govern runner contracts and gates
-- code: `choice_payload_match_rename_guard_success` and the manifest roles for `html_wasm_bool_conditional` and `html_wasm_multi_fragment_string`
+- docs: borrow-validation, access-and-aliasing, ownership, testing, validation, compiler overview, and progress matrix govern the semantic fix and gates
+- code: `transfer/access/conflicts.rs` owns CFG-carried alias activity; `transfer/access.rs::transfer_assign_target` owns projected writes and actor identity; focused borrow-checker tests own hidden CFG/origin facts
 ACCEPTANCE_CRITERIA:
-- the remaining short payload-guard marker names its guarded renamed capture contract
-- every whole-case acceptance-only fixture remains `smoke`; the two reviewed HTML-Wasm parity cases are classified `backend`
-- no primary contract is invented and backend outcomes remain unchanged
-- exact case runs, canonical audit, and `just validate` pass
+- loop-only helper/comment names describe actual CFG future-use behavior
+- user-local projected assignment targets pass their root actor identity while compiler temporaries retain linear-expiry behavior
+- focused tests distinguish branch/join CFG carry, user-local projected writes, and compiler-temporary projected writes without HIR mutation
+- focused borrow tests, `cargo fmt`, `git diff --check`, and `just validate` pass
 VALIDATION_STATE:
 - `cargo test --quiet integration_test_runner -- --format terse`: passed; 100 tests
 - `cargo run --quiet -- tests --audit`: passed; 1,651 cases, 1,784 backend executions, 17 acceptance-only, 33 baseline-only, 528 rendered-output blocks, zero hard findings
 - `just validate`: passed; cross-target Clippy, 3,496 Rust tests, 1,784 integration executions, docs check, and 28 benchmark cases
-DOCS_IMPACT: progress matrix unchanged; workflow prose remains scheduled for Phase 2R8
+DOCS_IMPACT: Phase 2R5 requires no progress-matrix change; review Phase 2R6 coverage wording after the semantic edge matrix
 BLOCKERS_OR_OPEN_DECISIONS: none; compiler diagnostics Phase 4.1c remains serialized and untouched
 DELEGATION_DECISION: codex-cli — explicit user-selected provider for implementation workers
 NEXT_WORKER_ORDER: codex-cli only for this run-local override
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit accepted Phase 2R5c4, refresh its hash, then launch bounded Phase 2R5c5 through `codex-cli-beanstalk`
+NEXT_RESUME_ACTION: commit accepted Phase 2R5c5, refresh its hash, then launch bounded Phase 2R6a through `codex-cli-beanstalk`
 
 ---
 
@@ -134,7 +134,8 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 2R5c1 named weak runtime markers | `d036eef0d` | Accepted | 528 rendered-output blocks; ten named fixtures now use context-rich markers; zero hard findings |
 | Phase 2R5c2 borrow/adversarial markers | `f1ea28e3f` | Accepted | 528 rendered-output blocks; ten borrow/adversarial fixtures now use context-rich markers; zero hard findings |
 | Phase 2R5c3 call/result/option markers | `58ce37ee2` | Accepted | 528 rendered-output blocks; ten call/result/option fixtures now observe context-labeled behavior; zero hard findings |
-| Phase 2R5c4 receiver/struct markers | pending acceptance commit | Accepted | 528 rendered-output blocks; six receiver/struct/multi-file fixtures now observe context-labeled values; zero hard findings |
+| Phase 2R5c4 receiver/struct markers | `1a3ff086c` | Accepted | 528 rendered-output blocks; six receiver/struct/multi-file fixtures now observe context-labeled values; zero hard findings |
+| Phase 2R5c5 marker/role closure | pending acceptance commit | Accepted | 17 acceptance-only smoke cases; two HTML-Wasm parity cases are backend-role; 528 rendered-output blocks; zero hard findings |
 
 ---
 
@@ -422,16 +423,16 @@ For each:
 
 ### Ambiguous runtime substrings
 
-- [ ] Review all Phase 2 migrated `rendered_output_contains` values that are numeric-only, very short, or repeated generic words.
+- [x] Review all Phase 2 migrated `rendered_output_contains` values that are numeric-only, very short, or repeated generic words.
 - [x] At minimum correct:
   - `borrow_checker_alias_not_live_after_scope`
   - `adversarial_nested_catch_handlers`
   - `adversarial_struct_collection_result_interop`
   - `multi_bind_explicit_types_and_mutability`
   - the `choice_payload_match_*` cases that assert only `bad` or an unlabeled scalar
-- [ ] Replace ambiguous fragments with context-rich markers emitted by the fixture, for example `first=10 second=20`.
-- [ ] Do not introduce artificial console output into static page contracts.
-- [ ] Keep Phase 5 exact/ordered runtime work; unique markers are not a substitute for exact events.
+- [x] Replace ambiguous fragments with context-rich markers emitted by the fixture, for example `first=10 second=20`.
+- [x] Do not introduce artificial console output into static page contracts.
+- [x] Keep Phase 5 exact/ordered runtime work; unique markers are not a substitute for exact events.
 
 ### Config wording
 
@@ -441,16 +442,16 @@ For each:
 
 ### Role audit
 
-- [ ] Every whole-case acceptance-only fixture is `role = "smoke"`.
-- [ ] Mixed-backend parity cases use `backend` or `boundary` where that better describes the primary purpose.
-- [ ] Do not assign a primary contract merely to silence an advisory.
+- [x] Every whole-case acceptance-only fixture is `role = "smoke"`.
+- [x] Mixed-backend parity cases use `backend` or `boundary` where that better describes the primary purpose.
+- [x] Do not assign a primary contract merely to silence an advisory.
 
 ### Acceptance
 
-- [ ] No recently migrated behavior-visible case is mislabeled acceptance-only.
-- [ ] Named contracts are actually exercised.
-- [ ] Short fragments cannot pass through accidental substring overlap in the reviewed set.
-- [ ] Focused exact-case runs, audit, and the full gate pass.
+- [x] No recently migrated behavior-visible case is mislabeled acceptance-only.
+- [x] Named contracts are actually exercised.
+- [x] Short fragments cannot pass through accidental substring overlap in the reviewed set.
+- [x] Focused exact-case runs, audit, and the full gate pass.
 
 ---
 

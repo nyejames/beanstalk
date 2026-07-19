@@ -2515,6 +2515,7 @@ tags = ["integration","html-wasm"]
 id = "html_wasm_bool_conditional"
 path = "html_wasm_bool_conditional"
 tags = ["integration","html-wasm"]
+role = "backend"
 
 [[case]]
 id = "html_wasm_flag_off_js_only_regression"
@@ -2540,6 +2541,7 @@ tags = ["integration","html-wasm","templates"]
 id = "html_wasm_multi_fragment_string"
 path = "html_wasm_multi_fragment_string"
 tags = ["integration","html-wasm"]
+role = "backend"
 
 [[case]]
 id = "html_wasm_multiple_runtime_fragments_order"
