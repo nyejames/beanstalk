@@ -29,19 +29,19 @@ This ordering is mandatory. Do not begin broad pruning while the harness can sti
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 2A — introduce the explicit success-contract schema
-LAST_ACCEPTED_COMMIT: `f253b3733` — document the Phase 1 workflow and deferred code-block highlighting extensions
-WORKTREE: parent `main` at `f253b3733`; accepted Phase 1A–1D worker worktrees remain available under `/Users/aneirinjames/projects/beanstalk/.worktrees/`
+CURRENT_SLICE: Phase 2B1 — migrate the first borrow-validation fallback family
+LAST_ACCEPTED_COMMIT: `603cc00d3` — add typed explicit compile-only contracts
+WORKTREE: parent `main` at `603cc00d3`; Phase 1 worker worktrees were removed after patch-equivalence checks; reuse `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase2a` for subsequent serialized slices
 REQUIRED_RELOADS: startup files, this plan and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: `testing.bd` requires explicit authored assertions for visible behaviour; `validation.bd` requires formatting and `just validate`
-- code: `SuccessExpectation` has no typed intent; 53 cases use the fallback expectation and another 57 explicit success blocks have no authored semantic assertion
+- docs: memory access/borrow-validation contracts define the selected cases' semantics; `testing.bd` requires explicit authored assertions for visible behaviour
+- code: Phase 2A accepts typed `success_contract = "compile_only"`; 53 fallback-backed cases remain, with the first 10-case borrow-validation family selected for migration
 ACCEPTANCE_CRITERIA:
-- add a narrow typed `success_contract = "compile_only"` expectation and reject unknown or failure-mode use
-- reject compile-only mixed with artifact, golden, rendered-output or absence assertions
-- expose explicit compile-only intent in the audit report
-- retain the implicit baseline and fallback only as the bounded Phase 2 migration path so all canonical outcomes remain green until the 110 affected success blocks are explicit
-- pass focused harness tests, formatting, diff checks and `just validate`
+- add authored HTML expectations to the 10 selected fallback-backed borrow-validation cases
+- use explicit compile-only intent for the six cases with no runtime output and mark only those manifest entries as `role = "smoke"`
+- add rendered-output assertions for the four observable cases, including the correct disjoint-field result `30 21`
+- leave runner enforcement, fallback infrastructure and unrelated classifications unchanged
+- pass every selected exact-case run, audit, focused harness tests, formatting, diff checks and `just validate`
 VALIDATION_STATE:
 - final TIR at `dc81f7e53`: `just validate` passed with 3,433 Rust tests, 1,784 integration executions, docs checking and 28 benchmark sanity cases
 - Phase 0A documentation-only gate: `cargo run --quiet -- build docs --release` passed; 72 files built and no generated diff was produced (`bean` was unavailable in `PATH`)
@@ -53,12 +53,13 @@ VALIDATION_STATE:
 - Phase 1D: focused 64-test integration-runner and 60-test CLI suites, real audit generation, `cargo fmt`, `git diff --check` and `just validate` passed; the full gate covered cross-target Clippy, 3,457 Rust tests, 1,784 integration executions, docs checking and 28 benchmark sanity cases
 - Phase 1 docs: `testing.bd` and `CONTRIBUTING.md` now document manifest metadata, composable filters, listing and audit; the release docs rebuilt successfully and the full `just validate` gate passed with 3,457 Rust tests, 1,784 integration executions and 28 benchmark sanity cases
 - Phase 2 sequencing exploration: Codex CLI Spark completed read-only at `f253b3733`; strict enforcement before migration would reject 110 current success blocks, split between 53 fallback-backed cases and 57 explicit weak blocks
+- Phase 2A: focused 70-test integration-runner suite, real 1,651-case audit, `cargo fmt`, `git diff --check` and `just validate` passed; main independently repeated the 70 focused tests and audit after integration
 DOCS_IMPACT: Phase 1 workflow docs, generated release output and the deferred code-block highlighting roadmap note are current; fixture outcomes/backend coverage and the progress matrix remain unchanged
-BLOCKERS_OR_OPEN_DECISIONS: diagnostics Phase 4.1c remains incomplete but is explicitly serialized at clean accepted commit `d7fb3654f`; no diagnostics, manifest or runner worker may overlap this plan; the Phase 2 migration dependency is resolved by adding schema before migration and enforcing only after all 110 blocks are explicit
-DELEGATION_DECISION: codex-cli — use the user-requested Codex CLI implementation profile for Phase 2A
-NEXT_WORKER_ORDER: codex-cli only for the Phase 2A implementation slice
+BLOCKERS_OR_OPEN_DECISIONS: diagnostics Phase 4.1c remains incomplete but is explicitly serialized at clean accepted commit `d7fb3654f`; no diagnostics, manifest or runner worker may overlap this plan; disk permits at most one additional worktree, so reuse the existing Phase 2 checkout and remove it when safely integrated
+DELEGATION_DECISION: codex-cli — reuse the existing dedicated worktree for the user-requested Codex CLI Phase 2B1 implementation slice
+NEXT_WORKER_ORDER: codex-cli only for the Phase 2B1 implementation slice
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit this sequencing correction, create a dedicated Phase 2A worker worktree and launch the bounded Codex CLI schema slice
+NEXT_RESUME_ACTION: commit this Phase 2A checkpoint, synchronize the reusable worker branch with main and launch the bounded Phase 2B1 fixture slice
 
 ## Recommended roadmap placement and activation conditions
 
@@ -100,42 +101,41 @@ ACTIVE_PLAN:
 
 CURRENT_SLICE:
 - Phase: 2
-- Checklist item: 2A — introduce the explicit success-contract schema
-- Goal: make compile-only intent authorable, validated and auditable before canonical fixture migration begins
-- Non-goals: no missing-`expect.toml` enforcement, implicit-baseline rejection, fallback removal, canonical fixture migration, diagnostics, warnings or runtime-order changes
+- Checklist item: 2B1 — migrate the first borrow-validation fallback family
+- Goal: replace the fallback for 10 coherent borrow-validation cases with six explicit compile-only contracts and four rendered-output contracts
+- Non-goals: no runner enforcement, fallback removal, unrelated fixture migration, diagnostic changes, exact runtime-event infrastructure or broad role/contract backfill
 
 LAST_GOOD_COMMIT:
-- `f253b3733` — accepted Phase 1 documentation and deferred code-block highlighting roadmap note
+- `603cc00d3` — accepted Phase 2A explicit success-contract schema
 
 CURRENT_WORKTREE_STATE:
-- Clean / known changes: parent `main` is at `f253b3733`; this sequencing correction is parent-owned
+- Clean / known changes: parent `main` is at `603cc00d3`; this Phase 2A checkpoint update is parent-owned
 - Branch: local `main`
-- Dedicated worker worktrees: accepted Phase 1A at `48aece83e`, Phase 1B at `27386981d`, Phase 1C at `fc1761348`, and Phase 1D at `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase1d` commit `5d04a0ee3`; no Phase 2A worktree yet
+- Dedicated worker worktrees: all accepted Phase 1 worktrees were clean and removed after `git cherry` confirmed their patches on main; reuse `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase2a` from worker commit `163a64be3`
 
 RELEVANT_DOCS_THIS_SLICE:
 - `AGENTS.md`
 - `docs/src/docs/codebase/style-guide/style-guide.bd`
 - `docs/src/docs/codebase/style-guide/testing.bd`
 - `docs/src/docs/codebase/style-guide/validation.bd`
+- `docs/src/docs/codebase/memory-management/access-and-aliasing/overview.bd`
+- `docs/src/docs/codebase/memory-management/access-and-aliasing/access-and-aliasing.bd`
+- `docs/src/docs/codebase/memory-management/borrow-validation/overview.bd`
+- `docs/src/docs/codebase/memory-management/borrow-validation/borrow-validation.bd`
 - `docs/src/docs/progress/#page.bst`
 - `docs/roadmap/roadmap.md`
 
 RELEVANT_CODE:
-- `src/compiler_tests/integration_test_runner/types.rs`: `SuccessExpectation` and `ParsedBackendExpectation` need one typed success-intent field
-- `src/compiler_tests/integration_test_runner/expectations.rs`: parse and validate the narrow `success_contract` spelling by expectation mode
-- `src/compiler_tests/integration_test_runner/fixture.rs`: thread typed success intent without changing current completeness enforcement
-- `src/compiler_tests/integration_test_runner/reporting.rs`: report explicit compile-only status without broadening later assertion-strength policy
-- `src/compiler_tests/integration_test_runner/tests/expectations.rs`, `tests/fixture.rs` and `tests/reporting.rs`: focused schema and reporting owners
-- `tests/fixtures/stubs/expect.toml`: inspect only in 2A; fallback removal belongs to 2C after migration
+- `tests/cases/{borrow_checker_basic_variables,borrow_checker_function_calls,borrow_checker_string_memory,branch_reborrow_after_last_use,complex_borrowing_scenarios,consistent_borrow_outcomes,consistent_ownership_outcomes,disjoint_field_borrows,immutable_alias_while_borrowed,last_use_precision}/expect.toml`: new explicit expectations
+- `tests/cases/manifest.toml`: add smoke role only to the six intentional compile-only cases
+- `tests/fixtures/stubs/expect.toml`: inspect only; fallback removal belongs to 2C after all migrations
 - `justfile::validate`: final code-bearing gate
 
 ACCEPTANCE_CRITERIA:
-- one narrow typed success intent represents `success_contract = "compile_only"`
-- unknown values and any use on failure backends are rejected with clear fixture context
-- compile-only cannot coexist with golden, artifact, rendered-output or absence assertions
-- the audit distinguishes explicit compile-only from the temporary implicit backend baseline
-- current implicit fixtures continue to load only until the Phase 2B migration is complete; Phase 2A does not edit canonical fixtures or the fallback
-- focused expectation/fixture/reporting tests, formatting, diff checks and `just validate` pass
+- six no-output cases use explicit `success_contract = "compile_only"`: `borrow_checker_basic_variables`, `borrow_checker_function_calls`, `borrow_checker_string_memory`, `complex_borrowing_scenarios`, `immutable_alias_while_borrowed`, `last_use_precision`
+- those six and only those six receive `role = "smoke"`; contract identifiers remain for the Phase 14 ownership backfill rather than inventing one shared broad contract
+- `branch_reborrow_after_last_use`, `consistent_borrow_outcomes` and `consistent_ownership_outcomes` assert their visible marker text; `disjoint_field_borrows` asserts `30 21`
+- all 10 exact cases pass on HTML, the audit reports 10 fewer implicit backend-baseline blocks and six explicit compile-only blocks, and full validation passes
 
 DECISIONS_ALREADY_MADE:
 - decision: harden the integration harness before pruning
@@ -159,6 +159,9 @@ DECISIONS_ALREADY_MADE:
 - decision: add the compile-only schema before migrating fixtures, then enforce explicitness and delete the fallback atomically
   - reason: immediate enforcement would reject 110 canonical success blocks, so schema-first enables green family migrations without preserving the permissive path after phase acceptance
   - source/user/date: Phase 1 audit and Codex CLI sequencing exploration, 2026-07-19
+- decision: reuse one Phase 2 worker worktree and remove accepted worker checkouts when safe
+  - reason: disk space is constrained to at most one additional worktree; serialized runner/fixture slices do not require fresh parallel checkouts
+  - source/user/date: explicit user request, 2026-07-19
 
 BLOCKERS / RISKS:
 - final TIR is accepted and is no longer a blocker; do not reopen it during suite hardening
@@ -192,6 +195,9 @@ VALIDATION_STATE:
 - Phase 1 documentation `cargo run --quiet -- build docs --release`: passed, 72 files built
 - Phase 1 documentation checkpoint `just validate`: passed with cross-target Clippy, 3,457 Rust tests, 1,784 integration executions, docs checking and 28 benchmark sanity cases
 - Phase 2 sequencing exploration: read-only Codex CLI Spark completed; no tests were run and the worktree remained unchanged
+- Phase 2A worker `just validate`: passed with the typed success-contract schema; focused runner tests increased to 70 and the audit remained 1,651 cases / 1,784 backend executions with no hard violations
+- Phase 2A main integration checks: `cargo test --quiet integration_test_runner -- --format terse` passed 70 tests; `cargo run --quiet -- tests --audit` passed with 1,651 cases and 1,784 executions
+- Phase 2B1 selection exploration: read-only Codex CLI Spark selected 10 fallback-backed borrow-validation cases; parent corrected the evidence to six compile-only and four observable cases, including disjoint-field output `30 21`
 
 DOCS_IMPACT:
 - progress matrix needed: review after every phase that adds, removes, or materially strengthens current coverage; update only when the coverage statement changes
@@ -199,7 +205,7 @@ DOCS_IMPACT:
 - authorized docs updates: this plan explicitly authorizes the documentation changes listed in each phase; do not broaden language or architecture docs without a discovered contradiction or an intentional accepted behaviour change
 
 NEXT_ACTION:
-- commit this sequencing correction, create a dedicated Phase 2A worker worktree and launch the bounded Codex CLI schema slice
+- commit this Phase 2A checkpoint, synchronize the reusable worker branch with main and launch the bounded Phase 2B1 fixture slice
 
 ---
 
@@ -1177,14 +1183,19 @@ This phase makes every success case explicit before stronger semantic consolidat
 
 ### 2A — Introduce explicit success intent
 
-- [ ] Add a typed `SuccessContract` or equivalent narrow field.
-- [ ] Support `success_contract = "compile_only"`.
-- [ ] Reject unknown values.
-- [ ] Reject compile-only on failure backends.
-- [ ] Reject compile-only mixed with artifact, golden, rendered-output or absence assertions.
-- [ ] Report explicit compile-only intent separately from the temporary implicit backend baseline.
-- [ ] Add self-tests for explicit compile-only acceptance, invalid combinations and audit classification.
-- [ ] Keep canonical outcomes unchanged in this schema slice; the implicit baseline and expectation fallback remain only until the 2B migration completes.
+- [x] Add a typed `SuccessContract` or equivalent narrow field.
+- [x] Support `success_contract = "compile_only"`.
+- [x] Reject unknown values.
+- [x] Reject compile-only on failure backends.
+- [x] Reject compile-only mixed with artifact, golden, rendered-output or absence assertions.
+- [x] Report explicit compile-only intent separately from the temporary implicit backend baseline.
+- [x] Add self-tests for explicit compile-only acceptance, invalid combinations and audit classification.
+- [x] Keep canonical outcomes unchanged in this schema slice; the implicit baseline and expectation fallback remain only until the 2B migration completes.
+
+Accepted at `603cc00d3`: explicit compile-only intent is typed, validated against failure and mixed
+contracts, and reported separately from the temporary backend baseline. Focused coverage increased
+to 70 runner tests. The canonical audit remained 1,651 cases and 1,784 backend executions, and the
+worker's full `just validate` gate passed without fixture or fallback changes.
 
 ### 2B — Migrate existing implicit success cases
 
