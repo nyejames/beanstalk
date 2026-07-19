@@ -29,17 +29,17 @@ This ordering is mandatory. Do not begin broad pruning while the harness can sti
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 2B10b exploration — pinpoint the collection-loop source alias loss before the borrow fix
+CURRENT_SLICE: Phase 2B10b — preserve loop-carried alias activity in borrow conflict checks
 LAST_ACCEPTED_COMMIT: `79d821a2b` — make the helper-chain contract explicit
-WORKTREE: parent `main` has the Phase 2B10a code checkpoint at `79d821a2b`; reusable worker branch is clean at `a4a61f36f` in `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase2a`; do not create another worktree
+WORKTREE: parent `main` has the Phase 2B10a plan checkpoint at `b2fe445cb`; reusable worker branch is clean at merge commit `0e8031045` in `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase2a`; do not create another worktree
 REQUIRED_RELOADS: startup files, this plan and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: collection-loop iteration retains shared access to its source while the body executes; overlapping `~items.push(4)` must use the existing shared/mutable conflict diagnostic lane
-- code: `loop_borrow_mutation_conflict` is the only fallback-backed case; current lowering snapshots the iterable and loses the source-root relationship before borrow validation
+- code: HIR and `transfer_assign_target` preserve the iterable alias to `items`; `is_local_active_for_alias_conflict` incorrectly expires it using linear last-use order despite the CFG backedge
 ACCEPTANCE_CRITERIA:
-- identify the exact HIR or borrow-analysis fact that must preserve the collection-loop source root
-- name the smallest coherent implementation and test scope without editing files
-- return an exact worker envelope or a concrete design/architecture blocker
+- make alias-conflict activity consult existing block-aware future-use facts so loop-carried aliases remain active
+- add focused borrow-checker coverage and make `loop_borrow_mutation_conflict` require `BST-BORROW-0003`
+- preserve valid loops, nested/disjoint roots and copies; pass targeted tests, audit and full gate
 VALIDATION_STATE:
 - final TIR at `dc81f7e53`: `just validate` passed with 3,433 Rust tests, 1,784 integration executions, docs checking and 28 benchmark sanity cases
 - Phase 0A documentation-only gate: `cargo run --quiet -- build docs --release` passed; 72 files built and no generated diff was produced (`bean` was unavailable in `PATH`)
@@ -63,13 +63,14 @@ VALIDATION_STATE:
 - Phase 2B9: all four exact HTML cases, 70 focused runner tests, audit and diff checks passed in worker and parent review; worker `just validate` passed; audit reported 17 compile-only, 57 backend-baseline-only, two fallback-backed and zero hard violations
 - Phase 2B10 exploration: Codex CLI read-only exploration confirmed the helper-chain fixture is stale and the loop mutation case exposes an existing `BST-BORROW-0003` analysis gap; no files changed
 - Phase 2B10a: exact helper-chain HTML case, 70 runner tests, audit and diff checks passed in worker and parent review; worker `just validate` passed; audit reported 17 compile-only, 56 backend-baseline-only, one fallback-backed and zero hard violations
+- Phase 2B10b exploration: Codex CLI traced the defect to linear expiry in `is_local_active_for_alias_conflict`; HIR aliasing is correct and existing CFG future-use facts own the fix; no files changed
 - Phase 2B9 launch: both the optional `beanstalk-spark-explorer` and required `beanstalk-plan-worker` Codex CLI profiles selected `gpt-5.6-luna` but returned the account usage-limit error before repository edits; the service reported retry availability at 2026-07-25 11:08 AM
 DOCS_IMPACT: Phase 1 workflow docs, generated release output and the deferred code-block highlighting roadmap note are current; fixture outcomes/backend coverage and the progress matrix remain unchanged
-BLOCKERS_OR_OPEN_DECISIONS: pinpoint whether the loop-source root relationship belongs in HIR lowering or existing borrow-analysis transfer before implementation; diagnostics Phase 4.1c remains serialized at `d7fb3654f`; disk permits at most one additional worktree
-DELEGATION_DECISION: codex-cli simple-exploration — explicit user-requested provider and root-cause ownership must be exact before the compiler edit
+BLOCKERS_OR_OPEN_DECISIONS: none for this slice; diagnostics Phase 4.1c remains serialized at `d7fb3654f`; disk permits at most one additional worktree
+DELEGATION_DECISION: codex-cli implementation — explicit user-requested provider and the root cause is bounded to borrow transfer plus direct tests
 NEXT_WORKER_ORDER: codex-cli only for this run
 STOP_REASON: none
-NEXT_RESUME_ACTION: launch the bounded Phase 2B10b root-cause exploration in the existing reusable worktree
+NEXT_RESUME_ACTION: launch the bounded Phase 2B10b implementation in the existing reusable worktree
 
 ## Recommended roadmap placement and activation conditions
 
@@ -111,15 +112,15 @@ ACTIVE_PLAN:
 
 CURRENT_SLICE:
 - Phase: 2
-- Checklist item: 2B10b exploration — pinpoint the collection-loop source alias loss before the borrow fix
-- Goal: identify the exact owner and smallest root-cause correction that makes mutation of the active iterable report `BST-BORROW-0003`
-- Non-goals: no repository edits, broad borrow-checker redesign, import changes, runner enforcement, fallback removal or new diagnostic family
+- Checklist item: 2B10b — preserve loop-carried alias activity in borrow conflict checks
+- Goal: use existing block-aware future-use facts so mutation of the active iterable reports `BST-BORROW-0003`
+- Non-goals: no HIR metadata path, broad borrow-checker redesign, import changes, runner enforcement, fallback removal or new diagnostic family
 
 LAST_GOOD_COMMIT:
 - `79d821a2b` — accepted Phase 2B10a helper-chain fixture migration
 
 CURRENT_WORKTREE_STATE:
-- Clean / known changes: parent `main` has the Phase 2B10a code checkpoint at `79d821a2b`; the reusable worker branch is clean at `a4a61f36f`
+- Clean / known changes: parent `main` has the Phase 2B10a plan checkpoint at `b2fe445cb`; the reusable worker branch is clean at merge commit `0e8031045`
 - Branch: local `main`
 - Dedicated worker worktrees: reuse `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase2a`, currently clean at worker commit `c300c18df`; do not create another worktree
 
@@ -142,14 +143,14 @@ RELEVANT_DOCS_THIS_SLICE:
 
 RELEVANT_CODE:
 - `tests/cases/loop_borrow_mutation_conflict/`: current success-through-fallback case that should reject with `BST-BORROW-0003`
-- `src/compiler_frontend/hir/hir_statement/loop_lowering.rs`: collection-loop iterable snapshot and item-load lowering
-- `src/compiler_frontend/analysis/borrow_checker/transfer/access/`: existing shared/mutable conflict transfer and diagnostic path
-- nearby HIR and borrow-checker tests: identify the smallest invariant owner before implementation
+- `src/compiler_frontend/analysis/borrow_checker/transfer/access.rs`: thread the current block through access checks
+- `src/compiler_frontend/analysis/borrow_checker/transfer/access/conflicts.rs`: use block-aware future-use facts when classifying active aliases
+- `src/compiler_frontend/analysis/borrow_checker/tests/`: focused loop-carried alias conflict and non-conflict invariants
 
 ACCEPTANCE_CRITERIA:
-- identify the exact fact lost between source collection-loop lowering and borrow transfer
-- select one current owner for the correction and name directly required focused tests
-- return an implementation envelope that preserves valid collection loops and existing conflict diagnostics
+- `loop_borrow_mutation_conflict` fails with `BST-BORROW-0003` through the existing diagnostic constructor
+- loop-carried aliases remain active through CFG backedges without making every temporary permanently active
+- valid loops, nested/disjoint roots and copied collections retain focused coverage; audit reports no fallback-backed cases and zero hard violations
 
 DECISIONS_ALREADY_MADE:
 - decision: harden the integration harness before pruning
@@ -238,7 +239,7 @@ DOCS_IMPACT:
 - authorized docs updates: this plan explicitly authorizes the documentation changes listed in each phase; do not broaden language or architecture docs without a discovered contradiction or an intentional accepted behaviour change
 
 NEXT_ACTION:
-- launch the bounded Phase 2B10b Codex CLI root-cause exploration in the existing reusable worktree
+- launch the bounded Phase 2B10b Codex CLI implementation task in the existing reusable worktree
 
 ---
 
