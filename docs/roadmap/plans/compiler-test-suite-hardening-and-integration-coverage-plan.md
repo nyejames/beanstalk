@@ -30,27 +30,27 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 2D3a — migrate the remaining package, facade, and module-import success contracts
-LAST_ACCEPTED_COMMIT: `9a929d9d5` (Phase 2D1)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 2D2 fixture rename and observable contract ready to commit
+CURRENT_SLICE: Phase 2D3a2 — migrate same-module and cross-module facade boundary success contracts
+LAST_ACCEPTED_COMMIT: `4e0b4ca7b` (Phase 2D2)
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 2D3a1 fixture contracts ready to commit; unrelated concurrent docs changes remain user-owned and unstaged
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: workflow guidance now matches acceptance-only, baseline, golden, path-containment, audit-policy, and contract-filter behavior; progress coverage uses future-use/final-use terminology
-- code: Phase 2D2 leaves 25 baseline-only advisories; the next coherent family is source-package facade exports, same-module imports, module-boundary facade access, and Core-package filesystem bypass
+- code: Phase 2D3a1 leaves 19 baseline-only advisories; Phase 2D3a2 owns `module_boundary_same_module_allowed`, `module_boundary_cross_module_facade_allowed`, and `module_boundary_submodule_facade_allowed`
 ACCEPTANCE_CRITERIA:
-- inspect the fresh family against package/module ownership and identify the strongest truthful backend-local assertion for each case
-- preserve same-module private access and cross-module facade-only access without broadening module semantics
-- migrate one bounded fixture batch through the user-selected Codex CLI provider with no runner or production changes
+- assert one context-rich HTML runtime marker derived from `greet()` in each case
+- preserve same-module private access, cross-module facade-only access, and the existing private `internal` declarations
+- preserve each HTML-Wasm `BST-RULE-0058` failure without forcing backend symmetry or changing manifest metadata
 - exact cases, focused harness tests, audit, `git diff --check`, and the full code-bearing gate pass
 VALIDATION_STATE:
-- `just validate`: passed for Phase 2D2; cross-target Clippy, 3,505 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
-- `cargo run --quiet -- tests --audit`: passed; 1,645 cases, 1,778 executions, 13 acceptance-only, 25 baseline-only, 533 rendered-output, 257 artifact, and zero hard findings
-DOCS_IMPACT: Phase 2D2 corrects the active plan and fixture terminology only; Phase 2D3a is expected to change assertion coverage only
-BLOCKERS_OR_OPEN_DECISIONS: none; inspect the nine-case package/facade family before assigning exact mutations
-DELEGATION_DECISION: codex-cli simple-exploration, then codex-cli implementation — explicit user-selected provider
+- `just validate`: passed for Phase 2D3a1; cross-target Clippy, 3,505 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
+- `cargo run --quiet -- tests --audit`: passed; 1,645 cases, 1,778 executions, 13 acceptance-only, 19 baseline-only, 538 rendered-output, 258 artifact, and zero hard findings
+DOCS_IMPACT: Phase 2D3a1 changes assertion coverage only; unrelated concurrent docs work remains outside this plan slice
+BLOCKERS_OR_OPEN_DECISIONS: none; the three backend-asymmetric outcomes are already structured and intentional
+DELEGATION_DECISION: codex-cli implementation — explicit user-selected provider
 NEXT_WORKER_ORDER: codex-cli only for this run-local override
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit accepted Phase 2D2, refresh its hash, then launch the bounded Phase 2D3a exploration through `codex-cli-beanstalk`
+NEXT_RESUME_ACTION: commit accepted Phase 2D3a1, refresh its hash, then launch bounded Phase 2D3a2 through `codex-cli-beanstalk`
 
 ---
 
@@ -141,7 +141,8 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 2R7c lifetime/final-use ownership | `5fbf183a4` | Accepted | 1,645 cases and 1,778 executions; 12 acceptance-only; 32 baseline-only; 529 rendered-output; zero hard findings |
 | Phase 2R8 workflow documentation | `4fa34390c` | Accepted | 1,645 cases and 1,778 executions; 32 baseline-only; codebase-standards and progress routes rebuilt from corrected source |
 | Phase 2D1 trait/order/package/config contracts | `9a929d9d5` | Accepted | 13 acceptance-only; 26 baseline-only; 532 rendered-output; 257 artifact; zero hard findings |
-| Phase 2D2 same-module choice visibility | pending acceptance commit | Accepted | 13 acceptance-only; 25 baseline-only; 533 rendered-output; 257 artifact; zero hard findings |
+| Phase 2D2 same-module choice visibility | `4e0b4ca7b` | Accepted | 13 acceptance-only; 25 baseline-only; 533 rendered-output; 257 artifact; zero hard findings |
+| Phase 2D3a1 package/facade/import contracts | pending acceptance commit | Accepted | 13 acceptance-only; 19 baseline-only; 538 rendered-output; 258 artifact; zero hard findings |
 
 ---
 
@@ -1257,7 +1258,7 @@ Do not present lower counts or faster time as proof of correctness.
 | `lifetime_inference_use_after_move` | Mutable alias blocks later source access | `mutable_alias_blocks_later_source_access` | none | `5fbf183a4` |
 | `last_use_precision` | Alias final use permits mutation-capable rebinding | `borrow_conflict_resolved_by_reordering` | none | `5fbf183a4` |
 | `borrow_checker_use_after_move` → `mutable_alias_blocks_later_source_access` | Mutable alias blocks later source access | `mutable_alias_blocks_later_source_access` | none | `5fbf183a4` |
-| `choice_import_visibility_non_exported` → `choice_same_module_private_import_success` | Same-module import and construction of a private choice declaration | `choice_same_module_private_import_success` | none | pending Phase 2D2 acceptance commit |
+| `choice_import_visibility_non_exported` → `choice_same_module_private_import_success` | Same-module import and construction of a private choice declaration | `choice_same_module_private_import_success` | none | `4e0b4ca7b` |
 
 ### Coverage gap and handoff ledger
 

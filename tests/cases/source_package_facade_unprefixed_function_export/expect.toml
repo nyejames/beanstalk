@@ -3,3 +3,6 @@ entry = "."
 [backends.html]
 mode = "success"
 warnings = "forbid"
+rendered_output_contains = [
+    "source_package_facade_unprefixed_function_export result=hello",
+]

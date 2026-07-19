@@ -2,4 +2,4 @@ import @core/math { sin }
 
 value = sin(1.0)
 
-[:math ok]
+#[:import_core_package_skips_filesystem_resolution source=external-package]

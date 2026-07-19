@@ -3,3 +3,6 @@ entry = "."
 [backends.html]
 mode = "success"
 warnings = "forbid"
+rendered_output_contains = [
+    "module_facade_unprefixed_type_export struct=hello choice=VariantA alias=world",
+]

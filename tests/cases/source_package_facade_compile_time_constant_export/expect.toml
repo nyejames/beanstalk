@@ -3,3 +3,6 @@ entry = "."
 [backends.html]
 mode = "success"
 warnings = "forbid"
+rendered_output_contains = [
+    "source_package_facade_compile_time_constant_export value=hello",
+]
