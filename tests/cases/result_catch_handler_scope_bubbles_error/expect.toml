@@ -1,4 +1,4 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
-rendered_output_contains = ["fallback", "0"]
+rendered_output_contains = ["bubbled-recovery-first=fallback", "bubbled-recovery-count=0"]

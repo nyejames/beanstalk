@@ -4,5 +4,5 @@ pair || -> String, Int:
 
 existing ~= "old"
 existing, created = pair()
-io.line([: [existing]])
-io.line([: [created]])
+io.line([:reassigned-existing=[existing]])
+io.line([:created-target=[created]])

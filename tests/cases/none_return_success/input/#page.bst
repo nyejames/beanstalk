@@ -5,4 +5,7 @@ make_name || -> String?:
     return none
 ;
 
-io.line("ok")
+name = make_name()
+if name is none:
+    io.line("none-return=absent")
+;

@@ -6,12 +6,12 @@ can_error |name String| -> String, Float, Error!:
 
 recover |name String| -> String, Float:
     value, score = can_error(name) catch |err|:
-        io.line([: [err.message]])
+        io.line([:handler-error-message=[err.message]])
         then "fallback", 0.0
     ;
     return value, score
 ;
 
 name, score = recover("test")
-io.line([: [name]])
-io.line([: [score]])
+io.line([:handler-recovery-value=[name]])
+io.line([:handler-recovery-score=[score]])

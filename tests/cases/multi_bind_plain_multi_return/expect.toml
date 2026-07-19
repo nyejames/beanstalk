@@ -1,4 +1,4 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
-rendered_output_contains = ["a", "1"]
+rendered_output_contains = ["pair-left=a", "pair-right=1"]

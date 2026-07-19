@@ -1,4 +1,4 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
-rendered_output_contains = ["hello"]
+rendered_output_contains = ["typed-argument=hello"]

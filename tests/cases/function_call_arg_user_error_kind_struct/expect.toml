@@ -1,4 +1,4 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
-rendered_output_contains = ["something went wrong"]
+rendered_output_contains = ["error-kind-message=something went wrong"]

@@ -1,4 +1,4 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
-rendered_output_contains = ["something went wrong", "fallback", "0"]
+rendered_output_contains = ["handler-error-message=something went wrong", "handler-recovery-value=fallback", "handler-recovery-score=0"]

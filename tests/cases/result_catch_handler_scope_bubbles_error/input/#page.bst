@@ -14,5 +14,5 @@ first, count = rethrow("Ana") catch:
     then "fallback", 0
 
 ;
-io.line([: [first]])
-io.line([: [count]])
+io.line([:bubbled-recovery-first=[first]])
+io.line([:bubbled-recovery-count=[count]])

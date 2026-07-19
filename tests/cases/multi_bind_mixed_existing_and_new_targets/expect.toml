@@ -1,4 +1,4 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
-rendered_output_contains = ["fresh", "9"]
+rendered_output_contains = ["reassigned-existing=fresh", "created-target=9"]

@@ -3,4 +3,6 @@
 
 name String? = none
 
-io.line("ok")
+if name is none:
+    io.line("none-declaration=absent")
+;

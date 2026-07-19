@@ -5,4 +5,6 @@
 name ~String? = none
 name = none
 
-io.line("ok")
+if name is none:
+    io.line("none-mutation=absent")
+;
