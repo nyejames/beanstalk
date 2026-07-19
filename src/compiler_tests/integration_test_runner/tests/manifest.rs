@@ -30,7 +30,7 @@ fn write_success_fixture(root: &Path, case_name: &str) {
     fs::write(input_root.join("#page.bst"), "#[:ok]\n").expect("should write fixture source");
     fs::write(
         case_root.join(EXPECT_FILE_NAME),
-        "[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\n",
+        "[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\nsuccess_contract = \"acceptance_only\"\n",
     )
     .expect("should write expect file");
 }

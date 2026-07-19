@@ -163,7 +163,7 @@ fn inventory_json_groups_backend_metadata_under_one_canonical_case() {
 }
 
 #[test]
-fn inventory_distinguishes_acceptance_only_from_baseline_only() {
+fn inventory_reports_acceptance_only_without_baseline_only_state() {
     let explicit_case = case(
         "explicit_acceptance_only",
         BackendId::Html,
@@ -180,24 +180,7 @@ fn inventory_distinguishes_acceptance_only_from_baseline_only() {
             artifacts_must_not_exist: Vec::new(),
         }),
     );
-    let baseline_only_case = case(
-        "baseline_only",
-        BackendId::HtmlWasm,
-        &["integration"],
-        None,
-        None,
-        ExpectedOutcome::Success(SuccessExpectation {
-            warnings: WarningExpectation::Forbid,
-            success_contract: None,
-            artifact_assertions: Vec::new(),
-            golden: GoldenExpectation::default(),
-            rendered_output_contains: Vec::new(),
-            rendered_output_not_contains: Vec::new(),
-            artifacts_must_not_exist: Vec::new(),
-        }),
-    );
-
-    let report = report_for_cases(&[explicit_case, baseline_only_case], None);
+    let report = report_for_cases(&[explicit_case], None);
     let json = serde_json::to_value(&report).expect("inventory should serialize");
 
     assert_eq!(json["cases"][0]["backends"][0]["baseline_applied"], true);
@@ -206,14 +189,8 @@ fn inventory_distinguishes_acceptance_only_from_baseline_only() {
         json["cases"][0]["backends"][0]["assertion_kinds"],
         serde_json::json!(["backend_baseline", "acceptance_only"])
     );
-    assert_eq!(json["cases"][1]["backends"][0]["baseline_applied"], true);
-    assert_eq!(json["cases"][1]["backends"][0]["acceptance_only"], false);
-    assert_eq!(
-        json["cases"][1]["backends"][0]["assertion_kinds"],
-        serde_json::json!(["backend_baseline"])
-    );
     assert_eq!(json["summary"]["acceptance_only_backend_blocks"], 1);
-    assert_eq!(json["summary"]["baseline_only_backend_blocks"], 1);
+    assert_eq!(json["summary"]["baseline_only_backend_blocks"], 0);
 }
 
 #[test]
@@ -261,7 +238,7 @@ fn report_serializes_supplied_policy_evaluation() {
                 success_contract: None,
                 artifact_assertions: Vec::new(),
                 golden: GoldenExpectation::default(),
-                rendered_output_contains: Vec::new(),
+                rendered_output_contains: vec!["case-a".to_owned()],
                 rendered_output_not_contains: Vec::new(),
                 artifacts_must_not_exist: Vec::new(),
             }),
@@ -277,7 +254,7 @@ fn report_serializes_supplied_policy_evaluation() {
                 success_contract: None,
                 artifact_assertions: Vec::new(),
                 golden: GoldenExpectation::default(),
-                rendered_output_contains: Vec::new(),
+                rendered_output_contains: vec!["case-b".to_owned()],
                 rendered_output_not_contains: Vec::new(),
                 artifacts_must_not_exist: Vec::new(),
             }),

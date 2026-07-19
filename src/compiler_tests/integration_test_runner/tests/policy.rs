@@ -140,14 +140,14 @@ fn stronger_mixed_backend_contract_does_not_force_smoke_role() {
 }
 
 #[test]
-fn baseline_only_and_missing_classification_findings_are_advisories() {
+fn missing_classification_findings_are_advisories() {
     let suite = suite(vec![success_case(
-        "unclassified_baseline",
+        "unclassified_case",
         BackendId::Html,
         None,
         None,
         None,
-        None,
+        Some("marker"),
     )]);
 
     let evaluation = evaluate_suite(&suite);
@@ -158,13 +158,11 @@ fn baseline_only_and_missing_classification_findings_are_advisories() {
         .collect::<Vec<_>>();
 
     assert!(evaluation.hard_findings.is_empty());
-    assert_eq!(evaluation.baseline_only_backend_blocks, 1);
     assert_eq!(
         codes,
         vec![
             "missing_contract_classification",
-            "missing_role_classification",
-            "baseline_only_backend"
+            "missing_role_classification"
         ]
     );
 }
@@ -172,8 +170,8 @@ fn baseline_only_and_missing_classification_findings_are_advisories() {
 #[test]
 fn policy_findings_are_deterministic_in_manifest_order() {
     let suite = suite(vec![
-        success_case("case_b", BackendId::Html, None, None, None, None),
-        success_case("case_a", BackendId::Html, None, None, None, None),
+        success_case("case_b", BackendId::Html, None, None, None, Some("case-b")),
+        success_case("case_a", BackendId::Html, None, None, None, Some("case-a")),
     ]);
 
     let evaluation = evaluate_suite(&suite);
@@ -193,10 +191,8 @@ fn policy_findings_are_deterministic_in_manifest_order() {
         vec![
             ("case_b", "missing_contract_classification"),
             ("case_b", "missing_role_classification"),
-            ("case_b", "baseline_only_backend"),
             ("case_a", "missing_contract_classification"),
             ("case_a", "missing_role_classification"),
-            ("case_a", "baseline_only_backend"),
         ]
     );
 }

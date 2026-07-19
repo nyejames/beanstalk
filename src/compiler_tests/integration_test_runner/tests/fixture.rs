@@ -145,7 +145,7 @@ fn empty_backend_golden_directory_has_no_contract() {
     fs::write(input_root.join("#page.bst"), "#[:ok]\n").expect("should write fixture source");
     fs::write(
         case_root.join(EXPECT_FILE_NAME),
-        "[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\n",
+        "[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\nsuccess_contract = \"acceptance_only\"\n",
     )
     .expect("should write expect file");
 
@@ -171,7 +171,7 @@ fn empty_nested_golden_directory_has_no_contract() {
     fs::write(input_root.join("#page.bst"), "#[:ok]\n").expect("should write fixture source");
     fs::write(
         case_root.join(EXPECT_FILE_NAME),
-        "[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\n",
+        "[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\nsuccess_contract = \"acceptance_only\"\n",
     )
     .expect("should write expect file");
 
@@ -251,7 +251,7 @@ fn accepts_backend_matrix_and_expands_case_variants() {
     fs::write(input_root.join("#page.bst"), "#[:ok]\n").expect("should write fixture source");
     fs::write(
         case_root.join(EXPECT_FILE_NAME),
-        "entry = \".\"\n\n[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\n\n[backends.html_wasm]\nmode = \"success\"\nwarnings = \"forbid\"\n",
+        "entry = \".\"\n\n[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\nsuccess_contract = \"acceptance_only\"\n\n[backends.html_wasm]\nmode = \"success\"\nwarnings = \"forbid\"\nsuccess_contract = \"acceptance_only\"\n",
     )
     .expect("should write matrix expect file");
 
@@ -274,7 +274,7 @@ fn backend_filter_limits_loaded_case_variants() {
     fs::write(input_root.join("#page.bst"), "#[:ok]\n").expect("should write fixture source");
     fs::write(
         case_root.join(EXPECT_FILE_NAME),
-        "entry = \".\"\n\n[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\n\n[backends.html_wasm]\nmode = \"success\"\nwarnings = \"forbid\"\n",
+        "entry = \".\"\n\n[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\nsuccess_contract = \"acceptance_only\"\n\n[backends.html_wasm]\nmode = \"success\"\nwarnings = \"forbid\"\nsuccess_contract = \"acceptance_only\"\n",
     )
     .expect("should write matrix expect file");
 
@@ -307,7 +307,7 @@ fn manifest_metadata_survives_backend_expansion() {
     fs::write(input_root.join("#page.bst"), "#[:ok]\n").expect("should write fixture source");
     fs::write(
         case_root.join(EXPECT_FILE_NAME),
-        "entry = \".\"\n\n[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\n\n[backends.html_wasm]\nmode = \"success\"\nwarnings = \"forbid\"\n",
+        "entry = \".\"\n\n[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\nsuccess_contract = \"acceptance_only\"\n\n[backends.html_wasm]\nmode = \"success\"\nwarnings = \"forbid\"\nsuccess_contract = \"acceptance_only\"\n",
     )
     .expect("should write matrix expect file");
     fs::write(
@@ -431,6 +431,132 @@ fn accepts_success_fixture_with_golden_only_assertion() {
 }
 
 #[test]
+fn accepts_success_fixture_with_artifact_assertion() {
+    let root = temp_dir("success_contract_artifact_assertion");
+    let case_root = root.join("case");
+    let input_root = case_root.join(INPUT_DIR_NAME);
+    fs::create_dir_all(&input_root).expect("should create input directory");
+    fs::write(input_root.join("#page.bst"), "#[:ok]\n").expect("should write source");
+    fs::write(
+        case_root.join(EXPECT_FILE_NAME),
+        "[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\n\n[[backends.html.artifact_assertions]]\npath = \"index.html\"\nkind = \"html\"\nmust_contain = [\"ok\"]\n",
+    )
+    .expect("should write expect file");
+
+    load_canonical_case_specs(&case_root, None)
+        .expect("artifact assertion-only fixture should be accepted");
+
+    fs::remove_dir_all(&root).expect("should clean up");
+}
+
+#[test]
+fn accepts_success_fixture_with_rendered_output_assertion() {
+    let root = temp_dir("success_contract_rendered_output");
+    let case_root = root.join("case");
+    let input_root = case_root.join(INPUT_DIR_NAME);
+    fs::create_dir_all(&input_root).expect("should create input directory");
+    fs::write(input_root.join("#page.bst"), "#[:ok]\n").expect("should write source");
+    fs::write(
+        case_root.join(EXPECT_FILE_NAME),
+        "[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\nrendered_output_contains = [\"ok\"]\n",
+    )
+    .expect("should write expect file");
+
+    load_canonical_case_specs(&case_root, None)
+        .expect("rendered-output assertion-only fixture should be accepted");
+
+    fs::remove_dir_all(&root).expect("should clean up");
+}
+
+#[test]
+fn accepts_success_fixture_with_artifact_absence_assertion() {
+    let root = temp_dir("success_contract_artifact_absence");
+    let case_root = root.join("case");
+    let input_root = case_root.join(INPUT_DIR_NAME);
+    fs::create_dir_all(&input_root).expect("should create input directory");
+    fs::write(input_root.join("#page.bst"), "#[:ok]\n").expect("should write source");
+    fs::write(
+        case_root.join(EXPECT_FILE_NAME),
+        "[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\nartifacts_must_not_exist = [\"unexpected.html\"]\n",
+    )
+    .expect("should write expect file");
+
+    load_canonical_case_specs(&case_root, None)
+        .expect("artifact-absence assertion-only fixture should be accepted");
+
+    fs::remove_dir_all(&root).expect("should clean up");
+}
+
+#[test]
+fn accepts_success_fixture_with_exact_warning_contract() {
+    let root = temp_dir("success_contract_exact_warning");
+    let case_root = root.join("case");
+    let input_root = case_root.join(INPUT_DIR_NAME);
+    fs::create_dir_all(&input_root).expect("should create input directory");
+    fs::write(input_root.join("#page.bst"), "#[:ok]\n").expect("should write source");
+    fs::write(
+        case_root.join(EXPECT_FILE_NAME),
+        "[backends.html]\nmode = \"success\"\nwarnings = \"exact\"\nwarning_count = 0\n",
+    )
+    .expect("should write expect file");
+
+    load_canonical_case_specs(&case_root, None)
+        .expect("exact-warning assertion-only fixture should be accepted");
+
+    fs::remove_dir_all(&root).expect("should clean up");
+}
+
+#[test]
+fn rejects_baseline_only_success_fixture() {
+    let root = temp_dir("baseline_only_success");
+    let case_root = root.join("case");
+    let input_root = case_root.join(INPUT_DIR_NAME);
+    fs::create_dir_all(&input_root).expect("should create input directory");
+    fs::write(input_root.join("#page.bst"), "#[:ok]\n").expect("should write source");
+    fs::write(
+        case_root.join(EXPECT_FILE_NAME),
+        "[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\n",
+    )
+    .expect("should write expect file");
+
+    let Err(error) = load_canonical_case_specs(&case_root, None) else {
+        panic!("baseline-only success fixture should be rejected");
+    };
+    assert!(
+        error.contains("baseline_only_success")
+            && error.contains("html")
+            && error.contains("must author at least one accepted success contract"),
+        "unexpected error: {error}"
+    );
+
+    fs::remove_dir_all(&root).expect("should clean up");
+}
+
+#[test]
+fn default_forbidden_warnings_do_not_satisfy_success_completeness() {
+    let root = temp_dir("default_forbidden_warnings_not_contract");
+    let case_root = root.join("case");
+    let input_root = case_root.join(INPUT_DIR_NAME);
+    fs::create_dir_all(&input_root).expect("should create input directory");
+    fs::write(input_root.join("#page.bst"), "#[:ok]\n").expect("should write source");
+    fs::write(
+        case_root.join(EXPECT_FILE_NAME),
+        "[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\n",
+    )
+    .expect("should write expect file");
+
+    let Err(error) = load_canonical_case_specs(&case_root, None) else {
+        panic!("default warnings = forbid should not satisfy completeness");
+    };
+    assert!(
+        error.contains("warnings = \"exact\" with warning_count"),
+        "unexpected error: {error}"
+    );
+
+    fs::remove_dir_all(&root).expect("should clean up");
+}
+
+#[test]
 fn rejects_unsafe_configured_entries() {
     let unsafe_entries = [
         "",
@@ -451,7 +577,7 @@ fn rejects_unsafe_configured_entries() {
         fs::write(
             case_root.join(EXPECT_FILE_NAME),
             format!(
-                "entry = \"{entry}\"\n\n[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\n"
+                "entry = \"{entry}\"\n\n[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\nsuccess_contract = \"acceptance_only\"\n"
             ),
         )
         .expect("should write expect file");
@@ -474,7 +600,7 @@ fn accepts_exact_directory_entry_and_returns_canonical_input() {
     fs::write(input_root.join("intro.bd"), "#[:ok]\n").expect("should write entry source");
     fs::write(
         case_root.join(EXPECT_FILE_NAME),
-        "entry = \".\"\n\n[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\n",
+        "entry = \".\"\n\n[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\nsuccess_contract = \"acceptance_only\"\n",
     )
     .expect("should write expect file");
 
@@ -503,7 +629,7 @@ fn accepts_nested_contained_entry_and_returns_canonical_path() {
     fs::write(&entry_path, "#[:ok]\n").expect("should write nested entry source");
     fs::write(
         case_root.join(EXPECT_FILE_NAME),
-        "entry = \"nested/intro.bd\"\n\n[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\n",
+        "entry = \"nested/intro.bd\"\n\n[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\nsuccess_contract = \"acceptance_only\"\n",
     )
     .expect("should write expect file");
 
@@ -554,7 +680,7 @@ fn rejects_input_directory_symlink_escape() {
     }
     fs::write(
         case_root.join(EXPECT_FILE_NAME),
-        "[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\n",
+        "[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\nsuccess_contract = \"acceptance_only\"\n",
     )
     .expect("should write expect file");
 
@@ -589,7 +715,7 @@ fn rejects_entry_symlink_escape() {
     }
     fs::write(
         case_root.join(EXPECT_FILE_NAME),
-        "entry = \"escape.bd\"\n\n[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\n",
+        "entry = \"escape.bd\"\n\n[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\nsuccess_contract = \"acceptance_only\"\n",
     )
     .expect("should write expect file");
 

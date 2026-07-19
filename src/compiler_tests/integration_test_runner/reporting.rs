@@ -93,6 +93,8 @@ pub(crate) struct SuiteInventoryReport {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct InventorySummary {
     pub acceptance_only_backend_blocks: usize,
+    // Fixture loading rejects baseline-only success backends before policy and reporting. Keep
+    // this canonical audit invariant visible without reimplementing completeness classification.
     pub baseline_only_backend_blocks: usize,
     pub rendered_output_backend_blocks: usize,
     pub artifact_backend_blocks: usize,
@@ -158,20 +160,14 @@ pub(crate) fn build_suite_inventory_report(
         repository_commit,
         manifest_case_count: inventory_cases.len(),
         expanded_backend_execution_count: cases.len(),
-        summary: build_inventory_summary(
-            &inventory_cases,
-            policy_evaluation.baseline_only_backend_blocks,
-        ),
+        summary: build_inventory_summary(&inventory_cases),
         cases: inventory_cases,
         hard_policy_violations: policy_evaluation.hard_findings.clone(),
         advisory_findings: policy_evaluation.advisories.clone(),
     }
 }
 
-fn build_inventory_summary(
-    cases: &[InventoryCase],
-    baseline_only_backend_blocks: usize,
-) -> InventorySummary {
+fn build_inventory_summary(cases: &[InventoryCase]) -> InventorySummary {
     let mut summary = InventorySummary {
         acceptance_only_backend_blocks: 0,
         baseline_only_backend_blocks: 0,
@@ -208,8 +204,6 @@ fn build_inventory_summary(
             summary.expected_warning_backend_blocks += 1;
         }
     }
-
-    summary.baseline_only_backend_blocks = baseline_only_backend_blocks;
 
     summary
 }

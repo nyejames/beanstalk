@@ -3,7 +3,7 @@
 //! WHAT: evaluates ownership and assertion-strength rules after typed fixture loading.
 //! WHY: cross-case policy must be decided once before reporting, selection or execution.
 
-use super::{CaseRole, ExpectedOutcome, SuccessContract, TestSuiteSpec, WarningExpectation};
+use super::{CaseRole, ExpectedOutcome, SuccessContract, TestSuiteSpec};
 use serde::Serialize;
 use std::collections::BTreeMap;
 
@@ -11,7 +11,6 @@ use std::collections::BTreeMap;
 pub(crate) struct PolicyEvaluation {
     pub(crate) hard_findings: Vec<PolicyFinding>,
     pub(crate) advisories: Vec<PolicyFinding>,
-    pub(crate) baseline_only_backend_blocks: usize,
 }
 
 impl PolicyEvaluation {
@@ -121,26 +120,6 @@ pub(crate) fn evaluate_suite(suite: &TestSuiteSpec) -> PolicyEvaluation {
                 },
             ));
         }
-
-        for (backend_order, case_order) in group.case_orders.iter().copied().enumerate() {
-            let case = &suite.cases[case_order];
-            if is_baseline_only(case) {
-                evaluation.baseline_only_backend_blocks += 1;
-                evaluation.advisories.push(PolicyFinding::new(
-                    "baseline_only_backend",
-                    Some(group.case_id.clone()),
-                    format!(
-                        "Backend '{}' has only the universal backend baseline; add a case-specific success contract or acceptance-only intent.",
-                        case.backend_id.as_str()
-                    ),
-                    FindingSortKey {
-                        case_order: group.first_case_order,
-                        backend_order,
-                        rule_order: 30,
-                    },
-                ));
-            }
-        }
     }
 
     evaluation
@@ -198,24 +177,6 @@ fn is_whole_case_acceptance_only(suite: &TestSuiteSpec, group: &CaseGroup) -> bo
                     if expectation.success_contract == Some(SuccessContract::AcceptanceOnly)
             )
         })
-}
-
-fn is_baseline_only(case: &super::TestCaseSpec) -> bool {
-    if !case.backend_id.has_universal_baseline() {
-        return false;
-    }
-
-    let ExpectedOutcome::Success(expectation) = &case.expected else {
-        return false;
-    };
-
-    expectation.success_contract.is_none()
-        && expectation.artifact_assertions.is_empty()
-        && !expectation.golden.is_present()
-        && expectation.rendered_output_contains.is_empty()
-        && expectation.rendered_output_not_contains.is_empty()
-        && expectation.artifacts_must_not_exist.is_empty()
-        && !matches!(expectation.warnings, WarningExpectation::Exact(_))
 }
 
 impl PolicyFinding {

@@ -30,27 +30,26 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 2E — enforce authored success completeness
-LAST_ACCEPTED_COMMIT: `b7a60487d` (Phase 2D3d)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 2D3e final baseline fixture contracts ready to commit; unrelated docs work remains user-owned
+CURRENT_SLICE: Phase 3A — complete assertion-module ownership
+LAST_ACCEPTED_COMMIT: `5ae591167` (Phase 2D3e)
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 2E implementation ready to commit; no unrelated worktree changes currently visible
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: workflow guidance now matches acceptance-only, baseline, golden, path-containment, audit-policy, and contract-filter behavior; progress coverage uses future-use/final-use terminology
-- code: Phase 2D3e leaves zero baseline-only success blocks; Phase 2E owns removal of the temporary baseline-only allowance and its self-tests
+- docs: `testing.bd` now defines baseline-only success as invalid; the progress matrix needs no change for this harness-only enforcement
+- code: fixture loading rejects baseline-only success; policy no longer owns a baseline-only advisory; reporting retains a single zero audit invariant; Phase 3A owns the assertion-module split
 ACCEPTANCE_CRITERIA:
-- remove the temporary backend-baseline completeness exception so baseline-only success is invalid
-- retain every authored success form and prove default `warnings = "forbid"` does not satisfy completeness
-- make normal loading/execution and audit enforcement share the existing policy owner without duplicate taxonomy
-- focused harness/CLI tests, audit with zero baseline-only blocks, `git diff --check`, and the full code-bearing gate pass
+- move each assertion family into the target `assertions/` module without copying logic or leaving a monolithic path
+- keep orchestration in `assertions/mod.rs`, Node output execution with rendered-output assertions, and Wasm parsing with Wasm assertions
+- preserve fixture behavior and pass focused assertion tests, audit, `git diff --check`, and the full code-bearing gate
 VALIDATION_STATE:
-- `just validate`: passed for Phase 2D3e; cross-target Clippy, 3,505 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
+- `just validate`: passed for Phase 2E; cross-target Clippy, 3,511 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
 - `cargo run --quiet -- tests --audit`: passed; 1,645 cases, 1,778 executions, 13 acceptance-only, zero baseline-only, 548 rendered-output, 267 artifact, and zero hard findings
-DOCS_IMPACT: Phase 2D3e changes assertion coverage only; Phase 2E may require testing-workflow wording review after implementation
-BLOCKERS_OR_OPEN_DECISIONS: none; inspect the existing completeness and suite-policy owners before assigning Phase 2E
-DELEGATION_DECISION: codex-cli implementation — explicit user-selected provider
-NEXT_WORKER_ORDER: codex-cli only for this run-local override
+DOCS_IMPACT: `testing.bd` updated; release docs build passed, while generated site churn from the separate docs/font stream remains excluded; progress matrix unchanged
+BLOCKERS_OR_OPEN_DECISIONS: none; inspect the current assertion owners before assigning Phase 3A
+DELEGATION_DECISION: Ollama implementation — timed user-selected provider override is active
+NEXT_WORKER_ORDER: Ollama, then codex-cli, then parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit accepted Phase 2D3e, refresh its hash, then inspect and launch bounded Phase 2E through `codex-cli-beanstalk`
+NEXT_RESUME_ACTION: commit accepted Phase 2E, refresh its hash, then inspect and launch bounded Phase 3A through `ollama-codex-beanstalk`
 
 ---
 
@@ -147,7 +146,8 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 2D3b canvas package contracts | `747e8436d` | Accepted | 13 acceptance-only; 13 baseline-only; 541 rendered-output; 261 artifact; zero hard findings |
 | Phase 2D3c HTML-Wasm content parity contracts | `b537bee80` | Accepted | 13 acceptance-only; 7 baseline-only; 541 rendered-output; 267 artifact; zero hard findings |
 | Phase 2D3d const-record contracts | `b7a60487d` | Accepted | 13 acceptance-only; 3 baseline-only; 545 rendered-output; 267 artifact; zero hard findings |
-| Phase 2D3e final baseline contracts | pending acceptance commit | Accepted | 13 acceptance-only; zero baseline-only; 548 rendered-output; 267 artifact; zero hard findings |
+| Phase 2D3e final baseline contracts | `5ae591167` | Accepted | 13 acceptance-only; zero baseline-only; 548 rendered-output; 267 artifact; zero hard findings |
+| Phase 2E authored completeness enforcement | pending acceptance commit | Accepted | 3,511 Rust tests; 1,645 cases and 1,778 executions; 13 acceptance-only; zero baseline-only; zero hard findings |
 
 ---
 
@@ -641,31 +641,31 @@ After each family:
 
 ## 2E — Enforce authored success completeness
 
-- [ ] Remove the temporary backend-baseline exception from fixture completeness.
-- [ ] A success backend must have at least one of:
+- [x] Remove the temporary backend-baseline exception from fixture completeness.
+- [x] A success backend must have at least one of:
   - acceptance-only intent
   - rendered-output assertion
   - artifact assertion
   - non-empty golden file set
   - artifact-absence assertion
   - non-default expected-warning contract
-- [ ] The universal backend baseline alone is insufficient.
-- [ ] Add self-tests for every accepted success-contract form.
-- [ ] Add a self-test proving a baseline-only success backend is rejected.
-- [ ] Add a self-test proving default `warnings = "forbid"` does not count as the authored contract.
-- [ ] Audit must report zero baseline-only backends.
-- [ ] Remove temporary baseline-only finding terminology that no longer has a valid canonical state.
+- [x] The universal backend baseline alone is insufficient.
+- [x] Add self-tests for every accepted success-contract form.
+- [x] Add a self-test proving a baseline-only success backend is rejected.
+- [x] Add a self-test proving default `warnings = "forbid"` does not count as the authored contract.
+- [x] Audit must report zero baseline-only backends.
+- [x] Remove temporary baseline-only finding terminology that no longer has a valid canonical state.
 
 ## Phase 2 acceptance
 
-- [ ] Every manifest case has a contained case-owned `expect.toml`.
-- [ ] No fallback infrastructure or old success spelling remains.
-- [ ] Every success backend has an authored case-specific contract or acceptance-only intent.
-- [ ] No behavior-visible case is weakened to acceptance-only.
-- [ ] Acceptance-only and baseline execution are reported separately.
-- [ ] Audit hard findings are zero.
-- [ ] Workflow docs and fixture examples are current.
-- [ ] Full validation passes.
+- [x] Every manifest case has a contained case-owned `expect.toml`.
+- [x] No fallback infrastructure or old success spelling remains.
+- [x] Every success backend has an authored case-specific contract or acceptance-only intent.
+- [x] No behavior-visible case is weakened to acceptance-only.
+- [x] Acceptance-only and baseline execution are reported separately.
+- [x] Audit hard findings are zero.
+- [x] Workflow docs and fixture examples are current.
+- [x] Full validation passes.
 
 ---
 

@@ -153,8 +153,8 @@ assertions, artifact-absence assertions or an authored expected-warning contract
 whose backends are all acceptance-only uses `role = "smoke"`. A mixed-backend case may use a
 boundary or backend role when another backend owns a stronger contract.
 
-A successful backend with only the universal baseline is baseline-only, not acceptance-only.
-The audit reports it as an advisory while the classification migration remains open.
+A successful backend with only the universal baseline is invalid. Typed fixture loading rejects it
+before policy evaluation, listing, audit, or execution.
 
 For new type-system syntax, include:
 
@@ -235,9 +235,10 @@ Audit cannot be combined with filters or `--list`. It writes the reporting-owned
 expectation facts, hard-policy violations and advisory missing-classification findings. The report
 is review input only; it never deletes, merges or rewrites fixtures.
 
-The inventory reports acceptance-only, baseline-only, rendered-output, artifact, golden, absence
-and expected-warning backend counts. Per-backend fields keep `baseline_applied`, `acceptance_only`,
-`assertion_kinds`, `golden_present` and `golden_mode` separate so the report matches what ran.
+The inventory reports acceptance-only, rendered-output, artifact, golden, absence and
+expected-warning backend counts, plus the zero baseline-only invariant. Per-backend fields keep
+`baseline_applied`, `acceptance_only`, `assertion_kinds`, `golden_present` and `golden_mode`
+separate so the report matches what ran.
 
 Hard policy has one suite-policy owner. Duplicate primary contracts, a primary without a contract
 and a whole-case acceptance-only fixture without `role = "smoke"` are hard findings. Normal list

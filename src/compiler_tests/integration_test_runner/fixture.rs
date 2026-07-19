@@ -11,7 +11,7 @@ use super::types::SuccessContract;
 use super::{
     BackendId, CANONICAL_TESTS_PATH, EXPECT_FILE_NAME, ExpectationMode, ExpectedOutcome,
     FailureExpectation, GOLDEN_DIR_NAME, INPUT_DIR_NAME, MANIFEST_FILE_NAME, ManifestCaseSpec,
-    ParsedExpectationFile, SuccessExpectation, TestCaseSpec, TestSuiteSpec,
+    ParsedExpectationFile, SuccessExpectation, TestCaseSpec, TestSuiteSpec, WarningExpectation,
 };
 use crate::compiler_frontend::Flag;
 use std::collections::HashSet;
@@ -350,8 +350,6 @@ fn validate_fixture_contract(
         .zip(golden_expectations)
     {
         let has_golden_files = golden.is_present();
-        let has_artifact_assertions = !backend_expectation.artifact_assertions.is_empty();
-        let has_backend_baseline = backend_expectation.backend_id.has_universal_baseline();
 
         match backend_expectation.mode {
             ExpectationMode::Failure => {
@@ -362,7 +360,7 @@ fn validate_fixture_contract(
                         backend_expectation.backend_id.as_str()
                     ));
                 }
-                if has_artifact_assertions {
+                if !backend_expectation.artifact_assertions.is_empty() {
                     return Err(format!(
                         "Fixture '{}' backend '{}' uses mode = \"failure\" and must not define artifact assertions.",
                         fixture_root.display(),
@@ -383,16 +381,11 @@ fn validate_fixture_contract(
                     ));
                 }
 
-                let has_rendered_output = !backend_expectation.rendered_output_contains.is_empty()
-                    || !backend_expectation.rendered_output_not_contains.is_empty();
-                if !has_golden_files
-                    && !has_artifact_assertions
-                    && !has_backend_baseline
-                    && !has_rendered_output
-                {
+                if !has_authored_success_contract(backend_expectation, golden) {
                     return Err(format!(
-                        "Fixture '{}' backend '{}' uses mode = \"success\" and must provide \
-                         artifact assertions, a '{}' directory, or 'rendered_output_contains'.",
+                        "Fixture '{}' backend '{}' uses mode = \"success\" and must author at least one accepted success contract: \
+                         success_contract = \"acceptance_only\", artifact assertions, a non-empty '{}' directory, \
+                         rendered-output assertions, artifact-absence assertions, or warnings = \"exact\" with warning_count.",
                         fixture_root.display(),
                         backend_expectation.backend_id.as_str(),
                         golden_dir_for_backend(fixture_root, backend_expectation.backend_id)
@@ -413,6 +406,19 @@ fn validate_fixture_contract(
     }
 
     Ok(())
+}
+
+fn has_authored_success_contract(
+    backend_expectation: &super::ParsedBackendExpectation,
+    golden: &GoldenExpectation,
+) -> bool {
+    backend_expectation.success_contract == Some(SuccessContract::AcceptanceOnly)
+        || !backend_expectation.artifact_assertions.is_empty()
+        || golden.is_present()
+        || !backend_expectation.rendered_output_contains.is_empty()
+        || !backend_expectation.rendered_output_not_contains.is_empty()
+        || !backend_expectation.artifacts_must_not_exist.is_empty()
+        || matches!(backend_expectation.warnings, WarningExpectation::Exact(_))
 }
 
 fn resolve_case_entry_path(
