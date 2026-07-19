@@ -25,6 +25,31 @@ refresh current repository state
 
 This ordering is mandatory. Do not begin broad pruning while the harness can still accept implicit compile-only cases, unexpected diagnostics, or weak unordered runtime substrings.
 
+## Current state
+
+ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
+STATUS: active
+CURRENT_SLICE: Phase 0B — produce the baseline inventory
+LAST_ACCEPTED_COMMIT: `691f3338d` — final TIR closure and current repository anchor; Phase 0A is ready for its documentation-only checkpoint
+WORKTREE: `main` at `691f3338d`, clean and aligned with `origin/main`; only the primary worktree exists
+REQUIRED_RELOADS: startup files, this plan and current source/diff
+RELEVANT_CONTEXT_NOW:
+- docs: testing and validation standards own inventory classification and the documentation-only Phase 0 gate; the deleted final-TIR plan remains historical evidence in commit `691f3338d^`
+- code: canonical manifest, integration runner and test CLI are unchanged from `144568587`; post-anchor test changes are confined to accepted TIR ownership and final-audit cleanup
+ACCEPTANCE_CRITERIA:
+- record exact unit/integration counts, repeatable timing evidence, fixture assertion strengths, tags, goldens, artifact assertions and source-shaped unit candidates at `691f3338d`
+- commit no temporary inventory scripts and change no tests or implementation
+- leave the first Phase 1 slice bounded by the refreshed inventory
+VALIDATION_STATE:
+- final TIR at `dc81f7e53`: `just validate` passed with 3,433 Rust tests, 1,784 integration executions, docs checking and 28 benchmark sanity cases
+- Phase 0A documentation-only gate: `cargo run --quiet -- build docs --release` passed; 72 files built and no generated diff was produced (`bean` was unavailable in `PATH`)
+DOCS_IMPACT: this plan only for Phase 0A; roadmap already activates this plan before canonical module work; progress matrix unchanged
+BLOCKERS_OR_OPEN_DECISIONS: diagnostics Phase 4.1c remains incomplete but is explicitly serialized at clean accepted commit `d7fb3654f`; no diagnostics, manifest or runner worker may overlap this plan
+DELEGATION_DECISION: parent-direct — Phase 0B is analysis-only; the requested Codex CLI simple-exploration profile hit its usage limit before work and changed no files
+NEXT_WORKER_ORDER: codex-cli for the first implementation slice; no provider substitution is authorized
+STOP_REASON: none
+NEXT_RESUME_ACTION: run the Phase 0B baseline inventory at `691f3338d`
+
 ## Recommended roadmap placement and activation conditions
 
 Recommended path:
@@ -65,17 +90,17 @@ ACTIVE_PLAN:
 
 CURRENT_SLICE:
 - Phase: 0
-- Checklist item: 0A — refresh the repository anchor after final TIR completion and the diagnostics checkpoint
-- Goal: establish the exact post-TIR/post-diagnostics baseline before changing the harness or deleting tests
+- Checklist item: 0B — produce the baseline inventory
+- Goal: record the exact post-TIR/post-diagnostics test-suite baseline before changing the harness or deleting tests
 - Non-goals: no compiler behaviour changes, no fixture deletion, no unit-test pruning, no expectation-schema migration
 
 LAST_GOOD_COMMIT:
-- `1298da468` — accepted post-TIR roadmap-review anchor; no test-suite implementation slice has been accepted yet
+- `691f3338d` — final TIR closure and refreshed test-hardening repository anchor; no test-suite implementation slice has been accepted yet
 
 CURRENT_WORKTREE_STATE:
-- Clean / known changes: `main` was clean at `1298da468`; the final-TIR R6D documentation refresh followed from that anchor and must be committed or otherwise known before activation
+- Clean / known changes: `main` is clean at `691f3338d` and matches `origin/main`
 - Branch: local `main`
-- Dedicated worker worktrees: none known; create or record any worker worktree before implementation
+- Dedicated worker worktrees: none; create and record one before the first implementation worker
 
 RELEVANT_DOCS_THIS_SLICE:
 - `AGENTS.md`
@@ -89,7 +114,7 @@ RELEVANT_DOCS_THIS_SLICE:
 - `docs/src/docs/codebase/memory-management/overview.bd` and selected memory leaves when access, aliasing, borrow validation, moves, drops, GC, or reactivity lifetime behaviour is touched
 - `docs/src/docs/progress/#page.bst`
 - `docs/roadmap/roadmap.md`
-- `docs/roadmap/plans/final-tir-completion-plan.md`
+- historical `docs/roadmap/plans/final-tir-completion-plan.md` from `691f3338d^`; the completed plan was removed at `691f3338d`
 - `docs/roadmap/plans/compiler-diagnostics-improvement-plan.md`
 
 RELEVANT_CODE:
@@ -112,9 +137,8 @@ RELEVANT_CODE:
 - `src/compiler_frontend/ast/templates/tir/tests/`: accepted post-TIR hidden-invariant inventory; later suite-wide ownership review belongs to this plan and must not reopen final TIR architecture
 
 ACCEPTANCE_CRITERIA:
-- the plan is re-anchored to the actual current head after TIR and diagnostics work
 - baseline test counts, suite wall times, fixture strengths, and candidate overlaps are recorded
-- every known overlapping active plan is either complete or explicitly serialized
+- every known overlapping active plan remains explicitly serialized
 - no test is deleted before its primary replacement owner is identified
 - the roadmap places this plan before canonical module implementation
 
@@ -140,7 +164,7 @@ DECISIONS_ALREADY_MADE:
 
 BLOCKERS / RISKS:
 - final TIR is accepted and is no longer a blocker; do not reopen it during suite hardening
-- compiler diagnostics work is still active and changes fixture expectations
+- compiler diagnostics Phase 4.1c remains incomplete but is parked at clean accepted commit `d7fb3654f` while this plan is active; do not run a concurrent diagnostics worker
 - `tests/cases/manifest.toml` is a high-conflict serialized file
 - exact diagnostic matching may expose existing cascades and unintended extra diagnostics
 - changing the Node runtime harness can alter ordering assumptions if event capture is not designed first
@@ -149,10 +173,10 @@ BLOCKERS / RISKS:
 - the design documents describe accepted end state while the progress matrix describes current support
 
 VALIDATION_STATE:
-- last recorded command: `just validate`, recorded by final TIR R6C before the `1298da468` roadmap-review anchor
+- last recorded command: `just validate`, recorded by final TIR final review before the `dc81f7e53` accepted correction checkpoint
 - result: passed with cross-target Clippy, 3,433 Rust unit tests, 1,784 integration executions, docs checking, and 28 benchmark sanity cases
 - known unrelated failures: none recorded
-- this downloadable planning artifact did not run repository validation independently
+- Phase 0A `cargo run --quiet -- build docs --release`: passed, 72 files built and no generated diff produced; direct `bean` invocation was unavailable in `PATH`
 
 DOCS_IMPACT:
 - progress matrix needed: review after every phase that adds, removes, or materially strengthens current coverage; update only when the coverage statement changes
@@ -160,7 +184,7 @@ DOCS_IMPACT:
 - authorized docs updates: this plan explicitly authorizes the documentation changes listed in each phase; do not broaden language or architecture docs without a discovered contradiction or an intentional accepted behaviour change
 
 NEXT_ACTION:
-- after a clean diagnostics checkpoint, refresh this capsule, compare the new head to both `14456858799607aba43b88d681625e9957ee7dff` and `1298da468`, and execute the remaining Phase 0A inventory only
+- run the Phase 0B inventory at `691f3338d`, using temporary scripts only under `/tmp`
 
 ---
 
@@ -771,14 +795,35 @@ This phase is documentation and analysis only. Temporary inventory scripts belon
 
 ### 0A — Refresh repository anchors
 
-- [ ] Read all startup and authority documents.
-- [ ] Record branch, head, status, and worktrees.
-- [ ] Compare current head with `14456858799607aba43b88d681625e9957ee7dff`.
-- [ ] Review every changed test and harness path since the interview anchor.
-- [ ] Refresh the current-state section and capsule.
-- [ ] Remove stale TIR paths and assumptions.
-- [ ] Record final TIR architecture and accepted test-ownership handoff.
-- [ ] Record final diagnostics plan state and any changed codes/reasons.
+- [x] Read all startup and authority documents.
+- [x] Record branch, head, status, and worktrees.
+- [x] Compare current head with `14456858799607aba43b88d681625e9957ee7dff`.
+- [x] Review every changed test and harness path since the interview anchor.
+- [x] Refresh the current-state section and capsule.
+- [x] Remove stale TIR paths and assumptions.
+- [x] Record final TIR architecture and accepted test-ownership handoff.
+- [x] Record final diagnostics plan state and any changed codes/reasons.
+
+Accepted Phase 0A record at `691f3338d`:
+
+- `main` is clean, matches `origin/main` and is the only worktree.
+- `tests/cases/manifest.toml`, `src/compiler_tests/integration_test_runner/**` and
+  `src/projects/cli.rs` have no changes from `144568587` or `1298da468`.
+- Every changed test path from `144568587` is under the accepted TIR/frontend ownership review:
+  template parser/folding/TIR tests, module-finalization tests, focused const/expression/field/type
+  tests, instrumentation tests and shared HIR fixture support. R5C removed implementation-shaped
+  duplicates while retaining exact-view, preparation, runtime-handoff and reactive-metadata
+  boundary owners. The final audit moved reactive metadata tests out of production source and made
+  no integration-harness or canonical-fixture change.
+- Final TIR was validated at `dc81f7e53`, closed at `691f3338d` and its historical plan was removed.
+  Current code owns one module store, exact `TirView` transitions, one preparation owner and folded
+  strings or neutral owned runtime handoff only. Later suite review must not reopen that architecture.
+- The diagnostics plan and diagnostic/harness paths have no post-`144568587` changes. Its current
+  state remains Phase 4.1b+d complete, Phase 4.1c pending and last accepted at `d7fb3654f`.
+  Diagnostics work is serialized at that clean checkpoint while this plan owns the active worktree.
+- The requested Codex CLI simple-exploration attempt changed no files and was unavailable because
+  the configured Spark profile reached its usage limit. Implementation slices remain assigned to
+  the Codex CLI implementation profile as requested.
 
 ### 0B — Produce the baseline inventory
 
