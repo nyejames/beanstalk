@@ -29,16 +29,16 @@ This ordering is mandatory. Do not begin broad pruning while the harness can sti
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 2B5 — migrate the multi-bind success family
-LAST_ACCEPTED_COMMIT: `1f0869712` — assert result recovery outputs
-WORKTREE: parent `main` at `1f0869712`; Phase 1 worker worktrees were removed after patch-equivalence checks; reuse `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase2a` for subsequent serialized slices
+CURRENT_SLICE: Phase 2B6 — migrate the numeric-promotion success family
+LAST_ACCEPTED_COMMIT: `6193a2e12` — make multi-bind contracts explicit
+WORKTREE: parent `main` at `6193a2e12`; Phase 1 worker worktrees were removed after patch-equivalence checks; reuse `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase2a` for subsequent serialized slices
 REQUIRED_RELOADS: startup files, this plan and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: memory access/borrow-validation contracts define the selected cases' semantics; `testing.bd` requires explicit authored assertions for visible behaviour
-- code: Phase 2B4 reduced fallback-backed cases to 28 and backend-baseline-only blocks to 83; the next coherent family has five fallback-backed multi-bind cases
+- code: Phase 2B5 reduced fallback-backed cases to 23 and backend-baseline-only blocks to 78; the next coherent family has four fallback-backed numeric-promotion cases
 ACCEPTANCE_CRITERIA:
-- add authored HTML expectations to five selected multi-bind cases
-- use explicit compile-only intent and `role = "smoke"` only for `multi_bind_optional_slots`; assert visible output for the other four cases
+- add authored HTML expectations to three integer-to-float promotion cases and `mixed_numeric_literals`
+- use explicit compile-only intent and `role = "smoke"` only for `mixed_numeric_literals`; assert each existing promotion success marker
 - add no broad contract IDs and leave source inputs, runner enforcement and fallback infrastructure unchanged
 - pass all five exact-case runs, audit, focused harness tests, formatting, diff checks and `just validate`
 VALIDATION_STATE:
@@ -57,12 +57,13 @@ VALIDATION_STATE:
 - Phase 2B2: all eight exact HTML cases, 70 focused runner tests, audit, formatting, diff checks and `just validate` passed; the full gate covered 3,463 Rust tests, 1,784 integration executions, docs checking and 28 benchmark sanity cases
 - Phase 2B3: all four exact HTML cases, 70 focused runner tests, audit, formatting, diff checks and `just validate` passed; the full gate covered 3,463 Rust tests, 1,784 integration executions, docs checking and 28 benchmark sanity cases
 - Phase 2B4: all five exact HTML cases, 70 focused runner tests, audit, formatting, diff checks and `just validate` passed; the full gate covered 3,463 Rust tests, 1,784 integration executions, docs checking and 28 benchmark sanity cases
+- Phase 2B5: all five exact HTML cases, 70 focused runner tests, audit, formatting, diff checks and `just validate` passed; audit reported 12 compile-only, 78 backend-baseline-only and 23 fallback-backed cases
 DOCS_IMPACT: Phase 1 workflow docs, generated release output and the deferred code-block highlighting roadmap note are current; fixture outcomes/backend coverage and the progress matrix remain unchanged
 BLOCKERS_OR_OPEN_DECISIONS: diagnostics Phase 4.1c remains serialized at `d7fb3654f`; disk permits at most one additional worktree; before Phase 2 closes, resolve `adversarial_multi_file_helper_chain` using unsupported `@./prefix` and review mutation-during-iteration semantics in `loop_borrow_mutation_conflict`
-DELEGATION_DECISION: codex-cli — reuse the existing dedicated worktree for the user-requested Codex CLI Phase 2B5 implementation slice
-NEXT_WORKER_ORDER: codex-cli only for the Phase 2B5 implementation slice
+DELEGATION_DECISION: codex-cli — reuse the existing dedicated worktree for the user-requested Codex CLI Phase 2B6 implementation slice
+NEXT_WORKER_ORDER: codex-cli only for the Phase 2B6 implementation slice
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit this Phase 2B4 checkpoint, synchronize the reusable worker branch with main and launch the bounded Phase 2B5 fixture slice
+NEXT_RESUME_ACTION: commit this Phase 2B5 checkpoint, synchronize the reusable worker branch with main and launch the bounded Phase 2B6 fixture slice
 
 ## Recommended roadmap placement and activation conditions
 
@@ -104,17 +105,17 @@ ACTIVE_PLAN:
 
 CURRENT_SLICE:
 - Phase: 2
-- Checklist item: 2B5 — migrate the multi-bind success family
-- Goal: replace the fallback for five multi-bind cases with one explicit compile-only and four rendered-output contracts
+- Checklist item: 2B6 — migrate the numeric-promotion success family
+- Goal: replace the fallback for four numeric cases with one explicit compile-only and three rendered-output contracts
 - Non-goals: no runner enforcement, fallback removal, unrelated fixture migration, diagnostic changes, exact runtime-event infrastructure or broad role/contract backfill
 
 LAST_GOOD_COMMIT:
-- `1f0869712` — accepted Phase 2B4 result/catch expectation migration
+- `6193a2e12` — accepted Phase 2B5 multi-bind expectation migration
 
 CURRENT_WORKTREE_STATE:
-- Clean / known changes: parent `main` is at `1f0869712`; this Phase 2B4 checkpoint update is parent-owned
+- Clean / known changes: parent `main` is at `6193a2e12`; this Phase 2B5 checkpoint update is parent-owned
 - Branch: local `main`
-- Dedicated worker worktrees: all accepted Phase 1 worktrees were clean and removed after `git cherry` confirmed their patches on main; reuse `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase2a` from worker commit `a6126caf2`
+- Dedicated worker worktrees: all accepted Phase 1 worktrees were clean and removed after `git cherry` confirmed their patches on main; reuse `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase2a` from worker commit `ccc18879d`
 
 RELEVANT_DOCS_THIS_SLICE:
 - `AGENTS.md`
@@ -129,17 +130,17 @@ RELEVANT_DOCS_THIS_SLICE:
 - `docs/roadmap/roadmap.md`
 
 RELEVANT_CODE:
-- `tests/cases/{adversarial_multi_bind_in_loops,multi_bind_explicit_types_and_mutability,multi_bind_mixed_existing_and_new_targets,multi_bind_optional_slots,multi_bind_plain_multi_return}/expect.toml`: new explicit expectations
-- `tests/cases/manifest.toml`: add smoke role only to `multi_bind_optional_slots`
+- `tests/cases/{int_promotion_to_float_declaration,int_promotion_to_float_return,int_promotion_to_float_via_function_call,mixed_numeric_literals}/expect.toml`: new explicit expectations
+- `tests/cases/manifest.toml`: add smoke role only to `mixed_numeric_literals`
 - `tests/cases/adversarial_multi_file_helper_chain/input/helper/compose.bst`: inspect-only design conflict; `@./prefix` is unsupported
 - `tests/cases/loop_borrow_mutation_conflict/input/#page.bst`: inspect-only pending mutation-during-iteration review
 - `tests/fixtures/stubs/expect.toml`: inspect only; fallback removal belongs to 2C after all migrations
 - `justfile::validate`: final code-bearing gate
 
 ACCEPTANCE_CRITERIA:
-- `adversarial_multi_bind_in_loops` asserts `16`; `multi_bind_explicit_types_and_mutability` asserts `1`, `two` and `4`; `multi_bind_mixed_existing_and_new_targets` asserts `fresh` and `9`; `multi_bind_plain_multi_return` asserts `a` and `1`
-- `multi_bind_optional_slots` uses explicit compile-only intent and is the only manifest entry gaining `role = "smoke"`
-- all five exact cases pass on HTML; audit reports 12 total explicit compile-only blocks, 78 remaining backend-baseline-only blocks, 23 remaining fallback-backed cases and zero hard violations; full validation passes
+- the three promotion cases assert `float declarations from int passed`, `float returns from int passed` and `runtime int to float coercion passed`
+- `mixed_numeric_literals` uses explicit compile-only intent and is the only manifest entry gaining `role = "smoke"`
+- all four exact cases pass on HTML; audit reports 13 total explicit compile-only blocks, 74 remaining backend-baseline-only blocks, 19 remaining fallback-backed cases and zero hard violations; full validation passes
 
 DECISIONS_ALREADY_MADE:
 - decision: harden the integration harness before pruning
@@ -208,6 +209,7 @@ VALIDATION_STATE:
 - Phase 2B3 selection exploration: read-only Codex CLI Spark found 12 observable candidates but could not execute them; parent split the mixed owners, verified the four selected cases compile on current main, and excluded two design-conflict candidates from silent success migration
 - Phase 2B3 worker `just validate`: passed with 3,463 Rust tests, 1,784 integration executions, docs checking and 28 benchmark sanity cases; audit reported 11 compile-only, 88 backend-baseline-only, 33 fallback-backed and zero hard violations
 - Phase 2B4 worker corrected the nested-catch fallback marker from the explorer's `guest-1.5` guess to source-verified `guest-0`; `just validate` passed with 3,463 Rust tests and 1,784 integration executions; audit reported 11 compile-only, 83 backend-baseline-only, 28 fallback-backed and zero hard violations
+- Phase 2B5 worker `just validate` passed; audit reported 12 compile-only, 78 backend-baseline-only, 23 fallback-backed and zero hard violations
 
 DOCS_IMPACT:
 - progress matrix needed: review after every phase that adds, removes, or materially strengthens current coverage; update only when the coverage statement changes
@@ -215,7 +217,7 @@ DOCS_IMPACT:
 - authorized docs updates: this plan explicitly authorizes the documentation changes listed in each phase; do not broaden language or architecture docs without a discovered contradiction or an intentional accepted behaviour change
 
 NEXT_ACTION:
-- commit this Phase 2B4 checkpoint, synchronize the reusable worker branch with main and launch the bounded Phase 2B5 fixture slice
+- commit this Phase 2B5 checkpoint, synchronize the reusable worker branch with main and launch the bounded Phase 2B6 fixture slice
 
 ---
 
@@ -1255,6 +1257,10 @@ Accepted batch 2B4 at `1f0869712`: five fallback-backed result/catch cases now a
 observable recovery values. The nested catch case correctly asserts the catch-path result
 `guest-0`. Audit baseline-only findings fell from 88 to 83, fallback use fell from 33 to 28, and
 full validation passed with 3,463 Rust tests and 1,784 integration executions.
+
+Accepted batch 2B5 at `6193a2e12`: four multi-bind cases now assert observable results and one
+no-output optional multi-bind case is an explicit compile-only smoke test. Audit baseline-only
+findings fell from 83 to 78, fallback use fell from 28 to 23, and full validation passed.
 
 ### 2C — Enforce canonical expectations and remove the fallback
 
