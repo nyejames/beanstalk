@@ -83,7 +83,7 @@ Use retained manifest metadata to narrow local runs without changing fixtures:
 ```sh
 cargo run --quiet -- tests --case arithmetic_operator_precedence --backend html
 cargo run --quiet -- tests --tag borrows --tag diagnostics --backend html
-cargo run --quiet -- tests --contract language.maps.get_alias_exclusivity
+cargo run --quiet -- tests --contract <contract-id>
 cargo run --quiet -- tests --list --tag borrows
 ```
 
@@ -95,8 +95,16 @@ cases, run:
 cargo run --quiet -- tests --audit
 ```
 
-Audit cannot be combined with filters or `--list`; it writes
-`target/test-reports/integration_suite_inventory.json`.
+Audit cannot be combined with filters or `--list`. It writes
+`target/test-reports/integration_suite_inventory.json`. The report keeps the universal backend
+baseline separate from authored acceptance-only intent and other case-specific assertions. Hard
+suite-policy findings make audit fail after the report is written and make normal list or execution
+fail before compilation. Advisory classification findings remain non-fatal.
+
+A successful HTML or HTML-Wasm backend always runs its universal backend baseline. Use
+`success_contract = "acceptance_only"` only when that backend intentionally has no case-specific
+semantic, artifact, golden, absence or expected-warning assertion. A whole-case acceptance-only
+fixture uses `role = "smoke"`.
 
 ## Validation
 

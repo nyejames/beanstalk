@@ -30,29 +30,27 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 2R8 — correct workflow documentation and re-anchor Phase 2R
-LAST_ACCEPTED_COMMIT: `26a707729` (Phase 2R7b)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 2R7c fixture consolidation ready to commit
+CURRENT_SLICE: Phase 2D1 — migrate trait, ordering, package-alias, and config-package success contracts
+LAST_ACCEPTED_COMMIT: `5fbf183a4` (Phase 2R7c)
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 2R8 documentation and generated routes ready to commit
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: `testing.bd` and `CONTRIBUTING.md` still need current acceptance-only, baseline, golden, path-containment, audit-policy, and contract-filter examples; the progress matrix still says `lifetime`
-- code: the fresh audit is authoritative for current counts; Phase 2R7 leaves four source-semantic primary owners and no `lifetime_inference_` canonical fixtures
+- docs: workflow guidance now matches acceptance-only, baseline, golden, path-containment, audit-policy, and contract-filter behavior; progress coverage uses future-use/final-use terminology
+- code: the fresh audit owns 32 baseline-only advisories; Phase 2D1 starts with `trait_incompatibility_parse_success`, `trait_relation_facade_private_private_success`, `entry_start_sees_sorted_declarations`, `two_package_symbols_same_name_aliases`, and `config_package_folder_missing_default_ignored`
 ACCEPTANCE_CRITERIA:
-- workflow docs describe acceptance-only beside the universal backend baseline, file-backed goldens, contained fixture/entry paths, and hard-policy behavior
-- examples use `acceptance_only` and `--contract <contract-id>` rather than removed or nonexistent spellings
-- progress coverage uses future-use/final-use terminology and the plan records fresh counts without claiming feature breadth changed
-- documentation is rebuilt from source; `git diff --check` and the required mixed/code-bearing full gate pass before acceptance
+- each named backend receives the strongest observable contract available without forcing cross-backend symmetry
+- trait, declaration-ordering, and config-package behavior emits and asserts context-rich markers; the private/private trait case uses static HTML evidence where runtime output is unavailable
+- `two_package_symbols_same_name_aliases` uses acceptance-only only if inspection confirms no meaningful observable result, with a truthful whole-case role
+- exact cases, focused harness tests, audit, `git diff --check`, and the full code-bearing gate pass
 VALIDATION_STATE:
-- four exact Phase 2R7c HTML cases: passed
-- `cargo test --quiet borrow_checker -- --format terse`: passed; 59 tests
-- `cargo run --quiet -- tests --audit`: passed; 1,645 cases, 1,778 executions, 12 acceptance-only, 32 baseline-only, 529 rendered-output, zero hard findings
-- `just validate`: passed; cross-target Clippy, 3,505 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
-DOCS_IMPACT: Phase 2R8 explicitly authorizes workflow and strengthened coverage wording corrections; supported feature breadth remains unchanged
+- `cargo run --quiet -- build docs --release`: passed; 72 files; generated codebase-standards and progress routes inspected
+- latest code-bearing `just validate`: passed at Phase 2R7c; cross-target Clippy, 3,505 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
+DOCS_IMPACT: Phase 2R8 corrections are complete; Phase 2D1 is expected to change assertion coverage only
 BLOCKERS_OR_OPEN_DECISIONS: none; compiler diagnostics Phase 4.1c remains serialized and untouched
-DELEGATION_DECISION: parent-direct — documentation and active-plan edits are parent-owned by the orchestrator
-NEXT_WORKER_ORDER: none for the parent-owned documentation slice
+DELEGATION_DECISION: codex-cli — explicit user-selected provider for the bounded Phase 2D1 fixture family
+NEXT_WORKER_ORDER: codex-cli only for this run-local override
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit accepted Phase 2R7c, refresh its hash, then apply the bounded Phase 2R8 documentation corrections
+NEXT_RESUME_ACTION: commit accepted Phase 2R8, refresh its hash, then launch bounded Phase 2D1 through `codex-cli-beanstalk`
 
 ---
 
@@ -140,7 +138,8 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 2R6a CFG/projected actors | `a6a1ad0a9` | Accepted | 3,499 Rust tests; CFG-accurate naming; projected user/compiler origin distinction; 1,784 integration executions |
 | Phase 2R6b loop-borrow edge matrix | `8dc9f6049` | Accepted | 3,504 Rust tests; 1,652 cases and 1,785 executions; one primary plus one boundary integration owner; zero hard findings |
 | Phase 2R7b inferred assignment-move fact | `26a707729` | Accepted | 3,505 Rust tests; source `UNINIT`, target `SLOT`, and empty target aliases protected by one focused snapshot test |
-| Phase 2R7c lifetime/final-use ownership | pending acceptance commit | Accepted | 1,645 cases and 1,778 executions; 12 acceptance-only; 32 baseline-only; 529 rendered-output; zero hard findings |
+| Phase 2R7c lifetime/final-use ownership | `5fbf183a4` | Accepted | 1,645 cases and 1,778 executions; 12 acceptance-only; 32 baseline-only; 529 rendered-output; zero hard findings |
+| Phase 2R8 workflow documentation | pending acceptance commit | Accepted | 1,645 cases and 1,778 executions; 32 baseline-only; codebase-standards and progress routes rebuilt from corrected source |
 
 ---
 
@@ -550,27 +549,27 @@ Beanstalk has no source-level lifetime system. Integration IDs and comments must
 
 ### Documentation corrections
 
-- [ ] Update `testing.bd` with acceptance-only semantics, universal backend baselines, truthful audit fields, golden-file rules, contained paths, and hard-policy behavior.
-- [ ] Replace the nonexistent concrete contract example in `testing.bd` and `CONTRIBUTING.md` with `--contract <contract-id>` unless a real classified contract is added in the same slice.
-- [ ] Update canonical expectation examples from `compile_only` to `acceptance_only`.
-- [ ] Correct any claim that fixture outcomes were unchanged: supported feature breadth stayed the same, assertion coverage improved, and one missed invalid loop mutation is now rejected.
-- [ ] Update this plan's active checkpoint and current counts from a fresh audit.
-- [ ] Review the progress matrix for strengthened coverage wording only.
-- [ ] Rebuild documentation from source.
+- [x] Update `testing.bd` with acceptance-only semantics, universal backend baselines, truthful audit fields, golden-file rules, contained paths, and hard-policy behavior.
+- [x] Replace the nonexistent concrete contract example in `testing.bd` and `CONTRIBUTING.md` with `--contract <contract-id>` unless a real classified contract is added in the same slice.
+- [x] Update canonical expectation examples from `compile_only` to `acceptance_only`.
+- [x] Correct any claim that fixture outcomes were unchanged: supported feature breadth stayed the same, assertion coverage improved, and one missed invalid loop mutation is now rejected.
+- [x] Update this plan's active checkpoint and current counts from a fresh audit.
+- [x] Review the progress matrix for strengthened coverage wording only.
+- [x] Rebuild documentation from source.
 
 ### Phase 2R acceptance
 
-- [ ] Success intent is truthful and the old spelling is deleted.
-- [ ] Golden presence cannot be faked by directories.
-- [ ] One suite-policy evaluator owns hard/advisory rules.
-- [ ] Audit writes useful reports and fails on hard findings.
-- [ ] Fixture and entry paths are contained.
-- [ ] Recently migrated weak or inaccurate fixtures are corrected.
-- [ ] Loop-borrow edge coverage is complete for the touched behavior.
-- [ ] Misleading lifetime fixtures are removed, renamed, or reassigned.
-- [ ] Workflow documentation is current.
-- [ ] `cargo fmt`, `git diff --check`, documentation build, and `just validate` pass.
-- [ ] The checkpoint log records the accepted Phase 2R commits without narrative bloat.
+- [x] Success intent is truthful and the old spelling is deleted.
+- [x] Golden presence cannot be faked by directories.
+- [x] One suite-policy evaluator owns hard/advisory rules.
+- [x] Audit writes useful reports and fails on hard findings.
+- [x] Fixture and entry paths are contained.
+- [x] Recently migrated weak or inaccurate fixtures are corrected.
+- [x] Loop-borrow edge coverage is complete for the touched behavior.
+- [x] Misleading lifetime fixtures are removed, renamed, or reassigned.
+- [x] Workflow documentation is current.
+- [x] `cargo fmt`, `git diff --check`, documentation build, and `just validate` pass.
+- [x] The checkpoint log records the accepted Phase 2R commits without narrative bloat.
 
 ---
 
@@ -1246,15 +1245,15 @@ Do not present lower counts or faster time as proof of correctness.
 
 | Removed or renamed test/case | Previous intended contract | Replacement primary owner | Retained secondary owner | Commit |
 |---|---|---|---|---|
-| `lifetime_inference_conflict_detection` → `live_shared_alias_blocks_mutable_rebinding` | Live shared alias prevents mutation-capable rebinding | `live_shared_alias_blocks_mutable_rebinding` | none | pending Phase 2R7c |
-| `lifetime_inference_control_flow` | Branch-local alias final use permits mutation-capable rebinding | `branch_reborrow_after_last_use` | none | pending Phase 2R7c |
-| `lifetime_inference_drop_insertion` | Hidden advisory drop-site placement | `borrow_checker_drop_site_tests::{emits_advisory_return_drop_sites, emits_advisory_break_and_region_exit_drop_sites}` | none | pending Phase 2R7c |
-| `lifetime_inference_error_precision` | Claimed precise diagnostics without a negative or location assertion | none; Phase 4 owns the real structured path/line gap | none | pending Phase 2R7c |
-| `lifetime_inference_integration_basic` | Basic end-to-end borrow acceptance and pipeline report storage | `borrow_checker_basic_variables` | `borrow_checker_pipeline_tests::successful_borrow_report_can_be_stored_on_module` | pending Phase 2R7c |
-| `lifetime_inference_move_refinement` | Hidden inferred-assignment move transition | `borrow_checker_fact_tests::statement_entry_state_marks_source_uninitialized_after_inferred_assignment_move` | none | pending Phase 2R7c |
-| `lifetime_inference_use_after_move` | Mutable alias blocks later source access | `mutable_alias_blocks_later_source_access` | none | pending Phase 2R7c |
-| `last_use_precision` | Alias final use permits mutation-capable rebinding | `borrow_conflict_resolved_by_reordering` | none | pending Phase 2R7c |
-| `borrow_checker_use_after_move` → `mutable_alias_blocks_later_source_access` | Mutable alias blocks later source access | `mutable_alias_blocks_later_source_access` | none | pending Phase 2R7c |
+| `lifetime_inference_conflict_detection` → `live_shared_alias_blocks_mutable_rebinding` | Live shared alias prevents mutation-capable rebinding | `live_shared_alias_blocks_mutable_rebinding` | none | `5fbf183a4` |
+| `lifetime_inference_control_flow` | Branch-local alias final use permits mutation-capable rebinding | `branch_reborrow_after_last_use` | none | `5fbf183a4` |
+| `lifetime_inference_drop_insertion` | Hidden advisory drop-site placement | `borrow_checker_drop_site_tests::{emits_advisory_return_drop_sites, emits_advisory_break_and_region_exit_drop_sites}` | none | `5fbf183a4` |
+| `lifetime_inference_error_precision` | Claimed precise diagnostics without a negative or location assertion | none; Phase 4 owns the real structured path/line gap | none | `5fbf183a4` |
+| `lifetime_inference_integration_basic` | Basic end-to-end borrow acceptance and pipeline report storage | `borrow_checker_basic_variables` | `borrow_checker_pipeline_tests::successful_borrow_report_can_be_stored_on_module` | `5fbf183a4` |
+| `lifetime_inference_move_refinement` | Hidden inferred-assignment move transition | `borrow_checker_fact_tests::statement_entry_state_marks_source_uninitialized_after_inferred_assignment_move` | none | `5fbf183a4` |
+| `lifetime_inference_use_after_move` | Mutable alias blocks later source access | `mutable_alias_blocks_later_source_access` | none | `5fbf183a4` |
+| `last_use_precision` | Alias final use permits mutation-capable rebinding | `borrow_conflict_resolved_by_reordering` | none | `5fbf183a4` |
+| `borrow_checker_use_after_move` → `mutable_alias_blocks_later_source_access` | Mutable alias blocks later source access | `mutable_alias_blocks_later_source_access` | none | `5fbf183a4` |
 
 ### Coverage gap and handoff ledger
 

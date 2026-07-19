@@ -316,7 +316,7 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
         [data:
             [: Borrow validation and ownership analysis]
             [: Supported]
-            [: Broad borrow, aliasing, mutable/exclusive access, use-after-move, branch merge, loop, short-circuit, lifetime, drop-site, hashmap, reactivity, and adversarial coverage.]
+            [: Broad borrow, aliasing, mutable/exclusive access, use-after-move, branch merge, loop, short-circuit, future-use, final-use, advisory drop-site, hashmap, reactivity and adversarial coverage.]
             [: HIR analysis / JS GC baseline]
             [: Borrow validation enforces exclusivity and move-safety while ownership/drop facts remain advisory for GC-only JS. GC fallback remains the language baseline.]
         ]

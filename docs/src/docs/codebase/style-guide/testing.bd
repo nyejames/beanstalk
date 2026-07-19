@@ -129,6 +129,33 @@ Do not use unit coverage as a substitute for an end-to-end case when user behavi
 - Prefer top-level templates to simulate output.
 - Avoid `io.line(...)` unless console behavior is itself under test.
 
+### Successful backend intent
+
+Every successful HTML and HTML-Wasm backend run applies its universal backend baseline. The
+baseline protects harness and target invariants. It is not the case's authored semantic contract.
+
+Use `success_contract = "acceptance_only"` only when that backend has no stronger case-specific
+semantic, artifact, golden, absence or expected-warning assertion.
+
+[codeblock, $code("text"):
+    [backends.html]
+    mode = "success"
+    warnings = "forbid"
+    success_contract = "acceptance_only"
+]
+
+Acceptance-only intent does not disable the baseline. The audit records both
+`baseline_applied = true` and `acceptance_only = true`, with `backend_baseline` and
+`acceptance_only` in `assertion_kinds`.
+
+Do not combine acceptance-only intent with artifact assertions, golden mode, rendered-output
+assertions, artifact-absence assertions or an authored expected-warning contract. A whole case
+whose backends are all acceptance-only uses `role = "smoke"`. A mixed-backend case may use a
+boundary or backend role when another backend owns a stronger contract.
+
+A successful backend with only the universal baseline is baseline-only, not acceptance-only.
+The audit reports it as an advisory while the classification migration remains open.
+
 For new type-system syntax, include:
 
 - positive usage
@@ -155,6 +182,11 @@ Canonical fixture shape:
 
 - `manifest.toml` is the authoritative case order. Every case declares a unique canonical `id`,
   unique fixture `path` and at least one non-empty tag.
+- Manifest case paths are relative and may not contain absolute, platform-prefix, parent or
+  current-directory components. Canonicalised fixture roots must remain inside `tests/cases/`,
+  including through symlinks.
+- IDs, paths, tags, contracts, roles and configured entries reject leading or trailing whitespace.
+  Tags within one case must be unique.
 - `contract` and `role` are optional while classification is being backfilled. Supported roles are
   `primary`, `boundary`, `backend`, `adversarial` and `smoke`.
 - A `primary` case requires a contract, and one contract may have at most one primary case.
@@ -166,10 +198,10 @@ Manifest entry shape:
 
 [codeblock, $code("text"):
     [[case]]
-    id = "hashmap_get_alias_blocks_set"
-    path = "hashmap_get_alias_blocks_set"
-    tags = ["integration", "maps", "borrows"]
-    contract = "language.maps.get_alias_exclusivity"
+    id = "borrow_conflict_resolved_by_reordering"
+    path = "borrow_conflict_resolved_by_reordering"
+    tags = ["integration", "borrows"]
+    contract = "language.bindings.alias_final_use_allows_mutable_rebinding"
     role = "primary"
 ]
 
@@ -180,7 +212,7 @@ Use the canonical case ID and retained metadata for local iteration:
 [codeblock, $code("text"):
     cargo run --quiet -- tests --case arithmetic_operator_precedence --backend html
     cargo run --quiet -- tests --tag borrows --tag diagnostics --backend html
-    cargo run --quiet -- tests --contract language.maps.get_alias_exclusivity
+    cargo run --quiet -- tests --contract <contract-id>
     cargo run --quiet -- tests --list --tag borrows
 ]
 
@@ -202,6 +234,15 @@ Audit cannot be combined with filters or `--list`. It writes the reporting-owned
 `target/test-reports/integration_suite_inventory.json`, including canonical metadata, backend
 expectation facts, hard-policy violations and advisory missing-classification findings. The report
 is review input only; it never deletes, merges or rewrites fixtures.
+
+The inventory reports acceptance-only, baseline-only, rendered-output, artifact, golden, absence
+and expected-warning backend counts. Per-backend fields keep `baseline_applied`, `acceptance_only`,
+`assertion_kinds`, `golden_present` and `golden_mode` separate so the report matches what ran.
+
+Hard policy has one suite-policy owner. Duplicate primary contracts, a primary without a contract
+and a whole-case acceptance-only fixture without `role = "smoke"` are hard findings. Normal list
+and execution modes reject hard findings before selection or compilation. Audit still writes the
+complete JSON report, then returns failure. Advisory classification findings remain non-fatal.
 
 ### Diagnostics assertions
 
@@ -236,6 +277,10 @@ Use one `expect.toml` per case with backend-specific assertion blocks.
 ]
 
 - Use backend-specific blocks within one case.
+- `entry = "."` is the one supported current-directory sentinel and selects the case's `input/`
+  directory. Every other entry is a relative contained path with no absolute, platform-prefix,
+  parent or current-directory component. Its canonical path must remain inside the owning
+  `input/` directory, including through symlinks.
 - Store strict goldens in:
 
 [codeblock, $code("text"):
@@ -245,6 +290,11 @@ Use one `expect.toml` per case with backend-specific assertion blocks.
 - Use artifact assertions for structure: file presence, Wasm validity, exports, imports, expected snippets, absence of forbidden output.
 - Use `artifacts_must_not_exist` for success cases whose contract requires an exact normalized output path to be absent. Paths reported as `NotBuilt` are ignored because they were never emitted.
 - Use strict goldens only where exact emitted text is contractual.
+- Golden discovery recursively counts actual files. Empty or directory-only golden trees do not
+  create a contract. Nested files do.
+- `golden_mode` without at least one discovered file is invalid. When files exist, strict is the
+  default if no mode is authored. When no files exist, audit reports `golden_present = false` and
+  `golden_mode = null`.
 - Prefer semantic or rendered-output assertions for behavior-first cases.
 - Strengthen artifact assertions when a golden can pass while structural behavior is wrong.
 - Do not require unsupported backends to succeed merely for matrix symmetry. Assert the intended rejection contract.
