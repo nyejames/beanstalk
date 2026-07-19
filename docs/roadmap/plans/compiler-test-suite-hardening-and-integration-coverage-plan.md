@@ -29,17 +29,17 @@ This ordering is mandatory. Do not begin broad pruning while the harness can sti
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 2B10a — migrate the stale helper-chain import fixture to the accepted module-root path
-LAST_ACCEPTED_COMMIT: `612439169` — make runtime and package contracts explicit
-WORKTREE: parent `main` has the Phase 2B9 plan checkpoint at `adfc40984`; reusable worker branch is clean at merge commit `cddbfe9a6` in `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase2a`; do not create another worktree
+CURRENT_SLICE: Phase 2B10b exploration — pinpoint the collection-loop source alias loss before the borrow fix
+LAST_ACCEPTED_COMMIT: `79d821a2b` — make the helper-chain contract explicit
+WORKTREE: parent `main` has the Phase 2B10a code checkpoint at `79d821a2b`; reusable worker branch is clean at `a4a61f36f` in `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase2a`; do not create another worktree
 REQUIRED_RELOADS: startup files, this plan and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: accepted imports are module-root-relative, so the nested helper must use `@helper/prefix`; removing current `@./` compatibility belongs to the queued canonical-module plan
-- code: `adversarial_multi_file_helper_chain` is a stale fixture with intended output `A-hello-B`; `loop_borrow_mutation_conflict` is a separate borrow-analysis bug and remains untouched in this slice
+- docs: collection-loop iteration retains shared access to its source while the body executes; overlapping `~items.push(4)` must use the existing shared/mutable conflict diagnostic lane
+- code: `loop_borrow_mutation_conflict` is the only fallback-backed case; current lowering snapshots the iterable and loses the source-root relationship before borrow validation
 ACCEPTANCE_CRITERIA:
-- replace only the stale `@./prefix` import with `@helper/prefix`
-- add an explicit HTML rendered-output contract for `A-hello-B`
-- leave resolver compatibility, the loop-borrow case, manifest metadata and fallback infrastructure unchanged; pass the exact case, audit and full gate
+- identify the exact HIR or borrow-analysis fact that must preserve the collection-loop source root
+- name the smallest coherent implementation and test scope without editing files
+- return an exact worker envelope or a concrete design/architecture blocker
 VALIDATION_STATE:
 - final TIR at `dc81f7e53`: `just validate` passed with 3,433 Rust tests, 1,784 integration executions, docs checking and 28 benchmark sanity cases
 - Phase 0A documentation-only gate: `cargo run --quiet -- build docs --release` passed; 72 files built and no generated diff was produced (`bean` was unavailable in `PATH`)
@@ -62,13 +62,14 @@ VALIDATION_STATE:
 - Phase 2B8: all seven exact HTML cases, 70 focused runner tests, audit, diff checks and `just validate` passed; audit reported 17 compile-only, 61 backend-baseline-only, six fallback-backed and zero hard violations
 - Phase 2B9: all four exact HTML cases, 70 focused runner tests, audit and diff checks passed in worker and parent review; worker `just validate` passed; audit reported 17 compile-only, 57 backend-baseline-only, two fallback-backed and zero hard violations
 - Phase 2B10 exploration: Codex CLI read-only exploration confirmed the helper-chain fixture is stale and the loop mutation case exposes an existing `BST-BORROW-0003` analysis gap; no files changed
+- Phase 2B10a: exact helper-chain HTML case, 70 runner tests, audit and diff checks passed in worker and parent review; worker `just validate` passed; audit reported 17 compile-only, 56 backend-baseline-only, one fallback-backed and zero hard violations
 - Phase 2B9 launch: both the optional `beanstalk-spark-explorer` and required `beanstalk-plan-worker` Codex CLI profiles selected `gpt-5.6-luna` but returned the account usage-limit error before repository edits; the service reported retry availability at 2026-07-25 11:08 AM
 DOCS_IMPACT: Phase 1 workflow docs, generated release output and the deferred code-block highlighting roadmap note are current; fixture outcomes/backend coverage and the progress matrix remain unchanged
-BLOCKERS_OR_OPEN_DECISIONS: after 2B10a, fix the loop iterable borrow gap as a separate coherent slice before Phase 2C; diagnostics Phase 4.1c remains serialized at `d7fb3654f`; disk permits at most one additional worktree
-DELEGATION_DECISION: codex-cli implementation — explicit user-requested provider and the stale fixture correction is a bounded two-file slice
+BLOCKERS_OR_OPEN_DECISIONS: pinpoint whether the loop-source root relationship belongs in HIR lowering or existing borrow-analysis transfer before implementation; diagnostics Phase 4.1c remains serialized at `d7fb3654f`; disk permits at most one additional worktree
+DELEGATION_DECISION: codex-cli simple-exploration — explicit user-requested provider and root-cause ownership must be exact before the compiler edit
 NEXT_WORKER_ORDER: codex-cli only for this run
 STOP_REASON: none
-NEXT_RESUME_ACTION: launch the bounded Phase 2B10a implementation in the existing reusable worktree
+NEXT_RESUME_ACTION: launch the bounded Phase 2B10b root-cause exploration in the existing reusable worktree
 
 ## Recommended roadmap placement and activation conditions
 
@@ -110,15 +111,15 @@ ACTIVE_PLAN:
 
 CURRENT_SLICE:
 - Phase: 2
-- Checklist item: 2B10a — migrate the stale helper-chain import fixture to the accepted module-root path
-- Goal: replace the stale nested-file-relative import and assert the authored `A-hello-B` output
-- Non-goals: no import-resolver compatibility removal, loop-borrow fix, runner enforcement, fallback removal, diagnostics changes or broad role/contract backfill
+- Checklist item: 2B10b exploration — pinpoint the collection-loop source alias loss before the borrow fix
+- Goal: identify the exact owner and smallest root-cause correction that makes mutation of the active iterable report `BST-BORROW-0003`
+- Non-goals: no repository edits, broad borrow-checker redesign, import changes, runner enforcement, fallback removal or new diagnostic family
 
 LAST_GOOD_COMMIT:
-- `612439169` — accepted Phase 2B9 runtime and package expectation migration
+- `79d821a2b` — accepted Phase 2B10a helper-chain fixture migration
 
 CURRENT_WORKTREE_STATE:
-- Clean / known changes: parent `main` has the Phase 2B9 plan checkpoint at `adfc40984`; the reusable worker branch is clean at merge commit `cddbfe9a6`
+- Clean / known changes: parent `main` has the Phase 2B10a code checkpoint at `79d821a2b`; the reusable worker branch is clean at `a4a61f36f`
 - Branch: local `main`
 - Dedicated worker worktrees: reuse `/Users/aneirinjames/projects/beanstalk/.worktrees/test-hardening-phase2a`, currently clean at worker commit `c300c18df`; do not create another worktree
 
@@ -132,19 +133,23 @@ RELEVANT_DOCS_THIS_SLICE:
 - `docs/src/docs/codebase/language/overview.bd`
 - `docs/language-overview.md`
 - `docs/src/docs/packages/import-paths.bd`
+- `docs/src/docs/codebase/memory-management/access-and-aliasing/overview.bd`
+- `docs/src/docs/codebase/memory-management/access-and-aliasing/access-and-aliasing.bd`
+- `docs/src/docs/codebase/memory-management/borrow-validation/overview.bd`
+- `docs/src/docs/codebase/memory-management/borrow-validation/borrow-validation.bd`
 - `docs/src/docs/progress/#page.bst`
 - `docs/roadmap/roadmap.md`
 
 RELEVANT_CODE:
-- `tests/cases/adversarial_multi_file_helper_chain/input/helper/compose.bst`: replace the stale import with `@helper/prefix`
-- `tests/cases/adversarial_multi_file_helper_chain/expect.toml`: add the explicit `A-hello-B` rendered-output contract
-- `src/compiler_frontend/paths/`: inspect only; current `@./` compatibility remains owned by the queued canonical-module plan
-- `tests/fixtures/stubs/expect.toml`: inspect only; fallback removal belongs to 2C after all migrations
+- `tests/cases/loop_borrow_mutation_conflict/`: current success-through-fallback case that should reject with `BST-BORROW-0003`
+- `src/compiler_frontend/hir/hir_statement/loop_lowering.rs`: collection-loop iterable snapshot and item-load lowering
+- `src/compiler_frontend/analysis/borrow_checker/transfer/access/`: existing shared/mutable conflict transfer and diagnostic path
+- nearby HIR and borrow-checker tests: identify the smallest invariant owner before implementation
 
 ACCEPTANCE_CRITERIA:
-- replace only the stale `@./prefix` import with `@helper/prefix`
-- add an explicit HTML success expectation with forbidden warnings and output `A-hello-B`
-- exact case, 70 runner tests, audit, diff checks and `just validate` pass; audit reports 17 compile-only, 56 backend-baseline-only, one fallback-backed and zero hard violations
+- identify the exact fact lost between source collection-loop lowering and borrow transfer
+- select one current owner for the correction and name directly required focused tests
+- return an implementation envelope that preserves valid collection loops and existing conflict diagnostics
 
 DECISIONS_ALREADY_MADE:
 - decision: harden the integration harness before pruning
@@ -233,7 +238,7 @@ DOCS_IMPACT:
 - authorized docs updates: this plan explicitly authorizes the documentation changes listed in each phase; do not broaden language or architecture docs without a discovered contradiction or an intentional accepted behaviour change
 
 NEXT_ACTION:
-- launch the bounded Phase 2B10a Codex CLI implementation task in the existing reusable worktree
+- launch the bounded Phase 2B10b Codex CLI root-cause exploration in the existing reusable worktree
 
 ---
 
@@ -1297,6 +1302,11 @@ Accepted batch 2B9 at `612439169`: the package-selection case now asserts its pa
 lowering and excludes package B, while three runtime cases assert their authored console values.
 Audit baseline-only findings fell from 61 to 57, fallback use fell from six to two, and the worker's
 full validation plus the parent's focused cases, 70 runner tests, audit and diff checks passed.
+
+Accepted batch 2B10a at `79d821a2b`: the stale nested helper import now uses the accepted
+module-root-relative `@helper/prefix` path and asserts its `A-hello-B` output. Audit baseline-only
+findings fell from 57 to 56, fallback use fell from two to one, and the worker's full validation
+plus the parent's exact case, 70 runner tests, audit and diff checks passed.
 
 ### 2C — Enforce canonical expectations and remove the fallback
 
