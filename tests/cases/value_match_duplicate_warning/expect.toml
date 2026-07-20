@@ -1,5 +1,5 @@
 [backends.html]
 mode = "success"
 warnings = "exact"
-warning_count = 1
+warning_codes = ["BST-RULE-0022"]
 rendered_output_contains = ["value_match_duplicate_warning result=busy"]

@@ -2,4 +2,4 @@
 mode = "failure"
 warnings = "exact"
 diagnostic_codes = ["BST-RULE-0034", "BST-RULE-0022"]
-warning_count = 1
+warning_codes = ["BST-RULE-0022"]
