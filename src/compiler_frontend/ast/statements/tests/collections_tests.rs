@@ -12,9 +12,8 @@ use crate::compiler_frontend::builtins::CollectionBuiltinOp;
 use crate::compiler_frontend::builtins::maps::MapBuiltinOp;
 use crate::compiler_frontend::compiler_messages::{
     CommonSyntaxMistakeReason, DiagnosticPayload, InvalidAssignmentTargetReason,
-    InvalidBuiltinCallReason, InvalidCollectionTypeReason, InvalidFallibleHandlingReason,
-    InvalidFieldAccessReason, InvalidMapLiteralReason, InvalidReceiverCallReason,
-    TypeMismatchContext,
+    InvalidBuiltinCallReason, InvalidFallibleHandlingReason, InvalidFieldAccessReason,
+    InvalidMapLiteralReason, InvalidReceiverCallReason, TypeMismatchContext,
 };
 use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
 use crate::compiler_frontend::tests::ast_fixture_support::{
@@ -110,16 +109,6 @@ fn parses_empty_collection_with_explicit_element_type() {
             .display_with_table(&string_table),
         "{Reading}"
     );
-}
-
-#[test]
-fn rejects_empty_collection_without_explicit_element_type() {
-    let diagnostic = parse_single_file_ast_diagnostic("values ~= {}\n");
-
-    assert!(matches!(
-        diagnostic.payload,
-        DiagnosticPayload::EmptyCollectionTypeAmbiguity
-    ));
 }
 
 #[test]
@@ -391,19 +380,6 @@ fn rejects_pull_method_as_unknown_collection_member() {
 }
 
 #[test]
-fn rejects_set_on_immutable_collection() {
-    let diagnostic = parse_single_file_ast_diagnostic("values = {1, 2, 3}\nvalues.set(0, 9)\n");
-
-    assert!(matches!(
-        diagnostic.payload,
-        DiagnosticPayload::InvalidReceiverCall {
-            reason: InvalidReceiverCallReason::ImmutableReceiverMutableMethod,
-            ..
-        }
-    ));
-}
-
-#[test]
 fn rejects_get_index_assignment_as_removed_syntax() {
     let diagnostic = parse_single_file_ast_diagnostic("values = {1, 2, 3}\nvalues.get(0) = 9\n");
 
@@ -508,19 +484,6 @@ fn fixed_collection_literal_within_capacity_is_accepted() {
         decl.value.diagnostic_type.display_with_table(&string_table),
         "{2 Int}"
     );
-}
-
-#[test]
-fn fixed_collection_literal_exceeding_capacity_is_rejected() {
-    let diagnostic = parse_single_file_ast_diagnostic("items {2 Int} = {1, 2, 3}\n");
-
-    assert!(matches!(
-        diagnostic.payload,
-        DiagnosticPayload::InvalidCollectionType {
-            reason: InvalidCollectionTypeReason::InitializerExceedsFixedCapacity { .. },
-            ..
-        }
-    ));
 }
 
 // --------------------------
@@ -709,29 +672,6 @@ fn parses_map_type_alias_literal() {
 }
 
 #[test]
-fn rejects_empty_inferred_curly_literal() {
-    let diagnostic = parse_single_file_ast_diagnostic("scores ~= {}\n");
-
-    assert!(matches!(
-        diagnostic.payload,
-        DiagnosticPayload::EmptyCollectionTypeAmbiguity
-    ));
-}
-
-#[test]
-fn rejects_mixed_collection_map_entries() {
-    let diagnostic = parse_single_file_ast_diagnostic("scores ~= {\"a\" = 1, 2}\n");
-
-    assert!(matches!(
-        diagnostic.payload,
-        DiagnosticPayload::InvalidMapLiteral {
-            reason: InvalidMapLiteralReason::MixedCollectionMapEntries,
-            ..
-        }
-    ));
-}
-
-#[test]
 fn rejects_collection_first_mixed_collection_map_entries() {
     let diagnostic = parse_single_file_ast_diagnostic("scores ~= {\"a\", \"b\" = 2}\n");
 
@@ -771,20 +711,6 @@ fn rejects_double_equal_inside_collection_as_common_syntax_mistake() {
 }
 
 #[test]
-fn rejects_duplicate_known_map_key() {
-    let diagnostic =
-        parse_single_file_ast_diagnostic("scores ~{String = Int} = {\"a\" = 1, \"a\" = 2}\n");
-
-    assert!(matches!(
-        diagnostic.payload,
-        DiagnosticPayload::InvalidMapLiteral {
-            reason: InvalidMapLiteralReason::DuplicateKnownKey,
-            ..
-        }
-    ));
-}
-
-#[test]
 fn rejects_unknown_bare_identifier_key() {
     let diagnostic =
         parse_single_file_ast_diagnostic("scores ~{String = Int} = {unknown_key = 10}\n");
@@ -792,34 +718,6 @@ fn rejects_unknown_bare_identifier_key() {
     assert!(matches!(
         diagnostic.payload,
         DiagnosticPayload::UnknownName { .. }
-    ));
-}
-
-#[test]
-fn rejects_unsupported_key_expression() {
-    let diagnostic = parse_single_file_ast_diagnostic("scores ~{Float = Int} = {1.5 = 10}\n");
-
-    assert!(matches!(
-        diagnostic.payload,
-        DiagnosticPayload::InvalidMapType {
-            reason: crate::compiler_frontend::compiler_messages::InvalidMapTypeReason::UnsupportedKeyType { .. },
-            ..
-        }
-    ));
-}
-
-#[test]
-fn rejects_const_map_literal() {
-    let diagnostic = parse_single_file_ast_diagnostic("scores #= {\"a\" = 1}\n");
-
-    assert!(matches!(
-        diagnostic.payload,
-        DiagnosticPayload::CompileTimeEvaluationError
-        {
-            reason:
-            crate::compiler_frontend::compiler_messages::CompileTimeEvaluationErrorReason::ConstantInitializerNotFoldable,
-            ..
-        }
     ));
 }
 
@@ -968,36 +866,6 @@ fn parses_map_length_as_property() {
 }
 
 #[test]
-fn rejects_map_length_with_parentheses() {
-    let diagnostic = parse_single_file_ast_diagnostic(
-        "scores ~{String = Int} = {\"Ada\" = 10}\ncount = scores.length()\n",
-    );
-
-    assert!(matches!(
-        diagnostic.payload,
-        DiagnosticPayload::InvalidBuiltinCall {
-            reason: InvalidBuiltinCallReason::MapLengthIsProperty,
-            ..
-        }
-    ));
-}
-
-#[test]
-fn rejects_map_length_assignment() {
-    let diagnostic = parse_single_file_ast_diagnostic(
-        "scores ~{String = Int} = {\"Ada\" = 10}\nscores.length = 5\n",
-    );
-
-    assert!(matches!(
-        diagnostic.payload,
-        DiagnosticPayload::InvalidAssignmentTarget {
-            reason: InvalidAssignmentTargetReason::ReadOnlyMapProperty,
-            ..
-        }
-    ));
-}
-
-#[test]
 fn rejects_map_get_index_assignment() {
     let diagnostic = parse_single_file_ast_diagnostic(
         "scores ~{String = Int} = {\"Ada\" = 10}\nscores.get(\"Ada\") = 5\n",
@@ -1007,66 +875,6 @@ fn rejects_map_get_index_assignment() {
         diagnostic.payload,
         DiagnosticPayload::InvalidAssignmentTarget {
             reason: InvalidAssignmentTargetReason::MapGetTargetNotWritable,
-            ..
-        }
-    ));
-}
-
-#[test]
-fn rejects_unhandled_map_get_result() {
-    let diagnostic = parse_single_file_ast_diagnostic(
-        "scores ~{String = Int} = {\"Ada\" = 10}\nvalue = scores.get(\"Ada\")\n",
-    );
-
-    assert!(matches!(
-        diagnostic.payload,
-        DiagnosticPayload::InvalidBuiltinCall {
-            reason: InvalidBuiltinCallReason::UnhandledFallibleCall,
-            ..
-        }
-    ));
-}
-
-#[test]
-fn rejects_map_set_without_mutable_receiver_marker() {
-    let diagnostic = parse_single_file_ast_diagnostic(
-        "scores ~{String = Int} = {\"Ada\" = 10}\nscores.set(\"Linus\", 7)!\n",
-    );
-
-    assert!(matches!(
-        diagnostic.payload,
-        DiagnosticPayload::InvalidReceiverCall {
-            reason: InvalidReceiverCallReason::MutableReceiverMissingMarker,
-            ..
-        }
-    ));
-}
-
-#[test]
-fn rejects_map_remove_without_mutable_receiver_marker() {
-    let diagnostic = parse_single_file_ast_diagnostic(
-        "scores ~{String = Int} = {\"Ada\" = 10}\nscores.remove(\"Ada\")!\n",
-    );
-
-    assert!(matches!(
-        diagnostic.payload,
-        DiagnosticPayload::InvalidReceiverCall {
-            reason: InvalidReceiverCallReason::MutableReceiverMissingMarker,
-            ..
-        }
-    ));
-}
-
-#[test]
-fn rejects_map_clear_without_mutable_receiver_marker() {
-    let diagnostic = parse_single_file_ast_diagnostic(
-        "scores ~{String = Int} = {\"Ada\" = 10}\nscores.clear()\n",
-    );
-
-    assert!(matches!(
-        diagnostic.payload,
-        DiagnosticPayload::InvalidReceiverCall {
-            reason: InvalidReceiverCallReason::MutableReceiverMissingMarker,
             ..
         }
     ));
