@@ -33,7 +33,7 @@ fn all_functions_is_default_for_direct_js_lowering() {
     assert!(output.source.contains(&format!("function {start_name}(")));
     assert!(
         output.source.contains(&format!("function {unused_name}(")),
-        "direct JS lowering should preserve legacy all-functions emission"
+        "direct JS lowering should emit every function by default"
     );
 }
 
