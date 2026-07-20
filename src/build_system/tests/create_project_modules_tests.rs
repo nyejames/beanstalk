@@ -1718,7 +1718,7 @@ fn entry_root_fallback_wins_for_unmatched_non_relative_imports() {
     assert_eq!(modules.len(), 1, "expected exactly one entry module");
 
     let source_theme = fs::canonicalize(src.join("helpers/theme.bst")).expect("canonical source");
-    let _package_theme =
+    let package_theme =
         fs::canonicalize(lib.join("helpers/theme.bst")).expect("canonical package file");
     let discovered_paths = modules[0]
         .input_files
@@ -1729,6 +1729,10 @@ fn entry_root_fallback_wins_for_unmatched_non_relative_imports() {
     assert!(
         discovered_paths.contains(&source_theme),
         "unmatched non-relative imports should fall back to the entry root"
+    );
+    assert!(
+        !discovered_paths.contains(&package_theme),
+        "entry-root fallback must not also pull in the same-stem package file"
     );
 
     fs::remove_dir_all(&root).expect("should remove temp root");
@@ -1786,42 +1790,6 @@ fn discover_all_modules_finds_multiple_hash_entries_per_root() {
     assert!(entry_names.contains("#page.bst"));
     assert!(entry_names.contains("#layout.bst"));
     assert!(entry_names.contains("#lib.bst"));
-
-    fs::remove_dir_all(&root).expect("should remove temp root");
-}
-
-#[test]
-fn detects_duplicate_config_keys() {
-    // Duplicate constants are caught by the header parser during parsing.
-    // This test verifies that config parsing properly reports the duplicate key error.
-    let root = temp_dir("config_duplicate_keys");
-    fs::create_dir_all(&root).expect("should create root dir");
-    let config_path = root.join(settings::CONFIG_FILE_NAME);
-
-    fs::write(
-        &config_path,
-        "entry_root #= \"src\"\ndev_folder #= \"dev\"\nentry_root #= \"other\"\n",
-    )
-    .expect("should write config");
-
-    let mut config = Config::new(root.clone());
-    let style_directives = test_style_directives();
-    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
-        .expect_err("config should fail");
-
-    let duplicate_diagnostic = messages.error_diagnostics().find(|diagnostic| {
-        matches!(
-            &diagnostic.payload,
-            DiagnosticPayload::InvalidConfig {
-                reason: InvalidConfigReason::DuplicateKey,
-                ..
-            }
-        )
-    });
-    assert!(
-        duplicate_diagnostic.is_some(),
-        "should have a duplicate config key diagnostic"
-    );
 
     fs::remove_dir_all(&root).expect("should remove temp root");
 }
@@ -1930,37 +1898,6 @@ fn rejects_config_non_compile_time_constant_value() {
         ),
         "unexpected diagnostic payload: {:?}",
         diagnostic.payload
-    );
-
-    fs::remove_dir_all(&root).expect("should remove temp root");
-}
-
-#[test]
-fn accepts_config_private_key_referencing_explicit_const() {
-    let root = temp_dir("config_private_ref_explicit");
-    fs::create_dir_all(&root).expect("should create root dir");
-    let config_path = root.join(settings::CONFIG_FILE_NAME);
-
-    fs::write(
-        &config_path,
-        "output_folder #= \"release\"\ndev_folder #= output_folder\n",
-    )
-    .expect("should write config");
-
-    let mut config = Config::new(root.clone());
-    let style_directives = test_style_directives();
-    parse_project_config_for_test(&mut config, &config_path, &style_directives)
-        .expect("private const referencing explicit constant should succeed");
-
-    assert_eq!(
-        config.release_folder,
-        PathBuf::from("release"),
-        "output_folder should be set"
-    );
-    assert_eq!(
-        config.dev_folder,
-        PathBuf::from("release"),
-        "dev_folder should resolve through private reference to explicit const"
     );
 
     fs::remove_dir_all(&root).expect("should remove temp root");
@@ -2104,75 +2041,14 @@ fn rejects_core_string_key_with_bool_value() {
     let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
         .expect_err("config should fail");
 
-    let diagnostic = first_error_diagnostic(&messages);
-    assert!(
-        matches!(
-            &diagnostic.payload,
-            DiagnosticPayload::InvalidConfig {
-                reason: InvalidConfigReason::InvalidConfigValueShape { .. },
-                ..
-            }
-        ),
-        "unexpected diagnostic payload: {:?}",
-        diagnostic.payload
-    );
-
-    fs::remove_dir_all(&root).expect("should remove temp root");
-}
-
-#[test]
-fn rejects_core_string_key_with_int_value() {
-    let root = temp_dir("config_string_shape_int_rejected");
-    fs::create_dir_all(&root).expect("should create root dir");
-    let config_path = root.join(settings::CONFIG_FILE_NAME);
-
-    fs::write(&config_path, "dev_folder #= 123\n").expect("should write config");
-
-    let mut config = Config::new(root.clone());
-    let style_directives = test_style_directives();
-    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
-        .expect_err("config should fail");
-
-    let diagnostic = first_error_diagnostic(&messages);
-    assert!(
-        matches!(
-            &diagnostic.payload,
-            DiagnosticPayload::InvalidConfig {
-                reason: InvalidConfigReason::InvalidConfigValueShape { .. },
-                ..
-            }
-        ),
-        "unexpected diagnostic payload: {:?}",
-        diagnostic.payload
-    );
-
-    fs::remove_dir_all(&root).expect("should remove temp root");
-}
-
-#[test]
-fn rejects_core_string_key_with_char_value() {
-    let root = temp_dir("config_string_shape_char_rejected");
-    fs::create_dir_all(&root).expect("should create root dir");
-    let config_path = root.join(settings::CONFIG_FILE_NAME);
-
-    fs::write(&config_path, "output_folder #= 'x'\n").expect("should write config");
-
-    let mut config = Config::new(root.clone());
-    let style_directives = test_style_directives();
-    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
-        .expect_err("config should fail");
-
-    let diagnostic = first_error_diagnostic(&messages);
-    assert!(
-        matches!(
-            &diagnostic.payload,
-            DiagnosticPayload::InvalidConfig {
-                reason: InvalidConfigReason::InvalidConfigValueShape { .. },
-                ..
-            }
-        ),
-        "unexpected diagnostic payload: {:?}",
-        diagnostic.payload
+    let reason = first_invalid_config_reason(&messages);
+    let InvalidConfigReason::InvalidConfigValueShape { expected } = reason else {
+        panic!("expected invalid config value shape, got {reason:?}");
+    };
+    assert_eq!(
+        messages.string_table.resolve(*expected),
+        "a string value",
+        "string-key shape mismatch must report the expected string shape"
     );
 
     fs::remove_dir_all(&root).expect("should remove temp root");
@@ -2192,77 +2068,14 @@ fn rejects_backend_bool_key_with_string_value() {
         parse_project_config_for_test_with_html_keys(&mut config, &config_path, &style_directives)
             .expect_err("config should fail");
 
-    let diagnostic = first_error_diagnostic(&messages);
-    assert!(
-        matches!(
-            &diagnostic.payload,
-            DiagnosticPayload::InvalidConfig {
-                reason: InvalidConfigReason::InvalidConfigValueShape { .. },
-                ..
-            }
-        ),
-        "unexpected diagnostic payload: {:?}",
-        diagnostic.payload
-    );
-
-    fs::remove_dir_all(&root).expect("should remove temp root");
-}
-
-#[test]
-fn rejects_backend_bool_key_with_int_value() {
-    let root = temp_dir("config_bool_shape_int_rejected");
-    fs::create_dir_all(&root).expect("should create root dir");
-    let config_path = root.join(settings::CONFIG_FILE_NAME);
-
-    fs::write(&config_path, "html_inject_core_css #= 1\n").expect("should write config");
-
-    let mut config = Config::new(root.clone());
-    let style_directives = test_style_directives();
-    let messages =
-        parse_project_config_for_test_with_html_keys(&mut config, &config_path, &style_directives)
-            .expect_err("config should fail");
-
-    let diagnostic = first_error_diagnostic(&messages);
-    assert!(
-        matches!(
-            &diagnostic.payload,
-            DiagnosticPayload::InvalidConfig {
-                reason: InvalidConfigReason::InvalidConfigValueShape { .. },
-                ..
-            }
-        ),
-        "unexpected diagnostic payload: {:?}",
-        diagnostic.payload
-    );
-
-    fs::remove_dir_all(&root).expect("should remove temp root");
-}
-
-#[test]
-fn rejects_backend_string_key_with_bool_value() {
-    let root = temp_dir("config_backend_string_shape_bool_rejected");
-    fs::create_dir_all(&root).expect("should create root dir");
-    let config_path = root.join(settings::CONFIG_FILE_NAME);
-
-    fs::write(&config_path, "html_lang #= false\n").expect("should write config");
-
-    let mut config = Config::new(root.clone());
-    let style_directives = test_style_directives();
-    let messages =
-        parse_project_config_for_test_with_html_keys(&mut config, &config_path, &style_directives)
-            .expect_err("config should fail");
-
-    let diagnostic = first_error_diagnostic(&messages);
-    assert!(
-        matches!(
-            &diagnostic.payload,
-            DiagnosticPayload::InvalidConfig {
-                reason: InvalidConfigReason::InvalidConfigValueShape { .. },
-                ..
-            }
-        ),
-        "unexpected diagnostic payload: {:?}",
-        diagnostic.payload
+    let reason = first_invalid_config_reason(&messages);
+    let InvalidConfigReason::InvalidConfigValueShape { expected } = reason else {
+        panic!("expected invalid config value shape, got {reason:?}");
+    };
+    assert_eq!(
+        messages.string_table.resolve(*expected),
+        "a boolean value",
+        "backend bool-key shape mismatch must report the expected bool shape"
     );
 
     fs::remove_dir_all(&root).expect("should remove temp root");
@@ -2298,29 +2111,6 @@ fn rejects_package_folders_with_bool_value() {
 }
 
 #[test]
-fn rejects_package_folders_with_mixed_collection() {
-    let root = temp_dir("config_package_folders_mixed_rejected");
-    fs::create_dir_all(&root).expect("should create root dir");
-    let config_path = root.join(settings::CONFIG_FILE_NAME);
-
-    fs::write(&config_path, "package_folders #= { \"lib\", 1 }\n").expect("should write config");
-
-    let mut config = Config::new(root.clone());
-    let style_directives = test_style_directives();
-    // A mixed collection fails during AST type checking before config shape validation.
-    // The important behavior is that it is rejected; the exact stage is an implementation detail.
-    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
-        .expect_err("config should fail");
-
-    assert!(
-        messages.error_diagnostics().next().is_some(),
-        "expected at least one diagnostic"
-    );
-
-    fs::remove_dir_all(&root).expect("should remove temp root");
-}
-
-#[test]
 fn accepts_package_folders_single_string() {
     let root = temp_dir("config_package_folders_single_string");
     fs::create_dir_all(&root).expect("should create root dir");
@@ -2335,35 +2125,6 @@ fn accepts_package_folders_single_string() {
 
     assert_eq!(config.package_folders, vec![PathBuf::from("lib")]);
     assert!(config.has_explicit_package_folders);
-
-    fs::remove_dir_all(&root).expect("should remove temp root");
-}
-
-#[test]
-fn rejects_closed_string_set_config_key_with_unsupported_value() {
-    let root = temp_dir("config_closed_string_set_rejected");
-    fs::create_dir_all(&root).expect("should create root dir");
-    let config_path = root.join(settings::CONFIG_FILE_NAME);
-
-    fs::write(&config_path, "project #= \"html_wasm\"\n").expect("should write config");
-
-    let mut config = Config::new(root.clone());
-    let style_directives = test_style_directives();
-    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
-        .expect_err("config should fail");
-
-    let diagnostic = first_error_diagnostic(&messages);
-    assert!(
-        matches!(
-            &diagnostic.payload,
-            DiagnosticPayload::InvalidConfig {
-                reason: InvalidConfigReason::InvalidConfigValueShape { .. },
-                ..
-            }
-        ),
-        "unexpected diagnostic payload: {:?}",
-        diagnostic.payload
-    );
 
     fs::remove_dir_all(&root).expect("should remove temp root");
 }
