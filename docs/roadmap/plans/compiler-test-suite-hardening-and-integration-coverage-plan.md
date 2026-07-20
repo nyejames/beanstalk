@@ -30,20 +30,20 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 14C12 HIR display and validation unit ownership review
-LAST_ACCEPTED_COMMIT: `1c112aec9` (Phase 14C10 code; Phase 14C11 required no code change)
+CURRENT_SLICE: Phase 14C13 borrow-checker unit ownership review
+LAST_ACCEPTED_COMMIT: `fcb30e1ac` (Phase 14C12 code)
 WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; accepted code is committed; concurrent example-name work remains separately committed
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: unit-test ownership, pruning, compiler-stage boundaries, and final governance rules govern the next slice
-- code: HIR lowering, module/local, metadata, and reachability ownership is complete; HIR display and validation tests form the final HIR group before borrow, build-system, backend, and final TIR reviews
+- code: HIR unit ownership is complete; the remaining 50 call-summary, fact, loop, scope, reactivity, drop-site, and pipeline borrow-checker tests form the next bounded group before build-system, backend, and final TIR reviews
 ACCEPTANCE_CRITERIA:
 - every remaining full-source unit has a distinct hidden invariant, parser fact, stage boundary, or policy owner
 - units superseded by a stronger canonical integration primary are deleted with replacement evidence
 - stale test-only helpers or production APIs are removed with their final caller
 - HIR, build-system, backend, and final TIR units keep only their owning semantic relationships and hidden facts
 VALIDATION_STATE:
-- `just validate`: passed; cross-target Clippy, 3,499 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
+- `just validate`: passed; cross-target Clippy, 3,496 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
 - Phase 14B audit: passed; zero hard findings; 66 backend-only and 15 adversarial-only primary-less contract advisories
 - Priya expectation alignment: accepted at `6efac7012`; 13 stale Rust and integration expectation files now match renamed inputs
 DOCS_IMPACT: testing, validation, and contributor workflow aligned with final suite policy; progress matrix and index unchanged
@@ -51,7 +51,7 @@ BLOCKERS_OR_OPEN_DECISIONS: none; 81 contract families without a primary are int
 DELEGATION_DECISION: Ollama — bounded Phase 14 implementation slices
 NEXT_WORKER_ORDER: Ollama only; no provider substitution
 STOP_REASON: none
-NEXT_RESUME_ACTION: launch the HIR display and validation unit ownership review through Ollama
+NEXT_RESUME_ACTION: launch the borrow-checker unit ownership review through Ollama
 
 ---
 
@@ -230,6 +230,7 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 14C9 HIR control-flow units | `75b7b2b93` | Accepted | One reference-typed collection-loop smoke that asserted only completed HIR validation was removed in favor of the executing `loop_collection_iteration` primary plus the explicit focused CFG owner; 43 branch, match, loop, value-block, and scoped-block CFG, target, merge, pattern, source-map, binding, terminality, and malformed-invariant owners retained; 3,499 Rust tests and 1,793 integration executions |
 | Phase 14C10 HIR result and numeric lowering units | `1c112aec9` | Accepted | All 27 result/fallible, checked-numeric, and Float-formatting units retained as explicit-edge, terminator, tuple-projection, alias, operation, failure-mode, conversion, prelude, formatter, and reactive-laziness owners; two module-wide fallible-branch checks were strengthened to prove outer calls and numeric operations occur only on the success edge; 3,499 Rust tests and 1,793 integration executions |
 | Phase 14C11 HIR module, local, metadata, and reachability units | no code change after `1c112aec9` | Accepted | All 31 module/local lowering, const/reactive/function-origin metadata, and reachability units retained as artefact projection, identity, binding, materialization, prelude, remapping, selected-root graph, feature-location, CFG-successor, and malformed-reference owners; latest full gate remains 3,499 Rust tests and 1,793 integration executions |
+| Phase 14C12 HIR display and validation units | `fcb30e1ac` | Accepted | Three collection-type display tests removed in favor of exact datatype display owners; the final-caller helper and obsolete test-only `with_type_environment` exposure were removed; six HIR-only display vocabulary owners and all 40 malformed/positive validator owners retained; 3,496 Rust tests and 1,793 integration executions |
 
 ---
 
@@ -1401,6 +1402,7 @@ Do not present lower counts or faster time as proof of correctness.
 | Eight fallible-handling diagnostic units | Dynamic-assert fallthrough, handler conflict/binding shape, `then` misuse, nested raw fallible fallback, and inline handler chaining | Eight Phase 4C7 canonical cases with exact `invalid_fallible_handling.*` reason assertions | 37 units retain AST/value-block shape, scope, terminality, assignment-target, parser-boundary, arity/type, and catch-placement facts | `d96a5f1c3` |
 | `hir_expression_lowering_tests::{collection_lowering_uses_pure_type_identity,returns_lowering_interns_multi_return_tuple_type_id,struct_lowering_uses_nominal_identity_only}` | Pure collection, tuple, and nominal-struct `TypeEnvironment` queries misplaced as HIR lowering tests | `environment_tests::{fixed_capacity_collection_interns_to_distinct_type_id,collection_shape_queries_work,display_renders_tuple_fields,nominal_struct_registration_allocates_id}` | `hir_expression_lowering_tests::{collection_expression_lowering_preserves_fixed_type_identity,expression_function_call_uses_variant_result_type_ids_for_multi_return,nominal_struct_identity_uses_field_parent_path}` retain the actual AST-to-HIR relationships | `83e3d689a` |
 | `loop_lowering_tests::lowers_collection_loop_with_reference_typed_iterable_expression` | Reference-typed collection loop lowers to valid completed HIR | `loop_collection_iteration` with executed `sum=10` output | `loop_lowering_tests::lowers_collection_loop_to_explicit_cfg` retains the hidden collection-loop CFG relationship | `75b7b2b93` |
+| `hir_display_tests::{hir_display_renders_fixed_collection_type,hir_display_renders_growable_collection_type,hir_display_renders_nested_fixed_collection_type}` | Collection `TypeId` rendering delegated through HIR display | `environment_tests::{display_type_renders_growable_and_fixed_collections,display_type_renders_nested_fixed_collections}` with exact strings | Six retained HIR display tests own failure terminator escaping and Float statement/failure-mode vocabulary | `fcb30e1ac` |
 
 ### Coverage gap and handoff ledger
 
