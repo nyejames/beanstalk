@@ -116,6 +116,48 @@ fn advisory_findings_are_serialized_without_failing_audit() {
     fs::create_dir_all(&root).expect("should create temporary report directory");
     let report_path = root.join("inventory.json");
 
+    // A backend-only primary-less contract family produces an advisory without a hard
+    // finding, so audit serializes advisories and still succeeds.
+    let result = run_loaded_suite(
+        suite_with_case(Some(CaseRole::Backend), Some("backend.lowering.shared")),
+        TestRunnerOptions {
+            audit: true,
+            ..TestRunnerOptions::default()
+        },
+        |_| successful_execution_result(),
+        report_path
+            .to_str()
+            .expect("temporary path should be UTF-8"),
+    );
+
+    assert!(result.is_ok());
+    let report = fs::read_to_string(&report_path).expect("audit should write its report");
+    let report_json: serde_json::Value =
+        serde_json::from_str(&report).expect("audit report should be valid JSON");
+    assert_eq!(
+        report_json["hard_policy_violations"]
+            .as_array()
+            .map(Vec::len),
+        Some(0)
+    );
+    assert_eq!(
+        report_json["advisory_findings"].as_array().map(Vec::len),
+        Some(1)
+    );
+    assert_eq!(
+        report_json["advisory_findings"][0]["code"],
+        "primary_less_contract_backend_only"
+    );
+
+    fs::remove_dir_all(&root).expect("should clean up temporary report directory");
+}
+
+#[test]
+fn contractless_smoke_case_passes_audit_without_findings() {
+    let root = temp_dir("runner_audit_contractless_smoke");
+    fs::create_dir_all(&root).expect("should create temporary report directory");
+    let report_path = root.join("inventory.json");
+
     let result = run_loaded_suite(
         suite_with_case(Some(CaseRole::Smoke), None),
         TestRunnerOptions {
@@ -138,10 +180,9 @@ fn advisory_findings_are_serialized_without_failing_audit() {
             .map(Vec::len),
         Some(0)
     );
-    assert!(
-        report_json["advisory_findings"]
-            .as_array()
-            .is_some_and(|findings| !findings.is_empty())
+    assert_eq!(
+        report_json["advisory_findings"].as_array().map(Vec::len),
+        Some(0)
     );
 
     fs::remove_dir_all(&root).expect("should clean up temporary report directory");

@@ -41,59 +41,48 @@ struct CaseGroup {
     case_orders: Vec<usize>,
 }
 
+/// A contract family aggregated across every canonical case that shares one contract.
+///
+/// `first_case_order` is the manifest order of the first canonical case introducing the
+/// contract, so primary-less advisories stay deterministic in manifest order rather than
+/// lexical contract order.
+struct ContractFamily {
+    contract: String,
+    first_case_id: String,
+    first_case_order: usize,
+    roles: Vec<Option<CaseRole>>,
+}
+
 pub(crate) fn evaluate_suite(suite: &TestSuiteSpec) -> PolicyEvaluation {
     let case_groups = group_cases(&suite.cases);
     let mut evaluation = PolicyEvaluation::default();
     let mut primary_contract_owners = BTreeMap::<String, String>::new();
 
-    for group in case_groups {
+    for group in &case_groups {
         let first_case = &suite.cases[group.case_orders[0]];
+        let role = first_case.role;
+        let contract = first_case.contract.as_deref();
 
-        if first_case.contract.is_none() && first_case.role != Some(CaseRole::Primary) {
-            evaluation.advisories.push(PolicyFinding::new(
-                "missing_contract_classification",
-                Some(group.case_id.clone()),
-                "Case has no manifest contract classification.",
-                FindingSortKey {
-                    case_order: group.first_case_order,
-                    backend_order: usize::MAX,
-                    rule_order: 10,
-                },
-            ));
-        }
-
-        if first_case.role.is_none() {
-            evaluation.advisories.push(PolicyFinding::new(
+        // A missing role is a hard finding: every canonical case must declare ownership.
+        if role.is_none() {
+            evaluation.hard_findings.push(PolicyFinding::new(
                 "missing_role_classification",
                 Some(group.case_id.clone()),
                 "Case has no manifest role classification.",
                 FindingSortKey {
                     case_order: group.first_case_order,
                     backend_order: usize::MAX,
-                    rule_order: 20,
+                    rule_order: RULE_MISSING_ROLE,
                 },
             ));
         }
 
-        if first_case.role == Some(CaseRole::Primary) {
-            if let Some(contract) = first_case.contract.as_ref() {
-                if let Some(previous_case_id) =
-                    primary_contract_owners.insert(contract.clone(), group.case_id.clone())
-                {
-                    evaluation.hard_findings.push(PolicyFinding::new(
-                        "duplicate_primary_contract",
-                        Some(group.case_id.clone()),
-                        format!(
-                            "Primary contract '{contract}' is also owned by case '{previous_case_id}'."
-                        ),
-                        FindingSortKey {
-                            case_order: group.first_case_order,
-                            backend_order: usize::MAX,
-                            rule_order: 10,
-                        },
-                    ));
-                }
-            } else {
+        // A missing contract is a hard finding for every non-smoke case. A contractless
+        // smoke case is intentional (whole-case acceptance-only smoke), so it is exempt.
+        // The primary-without-contract rule stays the single finding for primary cases so
+        // one case never produces two missing-contract findings.
+        if contract.is_none() && role != Some(CaseRole::Smoke) {
+            if role == Some(CaseRole::Primary) {
                 evaluation.hard_findings.push(PolicyFinding::new(
                     "primary_missing_contract",
                     Some(group.case_id.clone()),
@@ -101,14 +90,47 @@ pub(crate) fn evaluate_suite(suite: &TestSuiteSpec) -> PolicyEvaluation {
                     FindingSortKey {
                         case_order: group.first_case_order,
                         backend_order: usize::MAX,
-                        rule_order: 20,
+                        rule_order: RULE_MISSING_CONTRACT,
+                    },
+                ));
+            } else {
+                evaluation.hard_findings.push(PolicyFinding::new(
+                    "missing_contract_classification",
+                    Some(group.case_id.clone()),
+                    "Case has no manifest contract classification.",
+                    FindingSortKey {
+                        case_order: group.first_case_order,
+                        backend_order: usize::MAX,
+                        rule_order: RULE_MISSING_CONTRACT,
                     },
                 ));
             }
         }
 
-        if is_whole_case_acceptance_only(suite, &group) && first_case.role != Some(CaseRole::Smoke)
+        // A primary case registers its contract; a second primary for the same contract is
+        // a hard duplicate-primary finding attached to the later canonical case.
+        if role == Some(CaseRole::Primary)
+            && let Some(contract) = contract
+            && let Some(previous_case_id) =
+                primary_contract_owners.insert(contract.to_owned(), group.case_id.clone())
         {
+            evaluation.hard_findings.push(PolicyFinding::new(
+                "duplicate_primary_contract",
+                Some(group.case_id.clone()),
+                format!(
+                    "Primary contract '{contract}' is also owned by case '{previous_case_id}'."
+                ),
+                FindingSortKey {
+                    case_order: group.first_case_order,
+                    backend_order: usize::MAX,
+                    rule_order: RULE_DUPLICATE_PRIMARY,
+                },
+            ));
+        }
+
+        // A whole-case acceptance-only case must be smoke; a stronger contract on any
+        // backend exempts the case from this rule.
+        if is_whole_case_acceptance_only(suite, group) && role != Some(CaseRole::Smoke) {
             evaluation.hard_findings.push(PolicyFinding::new(
                 "acceptance_only_requires_smoke_role",
                 Some(group.case_id.clone()),
@@ -116,11 +138,12 @@ pub(crate) fn evaluate_suite(suite: &TestSuiteSpec) -> PolicyEvaluation {
                 FindingSortKey {
                     case_order: group.first_case_order,
                     backend_order: usize::MAX,
-                    rule_order: 30,
+                    rule_order: RULE_ACCEPTANCE_ONLY_SMOKE,
                 },
             ));
         }
 
+        // Per-backend contains-mode diagnostics require an authored non-blank reason.
         for (backend_order, case_order) in group.case_orders.iter().copied().enumerate() {
             let case = &suite.cases[case_order];
             let ExpectedOutcome::Failure(expectation) = &case.expected else {
@@ -147,11 +170,13 @@ pub(crate) fn evaluate_suite(suite: &TestSuiteSpec) -> PolicyEvaluation {
                 FindingSortKey {
                     case_order: group.first_case_order,
                     backend_order,
-                    rule_order: 40,
+                    rule_order: RULE_CONTAINS_REASON,
                 },
             ));
         }
     }
+
+    emit_primary_less_contract_advisories(suite, &case_groups, &mut evaluation);
 
     evaluation
         .hard_findings
@@ -161,6 +186,82 @@ pub(crate) fn evaluate_suite(suite: &TestSuiteSpec) -> PolicyEvaluation {
         .sort_by_key(|finding| finding.sort_key);
 
     evaluation
+}
+
+/// Reports one advisory per contract family that has no primary owner, emitted after the
+/// complete suite is grouped. Backend-only and adversarial-only ownership are distinguished
+/// with stable finding codes so they are reviewable rather than misreported as ordinary orphan
+/// boundaries; any mixed/ordinary primary-less family stays visibly distinct.
+fn emit_primary_less_contract_advisories(
+    suite: &TestSuiteSpec,
+    case_groups: &[CaseGroup],
+    evaluation: &mut PolicyEvaluation,
+) {
+    let mut families: Vec<ContractFamily> = Vec::new();
+    let mut family_index = BTreeMap::<String, usize>::new();
+
+    for group in case_groups {
+        let first_case = &suite.cases[group.case_orders[0]];
+        let Some(contract) = first_case.contract.as_deref() else {
+            continue;
+        };
+
+        if let Some(&index) = family_index.get(contract) {
+            families[index].roles.push(first_case.role);
+            continue;
+        }
+
+        family_index.insert(contract.to_owned(), families.len());
+        families.push(ContractFamily {
+            contract: contract.to_owned(),
+            first_case_id: group.case_id.clone(),
+            first_case_order: group.first_case_order,
+            roles: vec![first_case.role],
+        });
+    }
+
+    for family in &families {
+        if family.roles.contains(&Some(CaseRole::Primary)) {
+            continue;
+        }
+
+        let (code, ownership) = classify_primary_less_family(&family.roles);
+        evaluation.advisories.push(PolicyFinding::new(
+            code,
+            Some(family.first_case_id.clone()),
+            format!(
+                "Contract '{}' has no primary owner; ownership is {}.",
+                family.contract, ownership
+            ),
+            FindingSortKey {
+                case_order: family.first_case_order,
+                backend_order: usize::MAX,
+                rule_order: RULE_PRIMARY_LESS_FAMILY,
+            },
+        ));
+    }
+}
+
+fn classify_primary_less_family(roles: &[Option<CaseRole>]) -> (&'static str, &'static str) {
+    if roles.iter().any(Option::is_none) {
+        return (
+            "primary_less_contract_unclassified",
+            "unclassified (a member has no role)",
+        );
+    }
+    if roles.iter().all(|role| *role == Some(CaseRole::Backend)) {
+        return ("primary_less_contract_backend_only", "backend-only");
+    }
+    if roles
+        .iter()
+        .all(|role| *role == Some(CaseRole::Adversarial))
+    {
+        return ("primary_less_contract_adversarial_only", "adversarial-only");
+    }
+    (
+        "primary_less_contract_mixed",
+        "mixed or ordinary secondary ownership",
+    )
 }
 
 pub(crate) fn format_hard_findings(evaluation: &PolicyEvaluation) -> String {
@@ -225,3 +326,10 @@ impl PolicyFinding {
         }
     }
 }
+
+const RULE_MISSING_ROLE: usize = 10;
+const RULE_MISSING_CONTRACT: usize = 20;
+const RULE_DUPLICATE_PRIMARY: usize = 30;
+const RULE_ACCEPTANCE_ONLY_SMOKE: usize = 40;
+const RULE_CONTAINS_REASON: usize = 50;
+const RULE_PRIMARY_LESS_FAMILY: usize = 10;

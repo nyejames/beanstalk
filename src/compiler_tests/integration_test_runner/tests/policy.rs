@@ -131,7 +131,7 @@ fn whole_case_acceptance_only_requires_smoke_role() {
     let suite = suite(vec![success_case(
         "acceptance_only",
         BackendId::Html,
-        None,
+        Some("acceptance.shared"),
         Some(CaseRole::Backend),
         Some(SuccessContract::AcceptanceOnly),
         None,
@@ -144,6 +144,102 @@ fn whole_case_acceptance_only_requires_smoke_role() {
         evaluation.hard_findings[0].code,
         "acceptance_only_requires_smoke_role"
     );
+}
+
+#[test]
+fn missing_role_is_a_hard_policy_finding() {
+    // A primary owner for the same contract keeps the contract family primary-owned so the
+    // missing-role finding is the only policy result for the unclassified member.
+    let evaluation = evaluate_suite(&suite(vec![
+        success_case(
+            "primary_owner",
+            BackendId::Html,
+            Some("language.missing_role"),
+            Some(CaseRole::Primary),
+            None,
+            Some("primary"),
+        ),
+        success_case(
+            "missing_role_case",
+            BackendId::HtmlWasm,
+            Some("language.missing_role"),
+            None,
+            None,
+            Some("marker"),
+        ),
+    ]));
+
+    assert_eq!(evaluation.hard_findings.len(), 1);
+    assert_eq!(
+        evaluation.hard_findings[0].code,
+        "missing_role_classification"
+    );
+    assert_eq!(
+        evaluation.hard_findings[0].case_id.as_deref(),
+        Some("missing_role_case")
+    );
+    assert!(evaluation.advisories.is_empty());
+}
+
+#[test]
+fn missing_contract_is_a_hard_policy_finding_for_non_smoke_cases() {
+    let evaluation = evaluate_suite(&suite(vec![success_case(
+        "missing_contract_case",
+        BackendId::Html,
+        None,
+        Some(CaseRole::Boundary),
+        None,
+        Some("marker"),
+    )]));
+
+    assert_eq!(evaluation.hard_findings.len(), 1);
+    assert_eq!(
+        evaluation.hard_findings[0].code,
+        "missing_contract_classification"
+    );
+    assert!(evaluation.advisories.is_empty());
+}
+
+#[test]
+fn missing_role_and_missing_contract_are_both_hard_for_unclassified_cases() {
+    let evaluation = evaluate_suite(&suite(vec![success_case(
+        "unclassified_case",
+        BackendId::Html,
+        None,
+        None,
+        None,
+        Some("marker"),
+    )]));
+
+    let codes = evaluation
+        .hard_findings
+        .iter()
+        .map(|finding| finding.code.as_str())
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        codes,
+        vec![
+            "missing_role_classification",
+            "missing_contract_classification"
+        ]
+    );
+    assert!(evaluation.advisories.is_empty());
+}
+
+#[test]
+fn contractless_smoke_case_has_no_missing_contract_finding() {
+    let evaluation = evaluate_suite(&suite(vec![success_case(
+        "contractless_smoke",
+        BackendId::Html,
+        None,
+        Some(CaseRole::Smoke),
+        Some(SuccessContract::AcceptanceOnly),
+        None,
+    )]));
+
+    assert!(evaluation.hard_findings.is_empty());
+    assert!(evaluation.advisories.is_empty());
 }
 
 #[test]
@@ -194,14 +290,26 @@ fn blank_contains_reason_is_a_hard_policy_finding() {
 
 #[test]
 fn justified_contains_reason_has_no_hard_policy_finding() {
-    let evaluation = evaluate_suite(&suite(vec![failure_case(
-        "contains_justified_reason",
-        BackendId::Html,
-        Some("diagnostics.contains_reason"),
-        Some(CaseRole::Boundary),
-        DiagnosticMatchMode::Contains,
-        Some("independent recovery"),
-    )]));
+    // A primary owner for the same contract keeps the family primary-owned so the only
+    // relevant policy fact is the authored contains reason.
+    let evaluation = evaluate_suite(&suite(vec![
+        failure_case(
+            "contains_justified_reason",
+            BackendId::Html,
+            Some("diagnostics.contains_reason"),
+            Some(CaseRole::Boundary),
+            DiagnosticMatchMode::Contains,
+            Some("independent recovery"),
+        ),
+        success_case(
+            "primary_owner",
+            BackendId::Html,
+            Some("diagnostics.contains_reason"),
+            Some(CaseRole::Primary),
+            None,
+            Some("primary"),
+        ),
+    ]));
 
     assert!(evaluation.hard_findings.is_empty());
     assert!(evaluation.advisories.is_empty());
@@ -243,7 +351,7 @@ fn contains_findings_are_backend_local_and_deterministic() {
 }
 
 #[test]
-fn contains_findings_preserve_existing_hard_and_advisory_ordering() {
+fn hard_findings_preserve_manifest_order_across_rules() {
     let evaluation = evaluate_suite(&suite(vec![
         success_case(
             "primary_without_contract",
@@ -254,7 +362,7 @@ fn contains_findings_preserve_existing_hard_and_advisory_ordering() {
             Some("primary"),
         ),
         failure_case(
-            "contains_without_reason",
+            "unclassified_contains",
             BackendId::Html,
             None,
             None,
@@ -275,32 +383,24 @@ fn contains_findings_preserve_existing_hard_and_advisory_ordering() {
         evaluation
             .hard_findings
             .iter()
-            .map(|finding| finding.code.as_str())
-            .collect::<Vec<_>>(),
-        vec![
-            "primary_missing_contract",
-            "diagnostic_contains_requires_reason",
-        ]
-    );
-    assert_eq!(
-        evaluation
-            .advisories
-            .iter()
             .map(|finding| (finding.case_id.as_deref(), finding.code.as_str()))
             .collect::<Vec<_>>(),
         vec![
+            (Some("primary_without_contract"), "primary_missing_contract"),
+            (Some("unclassified_contains"), "missing_role_classification"),
             (
-                Some("contains_without_reason"),
+                Some("unclassified_contains"),
                 "missing_contract_classification"
             ),
             (
-                Some("contains_without_reason"),
-                "missing_role_classification"
+                Some("unclassified_contains"),
+                "diagnostic_contains_requires_reason"
             ),
-            (Some("unclassified_case"), "missing_contract_classification"),
             (Some("unclassified_case"), "missing_role_classification"),
+            (Some("unclassified_case"), "missing_contract_classification"),
         ]
     );
+    assert!(evaluation.advisories.is_empty());
 }
 
 #[test]
@@ -309,7 +409,7 @@ fn stronger_mixed_backend_contract_does_not_force_smoke_role() {
         success_case(
             "mixed",
             BackendId::Html,
-            None,
+            Some("mixed.shared"),
             Some(CaseRole::Backend),
             Some(SuccessContract::AcceptanceOnly),
             None,
@@ -317,7 +417,7 @@ fn stronger_mixed_backend_contract_does_not_force_smoke_role() {
         success_case(
             "mixed",
             BackendId::HtmlWasm,
-            None,
+            Some("mixed.shared"),
             Some(CaseRole::Backend),
             None,
             Some("marker"),
@@ -330,35 +430,183 @@ fn stronger_mixed_backend_contract_does_not_force_smoke_role() {
 }
 
 #[test]
-fn missing_classification_findings_are_advisories() {
-    let suite = suite(vec![success_case(
-        "unclassified_case",
-        BackendId::Html,
-        None,
-        None,
-        None,
-        Some("marker"),
-    )]);
-
-    let evaluation = evaluate_suite(&suite);
-    let codes = evaluation
-        .advisories
-        .iter()
-        .map(|finding| finding.code.as_str())
-        .collect::<Vec<_>>();
+fn primary_owned_contract_family_has_no_primary_less_advisory() {
+    let evaluation = evaluate_suite(&suite(vec![
+        success_case(
+            "primary_owner",
+            BackendId::Html,
+            Some("language.shared"),
+            Some(CaseRole::Primary),
+            None,
+            Some("primary"),
+        ),
+        success_case(
+            "backend_secondary",
+            BackendId::HtmlWasm,
+            Some("language.shared"),
+            Some(CaseRole::Backend),
+            None,
+            Some("secondary"),
+        ),
+    ]));
 
     assert!(evaluation.hard_findings.is_empty());
+    assert!(evaluation.advisories.is_empty());
+}
+
+#[test]
+fn primary_less_backend_only_contract_family_is_advisory() {
+    let evaluation = evaluate_suite(&suite(vec![
+        success_case(
+            "backend_owner_a",
+            BackendId::Html,
+            Some("backend.lowering.shared"),
+            Some(CaseRole::Backend),
+            None,
+            Some("a"),
+        ),
+        success_case(
+            "backend_owner_b",
+            BackendId::HtmlWasm,
+            Some("backend.lowering.shared"),
+            Some(CaseRole::Backend),
+            None,
+            Some("b"),
+        ),
+    ]));
+
+    assert!(evaluation.hard_findings.is_empty());
+    assert_eq!(evaluation.advisories.len(), 1);
     assert_eq!(
-        codes,
+        evaluation.advisories[0].code,
+        "primary_less_contract_backend_only"
+    );
+    assert_eq!(
+        evaluation.advisories[0].case_id.as_deref(),
+        Some("backend_owner_a")
+    );
+    assert!(evaluation.advisories[0].message.contains("backend-only"));
+}
+
+#[test]
+fn primary_less_adversarial_only_contract_family_is_advisory() {
+    let evaluation = evaluate_suite(&suite(vec![
+        failure_case(
+            "adversarial_owner_a",
+            BackendId::Html,
+            Some("language.results.chain"),
+            Some(CaseRole::Adversarial),
+            DiagnosticMatchMode::Exact,
+            None,
+        ),
+        failure_case(
+            "adversarial_owner_b",
+            BackendId::HtmlWasm,
+            Some("language.results.chain"),
+            Some(CaseRole::Adversarial),
+            DiagnosticMatchMode::Exact,
+            None,
+        ),
+    ]));
+
+    assert!(evaluation.hard_findings.is_empty());
+    assert_eq!(evaluation.advisories.len(), 1);
+    assert_eq!(
+        evaluation.advisories[0].code,
+        "primary_less_contract_adversarial_only"
+    );
+    assert_eq!(
+        evaluation.advisories[0].case_id.as_deref(),
+        Some("adversarial_owner_a")
+    );
+    assert!(
+        evaluation.advisories[0]
+            .message
+            .contains("adversarial-only")
+    );
+}
+
+#[test]
+fn primary_less_mixed_contract_family_is_visibly_distinct_advisory() {
+    let evaluation = evaluate_suite(&suite(vec![
+        success_case(
+            "backend_member",
+            BackendId::Html,
+            Some("boundary.mixed"),
+            Some(CaseRole::Backend),
+            None,
+            Some("backend"),
+        ),
+        success_case(
+            "boundary_member",
+            BackendId::HtmlWasm,
+            Some("boundary.mixed"),
+            Some(CaseRole::Boundary),
+            None,
+            Some("boundary"),
+        ),
+    ]));
+
+    assert!(evaluation.hard_findings.is_empty());
+    assert_eq!(evaluation.advisories.len(), 1);
+    assert_eq!(evaluation.advisories[0].code, "primary_less_contract_mixed");
+    assert_eq!(
+        evaluation.advisories[0].case_id.as_deref(),
+        Some("backend_member")
+    );
+}
+
+#[test]
+fn primary_less_advisories_are_one_per_family_in_manifest_order() {
+    let evaluation = evaluate_suite(&suite(vec![
+        success_case(
+            "second_family_first",
+            BackendId::Html,
+            Some("backend.zeta"),
+            Some(CaseRole::Backend),
+            None,
+            Some("zeta"),
+        ),
+        success_case(
+            "first_family_first",
+            BackendId::Html,
+            Some("backend.alpha"),
+            Some(CaseRole::Backend),
+            None,
+            Some("alpha"),
+        ),
+        success_case(
+            "first_family_second",
+            BackendId::HtmlWasm,
+            Some("backend.alpha"),
+            Some(CaseRole::Backend),
+            None,
+            Some("alpha-wasm"),
+        ),
+    ]));
+
+    assert_eq!(evaluation.advisories.len(), 2);
+    assert_eq!(
+        evaluation
+            .advisories
+            .iter()
+            .map(|finding| (finding.case_id.as_deref(), finding.code.as_str()))
+            .collect::<Vec<_>>(),
         vec![
-            "missing_contract_classification",
-            "missing_role_classification"
+            (
+                Some("second_family_first"),
+                "primary_less_contract_backend_only"
+            ),
+            (
+                Some("first_family_first"),
+                "primary_less_contract_backend_only"
+            ),
         ]
     );
 }
 
 #[test]
-fn policy_findings_are_deterministic_in_manifest_order() {
+fn missing_classification_findings_are_deterministic_in_manifest_order() {
     let suite = suite(vec![
         success_case("case_b", BackendId::Html, None, None, None, Some("case-b")),
         success_case("case_a", BackendId::Html, None, None, None, Some("case-a")),
@@ -366,7 +614,7 @@ fn policy_findings_are_deterministic_in_manifest_order() {
 
     let evaluation = evaluate_suite(&suite);
     let findings = evaluation
-        .advisories
+        .hard_findings
         .iter()
         .map(|finding| {
             (
@@ -379,10 +627,10 @@ fn policy_findings_are_deterministic_in_manifest_order() {
     assert_eq!(
         findings,
         vec![
-            ("case_b", "missing_contract_classification"),
             ("case_b", "missing_role_classification"),
-            ("case_a", "missing_contract_classification"),
+            ("case_b", "missing_contract_classification"),
             ("case_a", "missing_role_classification"),
+            ("case_a", "missing_contract_classification"),
         ]
     );
 }
