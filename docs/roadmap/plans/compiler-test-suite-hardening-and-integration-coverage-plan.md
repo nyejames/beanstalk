@@ -30,20 +30,20 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 14C14b Stage 0 discovery and package-topology unit ownership review
-LAST_ACCEPTED_COMMIT: `6783f9822` (Phase 14C14a code)
+CURRENT_SLICE: Phase 14C14c Stage 0 source-loading and provider-orchestration unit ownership review
+LAST_ACCEPTED_COMMIT: `0828bb7ea` (Phase 14C14b code)
 WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; accepted code is committed; concurrent example-name work remains separately committed
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: unit-test ownership, pruning, compiler-stage boundaries, and final governance rules govern the next slice
-- code: HIR and borrow-checker ownership plus the first Stage 0 source-index/config group are complete; remaining Stage 0, build-policy, command, backend-surface, and final TIR units are next
+- code: HIR and borrow-checker ownership plus Stage 0 source-index, config, discovery, topology, collision, and source-kind groups are complete; source-loading/provider orchestration is the final Stage 0 group before wider build policy
 ACCEPTANCE_CRITERIA:
 - every remaining full-source unit has a distinct hidden invariant, parser fact, stage boundary, or policy owner
 - units superseded by a stronger canonical integration primary are deleted with replacement evidence
 - stale test-only helpers or production APIs are removed with their final caller
 - HIR, build-system, backend, and final TIR units keep only their owning semantic relationships and hidden facts
 VALIDATION_STATE:
-- `just validate`: passed; cross-target Clippy, 3,492 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
+- `just validate`: passed; cross-target Clippy, 3,484 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
 - Phase 14B audit: passed; zero hard findings; 66 backend-only and 15 adversarial-only primary-less contract advisories
 - Priya expectation alignment: accepted at `6efac7012`; 13 stale Rust and integration expectation files now match renamed inputs
 DOCS_IMPACT: testing, validation, and contributor workflow aligned with final suite policy; progress matrix and index unchanged
@@ -51,7 +51,7 @@ BLOCKERS_OR_OPEN_DECISIONS: none; 81 contract families without a primary are int
 DELEGATION_DECISION: Ollama — bounded Phase 14 implementation slices
 NEXT_WORKER_ORDER: Ollama only; no provider substitution
 STOP_REASON: none
-NEXT_RESUME_ACTION: launch the Stage 0 discovery and package-topology unit group through Ollama
+NEXT_RESUME_ACTION: launch the Stage 0 source-loading and provider-orchestration unit group through Ollama
 
 ---
 
@@ -233,6 +233,7 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 14C12 HIR display and validation units | `fcb30e1ac` | Accepted | Three collection-type display tests removed in favor of exact datatype display owners; the final-caller helper and obsolete test-only `with_type_environment` exposure were removed; six HIR-only display vocabulary owners and all 40 malformed/positive validator owners retained; 3,496 Rust tests and 1,793 integration executions |
 | Phase 14C13 borrow-checker units | `dac197185` | Accepted | All 50 call-summary, fact, loop, pipeline, reactivity, scope, and advisory drop-site units retained as transfer, side-table, fixed-point, join, origin, invalidation, boundary, and malformed-HIR owners; one duplicate drop-site HIR fixture lowerer was consolidated onto the shared owner; 3,496 Rust tests and 1,793 integration executions |
 | Phase 14C14a Stage 0 source-index and config units | `6783f9822` | Accepted | Four config rejection units removed in favor of canonical primary/boundary cases while focused units retain their typed config or constant-evaluation reasons; configured-skip coverage moved solely to its canonical primary while the unit retains fixed-skip index policy; plain and mutable config binding modes share one typed-reason owner; 34 assigned source-index/config units remain; 3,492 Rust tests and 1,793 integration executions |
+| Phase 14C14b Stage 0 discovery and topology units | `0828bb7ea` | Accepted | Eight duplicate, cosmetic config-shape, and generic mixed-collection units removed in favor of identical focused owners or canonical cases; entry-root fallback now proves the same-stem package file is excluded; retained string and bool shape units assert the exact expected-shape payload; 47 assigned graph, config, topology, collision, and source-kind policy owners remain; 3,484 Rust tests and 1,793 integration executions |
 
 ---
 
@@ -1408,6 +1409,11 @@ Do not present lower counts or faster time as proof of correctness.
 | `create_project_modules_tests::rejects_config_mutable_bindings` | Mutable bindings are invalid in project config | `config_mutable_key_rejected` (`language.config.mutable_key_rejected`) | `rejects_config_plain_and_mutable_bindings` retains `PlainBindingUnsupported` for both binding modes | `6783f9822` |
 | `create_project_modules_tests::{rejects_relative_config_imports,rejects_provider_backed_js_config_imports}` | Relative and provider-backed JavaScript imports are invalid in project config | `config_relative_import_rejected` and `config_js_import_rejected` (boundaries of `language.config.import_rejected`) | `rejects_project_local_config_import_even_when_module_root_exists` retains `ConfigImportRootViolation` | `6783f9822` |
 | `create_project_modules_tests::rejects_config_call_to_imported_builder_source_package_function` | Function calls cannot supply folded config values | `config_function_call_rejected` (`language.config.non_constant_value_rejected`) | `rejects_config_non_compile_time_constant_value` retains `NonConstantReferenceInConstant`; source-backed package import metadata and folding have separate focused owners | `6783f9822` |
+| `create_project_modules_tests::detects_duplicate_config_keys` | Duplicate explicit config keys are rejected | `config_duplicate_private_explicit_rejected` (boundary of `language.config.duplicate_private_keys_rejected`) | `detects_duplicate_top_level_config_constants` retains `InvalidConfigReason::DuplicateKey`; authored-path remapping has its own focused owner | `0828bb7ea` |
+| `create_project_modules_tests::accepts_config_private_key_referencing_explicit_const` | A later config key may fold from an earlier config constant | `config_private_const_refs_success` | `accepts_config_local_reference_to_earlier_private_const` is the identical folded-state unit owner | `0828bb7ea` |
+| `create_project_modules_tests::{rejects_core_string_key_with_int_value,rejects_core_string_key_with_char_value,rejects_backend_bool_key_with_int_value,rejects_backend_string_key_with_bool_value}` | Config schema rejects values with the wrong primitive shape | `config_wrong_shape_string_rejected` (`language.config.value_type_mismatch_rejected`) owns the source-visible family | `rejects_core_string_key_with_bool_value` and `rejects_backend_bool_key_with_string_value` retain exact string/bool expected-shape payloads | `0828bb7ea` |
+| `create_project_modules_tests::rejects_closed_string_set_config_key_with_unsupported_value` | Closed-set config values reject unsupported strings | `config_invalid_project_value_rejected` (`language.config.invalid_project_value_rejected`) | focused string/bool shape units retain the shared typed payload family | `0828bb7ea` |
+| `create_project_modules_tests::rejects_package_folders_with_mixed_collection` | Heterogeneous collection literals are rejected while parsing config | `mixed_collection_literal_rejected` (`language.collections.mixed_literal_rejected`) | none; the removed unit asserted only that some ordinary AST diagnostic existed | `0828bb7ea` |
 
 ### Coverage gap and handoff ledger
 
