@@ -30,26 +30,26 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 3D3 — path, asset, and naming warning migration
-LAST_ACCEPTED_COMMIT: `a01728438` (Phase 3D1)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 3D2 import-alias warning migration is ready to commit; no unrelated changes currently visible
+CURRENT_SLICE: Phase 3C2 — delete count-only warning compatibility
+LAST_ACCEPTED_COMMIT: `c566da516` (Phase 3D2)
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 3D3 final warning fixture migration is ready to commit; no unrelated changes currently visible
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: testing guidance remains current through Phase 2 and needs diagnostic/warning exact-mode wording at Phase 3 closure
-- code: 18 fixtures author exact warning codes; the path-output, large-asset, and mixed-naming fixtures are the final count-only contracts
+- code: all 21 exact-warning fixtures author stable code multisets; obsolete `warning_count` parsing, typed transition, reporting, and tests remain to delete
 ACCEPTANCE_CRITERIA:
-- inventory actual warning multisets for the three remaining fixtures before finalizing expectations
-- author exact duplicate-aware `warning_codes` and remove `warning_count` only from that bounded family
-- keep all current backend outcomes and run exact cases, audit, integration execution, and the full gate
+- remove the `warning_count` schema and typed count-only state without compatibility aliases
+- require `warning_codes` for exact warning mode and retain duplicate-aware exact matching in both result lanes
+- remove transitional reporting/tests, reject the removed spelling, and pass focused tests, audit, integration execution, and the full gate
 VALIDATION_STATE:
-- `just validate`: passed for Phase 3D2; cross-target Clippy, 3,535 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
-- `cargo run --quiet -- tests --audit`: passed for Phase 3D2; 1,645 cases, 1,778 executions, and zero hard findings
+- `just validate`: passed for Phase 3D3; cross-target Clippy, 3,535 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
+- `cargo run --quiet -- tests --audit`: passed for Phase 3D3; 1,645 cases, 1,778 executions, and zero hard findings
 DOCS_IMPACT: `index.md` updated for the moved assertion module tree; progress matrix unchanged
 BLOCKERS_OR_OPEN_DECISIONS: Ollama wrapper still requires removed `docs/codebase-style-guide.md`; 19 justified diagnostic-contains blocks record duplicate module compilation that the queued canonical-module plan must remove
-DELEGATION_DECISION: codex-cli fallback — Phase 3D3 owns only the final three warning expectation files and Ollama remains cleanly blocked
+DELEGATION_DECISION: codex-cli fallback — Phase 3C2 is a bounded runner cleanup and Ollama remains cleanly blocked
 NEXT_WORKER_ORDER: codex-cli, then parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit Phase 3D2, refresh its hash, and launch bounded Phase 3D3 through `codex-cli-beanstalk`
+NEXT_RESUME_ACTION: commit Phase 3D3, refresh its hash, and launch bounded Phase 3C2 through `codex-cli-beanstalk`
 
 ---
 
@@ -152,7 +152,8 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 3B exact diagnostic multisets | `69a0f38dc` | Accepted | Exact default with duplicate counts; 19 justified contains backend blocks; 3,523 Rust tests; 1,778 integration executions |
 | Phase 3C1 warning code identity | `8fdf00022` | Accepted | Schema 4 exact warning-code multisets; 130 focused runner tests; 3,535 Rust tests; 21 count-only fixtures remain |
 | Phase 3D1 pattern/match warning migration | `a01728438` | Accepted | 15 exact-code fixtures; duplicate `BST-RULE-0022` counts preserved; six count-only fixtures remain |
-| Phase 3D2 import-alias warning migration | pending acceptance commit | Accepted | `BST-IMPORT-0003` exact counts preserved across three fixtures; three count-only fixtures remain |
+| Phase 3D2 import-alias warning migration | `c566da516` | Accepted | `BST-IMPORT-0003` exact counts preserved across three fixtures; three count-only fixtures remain |
+| Phase 3D3 final warning migration | pending acceptance commit | Accepted | All 21 exact-warning fixtures author stable code multisets; zero canonical `warning_count` occurrences |
 
 ---
 
@@ -717,7 +718,7 @@ assertions/
 ## 3C — Warning identity
 
 - [x] Preserve `forbid` and `ignore`.
-- [ ] Replace count-only exact warnings with exact warning-code multisets.
+- [x] Replace count-only exact warnings with exact warning-code multisets.
 - [x] Require count consistency when a transitional count field still exists.
 - [x] Report missing and unexpected warning codes.
 - [x] Cover successful and failed compilation results.
