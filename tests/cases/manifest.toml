@@ -2,143 +2,197 @@
 id = "adversarial_borrow_after_result_handler"
 path = "adversarial_borrow_after_result_handler"
 tags = ["adversarial", "bug-hunt"]
+contract = "language.results.catch_handler_preserves_alias_access"
+role = "adversarial"
 
 [[case]]
 id = "adversarial_borrow_nested_loop_aliases"
 path = "adversarial_borrow_nested_loop_aliases"
 tags = ["adversarial", "bug-hunt"]
+contract = "language.bindings.loop_alias_and_copy_keep_original_accessible"
+role = "adversarial"
 
 [[case]]
 id = "adversarial_entry_root_dot_segment_imports"
 path = "adversarial_entry_root_dot_segment_imports"
 tags = ["adversarial", "bug-hunt"]
+contract = "language.imports.parent_directory_segment_rejected"
+role = "adversarial"
 
 [[case]]
 id = "adversarial_html_wasm_multi_file_runtime_template"
 path = "adversarial_html_wasm_multi_file_runtime_template"
 tags = ["adversarial", "bug-hunt"]
+contract = "backend.html_wasm.runtime_template_rejected"
+role = "adversarial"
 
 [[case]]
 id = "adversarial_html_wasm_runtime_loop_fragment"
 path = "adversarial_html_wasm_runtime_loop_fragment"
 tags = ["adversarial", "bug-hunt"]
+contract = "backend.html_wasm.runtime_loop_fragment_rejected"
+role = "adversarial"
 
 [[case]]
 id = "adversarial_loop_match_result_chain"
 path = "adversarial_loop_match_result_chain"
 tags = ["adversarial", "bug-hunt"]
+contract = "language.results.loop_match_result_chain_executes"
+role = "adversarial"
 
 [[case]]
 id = "adversarial_match_result_control_flow_chain"
 path = "adversarial_match_result_control_flow_chain"
 tags = ["adversarial", "bug-hunt"]
+contract = "language.results.match_control_flow_chain_executes"
+role = "adversarial"
 
 [[case]]
 id = "adversarial_match_result_option_flow"
 path = "adversarial_match_result_option_flow"
 tags = ["adversarial", "bug-hunt"]
+contract = "language.results.option_match_flow_executes"
+role = "adversarial"
 
 [[case]]
 id = "adversarial_choice_payload_control_flow"
 path = "adversarial_choice_payload_control_flow"
 tags = ["adversarial", "bug-hunt", "choices"]
+contract = "language.choices.payload_control_flow_chain_executes"
+role = "adversarial"
 
 [[case]]
 id = "adversarial_multi_bind_in_loops"
 path = "adversarial_multi_bind_in_loops"
 tags = ["adversarial", "bug-hunt"]
+contract = "language.loops.multi_bind_accumulation_executes"
+role = "adversarial"
 
 [[case]]
 id = "adversarial_multi_file_helper_chain"
 path = "adversarial_multi_file_helper_chain"
 tags = ["adversarial", "bug-hunt"]
+contract = "language.modules.transitive_helper_chain_executes"
+role = "adversarial"
 
 [[case]]
 id = "adversarial_nested_catch_handlers"
 path = "adversarial_nested_catch_handlers"
 tags = ["adversarial", "bug-hunt"]
+contract = "language.results.nested_catch_handler_binds_error"
+role = "adversarial"
 
 [[case]]
 id = "adversarial_nested_templates_with_borrowed_values"
 path = "adversarial_nested_templates_with_borrowed_values"
 tags = ["adversarial", "bug-hunt"]
+contract = "language.templates.nested_borrowed_value_rendering"
+role = "adversarial"
 
 [[case]]
 id = "adversarial_path_template_head_grouped"
 path = "adversarial_path_template_head_grouped"
 tags = ["adversarial", "bug-hunt"]
+contract = "language.templates.path_template_head_grouped_asset_import"
+role = "adversarial"
 
 [[case]]
 id = "adversarial_runtime_html_nested_img_slot_application"
 path = "adversarial_runtime_html_nested_img_slot_application"
 tags = ["adversarial", "bug-hunt", "templates", "html"]
+contract = "language.templates.runtime_html_img_slot_application"
+role = "adversarial"
 
 [[case]]
 id = "adversarial_struct_collection_result_interop"
 path = "adversarial_struct_collection_result_interop"
 tags = ["adversarial", "bug-hunt"]
+contract = "language.results.struct_collection_interop_executes"
+role = "adversarial"
 
 [[case]]
 id = "adversarial_template_children_fresh_chain"
 path = "adversarial_template_children_fresh_chain"
 tags = ["adversarial", "bug-hunt"]
+contract = "language.templates.children_fresh_chain_preserves_order"
+role = "adversarial"
 
 [[case]]
 id = "adversarial_template_runtime_const_slot_mix"
 path = "adversarial_template_runtime_const_slot_mix"
 tags = ["adversarial", "bug-hunt"]
+contract = "language.templates.runtime_const_slot_mix"
+role = "adversarial"
 
 [[case]]
 id = "arithmetic_operator_precedence"
 path = "arithmetic_operator_precedence"
 tags = ["integration","language"]
+contract = "language.arithmetic.operator_precedence"
+role = "primary"
 
 [[case]]
 id = "basic_page_output"
 path = "basic_page_output"
 tags = ["integration","language"]
+contract = "language.templates.basic_page_render"
+role = "primary"
 
 [[case]]
 id = "borrow_checker_alias_not_live_after_scope"
 path = "borrow_checker_alias_not_live_after_scope"
 tags = ["integration","borrows"]
+contract = "language.bindings.scoped_alias_does_not_block_later_access"
+role = "primary"
 
 [[case]]
 id = "borrow_checker_basic_variables"
 path = "borrow_checker_basic_variables"
 tags = ["integration","borrows"]
+contract = "language.bindings.basic_variable_aliasing_acceptance"
 role = "smoke"
 
 [[case]]
 id = "borrow_checker_function_calls"
 path = "borrow_checker_function_calls"
 tags = ["integration","borrows"]
+contract = "language.functions.borrow_checked_call_acceptance"
 role = "smoke"
 
 [[case]]
 id = "borrow_checker_loop_break_with_alias"
 path = "borrow_checker_loop_break_with_alias"
 tags = ["integration","borrows"]
+contract = "language.bindings.loop_alias_survives_break"
+role = "primary"
 
 [[case]]
 id = "borrow_checker_multiple_mutable_borrows"
 path = "borrow_checker_multiple_mutable_borrows"
 tags = ["integration","borrows", "diagnostics"]
+contract = "language.bindings.multiple_mutable_borrows_rejected"
+role = "primary"
 
 [[case]]
 id = "borrow_checker_mutable_immutable_conflict"
 path = "borrow_checker_mutable_immutable_conflict"
 tags = ["integration","borrows", "diagnostics"]
+contract = "language.bindings.mutable_immutable_conflict_rejected"
+role = "primary"
 
 [[case]]
 id = "borrow_checker_duplicate_mutable_args"
 path = "borrow_checker_duplicate_mutable_args"
 tags = ["integration","borrows", "diagnostics"]
+contract = "language.bindings.duplicate_mutable_call_args_rejected"
+role = "primary"
 
 [[case]]
 id = "borrow_conflict_resolved_by_copy"
 path = "borrow_conflict_resolved_by_copy"
 tags = ["integration","borrows","diagnostics"]
+contract = "language.bindings.copy_resolves_shared_mutable_conflict"
+role = "primary"
 
 [[case]]
 id = "borrow_conflict_resolved_by_reordering"
@@ -151,6 +205,8 @@ role = "primary"
 id = "function_call_mutable_param_requires_explicit_tilde"
 path = "function_call_mutable_param_requires_explicit_tilde"
 tags = ["integration","functions","diagnostics"]
+contract = "language.functions.mutable_parameter_requires_explicit_tilde"
+role = "primary"
 
 [[case]]
 id = "function_call_mutable_param_fresh_values"
@@ -163,36 +219,49 @@ role = "primary"
 id = "function_call_mutable_param_copy_arg"
 path = "function_call_mutable_param_copy_arg"
 tags = ["integration","functions"]
+contract = "language.functions.explicit_copy_satisfies_mutable_parameter"
+role = "primary"
 
 [[case]]
 id = "function_call_immutable_place_missing_tilde"
 path = "function_call_immutable_place_missing_tilde"
 tags = ["integration","functions","diagnostics"]
+contract = "language.functions.immutable_place_missing_tilde_rejected"
+role = "primary"
 
 [[case]]
 id = "function_call_tilde_on_immutable_place"
 path = "function_call_tilde_on_immutable_place"
 tags = ["integration","functions","diagnostics"]
+contract = "language.functions.tilde_on_immutable_place_rejected"
+role = "primary"
 
 [[case]]
 id = "function_call_tilde_on_non_place_expression"
 path = "function_call_tilde_on_non_place_expression"
 tags = ["integration","functions","diagnostics"]
+contract = "language.functions.tilde_on_non_place_expression_rejected"
+role = "primary"
 
 [[case]]
 id = "function_call_named_args_mutable_success"
 path = "function_call_named_args_mutable_success"
 tags = ["integration","functions","named-args"]
+contract = "language.functions.named_mutable_argument_succeeds"
+role = "primary"
 
 [[case]]
 id = "function_call_named_args_mutable_missing_tilde"
 path = "function_call_named_args_mutable_missing_tilde"
 tags = ["integration","functions","named-args","diagnostics"]
+contract = "language.functions.named_mutable_argument_missing_tilde_rejected"
+role = "primary"
 
 [[case]]
 id = "borrow_checker_string_memory"
 path = "borrow_checker_string_memory"
 tags = ["integration","borrows"]
+contract = "language.bindings.string_aliasing_acceptance"
 role = "smoke"
 
 [[case]]
@@ -206,6 +275,8 @@ role = "primary"
 id = "branch_inconsistent_ownership_merge"
 path = "branch_inconsistent_ownership_merge"
 tags = ["integration","borrows", "diagnostics"]
+contract = "language.bindings.branch_inconsistent_ownership_merge_rejected"
+role = "primary"
 
 [[case]]
 id = "branch_reborrow_after_last_use"
@@ -218,292 +289,400 @@ role = "primary"
 id = "builtin_error_reserved_symbol_rejected"
 path = "builtin_error_reserved_symbol_rejected"
 tags = ["integration","diagnostics"]
+contract = "language.builtins.error_reserved_symbol_rejected"
+role = "primary"
 
 [[case]]
 id = "error_constructor_default_code"
 path = "error_constructor_default_code"
 tags = ["integration","results","structs"]
+contract = "language.builtins.error_constructor_default_code"
+role = "primary"
 
 [[case]]
 id = "error_constructor_named_args"
 path = "error_constructor_named_args"
 tags = ["integration","results","structs"]
+contract = "language.builtins.error_constructor_named_arguments"
+role = "primary"
 
 [[case]]
 id = "error_kind_name_user_available"
 path = "error_kind_name_user_available"
 tags = ["integration","results","structs"]
+contract = "language.builtins.error_kind_name_user_available"
+role = "primary"
 
 [[case]]
 id = "choice_basic_declaration_and_use"
 path = "choice_basic_declaration_and_use"
 tags = ["integration","language","choices"]
+contract = "language.choices.basic_declaration_acceptance"
 role = "smoke"
 
 [[case]]
 id = "choice_payload_record_declaration_success"
 path = "choice_payload_record_declaration_success"
 tags = ["integration","language","choices"]
+contract = "language.choices.payload_record_declaration"
+role = "primary"
 
 [[case]]
 id = "choice_payload_shorthand_rejected"
 path = "choice_payload_shorthand_rejected"
 tags = ["integration","diagnostics","choices"]
+contract = "language.choices.payload_shorthand_rejected"
+role = "primary"
 
 [[case]]
 id = "choice_payload_empty_record_rejected"
 path = "choice_payload_empty_record_rejected"
 tags = ["integration","diagnostics","choices"]
+contract = "language.choices.empty_payload_record_rejected"
+role = "primary"
 
 [[case]]
 id = "choice_payload_duplicate_field_rejected"
 path = "choice_payload_duplicate_field_rejected"
 tags = ["integration","diagnostics","choices"]
+contract = "language.choices.payload_duplicate_field_rejected"
+role = "primary"
 
 [[case]]
 id = "choice_payload_mutable_field_rejected"
 path = "choice_payload_mutable_field_rejected"
 tags = ["integration","diagnostics","choices"]
+contract = "language.choices.payload_mutable_field_rejected"
+role = "primary"
 
 [[case]]
 id = "choice_payload_field_default_rejected"
 path = "choice_payload_field_default_rejected"
 tags = ["integration","diagnostics","choices"]
+contract = "language.choices.payload_field_default_rejected"
+role = "primary"
 
 [[case]]
 id = "choice_payload_imported_field_type_success"
 path = "choice_payload_imported_field_type_success"
 tags = ["integration","language","choices"]
+contract = "language.choices.payload_imported_field_type"
+role = "primary"
 
 [[case]]
 id = "choice_payload_constructor_positional_success"
 path = "choice_payload_constructor_positional_success"
 tags = ["integration","language","choices"]
+contract = "language.choices.payload_constructor_argument_routing"
 role = "boundary"
 
 [[case]]
 id = "choice_payload_constructor_named_success"
 path = "choice_payload_constructor_named_success"
 tags = ["integration","language","choices"]
+contract = "language.choices.payload_constructor_argument_routing"
 role = "boundary"
 
 [[case]]
 id = "choice_equality_positional_constructor_success"
 path = "choice_equality_positional_constructor_success"
 tags = ["integration","language","choices","equality","js-backend"]
+contract = "language.choices.structural_equality_truth_table"
+role = "boundary"
 
 [[case]]
 id = "choice_equality_named_constructor_success"
 path = "choice_equality_named_constructor_success"
 tags = ["integration","language","choices","equality","js-backend"]
+contract = "language.choices.structural_equality_truth_table"
+role = "boundary"
 
 [[case]]
 id = "choice_payload_constructor_mixed_success"
 path = "choice_payload_constructor_mixed_success"
 tags = ["integration","language","choices"]
-role = "boundary"
+contract = "language.choices.payload_constructor_argument_routing"
+role = "primary"
 
 [[case]]
 id = "choice_payload_capture_reassignment_rejected"
 path = "choice_payload_capture_reassignment_rejected"
 tags = ["integration","diagnostics","choices","pattern-matching"]
+contract = "language.choices.match_capture_reassignment_rejected"
+role = "primary"
 
 [[case]]
 id = "choice_payload_match_capture_success"
 path = "choice_payload_match_capture_success"
 tags = ["integration","language","choices"]
+contract = "language.choices.match_capture_binds_payload"
+role = "primary"
 
 [[case]]
 id = "choice_payload_match_qualified_capture_success"
 path = "choice_payload_match_qualified_capture_success"
 tags = ["integration","language","choices"]
+contract = "language.choices.match_capture_binds_payload"
+role = "boundary"
 
 [[case]]
 id = "choice_payload_match_guard_uses_capture_success"
 path = "choice_payload_match_guard_uses_capture_success"
 tags = ["integration","language","choices"]
+contract = "language.choices.match_guard_uses_capture"
+role = "primary"
 
 [[case]]
 id = "choice_payload_match_exhaustive_tag_level_success"
 path = "choice_payload_match_exhaustive_tag_level_success"
 tags = ["integration","language","choices"]
+contract = "language.choices.match_exhaustive_tag_level"
+role = "primary"
 
 [[case]]
 id = "choice_payload_match_wrong_capture_name_rejected"
 path = "choice_payload_match_wrong_capture_name_rejected"
 tags = ["integration","diagnostics","choices","pattern-matching"]
+contract = "language.choices.match_capture_wrong_name_rejected"
+role = "primary"
 
 [[case]]
 id = "choice_payload_match_too_few_captures_rejected"
 path = "choice_payload_match_too_few_captures_rejected"
 tags = ["integration","diagnostics","choices","pattern-matching"]
+contract = "language.choices.match_capture_too_few_rejected"
+role = "primary"
 
 [[case]]
 id = "choice_payload_match_too_many_captures_rejected"
 path = "choice_payload_match_too_many_captures_rejected"
 tags = ["integration","diagnostics","choices","pattern-matching"]
+contract = "language.choices.match_capture_too_many_rejected"
+role = "primary"
 
 [[case]]
 id = "choice_payload_match_duplicate_capture_rejected"
 path = "choice_payload_match_duplicate_capture_rejected"
 tags = ["integration","diagnostics","choices","pattern-matching"]
+contract = "language.choices.match_capture_duplicate_binding_rejected"
+role = "primary"
 
 [[case]]
 id = "choice_payload_match_capture_shadowing_rejected"
 path = "choice_payload_match_capture_shadowing_rejected"
 tags = ["integration","diagnostics","choices","pattern-matching"]
+contract = "language.choices.match_capture_shadowing_rejected"
+role = "primary"
 
 [[case]]
 id = "choice_payload_match_rename_success"
 path = "choice_payload_match_rename_success"
 tags = ["integration","language","choices"]
+contract = "language.choices.match_capture_rename"
+role = "primary"
 
 [[case]]
 id = "choice_payload_match_rename_guard_success"
 path = "choice_payload_match_rename_guard_success"
 tags = ["integration","language","choices"]
+contract = "language.choices.match_capture_rename_with_guard"
+role = "primary"
 
 [[case]]
 id = "choice_payload_match_rename_wrong_original_rejected"
 path = "choice_payload_match_rename_wrong_original_rejected"
 tags = ["integration","diagnostics","choices","pattern-matching"]
+contract = "language.choices.match_rename_wrong_original_rejected"
+role = "primary"
 
 [[case]]
 id = "choice_payload_match_rename_duplicate_binding_rejected"
 path = "choice_payload_match_rename_duplicate_binding_rejected"
 tags = ["integration","diagnostics","choices","pattern-matching"]
+contract = "language.choices.match_rename_duplicate_binding_rejected"
+role = "primary"
 
 [[case]]
 id = "choice_payload_match_rename_shadowing_rejected"
 path = "choice_payload_match_rename_shadowing_rejected"
 tags = ["integration","diagnostics","choices","pattern-matching"]
+contract = "language.choices.match_rename_shadowing_rejected"
+role = "primary"
 
 [[case]]
 id = "choice_payload_match_rename_missing_alias_rejected"
 path = "choice_payload_match_rename_missing_alias_rejected"
 tags = ["integration","diagnostics","choices","pattern-matching"]
+contract = "language.choices.match_rename_missing_alias_rejected"
+role = "primary"
 
 [[case]]
 id = "choice_payload_match_rename_non_symbol_alias_rejected"
 path = "choice_payload_match_rename_non_symbol_alias_rejected"
 tags = ["integration","diagnostics","choices","pattern-matching"]
+contract = "language.choices.match_rename_non_symbol_alias_rejected"
+role = "primary"
 
 [[case]]
 id = "choice_payload_match_rename_original_not_visible_rejected"
 path = "choice_payload_match_rename_original_not_visible_rejected"
 tags = ["integration","diagnostics","choices","pattern-matching"]
+contract = "language.choices.match_rename_original_not_visible_rejected"
+role = "primary"
 
 [[case]]
 id = "choice_payload_match_rename_self_alias_success"
 path = "choice_payload_match_rename_self_alias_success"
 tags = ["integration","language","choices"]
+contract = "language.choices.match_capture_rename"
+role = "boundary"
 
 [[case]]
 id = "as_in_expression_rejected"
 path = "as_in_expression_rejected"
 tags = ["integration","diagnostics"]
+contract = "language.syntax.as_in_expression_rejected"
+role = "primary"
 
 [[case]]
 id = "as_in_variable_declaration_rejected"
 path = "as_in_variable_declaration_rejected"
 tags = ["integration","diagnostics"]
+contract = "language.syntax.as_in_variable_declaration_rejected"
+role = "primary"
 
 [[case]]
 id = "as_in_function_signature_rejected"
 path = "as_in_function_signature_rejected"
 tags = ["integration","diagnostics"]
+contract = "language.syntax.as_in_function_signature_rejected"
+role = "primary"
 
 [[case]]
 id = "as_in_non_choice_match_pattern_rejected"
 path = "as_in_non_choice_match_pattern_rejected"
 tags = ["integration","diagnostics"]
+contract = "language.syntax.as_in_non_choice_match_pattern_rejected"
+role = "primary"
 
 [[case]]
 id = "as_in_match_pattern_lead_rejected"
 path = "as_in_match_pattern_lead_rejected"
 tags = ["integration","diagnostics"]
+contract = "language.syntax.as_in_match_pattern_lead_rejected"
+role = "primary"
 
 [[case]]
 id = "choice_payload_match_named_assignment_rejected"
 path = "choice_payload_match_named_assignment_rejected"
 tags = ["integration","diagnostics","choices","pattern-matching"]
+contract = "language.choices.match_named_assignment_rejected"
+role = "primary"
 
 [[case]]
 id = "choice_payload_match_missing_payload_rejected"
 path = "choice_payload_match_missing_payload_rejected"
 tags = ["integration","diagnostics","choices","pattern-matching"]
+contract = "language.choices.match_missing_payload_rejected"
+role = "primary"
 
 [[case]]
 id = "choice_payload_match_unit_parens_rejected"
 path = "choice_payload_match_unit_parens_rejected"
 tags = ["integration","diagnostics","choices","pattern-matching"]
+contract = "language.choices.match_unit_parens_rejected"
+role = "primary"
 
 [[case]]
 id = "choice_payload_match_duplicate_variant_rejected"
 path = "choice_payload_match_duplicate_variant_rejected"
 tags = ["integration","diagnostics","choices","pattern-matching"]
+contract = "language.choices.match_duplicate_variant_rejected"
+role = "primary"
 
 [[case]]
 id = "choice_payload_match_guard_requires_else"
 path = "choice_payload_match_guard_requires_else"
 tags = ["integration","diagnostics","choices","pattern-matching"]
+contract = "language.choices.match_guard_requires_else"
+role = "primary"
 
 [[case]]
 id = "choice_payload_constructor_missing_field_rejected"
 path = "choice_payload_constructor_missing_field_rejected"
 tags = ["integration","diagnostics","choices"]
+contract = "language.choices.constructor_missing_field_rejected"
+role = "primary"
 
 [[case]]
 id = "choice_payload_constructor_unknown_field_rejected"
 path = "choice_payload_constructor_unknown_field_rejected"
 tags = ["integration","diagnostics","choices"]
+contract = "language.choices.constructor_unknown_field_rejected"
+role = "primary"
 
 [[case]]
 id = "choice_payload_constructor_duplicate_field_rejected"
 path = "choice_payload_constructor_duplicate_field_rejected"
 tags = ["integration","diagnostics","choices"]
+contract = "language.choices.constructor_duplicate_field_rejected"
+role = "primary"
 
 [[case]]
 id = "choice_payload_constructor_positional_after_named_rejected"
 path = "choice_payload_constructor_positional_after_named_rejected"
 tags = ["integration","diagnostics","choices"]
+contract = "language.choices.constructor_positional_after_named_rejected"
+role = "primary"
 
 [[case]]
 id = "choice_payload_constructor_type_mismatch_rejected"
 path = "choice_payload_constructor_type_mismatch_rejected"
 tags = ["integration","diagnostics","choices"]
+contract = "language.choices.constructor_field_type_mismatch_rejected"
+role = "primary"
 
 [[case]]
 id = "choice_equality_constructor_wrong_arity_rejected"
 path = "choice_equality_constructor_wrong_arity_rejected"
 tags = ["integration","diagnostics","choices","equality"]
+contract = "language.choices.equality_constructor_wrong_arity_rejected"
+role = "primary"
 
 [[case]]
 id = "choice_equality_constructor_wrong_field_rejected"
 path = "choice_equality_constructor_wrong_field_rejected"
 tags = ["integration","diagnostics","choices","equality"]
+contract = "language.choices.equality_constructor_wrong_field_rejected"
+role = "primary"
 
 [[case]]
 id = "choice_payload_constructor_without_args_rejected"
 path = "choice_payload_constructor_without_args_rejected"
 tags = ["integration","diagnostics","choices"]
+contract = "language.choices.constructor_without_args_rejected"
+role = "primary"
 
 [[case]]
 id = "choice_const_unit_success"
 path = "choice_const_unit_success"
 tags = ["integration","language","choices"]
+contract = "language.choices.const_choice_declaration"
 role = "boundary"
 
 [[case]]
 id = "choice_const_payload_success"
 path = "choice_const_payload_success"
 tags = ["integration","language","choices"]
-role = "boundary"
+contract = "language.choices.const_choice_declaration"
+role = "primary"
 
 [[case]]
 id = "choice_payload_const_non_const_field_rejected"
 path = "choice_payload_const_non_const_field_rejected"
 tags = ["integration","diagnostics","choices"]
+contract = "language.choices.const_payload_non_const_field_rejected"
+role = "primary"
 
 [[case]]
 id = "choice_equality_truth_table"
@@ -516,6 +695,8 @@ role = "primary"
 id = "choice_unit_equality_imported_variant_success"
 path = "choice_unit_equality_imported_variant_success"
 tags = ["integration","language","choices","equality","imports"]
+contract = "language.choices.structural_equality_truth_table"
+role = "boundary"
 
 [[case]]
 id = "choice_equality_imported_constructor_success"
