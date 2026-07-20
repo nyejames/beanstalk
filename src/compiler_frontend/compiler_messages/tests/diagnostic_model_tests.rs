@@ -10,12 +10,13 @@ use super::{
     InvalidChoiceVariantReason, InvalidCollectionTypeReason, InvalidConfigReason,
     InvalidExpressionReason, InvalidFallibleHandlingReason, InvalidFallibleOperandReason,
     InvalidFunctionSignatureReason, InvalidGenericParameterReason, InvalidImportClauseReason,
-    InvalidReceiverCallReason, InvalidSignatureMemberReason, InvalidStandaloneStatementReason,
-    InvalidStatementPositionReason, InvalidStringEscapeReason, InvalidTemplateDirectiveReason,
-    InvalidTemplateStructureReason, InvalidTraitKeywordUsageReason, InvalidTypeAnnotationReason,
-    MissingWhitespace, NameNamespace, NumberLiteralErrorReason, PathKind, ReceiverCallKind,
-    RuleDiagnosticKind, SymbolicSpacingConstruct, SymbolicSpacingError, SyntaxDiagnosticKind,
-    TypeAnnotationContext, TypeDiagnosticKind, TypeMismatchContext, UnsupportedOperatorCategory,
+    InvalidMapTypeReason, InvalidReceiverCallReason, InvalidSignatureMemberReason,
+    InvalidStandaloneStatementReason, InvalidStatementPositionReason, InvalidStringEscapeReason,
+    InvalidTemplateDirectiveReason, InvalidTemplateStructureReason, InvalidTraitKeywordUsageReason,
+    InvalidTypeAnnotationReason, MissingWhitespace, NameNamespace, NumberLiteralErrorReason,
+    PathKind, ReceiverCallKind, RuleDiagnosticKind, SymbolicSpacingConstruct, SymbolicSpacingError,
+    SyntaxDiagnosticKind, TypeAnnotationContext, TypeDiagnosticKind, TypeMismatchContext,
+    UnsupportedOperatorCategory,
 };
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_messages::render::{
@@ -237,6 +238,114 @@ fn explicit_severity_can_override_descriptor_default() {
     );
 
     assert_eq!(diagnostic.severity, DiagnosticSeverity::Warning);
+}
+
+#[test]
+fn diagnostic_identity_uses_descriptor_code_actual_severity_and_typed_reason() {
+    let mut string_table = StringTable::new();
+    let source_path = InternedPath::from_single_str("main.bst", &mut string_table);
+    let diagnostic = CompilerDiagnostic::with_severity(
+        DiagnosticKind::Syntax(SyntaxDiagnosticKind::InvalidCollectionType),
+        DiagnosticSeverity::Warning,
+        location(source_path),
+        DiagnosticPayload::InvalidCollectionType {
+            reason: InvalidCollectionTypeReason::ZeroCapacity,
+        },
+    );
+
+    let identity = diagnostic.identity();
+
+    assert_eq!(identity.code, "BST-SYNTAX-0016");
+    assert_eq!(identity.severity, DiagnosticSeverity::Warning);
+    assert_eq!(
+        identity.reason_key,
+        Some("invalid_collection_type.zero_capacity")
+    );
+}
+
+#[test]
+fn every_authored_stable_reason_key_is_unique_and_well_formed() {
+    let keys = super::diagnostic_payload::stable_reason_keys_for_tests();
+    let unique_keys = keys.iter().copied().collect::<HashSet<_>>();
+
+    assert!(
+        !keys.is_empty(),
+        "the stable reason-key inventory must not be empty"
+    );
+    assert_eq!(
+        keys.len(),
+        unique_keys.len(),
+        "stable reason keys must be globally unique",
+    );
+
+    for key in keys {
+        let segments: Vec<&str> = key.split('.').collect();
+
+        assert!(
+            segments.len() >= 2,
+            "stable reason key '{key}' must be qualified",
+        );
+        assert!(
+            segments.iter().all(|segment| {
+                !segment.is_empty()
+                    && segment
+                        .chars()
+                        .all(|character| character.is_ascii_lowercase() || character == '_')
+            }),
+            "stable reason key '{key}' must use non-empty lowercase snake-case segments",
+        );
+    }
+}
+
+#[test]
+fn reasonless_payloads_have_no_reason_key() {
+    let mut string_table = StringTable::new();
+    let source_path = InternedPath::from_single_str("main.bst", &mut string_table);
+    let diagnostic = CompilerDiagnostic::new(
+        DiagnosticKind::Rule(RuleDiagnosticKind::UnknownName),
+        location(source_path),
+        DiagnosticPayload::UnknownName {
+            name: string_table.intern("missing"),
+            namespace: NameNamespace::Value,
+        },
+    );
+
+    assert_eq!(diagnostic.identity().reason_key, None);
+}
+
+#[test]
+fn reason_key_dispatch_covers_distinct_typed_reason_families() {
+    let mut string_table = StringTable::new();
+    let source_path = InternedPath::from_single_str("main.bst", &mut string_table);
+    let location = location(source_path);
+    let diagnostics = [
+        CompilerDiagnostic::invalid_type_annotation(
+            TypeAnnotationContext::DeclarationTarget,
+            InvalidTypeAnnotationReason::NoneNotAllowed,
+            location.clone(),
+        ),
+        CompilerDiagnostic::invalid_map_type(
+            InvalidMapTypeReason::FixedCapacityNotAllowed,
+            location.clone(),
+        ),
+        CompilerDiagnostic::invalid_collection_type(
+            InvalidCollectionTypeReason::CapacityOverflow,
+            location,
+        ),
+    ];
+
+    assert_eq!(
+        diagnostics[0].identity().reason_key,
+        Some("invalid_type_annotation.none_not_allowed")
+    );
+    assert_eq!(
+        diagnostics[1].identity().reason_key,
+        Some("invalid_map_type.fixed_capacity_not_allowed")
+    );
+    assert_eq!(
+        diagnostics[2].identity().reason_key,
+        Some("invalid_collection_type.capacity_overflow")
+    );
 }
 
 #[test]

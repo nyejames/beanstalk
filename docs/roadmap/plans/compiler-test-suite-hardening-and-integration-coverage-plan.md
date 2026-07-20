@@ -30,26 +30,26 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 4A — compiler-owned diagnostic reason identity
-LAST_ACCEPTED_COMMIT: `ec6c828a1` (Phase 3E)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; Phase 3F documentation closure is ready to commit; unrelated generated font/style rebuild churn from `a83e9587f` must remain unstaged
+CURRENT_SLICE: Phase 4B — structured diagnostic expectation tables
+LAST_ACCEPTED_COMMIT: `9cc05cf61` (Phase 3F)
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 4A reason-identity slice is ready to commit; unrelated generated font/style rebuild churn from `a83e9587f` must remain unstaged
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: Phase 3 schema-5 exact diagnostics, exact warnings, and justified contains workflow wording is current; `index.md` already maps the assertion-family tree
-- code: Phase 4A must extend the compiler-owned typed diagnostic payload/reason owner without creating a runner taxonomy
+- docs: `testing.bd` owns structured assertion workflow wording after Phase 4 implementation; no Phase 4A source-doc change is required
+- code: `CompilerDiagnostic::identity()` now exposes descriptor code, actual severity, and one of 580 compiler-owned stable reason keys; Phase 4B must consume it without reconstructing payload taxonomy
 ACCEPTANCE_CRITERIA:
-- add one crate-private stable reason-identity path beside typed diagnostic payload definitions
-- expose code, severity, and optional qualified reason key independently of rendering and `Debug`
-- add representative reason-key and uniqueness coverage while keeping the runner out of compiler payload taxonomy
+- add typed `diagnostic_assertions` matched by exact code plus deterministic occurrence
+- support optional compiler-owned reason key, normalized path, line, count, and narrow secondary-label assertions; column remains optional only where contractual
+- reject assertions absent from `diagnostic_codes` or with ambiguous occurrence selection and report actionable mismatches
 VALIDATION_STATE:
-- `cargo run --quiet -- build docs --release`: passed for Phase 3F; codebase style-guide route inspected
-- `just validate`: passed for Phase 3E; cross-target Clippy, 3,540 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
-DOCS_IMPACT: Phase 3 testing workflow and contributor examples updated; `index.md` reviewed without edits; progress matrix unchanged
+- `just validate`: passed for Phase 4A; cross-target Clippy, 3,544 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
+- focused diagnostic model: passed; 68 tests and 580 globally unique qualified reason keys
+DOCS_IMPACT: Phase 4A source comments define stability; official workflow docs wait for Phase 4 closure; progress matrix unchanged
 BLOCKERS_OR_OPEN_DECISIONS: Ollama wrapper still requires removed `docs/codebase-style-guide.md`; 19 justified diagnostic-contains blocks record duplicate module compilation that the queued canonical-module plan must remove
 DELEGATION_DECISION: codex-cli fallback — the user-selected Ollama default is cleanly blocked before edits by its stale required-document path
 NEXT_WORKER_ORDER: codex-cli, parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit Phase 3F with exact documentation paths/hunks, refresh its hash, inspect the diagnostic owner, and delegate bounded Phase 4A implementation through Codex CLI fallback
+NEXT_RESUME_ACTION: commit Phase 4A with exact code/test/plan paths, refresh its hash, inspect the runner expectation owner, and delegate bounded Phase 4B implementation through Codex CLI fallback
 
 ---
 
@@ -156,7 +156,8 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 3D3 final warning migration | `d1057bc5a` | Accepted | All 21 exact-warning fixtures author stable code multisets; zero canonical `warning_count` occurrences |
 | Phase 3C2 warning compatibility deletion | `e3f820ec1` | Accepted | Schema 5 exact-code-only warnings; 129 focused runner tests; 3,534 Rust tests; no active count path |
 | Phase 3E contains-mode hard policy | `ec6c828a1` | Accepted | One hard-policy owner; 135 focused runner tests; 19 justified canonical contains blocks; zero hard findings |
-| Phase 3F assertion workflow documentation | pending acceptance commit | Accepted | Schema 5 exact multiset and justified-contains workflow documented; release docs build passed; `index.md` current |
+| Phase 3F assertion workflow documentation | `9cc05cf61` | Accepted | Schema 5 exact multiset and justified-contains workflow documented; release docs build passed; `index.md` current |
+| Phase 4A compiler-owned reason identity | pending acceptance commit | Accepted | 50 reason-bearing payload families; 580 unique qualified keys; 68 focused model tests; 3,544 Rust tests |
 
 ---
 
@@ -763,12 +764,12 @@ Distinguish broad-code reasons and protect source remapping without parsing pros
 
 ## 4A — Compiler-owned reason identity
 
-- [ ] Add one crate-private structured identity path beside typed diagnostic payload/reason definitions.
-- [ ] Expose code, severity, and optional stable reason key.
-- [ ] Use qualified keys such as `invalid_collection_type.zero_capacity`.
-- [ ] Keep keys independent of rendered wording and `Debug` output.
-- [ ] Add representative units and uniqueness coverage.
-- [ ] Document stability expectations.
+- [x] Add one crate-private structured identity path beside typed diagnostic payload/reason definitions.
+- [x] Expose code, severity, and optional stable reason key.
+- [x] Use qualified keys such as `invalid_collection_type.zero_capacity`.
+- [x] Keep keys independent of rendered wording and `Debug` output.
+- [x] Add representative units and uniqueness coverage.
+- [x] Document stability expectations.
 
 ## 4B — Structured expectation tables
 

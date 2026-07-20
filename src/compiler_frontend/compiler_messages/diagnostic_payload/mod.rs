@@ -11,6 +11,7 @@ use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap};
 use crate::compiler_frontend::tokenizer::tokens::TokenKind;
 
+mod reason_keys;
 mod remap;
 mod types;
 
@@ -643,4 +644,73 @@ pub enum DiagnosticPayload {
             String,
         >,
     },
+}
+
+#[cfg(test)]
+pub(super) fn stable_reason_keys_for_tests() -> &'static [&'static str] {
+    reason_keys::stable_reason_keys_for_tests()
+}
+
+impl DiagnosticPayload {
+    /// Return the stable, qualified key for a typed reason payload.
+    ///
+    /// Reasonless payloads deliberately return `None`. This dispatch is the single bridge from
+    /// the top-level diagnostic payload to the typed reason definitions below.
+    pub(super) fn stable_reason_key(&self) -> Option<&'static str> {
+        let key = match self {
+            Self::InvalidImportPath { reason, .. } => reason.stable_reason_key(),
+            Self::InvalidMutableAccess { reason, .. } => reason.stable_reason_key(),
+            Self::InvalidConfig { reason, .. } => reason.stable_reason_key(),
+            Self::DeferredFeature { reason } => reason.stable_reason_key(),
+            Self::InvalidStringEscape { reason } => reason.stable_reason_key(),
+            Self::InvalidNumberLiteral { reason, .. } => reason.stable_reason_key(),
+            Self::InvalidGenericApplication { reason } => reason.stable_reason_key(),
+            Self::InvalidImportClause { reason, .. } => reason.stable_reason_key(),
+            Self::InvalidTypeAnnotation { reason, .. } => reason.stable_reason_key(),
+            Self::InvalidCollectionType { reason } => reason.stable_reason_key(),
+            Self::InvalidMapType { reason } => reason.stable_reason_key(),
+            Self::InvalidMapLiteral { reason } => reason.stable_reason_key(),
+            Self::InvalidGenericParameter { reason } => reason.stable_reason_key(),
+            Self::InvalidTemplateDirective { reason, .. } => reason.stable_reason_key(),
+            Self::InvalidTemplateStructure { reason } => reason.stable_reason_key(),
+            Self::InvalidSignatureMember { reason } => reason.stable_reason_key(),
+            Self::InvalidFunctionSignature { reason } => reason.stable_reason_key(),
+            Self::InvalidChoiceVariant { reason, .. } => reason.stable_reason_key(),
+            Self::InvalidThisUsage { reason } => reason.stable_reason_key(),
+            Self::InvalidReceiverDeclaration { reason } => reason.stable_reason_key(),
+            Self::InvalidControlFlowStatement { reason } => reason.stable_reason_key(),
+            Self::InvalidDeclaration { reason, .. } => reason.stable_reason_key(),
+            Self::InvalidAssignmentTarget { reason, .. } => reason.stable_reason_key(),
+            Self::InvalidMultiBind { reason, .. } => reason.stable_reason_key(),
+            Self::InvalidBuiltinCall { reason, .. } => reason.stable_reason_key(),
+            Self::InvalidCast { reason, .. } => reason.stable_reason_key(),
+            Self::InvalidReceiverCall { reason, .. } => reason.stable_reason_key(),
+            Self::InvalidCopyTarget { reason } => reason.stable_reason_key(),
+            Self::InvalidFieldAccess { reason, .. } => reason.stable_reason_key(),
+            Self::InvalidMatchPattern { reason, .. } => reason.stable_reason_key(),
+            Self::NonExhaustiveMatch { reason, .. } => reason.stable_reason_key(),
+            Self::InvalidFallibleHandling { reason } => reason.stable_reason_key(),
+            Self::InvalidTemplateSlot { reason, .. } => reason.stable_reason_key(),
+            Self::CompileTimeEvaluationError { reason, .. } => reason.stable_reason_key(),
+            Self::InvalidFallibleOperand { reason, .. } => reason.stable_reason_key(),
+            Self::IncompatibleChoiceComparison { reason, .. } => reason.stable_reason_key(),
+            Self::InvalidCallShape { reason, .. } => reason.stable_reason_key(),
+            Self::InvalidReturnShape { reason } => reason.stable_reason_key(),
+            Self::InvalidGenericInstantiation { reason, .. } => reason.stable_reason_key(),
+            Self::InvalidPageMetadata { reason, .. } => reason.stable_reason_key(),
+            Self::InvalidCompileTimePath { reason, .. } => reason.stable_reason_key(),
+            Self::InvalidTraitKeywordUsage { reason } => reason.stable_reason_key(),
+            Self::InvalidTraitConformance { reason, .. } => reason.stable_reason_key(),
+            Self::InvalidTraitIncompatibility { reason, .. } => reason.stable_reason_key(),
+            Self::InvalidExpression { reason } => reason.stable_reason_key(),
+            Self::InvalidStandaloneStatement { reason } => reason.stable_reason_key(),
+            Self::InvalidMatchArm { reason } => reason.stable_reason_key(),
+            Self::InvalidLoopHeader { reason } => reason.stable_reason_key(),
+            Self::InvalidStatementPosition { reason } => reason.stable_reason_key(),
+            Self::CommonSyntaxMistake { reason } => reason.stable_reason_key(),
+            _ => return None,
+        };
+
+        Some(key)
+    }
 }

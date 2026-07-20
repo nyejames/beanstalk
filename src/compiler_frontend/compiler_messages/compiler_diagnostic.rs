@@ -7,8 +7,8 @@ use crate::builder_surface::SourceFileKind;
 use crate::compiler_frontend::compiler_messages::source_location::SourceLocation;
 use crate::compiler_frontend::compiler_messages::{
     BorrowAccessKind, BorrowDiagnosticKind, CommonSyntaxMistakeReason, ConfigDiagnosticKind,
-    DeferredFeatureDiagnosticKind, DeferredFeatureReason, DiagnosticBag, DiagnosticKind,
-    DiagnosticLabel, DiagnosticLabelMessage, DiagnosticOperator, DiagnosticPayload,
+    DeferredFeatureDiagnosticKind, DeferredFeatureReason, DiagnosticBag, DiagnosticIdentity,
+    DiagnosticKind, DiagnosticLabel, DiagnosticLabelMessage, DiagnosticOperator, DiagnosticPayload,
     DiagnosticPlace, DiagnosticSeverity, GenericApplicationErrorReason, GenericInferenceSubject,
     ImportClauseKind, ImportDiagnosticKind, ImportPublicSurfaceType,
     IncompatibleChoiceComparisonReason, InvalidCastReason, InvalidChoiceVariantReason,
@@ -1859,6 +1859,15 @@ impl CompilerDiagnostic {
     // ------------------------------------------------------------------
     //  Supporting Methods
     // ------------------------------------------------------------------
+
+    /// Return the compiler-owned identity used by tests and tooling.
+    ///
+    /// The descriptor remains the sole code authority and `severity` is the actual severity on
+    /// this diagnostic, including deliberate overrides. The payload owns the optional reason key.
+    #[allow(dead_code)]
+    pub(crate) fn identity(&self) -> DiagnosticIdentity {
+        DiagnosticIdentity::new(self.kind.descriptor().code, self.severity, &self.payload)
+    }
 
     pub(crate) fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         self.primary_location.remap_string_ids(remap);
