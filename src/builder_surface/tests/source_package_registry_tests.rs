@@ -104,7 +104,7 @@ fn merge_adds_non_overlapping_roots_in_canonical_order() {
 }
 
 #[test]
-fn get_root_and_has_prefix_work_after_merge() {
+fn get_root_and_has_prefix_locate_registered_root() {
     let mut registry = SourcePackageRegistry::new();
     registry.register_filesystem_root(
         "html",

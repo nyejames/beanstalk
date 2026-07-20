@@ -151,7 +151,7 @@ fn builder_surface_with_providers_is_cloneable() {
 // ------------------------------
 
 #[test]
-fn cache_key_distinguishes_same_path_across_provider_kinds() {
+fn cache_key_distinguishes_provider_kinds_and_matches_identical_keys() {
     let path = PathBuf::from("/project/lib/helper.js");
 
     let key_js = ExternalImportCacheKey {
@@ -159,54 +159,24 @@ fn cache_key_distinguishes_same_path_across_provider_kinds() {
         provider_kind: "js".into(),
     };
     let key_wit = ExternalImportCacheKey {
-        canonical_source_path: path,
+        canonical_source_path: path.clone(),
         provider_kind: "wit".into(),
     };
 
     assert_ne!(key_js, key_wit);
-}
 
-#[test]
-fn cache_key_equal_for_same_path_and_kind() {
-    let key_a = ExternalImportCacheKey {
-        canonical_source_path: PathBuf::from("/project/lib/helper.js"),
+    // Same canonical path and provider kind must produce equal keys so repeated
+    // imports of one file reuse a single cache entry.
+    let key_js_again = ExternalImportCacheKey {
+        canonical_source_path: path,
         provider_kind: "js".into(),
     };
-    let key_b = ExternalImportCacheKey {
-        canonical_source_path: PathBuf::from("/project/lib/helper.js"),
-        provider_kind: "js".into(),
-    };
-
-    assert_eq!(key_a, key_b);
+    assert_eq!(key_js, key_js_again);
 }
 
 // ------------------------------
-//  Resolved import result shape
+//  Provider resolution result
 // ------------------------------
-
-#[test]
-fn resolved_import_can_carry_all_expected_fields() {
-    let resolved = ResolvedExternalImport {
-        package_id: ExternalPackageId(7),
-        exported_types: vec![ExternalTypeId(1), ExternalTypeId(2)],
-        exported_free_functions: vec![ExternalFunctionId::Synthetic(10)],
-        runtime_asset: Some(RuntimeAssetIdentity {
-            canonical_source_path: PathBuf::from("/assets/lib.js"),
-            asset_kind: "js".to_owned(),
-        }),
-        diagnostics: vec![],
-        required_runtime_imports: vec![RequiredRuntimeImport {
-            module_name: "@beanstalk/runtime".to_owned(),
-            imported_names: vec!["bstOk".to_owned()],
-        }],
-    };
-
-    assert_eq!(resolved.package_id, ExternalPackageId(7));
-    assert_eq!(resolved.exported_types.len(), 2);
-    assert_eq!(resolved.exported_free_functions.len(), 1);
-    assert!(resolved.runtime_asset.is_some());
-    assert_eq!(resolved.required_runtime_imports.len(), 1);
-}
 
 #[test]
 fn dummy_provider_resolves_import_with_all_fields() {
@@ -289,6 +259,11 @@ fn resolution_table_replacing_same_source_prefix_updates_collected_package() {
         .get("src/main.bst", "@./helper.js")
         .expect("replacement should keep exact lookup available");
     assert_eq!(retrieved.package_id, ExternalPackageId(2));
+    assert_eq!(retrieved.exported_types, vec![ExternalTypeId(2)]);
+    assert_eq!(
+        retrieved.exported_free_functions,
+        vec![ExternalFunctionId::Synthetic(2)]
+    );
 }
 
 #[test]
@@ -329,22 +304,6 @@ fn resolution_table_orders_results_by_package_id_regardless_of_insert_order() {
     assert_eq!(result[0].package_id, ExternalPackageId(3));
     assert_eq!(result[1].package_id, ExternalPackageId(5));
     assert_eq!(result[2].package_id, ExternalPackageId(7));
-}
-
-#[test]
-fn resolution_table_get_lookup_unchanged_after_indexing() {
-    let mut table = ExternalImportResolutionTable::new();
-    let resolved = resolution_table_import(1);
-
-    table.insert("src/main.bst", "@./helper.js", resolved.clone());
-
-    let retrieved = table
-        .get("src/main.bst", "@./helper.js")
-        .expect("should retrieve inserted entry");
-
-    assert_eq!(retrieved.package_id, ExternalPackageId(1));
-    assert_eq!(retrieved.exported_types.len(), 1);
-    assert_eq!(retrieved.exported_free_functions.len(), 1);
 }
 
 // ------------------------------

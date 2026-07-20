@@ -13,14 +13,6 @@ fn empty_registry_has_no_supported_kinds() {
 }
 
 #[test]
-fn registry_default_is_empty() {
-    let registry = SourceFileKindRegistry::default();
-
-    assert!(!registry.is_supported("bd"));
-    assert_eq!(registry.supported_kinds().len(), 0);
-}
-
-#[test]
 fn register_beandown_lookup_succeeds() {
     let mut registry = SourceFileKindRegistry::new();
     registry.register("bd", SourceFileKind::Beandown);
@@ -39,17 +31,6 @@ fn compiler_owned_beanstalk_is_supported_without_registration() {
     assert!(registry.supports_recognized_extension("bst"));
     assert!(!registry.is_supported("bst"));
     assert!(!registry.supports_recognized_extension("bd"));
-}
-
-#[test]
-fn register_multiple_kinds() {
-    let mut registry = SourceFileKindRegistry::new();
-    registry.register("bd", SourceFileKind::Beandown);
-
-    let kinds = registry.supported_kinds();
-    assert_eq!(kinds.len(), 1);
-    assert_eq!(kinds[0].extension, "bd");
-    assert_eq!(kinds[0].kind, SourceFileKind::Beandown);
 }
 
 #[test]
