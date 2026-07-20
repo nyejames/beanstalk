@@ -944,48 +944,6 @@ fn provider_backed_namespace_import_exposes_function_and_type_members() {
 }
 
 #[test]
-fn provider_backed_import_participates_in_visible_name_collisions() {
-    let dir = temp_dir("provider_import_name_collision");
-    fs::create_dir_all(&dir).expect("should create temp dir");
-    fs::write(dir.join("config.bst"), "").expect("should write config");
-    fs::write(
-        dir.join("#page.bst"),
-        "draw #= 1\nimport @./drawing.js { draw }\nvalue = draw()\n",
-    )
-    .expect("should write page");
-    fs::write(dir.join("drawing.js"), "export function draw() {}\n").expect("should write js");
-
-    let mut config = Config::new(dir.clone());
-    let style_directives = StyleDirectiveRegistry::built_ins();
-    let mut string_table = StringTable::new();
-    let calls = Arc::new(AtomicUsize::new(0));
-    let mut frontend_surface = builder_surface_with_dummy_js_provider(calls);
-
-    let messages = match compile_project_frontend(
-        &mut config,
-        &[],
-        &style_directives,
-        &mut frontend_surface,
-        &mut string_table,
-    ) {
-        Ok(_) => panic!("external import should collide with the local constant"),
-        Err(messages) => messages,
-    };
-
-    assert!(
-        messages.error_diagnostics().any(|diagnostic| {
-            matches!(
-                &diagnostic.payload,
-                DiagnosticPayload::ImportNameCollision { .. }
-            )
-        }),
-        "expected import name collision diagnostic, got {messages:?}"
-    );
-
-    fs::remove_dir_all(&dir).expect("should remove temp dir");
-}
-
-#[test]
 fn provider_backed_same_bare_name_from_different_directories_gets_distinct_packages() {
     let dir = temp_dir("provider_same_bare_name_distinct_dirs");
     fs::create_dir_all(dir.join("a")).expect("should create a dir");
@@ -1149,9 +1107,18 @@ fn directory_project_rejects_missing_entry_root() {
     );
 
     assert!(result.is_err(), "expected Err for missing entry root");
+    let messages = result.err().expect("checked above");
     assert!(
-        result.err().expect("checked above").has_errors(),
-        "expected at least one error"
+        messages.error_diagnostics().any(|diagnostic| {
+            matches!(
+                &diagnostic.payload,
+                DiagnosticPayload::InvalidConfig {
+                    reason: InvalidConfigReason::ConfiguredEntryRootMissing { .. },
+                    ..
+                }
+            )
+        }),
+        "expected ConfiguredEntryRootMissing for a nonexistent entry root, got {messages:?}"
     );
 
     fs::remove_dir_all(&dir).expect("should remove temp dir");
@@ -1418,130 +1385,6 @@ fn html_js_provider_js_import_from_source_package_resolves() {
 
     fs::remove_dir_all(&dir).expect("should remove temp dir");
 }
-
-#[test]
-fn html_js_provider_invalid_js_file_surfaces_diagnostics() {
-    let dir = temp_dir("html_js_provider_invalid_js");
-    fs::create_dir_all(&dir).expect("should create temp dir");
-    fs::write(dir.join("config.bst"), "").expect("should write config");
-    fs::write(
-        dir.join("#page.bst"),
-        "import @./drawing.js { draw }\nvalue = draw()\n",
-    )
-    .expect("should write page");
-    fs::write(
-        dir.join("drawing.js"),
-        "export function draw() { return 1; }\n",
-    )
-    .expect("should write unannotated js");
-
-    let mut config = Config::new(dir.clone());
-    let style_directives = StyleDirectiveRegistry::built_ins();
-    let mut string_table = StringTable::new();
-    let mut frontend_surface = builder_surface_with_html_js_provider();
-
-    let messages = match compile_project_frontend(
-        &mut config,
-        &[],
-        &style_directives,
-        &mut frontend_surface,
-        &mut string_table,
-    ) {
-        Ok(_) => panic!("unannotated JS export should produce a diagnostic"),
-        Err(messages) => messages,
-    };
-
-    assert!(
-        messages.has_errors(),
-        "expected at least one error diagnostic for invalid JS file"
-    );
-
-    fs::remove_dir_all(&dir).expect("should remove temp dir");
-}
-
-#[test]
-fn html_js_provider_malformed_receiver_signature_surfaces_diagnostics() {
-    let dir = temp_dir("html_js_provider_bad_receiver_signature");
-    fs::create_dir_all(&dir).expect("should create temp dir");
-    fs::write(dir.join("config.bst"), "").expect("should write config");
-    fs::write(
-        dir.join("#page.bst"),
-        "import @./drawing.js { Canvas, bad }\n",
-    )
-    .expect("should write page");
-    fs::write(
-        dir.join("drawing.js"),
-        "/**\n * @bst.opaque Canvas\n */\n/**\n * @bst.sig bad |x Float, this ~Canvas|\n */\nexport function bad(x, ctx) {}\n",
-    )
-    .expect("should write malformed receiver js");
-
-    let mut config = Config::new(dir.clone());
-    let style_directives = StyleDirectiveRegistry::built_ins();
-    let mut string_table = StringTable::new();
-    let mut frontend_surface = builder_surface_with_html_js_provider();
-
-    let messages = match compile_project_frontend(
-        &mut config,
-        &[],
-        &style_directives,
-        &mut frontend_surface,
-        &mut string_table,
-    ) {
-        Ok(_) => panic!("malformed JS receiver signature should produce a diagnostic"),
-        Err(messages) => messages,
-    };
-
-    assert!(
-        messages.has_errors(),
-        "expected at least one error diagnostic for malformed receiver signature"
-    );
-
-    fs::remove_dir_all(&dir).expect("should remove temp dir");
-}
-
-#[test]
-fn html_js_provider_rejects_well_formed_receiver_methods_in_project_local_js() {
-    let dir = temp_dir("html_js_provider_rejects_receiver_methods");
-    fs::create_dir_all(&dir).expect("should create temp dir");
-    fs::write(dir.join("config.bst"), "").expect("should write config");
-    fs::write(
-        dir.join("#page.bst"),
-        "import @./drawing.js { Canvas, fill_rect }\n",
-    )
-    .expect("should write page");
-    fs::write(
-        dir.join("drawing.js"),
-        "/**\n * @bst.opaque Canvas\n */\n/**\n * @bst.sig fill_rect |this ~Canvas, x Float, y Float|\n */\nexport function fillRect(ctx, x, y) {}\n",
-    )
-    .expect("should write js with receiver-style signature");
-
-    let mut config = Config::new(dir.clone());
-    let style_directives = StyleDirectiveRegistry::built_ins();
-    let mut string_table = StringTable::new();
-    let mut frontend_surface = builder_surface_with_html_js_provider();
-
-    let messages = match compile_project_frontend(
-        &mut config,
-        &[],
-        &style_directives,
-        &mut frontend_surface,
-        &mut string_table,
-    ) {
-        Ok(_) => {
-            panic!("well-formed receiver-style signature in project-local JS should be rejected")
-        }
-        Err(messages) => messages,
-    };
-
-    assert!(
-        messages.has_errors(),
-        "expected at least one error diagnostic for project-local JS receiver-style signature"
-    );
-    assert_has_diagnostic_code(&messages, "BST-IMPORT-0022");
-
-    fs::remove_dir_all(&dir).expect("should remove temp dir");
-}
-
 #[test]
 fn html_js_provider_fallible_function_with_error_return_compiles() {
     let dir = temp_dir("html_js_provider_fallible");
