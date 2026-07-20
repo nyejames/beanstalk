@@ -30,27 +30,27 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 14C unit ownership final pass
-LAST_ACCEPTED_COMMIT: `5614e7d01` (Phase 14B final suite-policy enforcement)
+CURRENT_SLICE: Phase 14C2 AST branching unit ownership review
+LAST_ACCEPTED_COMMIT: `eb6c92d9e` (Phase 14C1 AST collection unit ownership)
 WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; accepted code is committed; concurrent docs work is out of scope and remains separate if present
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: unit-test ownership, pruning, compiler-stage boundaries, and final governance rules govern the next slice
-- code: source-shaped unit clusters across AST, HIR, build-system, and backend owners require a final bounded review
+- code: AST branching source-shaped units are the next bounded family; later HIR, build-system, backend, and final TIR owners still require review
 ACCEPTANCE_CRITERIA:
 - every remaining full-source unit has a distinct hidden invariant, parser fact, stage boundary, or policy owner
 - units superseded by a stronger canonical integration primary are deleted with replacement evidence
 - stale test-only helpers or production APIs are removed with their final caller
 - HIR, build-system, backend, and final TIR units keep only their owning semantic relationships and hidden facts
 VALIDATION_STATE:
-- `just validate`: passed; cross-target Clippy, 3,535 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
+- `just validate`: passed; cross-target Clippy, 3,521 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
 - Phase 14B audit: passed; zero hard findings; 66 backend-only and 15 adversarial-only primary-less contract advisories
 DOCS_IMPACT: testing, validation, and contributor workflow aligned with final suite policy; progress matrix and index unchanged
 BLOCKERS_OR_OPEN_DECISIONS: none; 81 contract families without a primary are intentionally 66 backend-only and 15 adversarial-only families, with no ordinary orphan family
 DELEGATION_DECISION: Ollama — bounded Phase 14 implementation slices
 NEXT_WORKER_ORDER: Ollama only; no provider substitution
 STOP_REASON: none
-NEXT_RESUME_ACTION: launch the first bounded Phase 14C source-shaped unit ownership review through Ollama
+NEXT_RESUME_ACTION: launch the AST branching unit ownership review through Ollama
 
 ---
 
@@ -218,6 +218,7 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 14A classification batch 10 | `6d51d6e07` | Accepted | Entries 1501–1647 reviewed; all 143 incomplete cases classified, reactive subscription positions were narrowed into distinct semantic owners, 22 target/helper cases remained backend-role, and zero roles remained missing; 3,526 Rust tests and 1,793 integration executions |
 | Phase 14A classification closure | `292b50350` | Accepted | Eight invented contracts were removed from whole-case acceptance-only smoke fixtures; all 1,647 cases now have explicit roles, every non-smoke case has a contract, and the only primary-less contract families are 66 backend-only plus 15 adversarial-only owners; zero hard findings; 3,526 Rust tests and 1,793 integration executions |
 | Phase 14B final suite policy | `5614e7d01` | Accepted | Missing roles and non-smoke contracts are hard findings; contractless whole-case smoke remains valid; primary-less families are reported once with backend-only and adversarial-only ownership distinguished; normal execution and audit share one evaluator; zero hard findings; 3,535 Rust tests and 1,793 integration executions |
+| Phase 14C1 AST collection units | `eb6c92d9e` | Accepted | Fourteen source-shaped diagnostic units removed in favor of canonical primaries with exact structured reasons, reason-specific rendered assertions, or unique diagnostic families; 50 AST shape, TypeId, operation identity, source-path, and broad-code payload owners retained; 3,521 Rust tests and 1,793 integration executions |
 
 ---
 
@@ -1382,6 +1383,7 @@ Do not present lower counts or faster time as proof of correctness.
 | Phase 5D3 nine normalized receiver HTML whole-page goldens | Immutable, mutable, nested, chained, exported, alias-return, and post-mutation receiver behavior | The same nine canonical cases through exact context-rich runtime output | none | `914c1c131` |
 | Phase 5D4 nine normalized template/import HTML whole-page goldens | Import execution/suppression, runtime templates, const slots, CSS, Markdown, and positional slot behavior | Runtime exact/order/exact-once plus narrow static `index.html` assertions in the same nine cases | none | `71f75c220` |
 | Phase 5D5 five normalized static HTML whole-page goldens | Page/static const-template content, source order, and unreferenced tracked-asset non-emission | Narrow `index.html` content/order/exact-once assertions plus `artifacts_must_not_exist` | none | `952bd3134` |
+| 14 AST collection diagnostic units in `collections_tests.rs` | Empty inferred collection/map rejection, immutable collection mutation, fixed-capacity overflow, mixed/duplicate/unsupported/const map literals, map length/get handling, and missing map mutation markers | Canonical collection and hashmap primary/boundary cases with exact reason, reason-specific rendered wording, or unique diagnostic-family ownership | 50 AST units retain parser shape, TypeId, builtin operation identity, source-path precision, and broad-code payload context | `eb6c92d9e` |
 
 ### Coverage gap and handoff ledger
 
