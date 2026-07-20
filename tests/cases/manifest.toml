@@ -2936,6 +2936,34 @@ contract = "language.maps.remove_returns_owned_value_outlives_mutation"
 role = "primary"
 
 [[case]]
+id = "map_set_immutable_non_copy_value_later_use_rejected"
+path = "map_set_immutable_non_copy_value_later_use_rejected"
+tags = ["integration", "borrows", "diagnostics", "hashmaps"]
+contract = "language.maps.set_rejects_later_use_of_immutable_non_copy_value"
+role = "primary"
+
+[[case]]
+id = "map_literal_consumes_inserted_non_copy_value"
+path = "map_literal_consumes_inserted_non_copy_value"
+tags = ["integration", "borrows", "diagnostics", "hashmaps"]
+contract = "language.maps.literal_consumes_inserted_non_copy_value"
+role = "primary"
+
+[[case]]
+id = "map_literal_consumes_inserted_non_copy_key"
+path = "map_literal_consumes_inserted_non_copy_key"
+tags = ["integration", "borrows", "diagnostics", "hashmaps"]
+contract = "language.maps.literal_consumes_inserted_non_copy_key"
+role = "primary"
+
+[[case]]
+id = "map_explicit_copy_insertion_independent"
+path = "map_explicit_copy_insertion_independent"
+tags = ["integration", "borrows", "hashmaps"]
+contract = "language.maps.explicit_copy_insertion_independent"
+role = "primary"
+
+[[case]]
 id = "map_borrowed_lookup_key"
 path = "map_borrowed_lookup_key"
 tags = ["integration", "borrows", "hashmaps"]

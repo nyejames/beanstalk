@@ -1,0 +1,18 @@
+entry = "."
+
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_exact = "map_explicit_copy_insertion_independent key=Ada value=ten stored=ten length=1"
+
+[backends.html_wasm]
+mode = "failure"
+warnings = "forbid"
+diagnostic_codes = ["BST-RULE-0064"]
+
+[[backends.html_wasm.diagnostic_assertions]]
+code = "BST-RULE-0064"
+reason = "unsupported_backend_feature.hashmap_construction"
+path = "input/#page.bst"
+line = 3
+count = 1
