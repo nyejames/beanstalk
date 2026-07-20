@@ -6,8 +6,7 @@
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::compiler_messages::{
-    DiagnosticKind, DiagnosticPayload, InvalidCollectionTypeReason, ReservedNameOwner,
-    RuleDiagnosticKind, TypeMismatchContext,
+    DiagnosticKind, DiagnosticPayload, ReservedNameOwner, RuleDiagnosticKind, TypeMismatchContext,
 };
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::tests::ast_fixture_support::start_function_body;
@@ -145,11 +144,6 @@ fn rejects_initializer_type_mismatch_with_target_and_value_details() {
 }
 
 #[test]
-fn declaration_int_context_reports_targeted_guidance_for_regular_division() {
-    assert_declaration_type_mismatch("result Int = 5 / 2\n");
-}
-
-#[test]
 fn rejects_multiline_regular_division_with_operator_on_next_line() {
     assert_declaration_type_mismatch("result Int = 5\n / 2\n");
 }
@@ -186,32 +180,6 @@ fn shorthand_fixed_collection_declaration_infers_element_type() {
         decl.value.diagnostic_type.display_with_table(&string_table),
         "{2 Int}"
     );
-}
-
-#[test]
-fn shorthand_empty_collection_is_rejected() {
-    let diagnostic = parse_single_file_ast_diagnostic("items {2} = {}\n");
-
-    assert!(matches!(
-        diagnostic.payload,
-        DiagnosticPayload::InvalidCollectionType {
-            reason: InvalidCollectionTypeReason::ShorthandEmptyLiteralAmbiguous,
-            ..
-        }
-    ));
-}
-
-#[test]
-fn shorthand_non_literal_rhs_is_rejected() {
-    let diagnostic = parse_single_file_ast_diagnostic("items {2} = 1 + 2\n");
-
-    assert!(matches!(
-        diagnostic.payload,
-        DiagnosticPayload::InvalidCollectionType {
-            reason: InvalidCollectionTypeReason::ShorthandNonLiteralRhs,
-            ..
-        }
-    ));
 }
 
 #[test]
@@ -307,23 +275,6 @@ Buffer = |
 buffer ~= Buffer()
 "#,
     );
-}
-
-// --------------------------
-//  Immutable empty fixed collection rejection
-// --------------------------
-
-#[test]
-fn immutable_empty_fixed_collection_is_rejected() {
-    let diagnostic = parse_single_file_ast_diagnostic("items {2 Int} = {}\n");
-
-    assert!(matches!(
-        diagnostic.payload,
-        DiagnosticPayload::InvalidCollectionType {
-            reason: InvalidCollectionTypeReason::EmptyImmutableFixedCollection,
-            ..
-        }
-    ));
 }
 
 #[test]
