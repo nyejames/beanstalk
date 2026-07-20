@@ -1,4 +1,0 @@
-[backends.html]
-mode = "success"
-warnings = "forbid"
-rendered_output_exact = "collection_literal_smoke first=10 len=3"

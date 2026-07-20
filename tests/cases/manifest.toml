@@ -1470,19 +1470,9 @@ path = "collection_get_assignment_rejected"
 tags = ["integration","collections","diagnostics"]
 
 [[case]]
-id = "collection_set_end_to_end"
-path = "collection_set_end_to_end"
-tags = ["integration","collections"]
-
-[[case]]
 id = "collection_set_readback_branch"
 path = "collection_set_readback_branch"
 tags = ["integration", "collections", "control-flow"]
-
-[[case]]
-id = "collection_literal_smoke"
-path = "collection_literal_smoke"
-tags = ["integration","collections"]
 
 [[case]]
 id = "empty_collection_requires_explicit_type"
@@ -1505,9 +1495,11 @@ path = "collection_methods_backend_contract"
 tags = ["integration","collections","js-backend"]
 
 [[case]]
-id = "collection_methods_end_to_end"
-path = "collection_methods_end_to_end"
+id = "collection_ordered_runtime_operations"
+path = "collection_ordered_runtime_operations"
 tags = ["integration","collections"]
+contract = "language.collections.ordered_runtime_operations"
+role = "primary"
 
 [[case]]
 id = "collection_mutable_access_js_regression"
