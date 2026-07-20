@@ -30,26 +30,26 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 13E remaining HTML assembly-policy ownership
-LAST_ACCEPTED_COMMIT: `ccc692886` (Phase 13C plan checkpoint; Phase 13D required no code change)
+CURRENT_SLICE: Phase 13F external-JavaScript runtime/glue ownership
+LAST_ACCEPTED_COMMIT: `ca89c014e` (Phase 13E HTML assembly-policy ownership)
 WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; accepted code is committed; unrelated concurrent docs source and generated-release edits remain unstaged
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: backend lowering, ABI, artifact, and semantic-substitute ownership rules govern the next slice
-- code: remaining HTML document, JS path, output-plan, metadata, runtime-registry, and tracked-asset tests are the next ownership inventory
+- code: external-JavaScript runtime-emission and glue tests are the next backend ownership inventory
 ACCEPTANCE_CRITERIA:
 - classify backend tests as ABI, helper, mapping, planning, malformed HIR, artifact, or semantic substitute
 - remove only semantic substitutes with verified integration owners
 - retain deliberate target representation and malformed-HIR contracts without broadening backend support
 VALIDATION_STATE:
-- `just validate`: passed; cross-target Clippy, 3,540 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
-- focused Phase 13D coverage: passed; all 24 HTML builder and four HTML-Wasm artifact tests classified as capability, artifact, planning, mapping, config-reason, or ABI owners; no stronger canonical integration owner justified deletion
+- `just validate`: passed; cross-target Clippy, 3,526 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
+- focused Phase 13E coverage: passed; all 55 assigned HTML assembly-policy tests classified; 14 weaker artifact substitutes removed with nine verified canonical integration owners; 41 hidden policy and algorithm owners retained
 DOCS_IMPACT: progress matrix reviewed; support and backend coverage are unchanged by fixture consolidation; index unchanged
 BLOCKERS_OR_OPEN_DECISIONS: none for the next slice; Ollama remains required with no provider substitution
 DELEGATION_DECISION: Ollama — bounded Phase 13 backend ownership slices
 NEXT_WORKER_ORDER: Ollama only; no provider substitution
 STOP_REASON: none
-NEXT_RESUME_ACTION: launch the remaining HTML assembly-policy classification slice through Ollama
+NEXT_RESUME_ACTION: launch the external-JavaScript runtime-emission and glue classification slice through Ollama
 
 ---
 
@@ -203,6 +203,7 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 13B4 JS policy and symbol ownership | `b87477d98` | Accepted | All 41 prelude, host, symbol, inline-expression, and emission-policy tests retained as helper selection/ordering, ABI, mapping, planning, or malformed-input owners; stale legacy wording corrected; 3,540 Rust tests and 1,793 integration executions |
 | Phase 13C Wasm backend ownership | `c1fab2a91` | Accepted | All 28 Wasm lowering, binary-emission, and shared feature-validation tests retained as LIR mapping, ABI, planning, malformed-input, artifact, or structured target-rejection owners; incidental LIR block/local ids replaced by semantic relationships; 3,540 Rust tests and 1,793 integration executions |
 | Phase 13D HTML project artifact ownership | no code change after `ccc692886` | Accepted | All 24 HTML builder and four HTML-Wasm artifact tests retained as capability, artifact, planning, mapping, config-reason, or ABI owners; single-file and deeper nested-route contracts lack stronger canonical integration owners; latest full gate remains 3,540 Rust tests and 1,793 integration executions |
+| Phase 13E HTML assembly-policy ownership | `ca89c014e` | Accepted | All 55 document, JS-path, output-plan, metadata, registry, and tracked-asset tests classified; 14 weaker artifact substitutes removed in favor of nine canonical integration owners; 41 hidden config, escaping, mapping, registry, and warning-policy owners retained; 3,526 Rust tests and 1,793 integration executions |
 
 ---
 
@@ -1362,6 +1363,7 @@ Do not present lower counts or faster time as proof of correctness.
 | `function_call_named_args_success` -> `function_call_named_and_default_args_success`; removed `function_call_named_args_{all_named,default_skip}` | Ordinary mixed positional/named, all-named, and skipped-default call binding | `function_call_named_and_default_args_success` | `function_call_named_args_mutable_success` retains exclusive-access routing; constructor defaults and all diagnostics remain separate | `4b9bd49e7` |
 | `collection_methods_end_to_end` -> `collection_ordered_runtime_operations`; removed `collection_set_end_to_end` and `collection_literal_smoke` | Growable collection literal plus ordered push, set, remove, complete readback, and length semantics | `collection_ordered_runtime_operations` | `hashmap_js_runtime_contract` retains map ordering; collection helper/artifact, empty/fixed/control-flow, borrow, and error owners remain separate | `7c4e33a99` |
 | `runtime_helpers::collection_push_returns_ok_carrier_on_success` | JavaScript collection-push helper returns the success carrier | `runtime_helpers::collection_push_returns_ok_after_mutation` | `explicit_empty_collection_can_be_pushed` and `fixed_collection_mutable_empty_push_success` own source-visible push success | `b42e9ab6f` |
+| 14 HTML document-shell, fragment-order, output-plan, and tracked-asset units removed in Phase 13E | Final title/body style, const/runtime fragment order, HTML-Wasm colocation, logical route mapping, and tracked-asset output/reference behavior | `html_builder_page_title`, `html_builder_body_style`, `top_level_fragment_mixed_const_runtime_order`, `html_docs_site_proving_ground`, `hash_root_config_namesake_is_module_root`, `basic_page_output`, `html_tracked_asset_entry_root_basic`, `html_tracked_asset_relative_basic`, `html_tracked_asset_relative_parent_normalization` | 41 focused HTML-project units retain hidden config precedence, escaping, malformed path, registry, deduplication, resolution, and warning facts | `ca89c014e` |
 | Phase 5D2 15 normalized HTML whole-page goldens | Runtime values for calls, collections, logical expressions, chars, structs, and short-circuit behavior | The same 15 canonical cases through `rendered_output_exact` | none | `d5256868b` |
 | Phase 5D3 nine normalized receiver HTML whole-page goldens | Immutable, mutable, nested, chained, exported, alias-return, and post-mutation receiver behavior | The same nine canonical cases through exact context-rich runtime output | none | `914c1c131` |
 | Phase 5D4 nine normalized template/import HTML whole-page goldens | Import execution/suppression, runtime templates, const slots, CSS, Markdown, and positional slot behavior | Runtime exact/order/exact-once plus narrow static `index.html` assertions in the same nine cases | none | `71f75c220` |
