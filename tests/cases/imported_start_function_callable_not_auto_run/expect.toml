@@ -1,4 +1,9 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
-golden_mode = "normalized"
+rendered_output_exact = "called helper start"
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = ["entry"]

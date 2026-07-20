@@ -1,4 +1,4 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
-golden_mode = "normalized"
+rendered_output_exact = "relative imports ok widget loaded content reached"

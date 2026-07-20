@@ -1,4 +1,9 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
-golden_mode = "normalized"
+rendered_output_exact = "<h1>Docs</h1><p>Hello from markdown. Soft line break continues here.</p>"
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = ["<p>Const soft line starts here. and continues here.</p>"]

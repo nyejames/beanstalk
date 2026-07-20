@@ -1,4 +1,4 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
-golden_mode = "normalized"
+rendered_output_contains_exactly_once = ["template_output_test  why oh  why temp2"]

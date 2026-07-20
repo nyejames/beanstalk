@@ -1,4 +1,11 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
-golden_mode = "normalized"
+rendered_output_contains_in_order = [
+    "  before  this content is now wrapped after",
+    "  before  This goes into the first slot in the middle  This goes into the second slot afterwards",
+]
+rendered_output_contains_exactly_once = [
+    "  before  this content is now wrapped after",
+    "  before  This goes into the first slot in the middle  This goes into the second slot afterwards",
+]

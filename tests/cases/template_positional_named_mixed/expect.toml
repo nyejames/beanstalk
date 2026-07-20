@@ -1,4 +1,4 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
-golden_mode = "normalized"
+rendered_output_exact = "title= Mixed Example\npositional=P1\ndefault=\nBody Text"
