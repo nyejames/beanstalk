@@ -30,9 +30,9 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 5D5 — final five normalized goldens converted to narrow static artifact and absence contracts and ready to commit
-LAST_ACCEPTED_COMMIT: `71f75c220` (Phase 5D4)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 5D5 expectations, five golden deletions, and this plan are ready to commit; unrelated docs source and generated rebuild work remains unstaged
+CURRENT_SLICE: Phase 5 documentation and acceptance closure after zero-golden audit
+LAST_ACCEPTED_COMMIT: `952bd3134` (Phase 5D5)
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; Phase 5D5 is committed; only this checkpoint is parent-owned; unrelated docs source and generated rebuild work remains unstaged
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: testing standards reserve goldens for exact emitted text and prefer runtime behavior or narrow artifact assertions when those own the contract
@@ -48,9 +48,9 @@ VALIDATION_STATE:
 DOCS_IMPACT: `testing.bd` still names schema 5 and must be updated with the complete runtime assertion workflow during Phase 5 documentation/closure; progress matrix and `index.md` unchanged
 BLOCKERS_OR_OPEN_DECISIONS: the user requires Ollama for every delegated implementation slice after Phase 5C2, with no provider substitution; 19 justified diagnostic-contains blocks separately record duplicate module compilation that the queued canonical-module plan must remove
 DELEGATION_DECISION: Ollama accepted with parent narrowing — the bare const output no longer pins the body tag
-NEXT_WORKER_ORDER: none for this accepted slice; Ollama only afterward
-STOP_REASON: none
-NEXT_RESUME_ACTION: commit Phase 5D5, refresh its hash, then complete Phase 5 documentation/acceptance closure before Phase 6
+NEXT_WORKER_ORDER: none for documentation closure; Ollama only for the next implementation slice
+STOP_REASON: context is too low to reload and safely complete the documentation/acceptance slice in this turn
+NEXT_RESUME_ACTION: reload startup files and this plan, update schema-6 runtime/golden workflow documentation and Phase 5 acceptance state, rebuild docs, validate, commit, then begin Phase 6 through Ollama
 
 ---
 
@@ -179,7 +179,7 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 5D2 runtime golden conversion | `d5256868b` | Accepted | 15 behavior-first whole-page goldens replaced by exact runtime output; 23 golden backend blocks remain; 1,778/1,778 executions |
 | Phase 5D3 receiver golden conversion | `914c1c131` | Accepted | Nine receiver whole-page goldens replaced by exact context-rich output; seven scalar markers relabeled; 14 golden backend blocks remain; 1,778/1,778 executions |
 | Phase 5D4 template/import golden conversion | `71f75c220` | Accepted | Nine whole-page goldens replaced by runtime and narrow static owners; order-sensitive console markers are exact-once; five golden backend blocks remain; 1,778/1,778 executions |
-| Phase 5D5 static golden conversion | pending acceptance commit | Accepted | Final five whole-page goldens replaced by narrow static content/order/exact-once and absence contracts; zero golden backend blocks; 1,778/1,778 executions |
+| Phase 5D5 static golden conversion | `952bd3134` | Accepted | Final five whole-page goldens replaced by narrow static content/order/exact-once and absence contracts; zero golden backend blocks; 1,778/1,778 executions |
 
 ---
 
@@ -1313,7 +1313,7 @@ Do not present lower counts or faster time as proof of correctness.
 | Phase 5D2 15 normalized HTML whole-page goldens | Runtime values for calls, collections, logical expressions, chars, structs, and short-circuit behavior | The same 15 canonical cases through `rendered_output_exact` | none | `d5256868b` |
 | Phase 5D3 nine normalized receiver HTML whole-page goldens | Immutable, mutable, nested, chained, exported, alias-return, and post-mutation receiver behavior | The same nine canonical cases through exact context-rich runtime output | none | `914c1c131` |
 | Phase 5D4 nine normalized template/import HTML whole-page goldens | Import execution/suppression, runtime templates, const slots, CSS, Markdown, and positional slot behavior | Runtime exact/order/exact-once plus narrow static `index.html` assertions in the same nine cases | none | `71f75c220` |
-| Phase 5D5 five normalized static HTML whole-page goldens | Page/static const-template content, source order, and unreferenced tracked-asset non-emission | Narrow `index.html` content/order/exact-once assertions plus `artifacts_must_not_exist` | none | pending acceptance commit |
+| Phase 5D5 five normalized static HTML whole-page goldens | Page/static const-template content, source order, and unreferenced tracked-asset non-emission | Narrow `index.html` content/order/exact-once assertions plus `artifacts_must_not_exist` | none | `952bd3134` |
 
 ### Coverage gap and handoff ledger
 
