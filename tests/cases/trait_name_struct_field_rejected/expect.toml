@@ -2,3 +2,8 @@
 mode = "failure"
 warnings = "forbid"
 diagnostic_codes = ["BST-RULE-0075"]
+
+[[backends.html.diagnostic_assertions]]
+code = "BST-RULE-0075"
+path = "input/#page.bst"
+line = 6

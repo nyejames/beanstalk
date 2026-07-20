@@ -30,26 +30,26 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 4B canonical location correction / Phase 4C3 mutable-access owner
-LAST_ACCEPTED_COMMIT: `a4f20eedc` (Phase 4C2)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed structured-location correction and mutable-access fixture contract are ready to commit; unrelated generated font/style rebuild churn from `a83e9587f` must remain unstaged
+CURRENT_SLICE: Phase 4C4 — trait-name misuse source locations
+LAST_ACCEPTED_COMMIT: `c5af4f2a2` (Phase 4B location correction / Phase 4C3)
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 4C4 trait-location migration is ready to commit; unrelated generated font/style rebuild churn from `a83e9587f` remains unstaged
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: `testing.bd` owns structured assertion workflow wording after Phase 4 migration; progress matrix remains current for this harness-only slice
-- code: structured assertions use compiler display coordinates and root unresolved relative scopes under fixture `input/`; `live_shared_alias_blocks_mutable_rebinding` owns the real mutable-access reason/path/line contract
+- code: eight canonical `BST-RULE-0075` fixtures cover trait names used in value and type positions; the payload has one semantic identity and no reason variant
 ACCEPTANCE_CRITERIA:
-- reuse compiler-owned display-coordinate and source-path rendering helpers without a parallel taxonomy
-- preserve absolute, input-prefixed, nested, and synthetic-header source scopes as fixture-relative paths
-- keep `live_shared_alias_blocks_mutable_rebinding` as the exact-code, reason, path, and line owner without adding a duplicate fixture
+- inventory all `BST-RULE-0075` backend blocks and preserve their exact code contracts
+- add structured fixture-relative path/line assertions at the authored misuse token
+- do not invent a runner or compiler reason split when every case has the same trait-name-as-type/value semantic identity
 VALIDATION_STATE:
 - `just validate`: passed; cross-target Clippy, 3,556 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
-- full integration/audit: passed; 1,778/1,778 executions; audit clean at 1,645 cases and 1,778 backend executions
+- Phase 4C4 focused cases/audit: passed; nine backend executions; audit clean at 1,645 cases and 1,778 backend executions
 DOCS_IMPACT: official structured-assertion workflow docs wait for Phase 4 closure; progress matrix and `index.md` unchanged
 BLOCKERS_OR_OPEN_DECISIONS: Ollama wrapper still requires removed `docs/codebase-style-guide.md`; 19 justified diagnostic-contains blocks record duplicate module compilation that the queued canonical-module plan must remove
 DELEGATION_DECISION: codex-cli fallback — the user-selected Ollama default is cleanly blocked before edits by its stale required-document path
 NEXT_WORKER_ORDER: codex-cli, parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit the reviewed location correction and mutable-access owner with exact source, fixture, test, and plan paths
+NEXT_RESUME_ACTION: commit the reviewed Phase 4C4 expectation and plan paths, refresh its hash, then inventory import path/visibility reason clusters
 
 ---
 
@@ -161,7 +161,8 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 4B structured diagnostic assertions | `3dab97639` | Accepted | Code-plus-occurrence selectors; compiler-owned reasons; fixture-relative primary/secondary locations; 145 focused runner tests; 3,555 Rust tests |
 | Phase 4C1 fixed-collection reasons | `124bee9f6` | Accepted | 22 `BST-SYNTAX-0016` fixtures distinguish nine `invalid_collection_type.*` reasons; 27/27 focused executions; zero hard findings |
 | Phase 4C2 call-shape reasons | `a4f20eedc` | Accepted | All 27 `BST-RULE-0054` fixtures distinguish eleven `invalid_call_shape.*` reasons; 1,778/1,778 integration executions; zero hard findings |
-| Phase 4B location correction / Phase 4C3 mutable access | pending acceptance commit | Accepted | One-based display coordinates and fixture-input-relative scopes; primary borrow fixture asserts reason/path/line; 146 focused runner tests; 3,556 Rust tests |
+| Phase 4B location correction / Phase 4C3 mutable access | `c5af4f2a2` | Accepted | One-based display coordinates and fixture-input-relative scopes; primary borrow fixture asserts reason/path/line; 146 focused runner tests; 3,556 Rust tests |
+| Phase 4C4 trait-name misuse locations | pending acceptance commit | Accepted | Eight `BST-RULE-0075` fixtures and nine backend blocks assert fixture-relative path/line without inventing a reason taxonomy; 1,778/1,778 executions |
 
 ---
 
