@@ -4,7 +4,8 @@
 //! WHY: assertion regressions can silently weaken the suite without changing compilation.
 
 use super::super::assertions::{
-    compare_text_golden, discover_golden_expectation, normalize_text_for_comparison,
+    RuntimeEvent, SlotOutput, compare_text_golden, discover_golden_expectation,
+    extract_script_blocks, normalize_text_for_comparison, parse_harness_output,
     validate_failure_result, validate_golden_outputs, validate_rendered_output_fragments,
     validate_success_result,
 };
@@ -1010,6 +1011,121 @@ fn rendered_output_fragment_validation_reports_semantic_mismatch_kind() {
     let result = validate_rendered_output_fragments("rendered text", &contains, &[])
         .expect("missing required fragment should fail");
     assert_eq!(result.1, FailureKind::RenderedOutputMismatch);
+}
+
+#[test]
+fn rendered_output_extracts_nonempty_script_blocks_in_source_order() {
+    let html = r#"
+<script>first</script>
+<script type="module">second</script>
+<script>   </script>
+"#;
+
+    assert_eq!(
+        extract_script_blocks(html),
+        vec!["first".to_owned(), "second".to_owned()]
+    );
+}
+
+#[test]
+fn rendered_output_decodes_typed_runtime_events() {
+    let output = parse_harness_output(
+        r#"{"events":[{"type":"console","text":"hello"},{"type":"fragment_insert","id":"root","html":"<p>hi</p>"}]}"#,
+    )
+    .expect("valid runtime events should decode");
+
+    assert_eq!(
+        output.events(),
+        &[
+            RuntimeEvent::Console {
+                text: "hello".to_owned(),
+            },
+            RuntimeEvent::FragmentInsert {
+                id: "root".to_owned(),
+                html: "<p>hi</p>".to_owned(),
+            },
+        ]
+    );
+}
+
+#[test]
+fn rendered_output_preserves_interleaved_event_chronology() {
+    let output = parse_harness_output(
+        r#"{"events":[{"type":"console","text":"before"},{"type":"fragment_insert","id":"root","html":"<b>one</b>"},{"type":"console","text":"after"},{"type":"fragment_insert","id":"root","html":"<b>two</b>"}]}"#,
+    )
+    .expect("interleaved runtime events should decode");
+
+    assert_eq!(
+        output.events(),
+        &[
+            RuntimeEvent::Console {
+                text: "before".to_owned(),
+            },
+            RuntimeEvent::FragmentInsert {
+                id: "root".to_owned(),
+                html: "<b>one</b>".to_owned(),
+            },
+            RuntimeEvent::Console {
+                text: "after".to_owned(),
+            },
+            RuntimeEvent::FragmentInsert {
+                id: "root".to_owned(),
+                html: "<b>two</b>".to_owned(),
+            },
+        ]
+    );
+}
+
+#[test]
+fn rendered_output_derives_channel_views_in_event_order() {
+    let output = parse_harness_output(
+        r#"{"events":[{"type":"console","text":"before"},{"type":"fragment_insert","id":"root","html":"<b>one</b>"},{"type":"console","text":"after"},{"type":"fragment_insert","id":"root","html":"<b>two</b>"}]}"#,
+    )
+    .expect("interleaved runtime events should decode");
+
+    assert_eq!(
+        output.console_lines(),
+        vec!["before".to_owned(), "after".to_owned()]
+    );
+    assert_eq!(
+        output.slot_outputs(),
+        vec![
+            SlotOutput {
+                id: "root".to_owned(),
+                html: "<b>one</b>".to_owned(),
+            },
+            SlotOutput {
+                id: "root".to_owned(),
+                html: "<b>two</b>".to_owned(),
+            },
+        ]
+    );
+    assert_eq!(
+        output.combined_output(),
+        "before\n<b>one</b>\nafter\n<b>two</b>"
+    );
+}
+
+#[test]
+fn rendered_output_rejects_unknown_or_malformed_runtime_events() {
+    for (json, expected_reason) in [
+        (
+            r#"{"events":[{"type":"unknown","text":"value"}]}"#,
+            "unknown type",
+        ),
+        (
+            r#"{"events":[{"type":"fragment_insert","id":"root"}]}"#,
+            "missing string field 'html'",
+        ),
+        (
+            r#"{"events":[{"type":"console","text":"value","extra":true}]}"#,
+            "unknown field 'extra'",
+        ),
+    ] {
+        let reason =
+            parse_harness_output(json).expect_err("malformed runtime events must fail decoding");
+        assert!(reason.contains(expected_reason), "{reason}");
+    }
 }
 
 #[test]

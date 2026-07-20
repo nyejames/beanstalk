@@ -39,7 +39,7 @@ pub(super) fn validate_rendered_output(
         Err(reason) => return Some((reason, FailureKind::HarnessFailed)),
     };
 
-    validate_rendered_output_fragments(&combine_rendered_output(&rendered), contains, not_contains)
+    validate_rendered_output_fragments(&rendered.combined_output(), contains, not_contains)
 }
 
 /// Validates rendered fragments independently of harness execution.
@@ -77,21 +77,66 @@ pub(super) fn validate_rendered_output_fragments(
     None
 }
 
-struct RenderedOutput {
-    io_lines: Vec<String>,
-    slot_outputs: Vec<SlotOutput>,
+#[derive(Debug)]
+pub(crate) struct RenderedOutput {
+    events: Vec<RuntimeEvent>,
 }
 
-struct SlotOutput {
-    html: String,
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum RuntimeEvent {
+    Console { text: String },
+    FragmentInsert { id: String, html: String },
 }
 
-fn combine_rendered_output(output: &RenderedOutput) -> String {
-    let mut parts = output.io_lines.clone();
-    for slot in &output.slot_outputs {
-        parts.push(slot.html.clone());
+#[derive(Debug, PartialEq, Eq)]
+#[cfg(test)]
+pub(crate) struct SlotOutput {
+    pub(crate) id: String,
+    pub(crate) html: String,
+}
+
+impl RenderedOutput {
+    #[cfg(test)]
+    pub(crate) fn events(&self) -> &[RuntimeEvent] {
+        &self.events
     }
-    parts.join("\n")
+
+    #[cfg(test)]
+    pub(crate) fn console_lines(&self) -> Vec<String> {
+        let mut lines = Vec::new();
+        for event in &self.events {
+            if let RuntimeEvent::Console { text } = event {
+                lines.push(text.to_owned());
+            }
+        }
+        lines
+    }
+
+    #[cfg(test)]
+    pub(crate) fn slot_outputs(&self) -> Vec<SlotOutput> {
+        let mut outputs = Vec::new();
+        for event in &self.events {
+            if let RuntimeEvent::FragmentInsert { id, html } = event {
+                outputs.push(SlotOutput {
+                    id: id.to_owned(),
+                    html: html.to_owned(),
+                });
+            }
+        }
+        outputs
+    }
+
+    pub(crate) fn combined_output(&self) -> String {
+        let mut parts = Vec::with_capacity(self.events.len());
+        for event in &self.events {
+            match event {
+                RuntimeEvent::Console { text } => parts.push(text.to_owned()),
+                RuntimeEvent::FragmentInsert { html, .. } => parts.push(html.to_owned()),
+            }
+        }
+
+        parts.join("\n")
+    }
 }
 
 /// Executes the script blocks from compiled HTML through a minimal Node.js harness.
@@ -178,10 +223,9 @@ fn remove_temp_harness_file_with_retry(path: &Path) -> Result<(), std::io::Error
 }
 
 fn build_node_harness(scripts: &[String]) -> String {
-    let prefix = r#"const __bst_io = [];
-const __bst_slots = [];
+    let prefix = r#"const __bst_events = [];
 const __bst_slot_by_id = new Map();
-console.log = (...args) => __bst_io.push(args.map(String).join(' '));
+console.log = (...args) => __bst_events.push({ type: 'console', text: args.map(String).join(' ') });
 function __bst_get_slot(id) {
     if (!__bst_slot_by_id.has(id)) {
         const slot = {
@@ -190,7 +234,7 @@ function __bst_get_slot(id) {
             insertAdjacentHTML: (_, html) => {
                 const text = String(html);
                 slot.innerHTML += text;
-                __bst_slots.push({ id, html: text });
+                __bst_events.push({ type: 'fragment_insert', id: String(id), html: text });
             }
         };
         __bst_slot_by_id.set(id, slot);
@@ -204,7 +248,7 @@ const document = {
 
     let suffix = r#"
 Promise.resolve().then(() => {
-    process.stdout.write(JSON.stringify({ io: __bst_io, slots: __bst_slots }) + '\n');
+    process.stdout.write(JSON.stringify({ events: __bst_events }) + '\n');
 });
 "#;
 
@@ -212,7 +256,7 @@ Promise.resolve().then(() => {
 }
 
 /// Extracts the text content between `<script>` and `</script>` tag pairs.
-fn extract_script_blocks(html: &str) -> Vec<String> {
+pub(crate) fn extract_script_blocks(html: &str) -> Vec<String> {
     let mut blocks = Vec::new();
     let mut search_from = 0;
 
@@ -240,30 +284,96 @@ fn find_script_open_end(html: &str, from: usize) -> Option<usize> {
     Some(from + tag_start + close_bracket + 1)
 }
 
-fn parse_harness_output(json: &str) -> Result<RenderedOutput, String> {
+pub(crate) fn parse_harness_output(json: &str) -> Result<RenderedOutput, String> {
     let value: serde_json::Value = serde_json::from_str(json).map_err(|error| {
         format!("rendered_output: failed to parse node harness JSON output: {error}\nRaw: {json}")
     })?;
 
-    let io_lines = value["io"]
-        .as_array()
-        .ok_or("rendered_output: 'io' field missing from harness output")?
-        .iter()
-        .filter_map(|value| value.as_str().map(str::to_owned))
-        .collect();
+    let invalid_harness_output = |reason: String| {
+        format!("rendered_output: invalid node harness output: {reason}\nRaw: {json}")
+    };
 
-    let slot_outputs = value["slots"]
-        .as_array()
-        .ok_or("rendered_output: 'slots' field missing from harness output")?
-        .iter()
-        .filter_map(|value| {
-            let html = value["html"].as_str()?.to_owned();
-            Some(SlotOutput { html })
-        })
-        .collect();
+    let Some(object) = value.as_object() else {
+        return Err(invalid_harness_output(
+            "top-level value must be an object".to_owned(),
+        ));
+    };
 
-    Ok(RenderedOutput {
-        io_lines,
-        slot_outputs,
-    })
+    if let Err(reason) = reject_unknown_fields(object, &["events"], "harness output") {
+        return Err(invalid_harness_output(reason));
+    }
+
+    let Some(events_value) = object.get("events") else {
+        return Err(invalid_harness_output("missing field 'events'".to_owned()));
+    };
+    let Some(events_array) = events_value.as_array() else {
+        return Err(invalid_harness_output(
+            "field 'events' must be an array".to_owned(),
+        ));
+    };
+
+    let mut events = Vec::with_capacity(events_array.len());
+    for (index, event_value) in events_array.iter().enumerate() {
+        let event = decode_runtime_event(index, event_value).map_err(invalid_harness_output)?;
+        events.push(event);
+    }
+
+    Ok(RenderedOutput { events })
+}
+
+fn decode_runtime_event(index: usize, value: &serde_json::Value) -> Result<RuntimeEvent, String> {
+    let Some(object) = value.as_object() else {
+        return Err(format!("event {index} must be an object"));
+    };
+
+    let event_type = required_string_field(object, "type", &format!("event {index}"))?;
+    match event_type.as_str() {
+        "console" => {
+            reject_unknown_fields(object, &["type", "text"], &format!("event {index}"))?;
+            let text = required_string_field(object, "text", &format!("event {index}"))?;
+            Ok(RuntimeEvent::Console { text })
+        }
+
+        "fragment_insert" => {
+            reject_unknown_fields(object, &["type", "id", "html"], &format!("event {index}"))?;
+            let id = required_string_field(object, "id", &format!("event {index}"))?;
+            let html = required_string_field(object, "html", &format!("event {index}"))?;
+            Ok(RuntimeEvent::FragmentInsert { id, html })
+        }
+
+        other => Err(format!("event {index} has unknown type '{other}'")),
+    }
+}
+
+fn required_string_field(
+    object: &serde_json::Map<String, serde_json::Value>,
+    field: &str,
+    context: &str,
+) -> Result<String, String> {
+    let Some(value) = object.get(field) else {
+        return Err(format!("{context} is missing string field '{field}'"));
+    };
+
+    let Some(value) = value.as_str() else {
+        return Err(format!("{context} field '{field}' must be a string"));
+    };
+
+    Ok(value.to_owned())
+}
+
+fn reject_unknown_fields(
+    object: &serde_json::Map<String, serde_json::Value>,
+    allowed_fields: &[&str],
+    context: &str,
+) -> Result<(), String> {
+    for field in object.keys() {
+        if !allowed_fields
+            .iter()
+            .any(|allowed_field| *allowed_field == field)
+        {
+            return Err(format!("{context} has unknown field '{field}'"));
+        }
+    }
+
+    Ok(())
 }

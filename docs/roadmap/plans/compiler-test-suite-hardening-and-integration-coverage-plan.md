@@ -30,26 +30,26 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 4D — structured diagnostic workflow documentation and Phase 4 closure
-LAST_ACCEPTED_COMMIT: `83aecdad2` (Phase 4C10)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 4D source docs, plan update, and owned generated hunks are ready to commit; unrelated generated font/style rebuild churn from `a83e9587f` remains unstaged
+CURRENT_SLICE: Phase 5A — typed chronological runtime-event model accepted and ready to commit
+LAST_ACCEPTED_COMMIT: `14bd9178b` (Phase 4D)
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 5A runner files and this plan are ready to commit; unrelated generated font/style rebuild churn from `a83e9587f` remains unstaged
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: `testing.bd` and `CONTRIBUTING.md` now document compiler-owned reason keys, code-plus-occurrence selectors, fixture-relative locations, secondary-label occurrences, and the no-runner-taxonomy rule
-- code: Phase 4 now has one compiler reason owner, a taxonomy-free runner schema, broad-code reason migrations, cross-file generated remapping, and representative declaration/borrow secondary-label owners
+- docs: testing standards require one Node harness and external behaviour assertions; Phase 5 owns exact/order/exact-once runtime semantics without adding another executor
+- code: `assertions/rendered_output.rs` records typed console and fragment-insert events in one chronological array and derives chronological combined plus channel-specific views
 ACCEPTANCE_CRITERIA:
-- document when and how to author structured diagnostic assertions without creating a runner taxonomy or pinning prose
-- update concise progress coverage for stable reasons plus primary/secondary source remapping
-- rebuild documentation, inspect only owned generated content, close every Phase 4 acceptance item, and preserve concurrent docs churn separately
+- record console and fragment inserts in one typed chronological event array at event time
+- derive existing channel/combined views from that array while preserving current contains/not-contains contracts, one executor, one microtask flush, and cleanup/retry behaviour
+- add focused extraction, decoding, ordering, and infrastructure-failure coverage without adding Phase 5B expectation fields
 VALIDATION_STATE:
-- `just validate`: passed; cross-target Clippy, 3,557 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
-- Phase 4D documentation release build: passed; 62 routes rebuilt and the owned style-guide/progress route content inspected
-DOCS_IMPACT: `testing.bd`, `CONTRIBUTING.md`, the progress matrix, and owned generated style-guide/progress hunks are current; `index.md` unchanged because no module owner moved
+- `just validate`: passed; cross-target Clippy, 3,562 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
+- Phase 5A focused runner tests: passed; 48 assertion tests plus both representative HTML executions
+DOCS_IMPACT: none until the Phase 5 expectation surface and migrations are complete; progress matrix and `index.md` unchanged
 BLOCKERS_OR_OPEN_DECISIONS: Ollama wrapper still requires removed `docs/codebase-style-guide.md`; 19 justified diagnostic-contains blocks record duplicate module compilation that the queued canonical-module plan must remove
-DELEGATION_DECISION: parent-direct — the orchestrator owns official docs, plan closure, generated-route review, and commit integration
-NEXT_WORKER_ORDER: none for this documentation slice
+DELEGATION_DECISION: codex-cli fallback — the user-selected Ollama default remains cleanly blocked before edits by its stale required-document path
+NEXT_WORKER_ORDER: none for this accepted slice
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit Phase 4D, refresh its hash, then launch the Phase 5A chronological runtime-event model
+NEXT_RESUME_ACTION: commit Phase 5A, refresh its hash, then define and delegate the bounded Phase 5B expectation-schema slice
 
 ---
 
@@ -170,7 +170,8 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 4C8b backend feature reason assertions | `d71dfa6a5` | Accepted | All 29 `BST-RULE-0064` fixtures distinguish seven exercised reasons; 24 redundant rendered wording fragments removed; 1,778/1,778 executions |
 | Phase 4C9 generated generic remapping | `a72876029` | Accepted | Recursive generic instantiation keeps the call site primary while body, declaration, and substitution labels remap to a helper source; rendered label prose removed; 1,778/1,778 executions |
 | Phase 4C10 declaration/conflict secondary labels | `83aecdad2` | Accepted | Duplicate declarations and duplicate exclusive accesses assert primary and earlier-site secondary paths/lines through rule and borrow diagnostic lanes; 1,778/1,778 executions |
-| Phase 4D structured assertion documentation | pending acceptance commit | Accepted | Testing/contributor workflow and progress coverage now describe compiler-owned reasons plus primary/secondary remapping; release docs rebuilt and owned routes inspected |
+| Phase 4D structured assertion documentation | `14bd9178b` | Accepted | Testing/contributor workflow and progress coverage now describe compiler-owned reasons plus primary/secondary remapping; release docs rebuilt and owned routes inspected |
+| Phase 5A chronological runtime-event model | pending acceptance commit | Accepted | One typed event array preserves console/fragment chronology; strict decoding and chronological/channel views have focused coverage; 3,562 Rust tests and 1,778 integration executions |
 
 ---
 
@@ -828,13 +829,13 @@ Extend the existing Node harness to protect chronology, exact output, and exact-
 
 ## 5A — Ordered event model
 
-- [ ] Define typed console and fragment-insert events.
-- [ ] Record one chronological event array at event time.
-- [ ] Derive channel-specific views from that array.
-- [ ] Preserve one documented microtask flush policy.
-- [ ] Preserve temporary-file cleanup and retry behavior.
-- [ ] Do not invoke Node for cases without runtime assertions.
-- [ ] Add units for extraction, decoding, ordering, and infrastructure failures.
+- [x] Define typed console and fragment-insert events.
+- [x] Record one chronological event array at event time.
+- [x] Derive channel-specific views from that array.
+- [x] Preserve one documented microtask flush policy.
+- [x] Preserve temporary-file cleanup and retry behavior.
+- [x] Do not invoke Node for cases without runtime assertions.
+- [x] Add units for extraction, decoding, ordering, and infrastructure failures.
 
 ## 5B — Stronger runtime fields
 

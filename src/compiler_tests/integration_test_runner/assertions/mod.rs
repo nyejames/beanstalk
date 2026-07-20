@@ -12,6 +12,10 @@ mod warnings;
 mod wasm;
 
 pub(crate) use goldens::discover_golden_expectation;
+#[cfg(test)]
+pub(crate) use rendered_output::{
+    RuntimeEvent, SlotOutput, extract_script_blocks, parse_harness_output,
+};
 
 #[cfg(test)]
 use super::GoldenMode;
