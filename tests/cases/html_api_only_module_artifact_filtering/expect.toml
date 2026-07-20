@@ -3,7 +3,7 @@ entry = "."
 [backends.html]
 mode = "success"
 warnings = "forbid"
-rendered_output_contains = [
+rendered_output_contains_exactly_once = [
     "html_api_only_module_artifact_filtering api-only-import",
 ]
 artifacts_must_not_exist = [
