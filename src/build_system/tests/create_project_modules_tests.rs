@@ -3497,10 +3497,23 @@ fn reachable_file_discovery_direct_markdown_extension_import_reports_bst_import_
         "expected explicit source extension diagnostic, got {:?}",
         diagnostic
     );
-    assert!(matches!(
-        &diagnostic.payload,
-        DiagnosticPayload::ExplicitSourceExtension { .. }
-    ));
+    if let DiagnosticPayload::ExplicitSourceExtension { path, extension } = &diagnostic.payload {
+        assert_eq!(
+            path.to_portable_string(&messages.string_table),
+            "./intro.md",
+            "unexpected import path in explicit source extension diagnostic"
+        );
+        assert_eq!(
+            messages.string_table.resolve(*extension),
+            "md",
+            "unexpected extension in explicit source extension diagnostic"
+        );
+    } else {
+        panic!(
+            "expected ExplicitSourceExtension payload, got {:?}",
+            diagnostic.payload
+        );
+    }
 
     fs::remove_dir_all(&root).expect("should remove temp root");
 }
@@ -3542,10 +3555,23 @@ fn reachable_file_discovery_unsupported_markdown_import_reports_bst_import_0025(
         "expected unsupported source file kind diagnostic, got {:?}",
         diagnostic
     );
-    assert!(matches!(
-        &diagnostic.payload,
-        DiagnosticPayload::UnsupportedSourceFileKind { .. }
-    ));
+    if let DiagnosticPayload::UnsupportedSourceFileKind { path, extension } = &diagnostic.payload {
+        assert_eq!(
+            path.to_portable_string(&messages.string_table),
+            "./intro",
+            "unexpected import path in unsupported source file kind diagnostic"
+        );
+        assert_eq!(
+            messages.string_table.resolve(*extension),
+            "md",
+            "unexpected extension in unsupported source file kind diagnostic"
+        );
+    } else {
+        panic!(
+            "expected UnsupportedSourceFileKind payload, got {:?}",
+            diagnostic.payload
+        );
+    }
 
     fs::remove_dir_all(&root).expect("should remove temp root");
 }
