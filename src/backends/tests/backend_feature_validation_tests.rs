@@ -10,7 +10,7 @@ use crate::backends::backend_feature_validation::{
 };
 use crate::backends::external_package_validation::BackendTarget;
 use crate::compiler_frontend::compiler_messages::{
-    DiagnosticKind, DiagnosticPayload, RuleDiagnosticKind,
+    DiagnosticKind, DiagnosticPayload, RuleDiagnosticKind, UnsupportedBackendFeatureReason,
 };
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
@@ -56,7 +56,11 @@ fn wasm_feature_validation_rejects_reachable_format_float() {
         "Wasm validation should reject reachable FormatFloat",
     );
 
-    assert_unsupported_feature(&diagnostic, &mut string_table, "Float formatting");
+    assert_unsupported_feature(
+        &diagnostic,
+        &mut string_table,
+        UnsupportedBackendFeatureReason::FloatFormatting,
+    );
 }
 
 #[test]
@@ -85,7 +89,11 @@ fn wasm_feature_validation_rejects_reachable_validate_float() {
         "Wasm validation should reject reachable ValidateFloat",
     );
 
-    assert_unsupported_feature(&diagnostic, &mut string_table, "Float boundary validation");
+    assert_unsupported_feature(
+        &diagnostic,
+        &mut string_table,
+        UnsupportedBackendFeatureReason::FloatBoundaryValidation,
+    );
 }
 
 #[test]
@@ -110,7 +118,11 @@ fn wasm_feature_validation_rejects_reachable_checked_numeric_op() {
         "Wasm validation should reject reachable checked numeric operations",
     );
 
-    assert_unsupported_feature(&diagnostic, &mut string_table, "checked numeric operations");
+    assert_unsupported_feature(
+        &diagnostic,
+        &mut string_table,
+        UnsupportedBackendFeatureReason::CheckedNumericOperations,
+    );
 }
 
 #[test]
@@ -227,7 +239,7 @@ fn wasm_feature_validation_diagnostic(
 fn assert_unsupported_feature(
     diagnostic: &crate::compiler_frontend::compiler_messages::CompilerDiagnostic,
     string_table: &mut StringTable,
-    expected_feature: &str,
+    expected_reason: UnsupportedBackendFeatureReason,
 ) {
     assert_eq!(
         diagnostic.kind,
@@ -236,14 +248,14 @@ fn assert_unsupported_feature(
 
     let DiagnosticPayload::UnsupportedBackendFeature {
         backend_name,
-        feature,
+        reason,
     } = &diagnostic.payload
     else {
         panic!("expected UnsupportedBackendFeature payload");
     };
 
     assert_eq!(*backend_name, string_table.intern("Wasm"));
-    assert_eq!(*feature, string_table.intern(expected_feature));
+    assert_eq!(*reason, expected_reason);
 }
 
 fn hir_module(

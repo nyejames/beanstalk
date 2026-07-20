@@ -522,11 +522,11 @@ fn render_payload_message(
         }
         DiagnosticPayload::UnsupportedBackendFeature {
             backend_name,
-            feature,
+            reason,
         } => format!(
             "Backend '{}' does not support {} yet.",
             string_table.resolve(*backend_name),
-            string_table.resolve(*feature)
+            reason.feature_name()
         ),
         DiagnosticPayload::InvalidPageMetadata { key, reason } => {
             invalid_page_metadata_message(*key, *reason, string_table)

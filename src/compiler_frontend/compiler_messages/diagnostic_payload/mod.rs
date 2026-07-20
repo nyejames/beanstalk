@@ -513,7 +513,7 @@ pub enum DiagnosticPayload {
 
     UnsupportedBackendFeature {
         backend_name: StringId,
-        feature: StringId,
+        reason: UnsupportedBackendFeatureReason,
     },
 
     InvalidPageMetadata {
@@ -660,6 +660,7 @@ impl DiagnosticPayload {
         let key = match self {
             Self::InvalidImportPath { reason, .. } => reason.stable_reason_key(),
             Self::InvalidMutableAccess { reason, .. } => reason.stable_reason_key(),
+            Self::UnsupportedBackendFeature { reason, .. } => reason.stable_reason_key(),
             Self::InvalidConfig { reason, .. } => reason.stable_reason_key(),
             Self::DeferredFeature { reason } => reason.stable_reason_key(),
             Self::InvalidStringEscape { reason } => reason.stable_reason_key(),

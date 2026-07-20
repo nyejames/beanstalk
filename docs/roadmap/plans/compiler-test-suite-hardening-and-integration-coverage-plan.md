@@ -30,26 +30,26 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 4C7 — invalid fallible-handling reasons
-LAST_ACCEPTED_COMMIT: `b2992ef92` (Phase 4C6)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 4C7 expectation migration is ready to commit; unrelated generated font/style rebuild churn from `a83e9587f` remains unstaged
+CURRENT_SLICE: Phase 4C8a — compiler-owned backend unsupported-feature reasons
+LAST_ACCEPTED_COMMIT: `5d72c1b75` (Phase 4C7)
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 4C8a diagnostic identity correction is ready to commit; unrelated generated font/style rebuild churn from `a83e9587f` remains unstaged
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: the error-return, propagation, catch/recovery, option, cast, and function-return references define the supported fallible surface; official structured-assertion workflow wording waits for Phase 4 closure
-- code: 36 canonical fixtures assert broad `BST-RULE-0051`; compiler-owned `InvalidFallibleHandlingReason` exposes 27 stable reason variants
+- docs: compiler and build-system authorities assign target-contract validation to the compiler over build-selected roots; the progress matrix records HTML-Wasm as experimental with clean structured rejection
+- code: `BST-RULE-0064` now carries a backend plus one of nine typed rejection reasons; free-form feature interning and the unreachable reactive-runtime-fragment category are removed, while 29 canonical fixtures still need structured reason assertions
 ACCEPTANCE_CRITERIA:
-- inventory every canonical `BST-RULE-0051` backend block and its emitted compiler-owned reason
-- assert the exact qualified reason for every occurrence and remove rendered wording fragments made redundant by reason identity
-- preserve exact codes, source inputs, backend outcomes, and fallible-handling semantics
+- replace free-form backend-feature identity with one typed compiler-owned reason enum and stable qualified keys
+- preserve backend names, rendered wording, diagnostic codes, locations, validation order, and target semantics
+- update focused backend validation/model coverage without migrating canonical expectations yet
 VALIDATION_STATE:
-- `just validate`: passed; cross-target Clippy, 3,556 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
-- Phase 4C7 focused cases/audit: passed; 36 exact cases and clean 1,645-case inventory
+- `just validate`: passed; cross-target Clippy, 3,557 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
+- Phase 4C8a focused backend/model tests: passed; 70 diagnostic-model tests and five backend-feature tests
 DOCS_IMPACT: official structured-assertion workflow docs wait for Phase 4 closure; progress matrix and `index.md` unchanged
 BLOCKERS_OR_OPEN_DECISIONS: Ollama wrapper still requires removed `docs/codebase-style-guide.md`; 19 justified diagnostic-contains blocks record duplicate module compilation that the queued canonical-module plan must remove
 DELEGATION_DECISION: codex-cli fallback — the user-selected Ollama default is cleanly blocked before edits by its stale required-document path
 NEXT_WORKER_ORDER: codex-cli, parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit the reviewed Phase 4C7 expectations and plan paths, refresh its hash, then inventory backend unsupported-feature reasons
+NEXT_RESUME_ACTION: commit the reviewed Phase 4C8a source, tests, and plan paths, refresh its hash, then migrate the 29 canonical `BST-RULE-0064` blocks
 
 ---
 
@@ -165,7 +165,8 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 4C4 trait-name misuse locations | `5d4a6c84c` | Accepted | Eight `BST-RULE-0075` fixtures and nine backend blocks assert fixture-relative path/line without inventing a reason taxonomy; 1,778/1,778 executions |
 | Phase 4C5 invalid import-clause reasons | `e33d1f6e9` | Accepted | Ten `BST-SYNTAX-0019` fixtures distinguish eight reasons; dedicated per-entry-plus-trailing reason is reachable; dead parser check removed; 3,556 Rust tests |
 | Phase 4C6 invalid import-path locations | `b2992ef92` | Accepted | Both `BST-IMPORT-0016` fixtures assert `parent_directory_segment` with root/nested fixture-relative paths and one-based lines; 1,778/1,778 executions |
-| Phase 4C7 invalid fallible-handling reasons | pending acceptance commit | Accepted | All 36 `BST-RULE-0051` fixtures distinguish 17 compiler-owned reasons; 12 redundant rendered wording fragments removed; 1,778/1,778 executions |
+| Phase 4C7 invalid fallible-handling reasons | `5d72c1b75` | Accepted | All 36 `BST-RULE-0051` fixtures distinguish 17 compiler-owned reasons; 12 redundant rendered wording fragments removed; 1,778/1,778 executions |
+| Phase 4C8a backend feature reason identity | pending acceptance commit | Accepted | Nine reachable backend-feature reasons replace interned feature prose; unreachable runtime-fragment rejection identity removed; 3,557 Rust tests and 1,778 integration executions |
 
 ---
 

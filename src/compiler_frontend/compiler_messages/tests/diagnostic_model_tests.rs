@@ -16,7 +16,7 @@ use super::{
     InvalidTypeAnnotationReason, MissingWhitespace, NameNamespace, NumberLiteralErrorReason,
     PathKind, ReceiverCallKind, RuleDiagnosticKind, SymbolicSpacingConstruct, SymbolicSpacingError,
     SyntaxDiagnosticKind, TypeAnnotationContext, TypeDiagnosticKind, TypeMismatchContext,
-    UnsupportedOperatorCategory, is_well_formed_reason_key,
+    UnsupportedBackendFeatureReason, UnsupportedOperatorCategory, is_well_formed_reason_key,
 };
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_messages::render::{
@@ -260,6 +260,23 @@ fn diagnostic_identity_uses_descriptor_code_actual_severity_and_typed_reason() {
     assert_eq!(
         identity.reason_key,
         Some("invalid_collection_type.zero_capacity")
+    );
+}
+
+#[test]
+fn unsupported_backend_feature_exposes_stable_reason_key() {
+    let mut string_table = StringTable::new();
+    let source_path = InternedPath::from_single_str("main.bst", &mut string_table);
+    let diagnostic = CompilerDiagnostic::unsupported_backend_feature(
+        string_table.intern("Wasm"),
+        UnsupportedBackendFeatureReason::HashmapOperation,
+        location(source_path),
+    );
+
+    assert_eq!(diagnostic.identity().code, "BST-RULE-0064");
+    assert_eq!(
+        diagnostic.identity().reason_key,
+        Some("unsupported_backend_feature.hashmap_operation")
     );
 }
 

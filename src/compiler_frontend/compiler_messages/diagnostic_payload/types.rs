@@ -95,6 +95,35 @@ pub enum InvalidMutableAccessReason {
     AliasedValueRequiresExclusiveAccess,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum UnsupportedBackendFeatureReason {
+    HashmapConstruction,
+    HashmapOperation,
+    ReactiveTemplateRuntime,
+    RuntimeCasts,
+    CheckedNumericOperations,
+    FloatFormatting,
+    FloatBoundaryValidation,
+    GenericRuntimeValues,
+    ReactiveExternalCallSink,
+}
+
+impl UnsupportedBackendFeatureReason {
+    pub(crate) fn feature_name(self) -> &'static str {
+        match self {
+            Self::HashmapConstruction => "hashmap construction",
+            Self::HashmapOperation => "hashmap operation",
+            Self::ReactiveTemplateRuntime => "reactive template runtime",
+            Self::RuntimeCasts => "runtime casts",
+            Self::CheckedNumericOperations => "checked numeric operations",
+            Self::FloatFormatting => "Float formatting",
+            Self::FloatBoundaryValidation => "Float boundary validation",
+            Self::GenericRuntimeValues => "generic runtime values",
+            Self::ReactiveExternalCallSink => "reactive external-call sink",
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum InvalidConfigReason {
     MissingKey,

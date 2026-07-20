@@ -22,7 +22,8 @@ use crate::compiler_frontend::compiler_messages::{
     InvalidTraitIncompatibilityReason, InvalidTraitKeywordUsageReason, InvalidTypeAnnotationReason,
     NameNamespace, NamespaceTypeValueMisuseKind, NamingConvention, NumberLiteralErrorReason,
     OperatorOperandPosition, PathKind, RangeOperandKind, RuleDiagnosticKind, SyntaxDiagnosticKind,
-    TypeAnnotationContext, TypeDiagnosticKind, TypeMismatchContext, UnsupportedOperatorCategory,
+    TypeAnnotationContext, TypeDiagnosticKind, TypeMismatchContext,
+    UnsupportedBackendFeatureReason, UnsupportedOperatorCategory,
 };
 use crate::compiler_frontend::datatypes::generic_bindings::BindingConflict;
 use crate::compiler_frontend::datatypes::ids::TypeId;
@@ -652,7 +653,7 @@ impl CompilerDiagnostic {
 
     pub(crate) fn unsupported_backend_feature(
         backend_name: StringId,
-        feature: StringId,
+        reason: UnsupportedBackendFeatureReason,
         location: SourceLocation,
     ) -> Self {
         Self::new(
@@ -660,7 +661,7 @@ impl CompilerDiagnostic {
             location,
             DiagnosticPayload::UnsupportedBackendFeature {
                 backend_name,
-                feature,
+                reason,
             },
         )
     }

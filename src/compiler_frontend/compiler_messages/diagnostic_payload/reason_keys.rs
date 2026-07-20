@@ -93,6 +93,18 @@ define_stable_reason_keys! {
     &InvalidMutableAccessReason::AliasedValueRequiresExclusiveAccess => "invalid_mutable_access.aliased_value_requires_exclusive_access",
     },
 
+    UnsupportedBackendFeatureReason => {
+    &UnsupportedBackendFeatureReason::HashmapConstruction => "unsupported_backend_feature.hashmap_construction",
+    &UnsupportedBackendFeatureReason::HashmapOperation => "unsupported_backend_feature.hashmap_operation",
+    &UnsupportedBackendFeatureReason::ReactiveTemplateRuntime => "unsupported_backend_feature.reactive_template_runtime",
+    &UnsupportedBackendFeatureReason::RuntimeCasts => "unsupported_backend_feature.runtime_casts",
+    &UnsupportedBackendFeatureReason::CheckedNumericOperations => "unsupported_backend_feature.checked_numeric_operations",
+    &UnsupportedBackendFeatureReason::FloatFormatting => "unsupported_backend_feature.float_formatting",
+    &UnsupportedBackendFeatureReason::FloatBoundaryValidation => "unsupported_backend_feature.float_boundary_validation",
+    &UnsupportedBackendFeatureReason::GenericRuntimeValues => "unsupported_backend_feature.generic_runtime_values",
+    &UnsupportedBackendFeatureReason::ReactiveExternalCallSink => "unsupported_backend_feature.reactive_external_call_sink",
+    },
+
     NumberLiteralErrorReason => {
     &NumberLiteralErrorReason::SeparatorNotBetweenDigits => "invalid_number_literal.separator_not_between_digits",
     &NumberLiteralErrorReason::MultipleDecimalPoints => "invalid_number_literal.multiple_decimal_points",

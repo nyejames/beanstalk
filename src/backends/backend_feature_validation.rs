@@ -6,8 +6,10 @@
 //! structured source diagnostic instead of a backend-internal lowering error.
 
 use crate::backends::external_package_validation::BackendTarget;
-use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
+use crate::compiler_frontend::compiler_messages::{
+    CompilerDiagnostic, UnsupportedBackendFeatureReason,
+};
 use crate::compiler_frontend::datatypes::definitions::TypeDefinition;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind};
@@ -157,16 +159,16 @@ fn validate_wasm_maps(
         return Ok(());
     };
 
-    let feature = match &map_use.kind {
-        ReachableMapUseKind::Literal => "hashmap construction",
-        ReachableMapUseKind::Operation(_) => "hashmap operation",
+    let reason = match &map_use.kind {
+        ReachableMapUseKind::Literal => UnsupportedBackendFeatureReason::HashmapConstruction,
+        ReachableMapUseKind::Operation(_) => UnsupportedBackendFeatureReason::HashmapOperation,
     };
 
     // Only the first reachable unsupported operation is reported. Unreachable helpers remain
     // valid typed HIR and do not block the build.
     let diagnostic = CompilerDiagnostic::unsupported_backend_feature(
         string_table.intern(target.as_str()),
-        string_table.intern(feature),
+        reason,
         map_use.location.clone(),
     );
 
@@ -193,7 +195,7 @@ fn validate_wasm_reactive_features(
 
     let diagnostic = CompilerDiagnostic::unsupported_backend_feature(
         string_table.intern(target.as_str()),
-        string_table.intern("reactive template runtime"),
+        UnsupportedBackendFeatureReason::ReactiveTemplateRuntime,
         reactive_template.location.clone(),
     );
 
@@ -219,7 +221,7 @@ fn validate_wasm_runtime_casts(
 
     let diagnostic = CompilerDiagnostic::unsupported_backend_feature(
         string_table.intern(target.as_str()),
-        string_table.intern("runtime casts"),
+        UnsupportedBackendFeatureReason::RuntimeCasts,
         runtime_cast.location.clone(),
     );
 
@@ -245,7 +247,7 @@ fn validate_wasm_checked_numeric_ops(
 
     let diagnostic = CompilerDiagnostic::unsupported_backend_feature(
         string_table.intern(target.as_str()),
-        string_table.intern("checked numeric operations"),
+        UnsupportedBackendFeatureReason::CheckedNumericOperations,
         numeric_op.location.clone(),
     );
 
@@ -270,14 +272,18 @@ fn validate_wasm_float_statements(
         return Ok(());
     };
 
-    let feature = match float_statement.kind {
-        ReachableFloatStatementKind::FormatFloat => "Float formatting",
-        ReachableFloatStatementKind::ValidateFloat => "Float boundary validation",
+    let reason = match float_statement.kind {
+        ReachableFloatStatementKind::FormatFloat => {
+            UnsupportedBackendFeatureReason::FloatFormatting
+        }
+        ReachableFloatStatementKind::ValidateFloat => {
+            UnsupportedBackendFeatureReason::FloatBoundaryValidation
+        }
     };
 
     let diagnostic = CompilerDiagnostic::unsupported_backend_feature(
         string_table.intern(target.as_str()),
-        string_table.intern(feature),
+        reason,
         float_statement.location.clone(),
     );
 
@@ -318,7 +324,7 @@ fn validate_wasm_generic_runtime_values(
 
     let diagnostic = CompilerDiagnostic::unsupported_backend_feature(
         string_table.intern(target.as_str()),
-        string_table.intern("generic runtime values"),
+        UnsupportedBackendFeatureReason::GenericRuntimeValues,
         location,
     );
 
@@ -535,11 +541,9 @@ fn validate_js_reactive_sinks(
         return Ok(());
     };
 
-    let feature = feature_name_for_reactive_sink(rejected_sink);
-
     let diagnostic = CompilerDiagnostic::unsupported_backend_feature(
         string_table.intern(target.as_str()),
-        string_table.intern(feature),
+        UnsupportedBackendFeatureReason::ReactiveExternalCallSink,
         rejected_sink.location.clone(),
     );
 
@@ -560,11 +564,4 @@ fn sink_template_has_runtime_subscription(
         .reactive_templates()
         .find(|template| template.id == sink.template_id)
         .is_some_and(|template| !template.dependencies.is_empty())
-}
-
-fn feature_name_for_reactive_sink(sink: &ReachableReactiveSinkUse) -> &'static str {
-    match &sink.kind {
-        ReachableReactiveSinkKind::RuntimeFragment => "reactive runtime fragment",
-        ReachableReactiveSinkKind::ExternalCallArgument { .. } => "reactive external-call sink",
-    }
 }
