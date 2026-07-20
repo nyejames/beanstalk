@@ -30,26 +30,26 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 11 reactive runtime update ownership
-LAST_ACCEPTED_COMMIT: `68fb90fb6` (Phase 10B root/fragment activation)
+CURRENT_SLICE: Phase 12 positive integration consolidation
+LAST_ACCEPTED_COMMIT: `780d0419c` (Phase 11 reactive mutation ownership)
 WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; accepted code is committed; unrelated concurrent docs source and generated-release edits remain unstaged
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: reactive subscription, invalidation, runtime sink, and backend-gating contracts govern the next slice
-- code: reactive HTML-JS mounting/scheduling cases, exact runtime output, rejection diagnostics, and hidden invalidation facts are the next inventory
+- docs: test ownership, pruning, exact runtime assertion, and failure-localization rules govern the next slice
+- code: fresh mutable arguments, choice equality, named/default calls, and ordered collection/map positive cases are the consolidation inventory
 ACCEPTANCE_CRITERIA:
-- post-subscription source mutation is accepted and exact runtime output proves initial/update order with one mount
-- reactive parameters do not grant mutation permission and reject with exact reason/location
-- HTML-Wasm retains structured rejection; hidden source identity/invalidation facts remain unit-owned
+- consolidate only exact shared positive contracts into the strongest existing primary owner
+- retain distinct negative diagnostic reasons and avoid cross-feature mega-fixtures
+- remove superseded folders/manifest entries atomically with no semantic coverage loss
 VALIDATION_STATE:
-- `just validate`: passed; cross-target Clippy, 3,541 Rust tests, 1,804 integration executions, docs check, and 28 benchmark cases
-- focused Phase 10B coverage: passed; eight canonical root/fragment owner cases plus zero audit hard findings across 1,660 cases
-DOCS_IMPACT: progress matrix reviewed; broad command/root/fragment coverage wording remains accurate; index unchanged
+- `just validate`: passed; cross-target Clippy, 3,541 Rust tests, 1,807 integration executions, docs check, and 28 benchmark cases
+- focused Phase 11 coverage: passed; 44 reactivity executions, six hidden reactivity facts, and zero audit hard findings across 1,661 cases
+DOCS_IMPACT: progress matrix reviewed; current reactivity support/rejection and coverage wording remains accurate; index unchanged
 BLOCKERS_OR_OPEN_DECISIONS: none for the next slice; Ollama remains required with no provider substitution
-DELEGATION_DECISION: Ollama — bounded Phase 11 reactive runtime coverage slice
+DELEGATION_DECISION: Ollama — bounded Phase 12 consolidation slices
 NEXT_WORKER_ORDER: Ollama only; no provider substitution
 STOP_REASON: none
-NEXT_RESUME_ACTION: inventory current post-subscription runtime and reactive-parameter mutation owners, then launch Phase 11 through Ollama
+NEXT_RESUME_ACTION: inventory the Phase 12 candidate clusters and launch the first coherent consolidation through Ollama
 
 ---
 
@@ -191,6 +191,7 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 9 facade effect summaries | `6d92cbd1e` | Accepted | Three primary facade cases cover return-alias liveness/final use, fresh returns, and mutable-parameter access across re-exports; existing generated-generic remapping owns supported generated labels; 3,540 Rust tests and 1,804 integration executions |
 | Phase 10A check/build frontend parity | `6a2c2e6b0` | Accepted | One focused command test compares exact typed warning and error identity across check/build seams, including reason/path/line/multiplicity, and proves check writes no artifacts; 3,541 Rust tests and 1,804 integration executions |
 | Phase 10B root/fragment activation | `68fb90fb6` | Accepted | Existing exact/ordered owners cover active/imported/API-only roots, mixed fragment order, loop-control output, and non-duplicated hydration; API-only imported runtime output is now exact-once; 3,541 Rust tests and 1,804 integration executions |
+| Phase 11 reactive mutation ownership | `780d0419c` | Accepted | Exact HTML events protect one mount plus one batched rerender, the mount call is exact-once, HTML-Wasm rejects the same source structurally, and reactive-parameter assignment has a primary reason/path/label owner; 3,541 Rust tests and 1,807 integration executions |
 
 ---
 
@@ -1101,24 +1102,24 @@ When current implementation does not support the accepted canonical-module end s
 
 ## Required coverage
 
-- [ ] Mount a template subscribed to a reactive source.
-- [ ] Mutate the source after subscription; prove mutation is accepted and output updates.
-- [ ] Assert initial output, update order, one mount, and defined rerender count.
-- [ ] Do not make incidental microtask counts contractual.
-- [ ] Reject reactive-parameter mutation permission with exact reason/location.
-- [ ] Retain hidden invalidation/source-identity units.
-- [ ] Add map/place invalidation runtime coverage only where current progress says it works.
-- [ ] Use HTML-JS success and HTML-Wasm structured rejection in one matrix.
-- [ ] Do not introduce deferred field/path subscriptions or broader reactivity.
+- [x] Mount a template subscribed to a reactive source.
+- [x] Mutate the source after subscription; prove mutation is accepted and output updates.
+- [x] Assert initial output, update order, one mount, and defined rerender count.
+- [x] Do not make incidental microtask counts contractual.
+- [x] Reject reactive-parameter mutation permission with exact reason/location.
+- [x] Retain hidden invalidation/source-identity units.
+- [x] Add map/place invalidation runtime coverage only where current progress says it works.
+- [x] Use HTML-JS success and HTML-Wasm structured rejection in one matrix.
+- [x] Do not introduce deferred field/path subscriptions or broader reactivity.
 
 ## Phase 11 acceptance
 
-- [ ] Runtime semantics and hidden invalidation facts each have one owner.
-- [ ] Subscription is not modeled as an active borrow.
-- [ ] Ordered assertions avoid scheduler internals.
-- [ ] No TIR identity or view leaks into runtime expectations.
-- [ ] Progress wording is current.
-- [ ] Full validation passes.
+- [x] Runtime semantics and hidden invalidation facts each have one owner.
+- [x] Subscription is not modeled as an active borrow.
+- [x] Ordered assertions avoid scheduler internals.
+- [x] No TIR identity or view leaks into runtime expectations.
+- [x] Progress wording is current.
+- [x] Full validation passes.
 
 ---
 
@@ -1356,7 +1357,7 @@ Do not present lower counts or faster time as proof of correctness.
 |---|---|---|---|
 | Hashmap `get` alias blocks live mutation | Shared map value access conflicts with overlapping mutation | Integration plus focused borrow facts | Phase 6 |
 | Cross-module return-alias/effect summaries | Public summaries govern caller transfer where current modules support it | Integration plus summary units | Phase 9 accepted (`6d92cbd1e`) |
-| Reactive update after subscription | Subscription is read-only dependency, not active borrow | Integration plus invalidation units | Phase 11 |
+| Reactive update after subscription | Subscription is read-only dependency, not active borrow | Integration plus invalidation units | Phase 11 accepted (`780d0419c`) |
 | `check`/build frontend parity | Same frontend diagnostics; `check` emits no artifacts | Command tests | Phase 10 accepted (`6a2c2e6b0`) |
 | `check` target-planning parity | Current `check` stops after the shared frontend and does not yet run the accepted build-owned target-planning sequence | Canonical module compilation and scoped packages plan | Phase 10 handoff |
 | Ordered root/fragment execution | Active root once; imported root dormant; source order preserved | Integration | Phases 5 and 10 accepted (`68fb90fb6`) |
