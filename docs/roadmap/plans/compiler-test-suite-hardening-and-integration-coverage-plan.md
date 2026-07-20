@@ -30,27 +30,27 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 5 documentation and acceptance closure after zero-golden audit
-LAST_ACCEPTED_COMMIT: `952bd3134` (Phase 5D5)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; Phase 5D5 is committed; only this checkpoint is parent-owned; unrelated docs source and generated rebuild work remains unstaged
+CURRENT_SLICE: Phase 6 live hashmap lookup alias conflicts
+LAST_ACCEPTED_COMMIT: `fc3b25eaa` (Phase 5 documentation and acceptance closure)
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; Phase 5 is complete; unrelated docs style, generated release output, and generated font work remains unstaged
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: testing standards reserve goldens for exact emitted text and prefer runtime behavior or narrow artifact assertions when those own the contract
-- code: zero golden backend blocks remain; the final five static cases use narrow HTML content/order/exact-once and artifact-absence contracts
+- docs: access-and-aliasing and borrow-validation leaves own hashmap alias legality; testing standards require exact diagnostic identity and source locations
+- code: existing hashmap integration cases and focused borrow-map units are the evidence base for adding a primary live-lookup conflict owner without pruning units
 ACCEPTANCE_CRITERIA:
-- replace the final five normalized whole-page goldens with narrow `index.html` content/order or artifact-absence assertions
-- prove the unreferenced asset is not emitted without pinning unrelated page scaffolding
-- do not edit source; remove the final golden files and empty trees while preserving warning/backend intent
+- add one primary integration case proving a live `get` alias blocks `set`
+- assert the exact diagnostic code, compiler-owned reason, mutation location, and earlier shared-access label
+- preserve current HTML/HTML-Wasm behavior and do not delete units or broaden map semantics
 VALIDATION_STATE:
-- `just validate`: passed; cross-target Clippy, 3,575 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
-- Phase 5D5 selected case executions: passed; all five selected HTML cases
-- `cargo run --quiet -- tests --audit`: passed; 1,645 cases, 1,778 executions, zero golden backend blocks, zero hard findings
-DOCS_IMPACT: `testing.bd` still names schema 5 and must be updated with the complete runtime assertion workflow during Phase 5 documentation/closure; progress matrix and `index.md` unchanged
+- `cargo run --quiet -- build docs --release`: passed; 63 files built and the style-guide route contains the schema-6 runtime workflow
+- prior Phase 5 `just validate`: passed; cross-target Clippy, 3,575 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
+- Phase 6 focused validation: not run
+DOCS_IMPACT: Phase 5 testing and contributor documentation is current; Phase 6 progress wording is reviewed after coverage lands
 BLOCKERS_OR_OPEN_DECISIONS: the user requires Ollama for every delegated implementation slice after Phase 5C2, with no provider substitution; 19 justified diagnostic-contains blocks separately record duplicate module compilation that the queued canonical-module plan must remove
-DELEGATION_DECISION: Ollama accepted with parent narrowing — the bare const output no longer pins the body tag
-NEXT_WORKER_ORDER: none for documentation closure; Ollama only for the next implementation slice
-STOP_REASON: context is too low to reload and safely complete the documentation/acceptance slice in this turn
-NEXT_RESUME_ACTION: reload startup files and this plan, update schema-6 runtime/golden workflow documentation and Phase 5 acceptance state, rebuild docs, validate, commit, then begin Phase 6 through Ollama
+DELEGATION_DECISION: Ollama — user-required provider for the bounded Phase 6 implementation slice
+NEXT_WORKER_ORDER: Ollama only; no provider substitution
+STOP_REASON: none
+NEXT_RESUME_ACTION: read the hashmap access and borrow-validation leaves, inspect existing owners, then launch the live-lookup conflict slice through Ollama
 
 ---
 
@@ -180,6 +180,7 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 5D3 receiver golden conversion | `914c1c131` | Accepted | Nine receiver whole-page goldens replaced by exact context-rich output; seven scalar markers relabeled; 14 golden backend blocks remain; 1,778/1,778 executions |
 | Phase 5D4 template/import golden conversion | `71f75c220` | Accepted | Nine whole-page goldens replaced by runtime and narrow static owners; order-sensitive console markers are exact-once; five golden backend blocks remain; 1,778/1,778 executions |
 | Phase 5D5 static golden conversion | `952bd3134` | Accepted | Final five whole-page goldens replaced by narrow static content/order/exact-once and absence contracts; zero golden backend blocks; 1,778/1,778 executions |
+| Phase 5 documentation and acceptance closure | `fc3b25eaa` | Accepted | Schema 6 chronology, exact/order/exact-once runtime workflow, line-ending-only normalization, and zero-golden policy documented; release docs build passed |
 
 ---
 
@@ -893,13 +894,13 @@ so Phase 5D retains no whole-page golden.
 
 ## Phase 5 acceptance
 
-- [ ] One Node harness remains.
-- [ ] Runtime chronology is captured, not reconstructed.
-- [ ] Exact-once protects activation/mount contracts.
-- [ ] Exact mode is not over-normalized.
-- [ ] Every retained golden has an explicit owner.
-- [ ] Documentation is current.
-- [ ] Full validation passes.
+- [x] One Node harness remains.
+- [x] Runtime chronology is captured, not reconstructed.
+- [x] Exact-once protects activation/mount contracts.
+- [x] Exact mode is not over-normalized.
+- [x] Every retained golden has an explicit owner.
+- [x] Documentation is current.
+- [x] Full validation passes.
 
 ---
 
