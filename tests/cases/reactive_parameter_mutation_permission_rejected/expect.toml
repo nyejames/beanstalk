@@ -1,0 +1,35 @@
+entry = "."
+
+[backends.html]
+mode = "failure"
+warnings = "forbid"
+diagnostic_codes = ["BST-RULE-0044"]
+
+[[backends.html.diagnostic_assertions]]
+code = "BST-RULE-0044"
+reason = "invalid_assignment_target.immutable_binding"
+path = "input/#page.bst"
+line = 5
+count = 1
+
+[[backends.html.diagnostic_assertions.secondary_labels]]
+occurrence = 1
+path = "input/#page.bst"
+line = 4
+
+[backends.html_wasm]
+mode = "failure"
+warnings = "forbid"
+diagnostic_codes = ["BST-RULE-0044"]
+
+[[backends.html_wasm.diagnostic_assertions]]
+code = "BST-RULE-0044"
+reason = "invalid_assignment_target.immutable_binding"
+path = "input/#page.bst"
+line = 5
+count = 1
+
+[[backends.html_wasm.diagnostic_assertions.secondary_labels]]
+occurrence = 1
+path = "input/#page.bst"
+line = 4

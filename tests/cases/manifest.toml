@@ -7796,6 +7796,13 @@ path = "reactive_parameter_requires_source_rejected"
 tags = ["integration", "language", "reactivity", "diagnostics", "functions"]
 
 [[case]]
+id = "reactive_parameter_mutation_permission_rejected"
+path = "reactive_parameter_mutation_permission_rejected"
+tags = ["integration", "language", "reactivity", "diagnostics", "functions", "borrows"]
+contract = "language.reactivity.reactive_parameter_does_not_grant_mutation_permission"
+role = "primary"
+
+[[case]]
 id = "reactive_subscription_entry_runtime_success"
 path = "reactive_subscription_entry_runtime_success"
 tags = ["integration", "language", "reactivity", "templates"]
