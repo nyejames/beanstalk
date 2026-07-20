@@ -465,7 +465,7 @@ fn runtime_fragment_push_preserves_reactive_template_object() {
 
     assert!(
         source.contains("push(__bs_template_string("),
-        "runtime fragment pushes must preserve reactive template objects for Phase 7 mounting"
+        "runtime fragment pushes must preserve reactive template objects for HTML mounting"
     );
     assert!(
         !source.contains("push(__bs_template_snapshot(__bs_template_string("),
