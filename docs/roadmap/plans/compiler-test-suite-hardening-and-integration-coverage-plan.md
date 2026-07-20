@@ -30,21 +30,21 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 14C14g build import, directive, and infrastructure unit ownership review
-LAST_ACCEPTED_COMMIT: `76894bb2c` (Phase 14C14f code)
+CURRENT_SLICE: Phase 14C14h build output cleanup and manifest unit ownership review
+LAST_ACCEPTED_COMMIT: `fe30993ff` (Phase 14C14g code)
 WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; accepted code is committed; concurrent example-name work remains separately committed
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: unit-test ownership, pruning, compiler-stage boundaries, and final governance rules govern the next slice
-- code: all 177 retained tests across the reviewed Stage 0, compile-project frontend, and builder-surface groups now have distinct owners; build import, directive, and infrastructure boundaries are next
+- code: all 190 retained tests across the reviewed Stage 0, frontend, builder-surface, and small build-boundary groups now have distinct owners; output cleanup and manifest policy are next
 ACCEPTANCE_CRITERIA:
 - every remaining full-source unit has a distinct hidden invariant, parser fact, stage boundary, or policy owner
 - units superseded by a stronger canonical integration primary are deleted with replacement evidence
 - stale test-only helpers or production APIs are removed with their final caller
 - HIR, build-system, backend, and final TIR units keep only their owning semantic relationships and hidden facts
 VALIDATION_STATE:
-- `just validate`: passed; cross-target Clippy, 3,475 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
-- Phase 14C14f focused group: passed; 28 builder-surface registry tests
+- `just validate`: passed; cross-target Clippy, 3,474 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
+- Phase 14C14g focused groups: passed; 10 build-import, two build-directive, and one build-infrastructure tests
 - Phase 14B audit: passed; zero hard findings; 66 backend-only and 15 adversarial-only primary-less contract advisories
 - Priya expectation alignment: accepted at `6efac7012`; 13 stale Rust and integration expectation files now match renamed inputs
 DOCS_IMPACT: testing, validation, and contributor workflow aligned with final suite policy; progress matrix and index unchanged
@@ -52,7 +52,7 @@ BLOCKERS_OR_OPEN_DECISIONS: none; 81 contract families without a primary are int
 DELEGATION_DECISION: Ollama — bounded Phase 14 implementation slices
 NEXT_WORKER_ORDER: Ollama only; no provider substitution
 STOP_REASON: none
-NEXT_RESUME_ACTION: launch the build import, directive, and infrastructure unit group through Ollama
+NEXT_RESUME_ACTION: launch the build output cleanup and manifest unit group through Ollama
 
 ---
 
@@ -239,6 +239,7 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 14C14d frontend preparation and filesystem identity | no code change after `afa944551` | Accepted | All 20 frontend-preparation and 13 filesystem-identity tests retained as deterministic merge/remapping, scheduling-policy, chunk-planning, counter, malformed-payload, canonicalization, discovery-outcome, and strict platform filesystem-identity owners; 19 frontend tests and five host-runnable filesystem tests pass on macOS, while eight non-UTF-8 identity tests remain Linux-gated; latest full gate remains 3,484 Rust tests and 1,793 integration executions |
 | Phase 14C14e compile-project frontend units | `2aa652d29` | Accepted | Four weak source-visible or cosmetic duplicates removed in favor of canonical import-collision and unsupported-JS owners, an exact external-JS parser owner, and the retained realistic project-local receiver rejection; missing entry-root coverage now asserts `ConfiguredEntryRootMissing`; 25 provider registry, cache, runtime-metadata reachability, identity/remapping, capability, infrastructure, discovery, and HIR metadata owners remain; 3,480 Rust tests and 1,793 integration executions |
 | Phase 14C14f builder-surface registry units | `76894bb2c` | Accepted | Five construction, equality, lookup, default, and single-kind smokes consolidated into stronger provider-resolution, cache-key, replacement-lookup, empty-registry, and deterministic multi-kind owners; one misleading package-registry test name corrected; 28 provider registration/cache/resolution-table, source-kind, package-order, collision, origin, and backing owners remain; 3,475 Rust tests and 1,793 integration executions |
+| Phase 14C14g build import, directive, and infrastructure units | `fe30993ff` | Accepted | The positive HTML-builder directive smoke was removed in favor of the canonical `template_html_directives_html_project_success` artifact owner; all 10 import/glue/runtime/reachability/string-table tests, two unregistered-versus-frontend directive capability tests, and the poisoned-current-directory-mutex infrastructure test remain distinct; 3,474 Rust tests and 1,793 integration executions |
 
 ---
 
@@ -1428,6 +1429,7 @@ Do not present lower counts or faster time as proof of correctness.
 | `provider_registry_tests::resolution_table_get_lookup_unchanged_after_indexing` | Exact source/prefix lookup returns the indexed payload | `resolution_table_replacing_same_source_prefix_updates_collected_package`, strengthened to assert the replaced package, type, and function payload through `get` | none | `76894bb2c` |
 | `source_file_kind_registry_tests::registry_default_is_empty` | The default registry starts empty | `empty_registry_has_no_supported_kinds` | `Default` and `new` share the same empty representation | `76894bb2c` |
 | `source_file_kind_registry_tests::register_multiple_kinds` | A single registered Beandown kind appears in `supported_kinds` | `supported_kinds_sorts_multiple_kinds_deterministically` | `register_beandown_lookup_succeeds` retains direct registration/lookup | `76894bb2c` |
+| `build_directive_tests::html_project_directives_are_available_under_html_builder` | HTML, CSS, and escaped-HTML directives render under the HTML builder | `template_html_directives_html_project_success` with one realistic input and exact `index.html` fragments for all three directives | the two retained directive units own unregistered project directives and frontend-builtins-without-builder-registration boundaries | `fe30993ff` |
 
 ### Coverage gap and handoff ledger
 
