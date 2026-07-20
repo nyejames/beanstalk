@@ -9,4 +9,7 @@ rendered_output_contains = ["alias_struct_param ada=10 linus=7 bo=7"]
 mode = "failure"
 warnings = "forbid"
 diagnostic_codes = ["BST-RULE-0064"]
-message_contains = ["Wasm", "hashmap"]
+
+[[backends.html_wasm.diagnostic_assertions]]
+code = "BST-RULE-0064"
+reason = "unsupported_backend_feature.hashmap_construction"

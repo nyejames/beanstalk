@@ -7,3 +7,7 @@ rendered_output_contains = ["named struct generic inference"]
 mode = "failure"
 warnings = "forbid"
 diagnostic_codes = ["BST-RULE-0064"]
+
+[[backends.html_wasm.diagnostic_assertions]]
+code = "BST-RULE-0064"
+reason = "unsupported_backend_feature.generic_runtime_values"

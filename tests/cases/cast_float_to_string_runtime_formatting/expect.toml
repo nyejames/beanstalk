@@ -9,4 +9,7 @@ rendered_output_contains = ["1 / 1.5 / 0.000001 / 1e-7 / 1e+21 / 0"]
 mode = "failure"
 warnings = "forbid"
 diagnostic_codes = ["BST-RULE-0064"]
-message_contains = ["Wasm", "Float formatting"]
+
+[[backends.html_wasm.diagnostic_assertions]]
+code = "BST-RULE-0064"
+reason = "unsupported_backend_feature.float_formatting"

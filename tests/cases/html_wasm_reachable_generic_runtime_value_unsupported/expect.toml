@@ -9,3 +9,7 @@ rendered_output_contains = ["html wasm rejects reachable generic runtime value"]
 mode = "failure"
 warnings = "forbid"
 diagnostic_codes = ["BST-RULE-0064"]
+
+[[backends.html_wasm.diagnostic_assertions]]
+code = "BST-RULE-0064"
+reason = "unsupported_backend_feature.generic_runtime_values"

@@ -9,4 +9,7 @@ rendered_output_contains = ["runtime catch codes: 210|241|230|250"]
 mode = "failure"
 warnings = "forbid"
 diagnostic_codes = ["BST-RULE-0064"]
-message_contains = ["Wasm", "runtime casts"]
+
+[[backends.html_wasm.diagnostic_assertions]]
+code = "BST-RULE-0064"
+reason = "unsupported_backend_feature.runtime_casts"

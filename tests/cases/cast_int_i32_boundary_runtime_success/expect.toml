@@ -9,4 +9,7 @@ rendered_output_contains = ["runtime i32 boundaries: 2147483647/-2147483648/2147
 mode = "failure"
 warnings = "forbid"
 diagnostic_codes = ["BST-RULE-0064"]
-message_contains = ["Wasm", "runtime casts"]
+
+[[backends.html_wasm.diagnostic_assertions]]
+code = "BST-RULE-0064"
+reason = "unsupported_backend_feature.runtime_casts"

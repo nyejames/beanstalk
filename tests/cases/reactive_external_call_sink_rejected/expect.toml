@@ -4,7 +4,10 @@ entry = "."
 mode = "failure"
 warnings = "forbid"
 diagnostic_codes = ["BST-RULE-0064"]
-message_contains = ["JavaScript", "reactive external-call sink"]
+
+[[backends.html.diagnostic_assertions]]
+code = "BST-RULE-0064"
+reason = "unsupported_backend_feature.reactive_external_call_sink"
 
 [backends.html_wasm]
 mode = "failure"
