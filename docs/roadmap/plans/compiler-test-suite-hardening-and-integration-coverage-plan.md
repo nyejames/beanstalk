@@ -30,26 +30,26 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 7 prune and narrow source-shaped hashmap borrow-checker units
-LAST_ACCEPTED_COMMIT: `4c323a4f4` (Phase 6 inserted non-copy key/value and explicit-copy integration owners)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; Phase 6 is complete; unrelated compiler-design docs source and generated work remains unstaged
+CURRENT_SLICE: Phase 8 function-call unit ownership reassignment
+LAST_ACCEPTED_COMMIT: `f6c514180` (Phase 7 hashmap borrow fact narrowing)
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; Phase 7 is committed and the worktree is clean
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: access-and-aliasing and borrow-validation leaves own hashmap alias legality; testing standards require exact diagnostic identity and source locations
-- code: Phase 6 has primary integration owners for all required hashmap access/ownership behavior; `borrow_checker_map_tests.rs` still contains 15 whole-source units to classify and prune
+- code: `function_call_tests.rs` mixes raw parser/location facts with whole-source success/failure behavior already covered by canonical integration cases
 ACCEPTANCE_CRITERIA:
-- classify every map unit against a Phase 6 primary owner or a distinct hidden transfer/state invariant
-- delete source-visible duplicates and replace only genuinely hidden `MayConsume` or aggregate-transfer coverage with narrow fact tests
-- remove stale helpers and rename retained tests after stage invariants without changing production behavior
+- retain raw argument shape, authored-marker/value/target locations, and narrow access classification facts
+- remove whole-source call acceptance/rejection units only where exact integration owners exist
+- delete stale helpers/imports without changing production call parsing or diagnostics
 VALIDATION_STATE:
-- `just validate`: passed; cross-target Clippy, 3,576 Rust tests, 1,796 integration executions, docs check, and 28 benchmark cases
-- focused insertion cases: passed; eight backend blocks and zero audit hard findings across 1,654 cases
+- `just validate`: passed; cross-target Clippy, 3,566 Rust tests, 1,796 integration executions, docs check, and 28 benchmark cases
+- focused borrow-checker tests: passed; 50 tests and zero audit hard findings across 1,654 cases
 DOCS_IMPACT: progress matrix reviewed; existing broad hashmap borrow/diagnostic and final-use wording remains accurate; index unchanged
 BLOCKERS_OR_OPEN_DECISIONS: none for the next slice; Ollama remains required with no provider substitution
-DELEGATION_DECISION: Ollama — bounded `borrow_checker_map_tests.rs` ownership/pruning slice
+DELEGATION_DECISION: Ollama — bounded function-call test ownership/pruning slice
 NEXT_WORKER_ORDER: Ollama only; no provider substitution
 STOP_REASON: none
-NEXT_RESUME_ACTION: launch Phase 7 hashmap borrow-checker unit pruning through Ollama
+NEXT_RESUME_ACTION: launch Phase 8 function-call ownership reassignment through Ollama
 
 ---
 
@@ -184,6 +184,7 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 6 alias final-use and explicit-copy independence | `d002a80cf` | Accepted | Two primary HTML runtime owners prove final-use mutation and non-copy explicit-copy independence with HTML-Wasm structured rejection; 1,648 cases and 1,784 executions |
 | Phase 6 removed-value ownership and borrowed lookup keys | `d9e4d7fa3` | Accepted | Two primary HTML runtime owners prove removed non-copy values outlive later mutation/clear and lookup keys remain usable after contains/get/remove; 1,650 cases and 1,788 executions |
 | Phase 6 inserted ownership and explicit-copy insertion | `4c323a4f4` | Accepted | Three primary negatives distinguish immutable `set` later-use access from literal key/value ownership transfer; one exact runtime owner proves copied insertion independence; 1,654 cases and 1,796 executions |
+| Phase 7 hashmap unit pruning | `f6c514180` | Accepted | Fifteen source-shaped units removed; five hidden get/remove/set/nested-literal state facts retained in the fact owner; 3,566 Rust tests and 1,796 integration executions |
 
 ---
 
@@ -959,24 +960,24 @@ Remove unit tests that only re-prove user-visible language behavior after Phase 
 
 ## Checklist
 
-- [ ] Review every test in `borrow_checker_map_tests.rs` against Phase 6 contracts.
-- [ ] Delete fully replaced source-only acceptance/rejection tests.
-- [ ] Retain narrow access-root/classification units where output cannot expose the fact.
-- [ ] Review branch/match/loop scope units; retain snapshot/merge or malformed-HIR invariants only.
-- [ ] Keep minimal pipeline failure-propagation and report-storage sentinels.
-- [ ] Preserve call summaries, value/statement/terminator facts, drop sites, liveness, reactive invalidation, and malformed-HIR rejection.
-- [ ] Delete helpers used only by removed tests.
-- [ ] Rename remaining tests after the stage invariant.
-- [ ] Record every removal and replacement owner.
+- [x] Review every test in `borrow_checker_map_tests.rs` against Phase 6 contracts.
+- [x] Delete fully replaced source-only acceptance/rejection tests.
+- [x] Retain narrow access-root/classification units where output cannot expose the fact.
+- [x] Review branch/match/loop scope units; retain snapshot/merge or malformed-HIR invariants only.
+- [x] Keep minimal pipeline failure-propagation and report-storage sentinels.
+- [x] Preserve call summaries, value/statement/terminator facts, drop sites, liveness, reactive invalidation, and malformed-HIR rejection.
+- [x] Delete helpers used only by removed tests.
+- [x] Rename remaining tests after the stage invariant.
+- [x] Record every removal and replacement owner.
 
 ## Phase 7 acceptance
 
-- [ ] No user-visible borrow behavior is unit-only.
-- [ ] Hidden borrow invariants remain strong.
-- [ ] Pipeline coverage is minimal and boundary-focused.
-- [ ] No production API survives only for deleted tests.
-- [ ] `index.md` and progress coverage are current where ownership moved.
-- [ ] Full validation passes.
+- [x] No user-visible borrow behavior is unit-only.
+- [x] Hidden borrow invariants remain strong.
+- [x] Pipeline coverage is minimal and boundary-focused.
+- [x] No production API survives only for deleted tests.
+- [x] `index.md` and progress coverage are current where ownership moved.
+- [x] Full validation passes.
 
 ---
 
@@ -1314,6 +1315,17 @@ Do not present lower counts or faster time as proof of correctness.
 | `last_use_precision` | Alias final use permits mutation-capable rebinding | `borrow_conflict_resolved_by_reordering` | none | `5fbf183a4` |
 | `borrow_checker_use_after_move` → `mutable_alias_blocks_later_source_access` | Mutable alias blocks later source access | `mutable_alias_blocks_later_source_access` | none | `5fbf183a4` |
 | `choice_import_visibility_non_exported` → `choice_same_module_private_import_success` | Same-module import and construction of a private choice declaration | `choice_same_module_private_import_success` | none | `4e0b4ca7b` |
+| `borrow_checker_map_tests::map_get_alias_blocks_set_when_used_after_mutation` | Live `get` alias blocks mutation | `map_get_alias_blocks_set_when_used_after_mutation` | `borrow_checker_fact_tests::map_get_operation_result_alias_retains_receiver_root` | `f6c514180` |
+| `borrow_checker_map_tests::map_get_alias_allows_set_when_used_before_mutation` | Final alias use permits mutation | `map_alias_final_use_allows_mutation` | none | `f6c514180` |
+| `borrow_checker_map_tests::{map_get_alias_blocks_remove_when_used_after_mutation,map_get_alias_blocks_clear_when_used_after_mutation}` | Live `get` alias blocks equivalent map mutations | `map_get_alias_blocks_set_when_used_after_mutation` | none; shared mutable-receiver conflict path | `f6c514180` |
+| `borrow_checker_map_tests::map_contains_and_length_do_not_create_long_lived_aliases` | Shared map queries do not retain mutation-blocking aliases | `map_borrowed_lookup_key` and `map_alias_final_use_allows_mutation` | none | `f6c514180` |
+| `borrow_checker_map_tests::map_remove_result_is_owned_and_can_outlive_mutation` | Removed value owns independent state | `map_remove_returns_owned_value` | `borrow_checker_fact_tests::map_remove_result_is_fresh_owned` | `f6c514180` |
+| `borrow_checker_map_tests::map_set_consumes_inserted_non_copy_values` | Last-use-sensitive `set` ownership transfer | `map_set_immutable_non_copy_value_later_use_rejected` and `map_explicit_copy_insertion_independent` | `borrow_checker_fact_tests::{map_set_final_use_moves_inserted_non_copy_roots,map_set_later_use_keeps_mutable_inputs_borrowed}` | `f6c514180` |
+| `borrow_checker_map_tests::{map_literal_consumes_inserted_non_copy_values,map_literal_consumes_inserted_non_copy_keys}` | Map literal owns inserted key/value roots | `map_literal_consumes_inserted_non_copy_value` and `map_literal_consumes_inserted_non_copy_key` | none | `f6c514180` |
+| `borrow_checker_map_tests::nested_map_literal_consumes_inner_inserted_values` | Recursive aggregate ownership transfer | none; hidden state fact | `borrow_checker_fact_tests::nested_map_literal_moves_inner_non_copy_value_root` | `f6c514180` |
+| `borrow_checker_map_tests::map_literal_allows_copy_values` | Copyable values remain usable after literal construction | `map_explicit_copy_insertion_independent` plus scalar map runtime coverage | none | `f6c514180` |
+| `borrow_checker_map_tests::{map_get_key_is_not_consumed,map_contains_key_is_not_consumed,map_remove_key_is_not_consumed}` | Lookup keys are borrowed | `map_borrowed_lookup_key` | none | `f6c514180` |
+| `borrow_checker_map_tests::map_set_after_nothing_passes` | Baseline map mutation success | `hashmap_js_runtime_contract` | none | `f6c514180` |
 | Phase 5D2 15 normalized HTML whole-page goldens | Runtime values for calls, collections, logical expressions, chars, structs, and short-circuit behavior | The same 15 canonical cases through `rendered_output_exact` | none | `d5256868b` |
 | Phase 5D3 nine normalized receiver HTML whole-page goldens | Immutable, mutable, nested, chained, exported, alias-return, and post-mutation receiver behavior | The same nine canonical cases through exact context-rich runtime output | none | `914c1c131` |
 | Phase 5D4 nine normalized template/import HTML whole-page goldens | Import execution/suppression, runtime templates, const slots, CSS, Markdown, and positional slot behavior | Runtime exact/order/exact-once plus narrow static `index.html` assertions in the same nine cases | none | `71f75c220` |
