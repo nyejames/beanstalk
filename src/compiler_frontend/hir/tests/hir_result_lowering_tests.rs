@@ -15,7 +15,9 @@ use crate::compiler_frontend::ast::statements::fallible_handling::wrap_catch_exp
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
+use crate::compiler_frontend::external_packages::CallTarget;
 use crate::compiler_frontend::hir::expressions::HirExpressionKind;
+use crate::compiler_frontend::hir::numeric::HirNumericOp;
 use crate::compiler_frontend::hir::statements::HirStatementKind;
 use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -765,7 +767,7 @@ fn call_argument_result_propagation_lowers_before_outer_call() {
         location.clone(),
     );
     let outer_call = Expression::function_call_with_typed_arguments(
-        consume_name,
+        consume_name.clone(),
         vec![CallArgument::positional(
             propagated_call,
             CallAccessMode::Shared,
@@ -827,12 +829,62 @@ fn call_argument_result_propagation_lowers_before_outer_call() {
     )
     .expect("call-argument propagation lowering should succeed");
 
-    assert!(
+    let forward_function = module
+        .functions
+        .iter()
+        .find(|function| {
+            module
+                .side_table
+                .function_name_path(function.id)
+                .is_some_and(|path| path == &forward_name)
+        })
+        .expect("forward function should exist");
+    let forward_entry = module
+        .blocks
+        .iter()
+        .find(|block| block.id == forward_function.entry)
+        .expect("forward entry block should exist");
+    let HirTerminator::FallibleBranch { success_block, .. } = forward_entry.terminator else {
+        panic!("call argument propagation should branch before the outer call");
+    };
+    let success_block = module
+        .blocks
+        .iter()
+        .find(|block| block.id == success_block)
+        .expect("call argument propagation should create a success block");
+
+    let entry_calls_consume = forward_entry.statements.iter().any(|statement| {
+        let HirStatementKind::Call {
+            target: CallTarget::UserFunction(function_id),
+            ..
+        } = statement.kind
+        else {
+            return false;
+        };
+
         module
-            .blocks
-            .iter()
-            .any(|block| matches!(block.terminator, HirTerminator::FallibleBranch { .. })),
-        "call argument propagation should lower to an explicit fallible branch"
+            .side_table
+            .function_name_path(function_id)
+            .is_some_and(|path| path == &consume_name)
+    });
+    let success_calls_consume = success_block.statements.iter().any(|statement| {
+        let HirStatementKind::Call {
+            target: CallTarget::UserFunction(function_id),
+            ..
+        } = statement.kind
+        else {
+            return false;
+        };
+
+        module
+            .side_table
+            .function_name_path(function_id)
+            .is_some_and(|path| path == &consume_name)
+    });
+
+    assert!(
+        !entry_calls_consume && success_calls_consume,
+        "the outer call must lower only after fallible argument propagation succeeds"
     );
 }
 
@@ -934,12 +986,47 @@ fn runtime_binary_result_propagation_lowers_before_operator() {
     )
     .expect("runtime binary propagation lowering should succeed");
 
+    let forward_function = module
+        .functions
+        .iter()
+        .find(|function| {
+            module
+                .side_table
+                .function_name_path(function.id)
+                .is_some_and(|path| path == &forward_name)
+        })
+        .expect("forward function should exist");
+    let forward_entry = module
+        .blocks
+        .iter()
+        .find(|block| block.id == forward_function.entry)
+        .expect("forward entry block should exist");
+    let HirTerminator::FallibleBranch { success_block, .. } = forward_entry.terminator else {
+        panic!("runtime binary propagation should branch before the numeric operator");
+    };
+    let success_block = module
+        .blocks
+        .iter()
+        .find(|block| block.id == success_block)
+        .expect("runtime binary propagation should create a success block");
+
+    let entry_has_numeric_op = forward_entry
+        .statements
+        .iter()
+        .any(|statement| matches!(statement.kind, HirStatementKind::NumericOp { .. }));
+    let success_has_add = success_block.statements.iter().any(|statement| {
+        matches!(
+            statement.kind,
+            HirStatementKind::NumericOp {
+                op: HirNumericOp::IntAdd,
+                ..
+            }
+        )
+    });
+
     assert!(
-        module
-            .blocks
-            .iter()
-            .any(|block| matches!(block.terminator, HirTerminator::FallibleBranch { .. })),
-        "runtime binary propagation should lower to an explicit fallible branch"
+        !entry_has_numeric_op && success_has_add,
+        "the numeric operator must lower only after fallible operand propagation succeeds"
     );
 }
 
