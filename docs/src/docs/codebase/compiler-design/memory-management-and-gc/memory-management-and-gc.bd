@@ -1,109 +1,130 @@
 # Automatic memory management before the borrow checker
 
-## Reader promise
+Heap values must stay usable while something can still observe them. They must also release resources without letting code touch storage that already died. Those two sentences sound like one problem. They are at least two: keeping wood alive while it still feeds the canopy, and stopping two branches from tearing the same limb.
 
-- Compare manual memory, reference counting, tracing GC, ownership and region
-  allocation.
-- Understand why GC and access validation solve different problems in Beanstalk.
+**Garbage collection** answers liveness. **Access validation** answers conflicting use. Beanstalk runs both stories on purpose.
 
-## Entry state
+## Five memory strategies
 
-- Validated HIR and runtime operations.
-- Reader understands that HIR makes places and control flow explicit.
+Compare strategies by *when storage ends*, not by marketing labels.
 
-## Opening problem
+**Manual allocation.** The programmer calls allocate and free. Maximum control. Maximum opportunity to free too early, free twice or forget entirely.
 
-- Heap values must remain usable while observable and must release resources
-  without unsafe access.
-- Running checkpoint: the greeting string and template values cross runtime
-  operations.
+**Reference counting.** Each alias bumps a count. When the count hits zero, storage frees. Cycles need special care. Costs sit on every alias edge.
 
-## Section sequence
+**Tracing GC.** A collector walks from roots and reclaims what it cannot reach. Programmers stop writing most frees. Pauses and throughput become runtime concerns.
 
-### Five memory strategies
+**Ownership.** Each value has a unique owner responsible for destruction. Transfers move that duty. Alias rules get strict. Deterministic drops become natural.
 
-- Compare manual allocation, reference counting, tracing GC, ownership and
-  region or arena support.
-- Use timelines rather than a feature list.
+**Region or arena allocation.** Many values share a bulk lifetime. The region frees as a unit. Great for bursty workloads with clear epochs. Awkward when lifetimes tangle.
 
-### Failure modes
+Real systems mix these. Beanstalk's semantic baseline is GC. Ownership-aware lowering may ride on top when proof exists.
 
-- Cover use after free, double free, leaks, invalid aliasing and conflicting
-  mutation.
-- Mark data races as a general or future-concurrency concern.
+**Diagram placeholder:** Five strategies show when values become reachable and reclaimable
 
-### What GC solves
+*Caption: teaching comparison.*
+*Question: who decides when storage ends in each model?*
 
-- Explain reachability and reclamation.
-- State that GC does not make conflicting mutation or invalid source access
-  safe.
+## Failure modes
 
-### What ownership adds
+Name the failure modes:
 
-- Explain deterministic destruction and source complexity.
-- Avoid introducing source lifetimes or a move keyword as Beanstalk syntax.
+- **use after free** reads or writes storage that already ended
+- **double free** destroys the same storage twice
+- **leaks** retain storage forever without intending to
+- **invalid aliasing** creates overlapping views the language did not allow
+- **conflicting mutation** lets one writer smash what readers still treat as stable
+- **data races** under concurrency deserve separate treatment. Label them as general or future-concurrency context rather than current Beanstalk thread syntax
 
-### Beanstalk's semantic baseline
+GC aims at lifetime hazards. It does not automatically bless conflicting mutation. Two aliases can both point at live memory and still disagree about who may write.
 
-- GC-backed correctness.
-- Mandatory access and borrow validation.
-- Shared access, explicit `copy`, exclusive `~place` and inferred moves.
-- Optional ownership-aware lowering.
+## What GC solves
 
-### Backend choices
+A tracing collector (or a host GC such as the JavaScript heap) tracks **reachability** from roots. Unreachable objects become reclaimable.
 
-- Compare host GC, Wasm GC, linear memory, handles and hybrid runtime paths.
-- Keep ownership optimisation subordinate to language semantics.
+That property underwrites Beanstalk's semantic promise: correctness does not depend on proving a deterministic drop on every path. If ownership analysis cannot prove a transfer, the value may remain GC-managed. Observable behaviour stays stable.
+
+GC does **not** make this safe:
+
+[codeblock, $code("text"):
+// conceptual: shared reader plus overlapping exclusive mutation
+]
+
+Live memory can still host a logic hazard. Access rules still matter.
+
+**Diagram placeholder:** GC tracks lifetime while borrow rules track conflicting access
+
+*Caption: exact conceptual separation.*
+*Question: why need both?*
+
+## What ownership adds
+
+Ownership thinking gives **deterministic destruction** and clearer resource release when the compiler can prove a last use. It also adds source complexity if you expose lifetimes and move keywords everywhere.
+
+Beanstalk refuses that source tax. There is no lifetime syntax and no move keyword in the language surface this series teaches. Moves are inferred. Copies are explicit. Existing values default to shared read-only access. Mutation needs explicit exclusive access through `~place`.
+
+## Beanstalk's semantic baseline
+
+Hold these rules together:
+
+1. **GC is the semantic baseline** for all backends.
+2. **Borrow validation is mandatory**, even under GC.
+3. **Shared access** is the default for existing values.
+4. **`copy`** creates an independent value on purpose.
+5. **`~place`** requests temporary exclusive access to a mutable place.
+6. **Moves are inferred** at safe consumption points.
+7. **Ownership-aware lowering** is optional optimisation layered over the same accepted programs.
+
+GC-only and ownership-aware backends must accept and reject the same source programs. Optimisation may not widen or shrink the language.
+
+**Diagram placeholder:** Source access rules flow through HIR and validation into GC or ownership-aware lowering
+
+*Caption: accepted architecture simplified.*
+*Question: where can optimisation change without changing meaning?*
+
+## Backend choices
+
+Targets pick runtime machinery:
+
+- **host GC** on JavaScript, letting the browser or engine reclaim
+- **Wasm GC** proposals and engines where available
+- **linear memory** with handles and runtime helpers
+- **hybrid** paths that mix host objects and Wasm-managed storage
+
+Those choices implement one semantic contract. They do not redefine shared access or exclusivity. Ownership optimisation stays subordinate to language semantics.
+
+**Diagram placeholder:** JavaScript host GC and Wasm runtime choices meet one semantic contract
+
+*Caption: backend design space, not a final implementation matrix.*
+*Question: what stays invariant across runtimes?*
+
+In the greeting project, strings and template values cross runtime operations. Under GC they remain safe while reachable. Under ownership-aware Wasm lowering they might drop earlier when proof exists. Priya's paragraph still means the same thing.
 
 ## What can fail here
 
-- Unsafe aliasing remains invalid even when GC preserves allocation lifetime.
-- Conservative ownership evidence may retain values under GC.
-- Do not imply deterministic destruction as a correctness requirement.
+- unsafe aliasing remains invalid even when GC preserves allocation lifetime
+- conservative ownership evidence may retain values under GC longer than a perfect oracle would
+- do not imply deterministic destruction as a correctness requirement for source programs
 
 ## Why Beanstalk does it this way
 
-- Alternative: expose Rust-style lifetimes, references and owned or borrowed
-  signatures in every API.
-- Choice: keep GC as the semantic fallback and validate access separately.
-- Benefit: safer source rules with a backend escape route.
-- Cost: collector work remains and ownership-aware destruction cannot always
-  prove a transfer.
+**Alternative:** expose Rust-style lifetimes, references and owned-or-borrowed signatures in every API.
+
+**Choice:** keep GC as the semantic fallback and validate access separately.
+
+**Benefit:** safer source rules with a backend escape route when proof is thin.
+
+**Cost:** collector work remains, and ownership-aware destruction cannot always prove a transfer.
 
 ## Roadmap and current status
 
-- Accepted design: GC is the semantic baseline for all backends.
-- Current implementation: link memory and progress authorities for current
-  runtime coverage.
-- Queued work: ownership-aware backend work follows the mixed backend plan.
-- Deferred or outside scope: current concurrency syntax and deterministic
-  destruction as a source guarantee.
+- **Accepted design:** GC is the semantic baseline for all backends.
+- **Current implementation:** memory and progress authorities for runtime coverage.
+- **Queued work:** ownership-aware backend work follows mixed backend plans.
+- **Deferred or outside scope:** current concurrency syntax, and deterministic destruction as a source-level guarantee.
 
-## Visual plan
-
-- Memory-strategy timeline. Alt text: five strategies show when values become
-  reachable and reclaimable. Caption: teaching comparison. Question: who
-  decides when storage ends?
-- Liveness versus access safety. Alt text: GC tracks lifetime while borrow
-  rules track conflicting access. Caption: exact conceptual separation.
-  Question: why need both?
-- Layered Beanstalk model. Alt text: source access rules flow through HIR and
-  validation into GC or ownership-aware lowering. Caption: accepted architecture
-  simplified. Question: where can optimisation change?
-- Host and Wasm runtime options. Alt text: JavaScript host GC and Wasm runtime
-  choices meet one semantic contract. Caption: backend design space, not a
-  final implementation matrix. Question: what stays invariant?
+Deep detail lives under `docs/src/docs/codebase/memory-management/`. This article only places the model on the chronological route.
 
 ## Exit state
 
-- Output: a memory model where GC preserves correctness and analysis enforces
-  access rules.
-- Next question: how does borrow validation compute those rules over HIR?
-
-## Links to include
-
-- `docs/src/docs/codebase/memory-management/overview.bd`
-- `docs/src/docs/codebase/memory-management/access-and-aliasing/access-and-aliasing.bd`
-- `docs/src/docs/codebase/memory-management/ownership-and-drops/ownership-and-drops.bd`
-- `docs/src/docs/codebase/memory-management/runtime-and-backend-lowering/runtime-and-backend-lowering.bd`
-
+You leave with a memory model where GC preserves correctness and analysis enforces access rules. The next question: how does borrow validation compute those rules over HIR?

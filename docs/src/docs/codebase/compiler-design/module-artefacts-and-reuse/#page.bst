@@ -12,7 +12,7 @@ page_head #= codebase_theme_head
 
     # Packaging a module once
 
-    Outline for the later educational writing pass. The canonical architecture remains in the linked authority documents.
+    Immutable artefact lanes and fingerprints let one module serve every entry without entry-specific recompilation.
 ]
 
 #[section, reference_content]
@@ -20,4 +20,3 @@ page_head #= codebase_theme_head
 #[section, $md:
     @../ (Compiler design) / @../borrow-validation-and-drops (Previous) / @../linking-entries-and-reachability (Next)
 ]
-

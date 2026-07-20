@@ -1,19 +1,14 @@
 # From Beanstalk source to a webpage
 
-This series provides educational scaffolding for a later writing pass. It
-explains compiler concepts through one Beanstalk project. It does not define
-compiler behaviour or current implementation status.
+A compiler does not wake up and spit machine code at a file. It grows a program through a sequence of representations. Each stage sheds one kind of ambiguity and passes a clearer form to the next.
 
-## Reader promise
+This series follows that growth for one small Beanstalk project. You already write Rust. You know functions, enums, structs and ownership as a user. You may not yet own the words *intermediate representation*, *link plan* or *borrow validation*. That is fine. Each term arrives when the running example needs it.
 
-- Follow one project from source files to generated HTML.
-- Learn each compiler term when the running example needs it.
-- Track which owner creates each representation.
-- Separate accepted design from current, queued and deferred work.
+These pages teach. They do not define compiler behaviour. Accepted architecture lives in the canonical design documents. Current support lives in the progress matrix. Sequencing lives in the roadmap. When those disagree with an old habit in the code, the design document wins for this tour.
 
-## Running example
+## The project you will carry
 
-Project tree:
+Keep this tree in your head for the whole series:
 
 [codeblock, $code("text"):
 compiler_walkthrough/
@@ -23,7 +18,7 @@ compiler_walkthrough/
     └── greeting.bst
 ]
 
-Keep these source shapes stable across the series:
+And keep these source shapes stable:
 
 [codeblock, $code("text"):
 -- greeting.bst
@@ -47,15 +42,17 @@ visitor = "Priya"
 ]
 ]
 
-Final relevant fragment:
+The final relevant fragment the series aims at:
 
 [codeblock, $code("text"):
 <p>Hello, Priya!</p>
 ]
 
-## Pipeline position
+Priya never changes. The file names never change. The fragment never changes. Side examples may branch away for a paragraph. They always return to this greeting.
 
-Plan one reusable strip with these checkpoints:
+## What each stage hands the next
+
+One strip of checkpoints runs through every article:
 
 [codeblock, $code("text"):
 project tree
@@ -76,22 +73,28 @@ project tree
 -> HTML, runtime assets and output manifest
 ]
 
-Outline each article around the current checkpoint. Show both the incoming
-representation and the outgoing representation.
+Each article opens with the incoming representation and closes with the outgoing one. If a page jumps ahead, you have left the chronological route.
 
-## Owners to introduce
+**Diagram placeholder:** Growth path of compiler representations from project tree to HTML output
 
-- **Build system:** selects commands, discovers source, constructs graphs,
-  schedules modules, plans entries and owns output writing.
-- **Compiler frontend and analysis:** prepares syntax, binds interfaces,
-  checks semantics, lowers HIR and validates access.
-- **Artefact builder:** assembles selected compiler facts into an output plan.
-- **Target backends:** lower validated functions and runtime requirements into
-  JavaScript, Wasm and glue artefacts.
+*Caption: simplified Beanstalk walkthrough, not a universal compiler taxonomy.*
+*Question: which step still looks like source, and which first looks like a program a host can run?*
 
-## Chronological reading path
+## Four owners you will meet again
 
-Use one primary route. Do not group these pages by internal subsystem.
+**Build system.** Selects the command, discovers source, builds graphs, schedules modules, plans entries and owns writing files to disk.
+
+**Compiler frontend and analysis.** Prepares syntax, binds interfaces, checks semantics, lowers HIR and validates access.
+
+**Artefact builder.** Assembles selected compiler facts into an output plan for one kind of project, such as an HTML page.
+
+**Target backends.** Lower validated functions and runtime needs into JavaScript, Wasm and glue.
+
+A fact has one owner. Later stages consume that fact. They do not rebuild it from source text for sport.
+
+## How to read the series
+
+Read in order. The path groups ideas by time of appearance, not by internal crate name.
 
 1. @./what-a-compiler-does (01. What a compiler does)
 2. @./beanstalk-design-choices (02. Why Beanstalk makes different choices)
@@ -112,126 +115,28 @@ Use one primary route. Do not group these pages by internal subsystem.
 17. @./backend-lowering (17. Backend lowering)
 18. @./html-assembly-and-output (18. HTML assembly and output)
 
-The landing page itself acts as article 00.
+This landing page acts as article 00.
 
-## Status language
+## Status language on every page
 
-Every later article must label:
+Later articles label four kinds of claim:
 
-- **Accepted design:** canonical architecture or language contract
-- **Current implementation:** behaviour recorded by the progress matrix
-- **Queued or active implementation:** named roadmap work
-- **Deferred or outside scope:** intentionally postponed or rejected design
+- **Accepted design:** architecture or language contract the authorities already chose
+- **Current implementation:** behaviour the progress matrix records today
+- **Queued or active implementation:** named roadmap work still landing
+- **Deferred or outside scope:** postponed on purpose, or rejected as a language shape
 
-Link to the progress matrix and roadmap. Do not copy either document into the
-articles. Keep accepted architecture as the main teaching path.
+The series links the progress matrix and roadmap. It does not paste either document into the articles. Accepted architecture stays the main teaching path.
 
-## Migration map
+## Where authority lives
 
-[table:
-    [th:
-        [: Current area]
-        [: New chronological home]
-    ]
+- `docs/compiler-design-overview.md` for compiler stages, identities, artefacts and validation
+- `docs/build-system-design.md` for commands, graphs, builders, linking and outputs
+- `docs/src/docs/codebase/language/overview.bd` for language surface
+- `docs/src/docs/codebase/memory-management/overview.bd` for access, GC and ownership
+- `docs/src/docs/progress/#page.bst` for what works today
+- `docs/roadmap/roadmap.md` for order and deferred design
 
-    [td:
-        [: Root compiler-design overview]
-        [: This landing outline]
-    ]
+Educational pages explain those authorities. They do not outrank them.
 
-    [td:
-        [: Project structure and frontend boundary]
-        [: Starting a build, project graphs and modules]
-    ]
-
-    [td:
-        [: Tokenization]
-        [: Tokenization]
-    ]
-
-    [td:
-        [: Header parsing and dependency sorting]
-        [: Declarations, imports and ordering]
-    ]
-
-    [td:
-        [: AST pages and type identity]
-        [: AST semantics and types]
-    ]
-
-    [td:
-        [: Constants, generics, traits and casts]
-        [: Compile-time semantics]
-    ]
-
-    [td:
-        [: Templates and reactivity]
-        [: Templates and TIR]
-    ]
-
-    [td:
-        [: Diagnostics, paths and symbols]
-        [: Diagnostics]
-    ]
-
-    [td:
-        [: HIR generation]
-        [: HIR]
-    ]
-
-    [td:
-        [: Memory-management pages]
-        [: Memory management and GC, borrow validation and drops]
-    ]
-
-    [td:
-        [: Parallelism and determinism]
-        [: Project graphs and module artefacts and reuse]
-    ]
-
-    [td:
-        [: Entry start and page fragments]
-        [: Linking, entries and reachability]
-    ]
-
-    [td:
-        [: Backend validation and lowering]
-        [: Target planning and validation, backend lowering]
-    ]
-
-    [td:
-        [: HTML assembly, external assets and tracked assets]
-        [: HTML assembly and output]
-    ]
-]
-
-Search inbound links before removing an old route. Keep one teaching owner for
-each concept. Link the memory and language authorities instead of duplicating
-their full references.
-
-## Cross-page audit
-
-The final review must verify:
-
-- terminology remains distinct for module, package, binding, AST, TIR, HIR,
-  access, borrowing, ownership and allocation
-- owners remain consistent from Stage 0 through output writing
-- accepted, current, queued and deferred status labels remain accurate
-- Priya, the file names and the final fragment never change
-- each page consumes the previous checkpoint and produces the next one
-- each page has three to five visual briefs with alt text, caption, question
-  and simplification status
-- side examples return to the greeting project
-- diagnostics, memory, target and output topics do not duplicate another page
-
-## Authority links for the later writing pass
-
-- `docs/compiler-design-overview.md`
-- `docs/build-system-design.md`
-- `docs/src/docs/codebase/language/overview.bd`
-- `docs/src/docs/codebase/memory-management/overview.bd`
-- `docs/src/docs/progress/#page.bst`
-- `docs/roadmap/roadmap.md`
-
-The later writer must read these authorities again immediately before drafting
-each article.
+Start at the first shoot: what a compiler does between Priya's name and a paragraph on a page.

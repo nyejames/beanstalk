@@ -12,7 +12,7 @@ page_head #= codebase_theme_head
 
     # From characters to located tokens
 
-    Outline for the later educational writing pass. The canonical architecture remains in the linked authority documents.
+    Lexical analysis cuts character streams into located tokens and prepares document source kinds for shared later stages.
 ]
 
 #[section, reference_content]
@@ -20,4 +20,3 @@ page_head #= codebase_theme_head
 #[section, $md:
     @../ (Compiler design) / @../project-graphs-and-modules (Previous) / @../declarations-imports-and-ordering (Next)
 ]
-

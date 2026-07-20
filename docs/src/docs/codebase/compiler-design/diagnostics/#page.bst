@@ -12,7 +12,7 @@ page_head #= codebase_theme_head
 
     # Compiler errors as structured data
 
-    Outline for the later educational writing pass. The canonical architecture remains in the linked authority documents.
+    User failures and internal failures travel separate lanes as structured payloads with deferred rendering.
 ]
 
 #[section, reference_content]
@@ -20,4 +20,3 @@ page_head #= codebase_theme_head
 #[section, $md:
     @../ (Compiler design) / @../templates-and-tir (Previous) / @../hir (Next)
 ]
-

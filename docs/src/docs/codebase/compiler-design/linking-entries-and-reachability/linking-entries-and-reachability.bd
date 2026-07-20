@@ -1,99 +1,114 @@
 # Choosing what runs
 
-## Reader promise
+Compilation and activation are different verbs.
 
-- Separate compilation from activation.
-- Follow dormant root work, entry assembly, page fragments and reachable
-  functions into an explicit link plan.
+A module can compile completely, including its dormant top-level work, and still do nothing at runtime until an **entry** selects it. The seed can be fully formed and still sleep through winter. Imports do not secretly run initialisers because someone mentioned a name.
 
-## Entry state
+## Compile versus activate
 
-- Successful module artefacts and fingerprints.
-- Running checkpoint: `#page.bst` contains root work and a page fragment while
-  `greeting.bst` remains an imported module.
+Every normal root may carry dormant top-level runtime work and page fragments. That work is parsed, type-checked, lowered and borrow-validated **before** any entry activates it.
 
-## Opening problem
+The compiler synthesises an implicit **`start`** for a normal root. Properties that matter:
 
-- A compiled module should not execute merely because another module imports it.
-- The builder needs exact roots and reachable functions for one entry.
+- non-exported
+- non-importable
+- infallible as a function contract (no `Error!` return channel)
+- owner of dormant top-level runtime work and runtime fragment string production in source order
 
-## Section sequence
+Compilation never activates `start`. Entry assembly may activate it once after the module already compiled.
 
-### Compile versus activate
+Support roots and the project package facade have no implicit `start`.
 
-- Introduce the compiler-synthesised non-exported, non-importable and
-  infallible `start`.
-- Show dormant root work in the normal root.
+In the walkthrough, `#page.bst` owns dormant root work and a page fragment. `greeting.bst` remains an imported module. Importing `greet` does not run page-level statements from greeting's root, because greeting is not the activated entry root.
 
-### Page fragments and root order
+**Diagram placeholder:** All modules compile before one selected root activates
 
-- Separate folded compile-time fragments, runtime fragments and insertion
-  indexes.
-- Explain why imported modules do not run root work.
+*Caption: exact conceptual distinction.*
+*Question: when does root work run?*
 
-### Entry assembly
+**Diagram placeholder:** page root owns a dormant start selected by one entry
 
-- Select entry candidates and build `EntryAssembly` from existing facts.
-- Contrast with `ProjectPackageAssembly`.
+*Caption: simplified root map.*
+*Question: why do imported roots stay dormant?*
 
-### Reachable function union
+## Page fragments and root order
 
-- Build a call graph from `start`, `greet`, helpers, bindings and generated
-  functions.
-- Include capabilities and assets in the link facts.
+Fragments split into useful kinds:
 
-### No deferred compilation
+- **folded compile-time fragments** already reduced to strings with insertion indexes
+- **runtime fragments** produced when `start` runs
+- ordering metadata that preserves source indexes
 
-- State that linking consumes compiled facts and never triggers source
-  compilation.
+Imported modules do not run their root work merely because a consumer imported a function. Activation is explicit and entry-scoped.
+
+The paragraph in `#page.bst` enters through fragment metadata and, if needed, runtime production. It does not require the backend to re-read the `.bst` file.
+
+**Diagram placeholder:** Folded and runtime fragments preserve source indexes
+
+*Caption: exact ordering principle simplified.*
+*Question: where does the paragraph enter?*
+
+## Entry assembly
+
+The build system selects **entry candidates** and builds an **`EntryAssembly`** from existing facts: which root activates, which fragments apply, which metadata the builder needs.
+
+Contrast **`ProjectPackageAssembly`**, which carries project-wide assembly privilege for the facade. Different job, shared taste for explicit data.
+
+Builders consume compiled graphs and explicit plans. They do not rediscover source structure by walking directories again.
+
+## Reachable function union
+
+From activated `start`, the linker walks call edges through:
+
+- `greet` and other source functions
+- helpers
+- binding-backed calls
+- generated concrete functions
+
+The result is a **reachable function union** for the entry. Unreachable private helpers need not lower. Unsupported features in unreachable private functions need not fail target validation.
+
+Reachability here records syntactic function and CFG reachability. It does not perform clever constant-branch tree shaking as its definition of truth. Some target checks may still inspect semantic types with the paired environment when raw reachability is not enough.
+
+Link facts also carry capabilities and assets the entry will need.
+
+**Diagram placeholder:** Reachable nodes are highlighted from `start`, with an unreachable helper left aside
+
+*Caption: teaching graph.*
+*Question: what reaches the backend?*
+
+## No deferred compilation
+
+Linking consumes compiled facts. It **never** triggers source compilation of a module that should have been in the graph already.
+
+If a function is missing, the graph or artefact stage failed earlier. Link planning does not become a second compiler driver.
 
 ## What can fail here
 
-- Invalid root activity, missing entry candidate, fragment order conflict or
-  unresolved reachable call.
-- A module diagnosis blocks required assembly.
-- Keep target capability failures for the next article.
+- invalid root activity for a root role
+- missing entry candidate
+- fragment order conflict
+- unresolved reachable call
+- module diagnosis that blocks required assembly
+
+Target capability failures wait for the next article even when they appear adjacent in real builds.
 
 ## Why Beanstalk does it this way
 
-- Alternative: activate imported module initialisers or parse only the active
-  root.
-- Choice: compile dormant work once, activate selected roots explicitly.
-- Benefit: imports remain predictable and entry planning stays data-driven.
-- Cost: the builder must carry explicit root and fragment metadata.
+**Alternative:** activate imported module initialisers automatically, or parse only the active root and discover callees late.
+
+**Choice:** compile dormant work once, activate selected roots explicitly.
+
+**Benefit:** imports remain predictable and entry planning stays data-driven.
+
+**Cost:** the builder must carry explicit root and fragment metadata.
 
 ## Roadmap and current status
 
-- Accepted design: active-root `start`, entry assembly and exact reachable
-  union.
-- Current implementation: label transitional entry activation where the
-  progress matrix differs.
-- Queued work: entry-config plan changes root metadata and must remain labelled.
-- Deferred or outside scope: link-time deferred source compilation.
-
-## Visual plan
-
-- Compilation versus activation timeline. Alt text: all modules compile before
-  one selected root activates. Caption: exact conceptual distinction.
-  Question: when does root work run?
-- Dormant `start` selection. Alt text: `#page.bst` owns a dormant start
-  selected by one entry. Caption: simplified root map. Question: why do
-  imported roots stay dormant?
-- Reachable call graph. Alt text: reachable nodes are highlighted from
-  `start`, with an unreachable helper left aside. Caption: teaching graph.
-  Question: what reaches the backend?
-- Fragment merge timeline. Alt text: folded and runtime fragments preserve
-  source indexes. Caption: exact ordering principle simplified. Question: where
-  does the paragraph enter?
+- **Accepted design:** active-root `start`, entry assembly and exact reachable union.
+- **Current implementation:** label transitional entry activation where the progress matrix differs.
+- **Queued work:** entry-config plans may change root metadata and must stay labelled.
+- **Deferred or outside scope:** link-time deferred source compilation.
 
 ## Exit state
 
-- Output: explicit roots, fragment metadata and reachable function union.
-- Next question: which target can host each reachable function?
-
-## Links to include
-
-- `docs/compiler-design-overview.md` root and link-fact sections
-- `docs/build-system-design.md` entry assembly sections
-- `src/compiler_frontend/ast/module_ast/finalization/`
-- `docs/roadmap/plans/entry-config-blocks-runtime-title-plan.md`
+You leave with explicit roots, fragment metadata and a reachable function union. The next question: which target can host each reachable function?

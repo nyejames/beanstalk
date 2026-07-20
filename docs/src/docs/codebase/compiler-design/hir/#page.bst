@@ -12,7 +12,7 @@ page_head #= codebase_theme_head
 
     # Lowering meaning into explicit control flow
 
-    Outline for the later educational writing pass. The canonical architecture remains in the linked authority documents.
+    HIR linearises evaluation order, records link facts and becomes the first backend-facing semantic IR.
 ]
 
 #[section, reference_content]
@@ -20,4 +20,3 @@ page_head #= codebase_theme_head
 #[section, $md:
     @../ (Compiler design) / @../diagnostics (Previous) / @../memory-management-and-gc (Next)
 ]
-

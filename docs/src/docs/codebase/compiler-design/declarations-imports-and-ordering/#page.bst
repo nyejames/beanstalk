@@ -12,7 +12,7 @@ page_head #= codebase_theme_head
 
     # Finding the program's shape
 
-    Outline for the later educational writing pass. The canonical architecture remains in the linked authority documents.
+    Prepared shells, bound imports and local declaration order give each module its top-level silhouette before bodies type-check.
 ]
 
 #[section, reference_content]
@@ -20,4 +20,3 @@ page_head #= codebase_theme_head
 #[section, $md:
     @../ (Compiler design) / @../tokenization (Previous) / @../ast-semantics-and-types (Next)
 ]
-

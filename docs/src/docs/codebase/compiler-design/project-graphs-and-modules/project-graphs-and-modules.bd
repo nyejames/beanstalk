@@ -1,96 +1,112 @@
 # Turning folders into a compiler graph
 
-## Reader promise
+A directory is a convenience for humans. It does not tell the compiler which files form one semantic unit, which root owns them or which module must compile before another can bind an import.
 
-- Distinguish files, modules, packages, roots, providers, consumers, ownership
-  and semantic reachability.
-- See why Stage 0 schedules one physical module once.
+Stage 0 answers those questions. It maps the greeting project's filesystem tree onto a **canonical source graph**: roots, branches and the edges that feed nutrients between them.
 
-## Entry state
+## Nodes and edges
 
-- Folded command and project values.
-- Running tree with `src/#page.bst` and `src/greeting.bst`.
+A **graph** here means nodes plus directed edges with meaning.
 
-## Opening problem
+**Nodes** include modules, packages and other compilation units the build system recognises.
 
-- A directory does not say which files form one semantic unit.
-- Running checkpoint: map the tree to a canonical source index.
+**Edges** record relationships: this module imports that provider, this package depends on that package.
 
-## Section sequence
+A **provider** supplies a public interface. A **consumer** binds against that interface after the provider succeeds.
 
-### Nodes and edges
+In the running example, `#page.bst` consumes `@greeting`. The edge names a provider relationship, a graft point rather than a copy. It does not clone `greet`'s body into the page module.
 
-- Define graph nodes, directed edges, providers and consumers.
-- Show `@greeting` as a provider relationship, not a copied declaration.
+**Diagram placeholder:** Roots own files while imports create provider edges
 
-### Roots, packages and ownership
+*Caption: exact running-example identities simplified.*
+*Question: what does a folder mean to the compiler once Stage 0 finishes?*
 
-- Introduce normal `#*.bst` roots, scoped `+*.bst` support roots, the
-  project facade and ordinary owned source files.
-- Distinguish source-backed and binding-backed packages.
+## Roots, packages and ownership
 
-### Owned and semantic source sets
+Beanstalk marks module roots in the filesystem on purpose.
 
-- Place `OwnedSourceSet`, `SemanticSourceSet` and check-only orphan units.
-- Explain why ownership does not inject disconnected declarations.
+- **Normal roots** use names like `#page.bst`. They may hold declarations, dormant top-level runtime work and page fragments.
+- **Support roots** use names like `+helpers.bst`. They are API-only semantic modules: declarations yes, implicit `start` and page fragments no.
+- The **project package facade** is another API-only role with project-wide assembly privilege owned by the build system.
+- Ordinary owned source files such as `greeting.bst` sit under a root's ownership without each file becoming its own root.
 
-### Provider-first scheduling
+**Source-backed packages** compile Beanstalk source into ordinary module artefacts. **Binding-backed packages** expose typed external interfaces without Beanstalk module bodies. Both appear in the capability surface. Only source-backed modules produce HIR.
 
-- Show graph finalisation, provider interfaces and compile waves.
-- Explain one canonical module compilation per project or package boundary.
+Filesystem layout carries semantic constraints. That is the point. The graph should not invent a different topology than the tree authors can see.
 
-### Deterministic identity
+## Owned and semantic source sets
 
-- Introduce stable source, module and declaration identities without naming
-  implementation details too early.
+Stage 0 distinguishes sets that newcomers often collapse.
+
+**OwnedSourceSet.** Files this module root owns on disk.
+
+**SemanticSourceSet.** Files that participate in semantic compilation for the command.
+
+**Check-only orphan units.** Files the tool may still parse for diagnostics even when they sit outside the semantic set for a build.
+
+Ownership does not inject disconnected declarations into a consumer. A file can be owned and still remain outside the semantic set for a given command. Import visibility and ownership are different axes.
+
+**Diagram placeholder:** Owned files can remain outside the semantic source set
+
+*Caption: conceptual distinction.*
+*Question: why does ownership not imply import visibility?*
+
+## Provider-first scheduling
+
+After the graph finalises, the build system schedules **compile waves**, root-first growth rather than every branch racing the trunk.
+
+Providers finish before consumers bind. A module waits until every required provider interface exists. Binding-backed interfaces may appear earlier than source providers because they do not wait on Beanstalk module compilation.
+
+One physical module compiles **once** per project or package compilation boundary. Entries later activate roots. They do not recompile the same module once per page.
+
+For the greeting project, `greeting.bst`'s module compiles and publishes an interface. Only then does `#page.bst` bind `import @greeting { greet }`.
+
+**Diagram placeholder:** Providers finish before consumers bind
+
+*Caption: deterministic schedule.*
+*Question: when can interface binding start for the page?*
+
+**Diagram placeholder:** Page consumes the greeting interface
+
+*Caption: teaching graph, not a complete package graph.*
+*Question: who must compile first?*
+
+## Deterministic identity
+
+Graphs need names that do not jitter when threads finish in a different order.
+
+Stage 0 and the compiler assign **stable identities** to sources, modules and later declarations. Exact Rust type names may change. The rule does not: identity must not depend on worker completion order, cosmetic filename suffixes for roots or source position alone.
+
+Determinism lets parallel compilation merge results in canonical order. Diagnostics and artefacts stay reproducible.
 
 ## What can fail here
 
-- Illegal root topology, path collisions, unsupported source kinds and missing
-  providers.
-- Import cycles and orphan source diagnostics.
-- Mark current entry-closure compilation as transitional if the module plan
-  remains queued.
+- illegal root topology or path collisions
+- unsupported source kinds for the active builder
+- missing providers
+- import cycles
+- orphan source diagnostics
+- transitional entry-closure compilation while the canonical module plan still lands
+
+If current code still compiles a looser closure than the accepted module model, label it transitional against the roadmap plan.
 
 ## Why Beanstalk does it this way
 
-- Alternative: global search paths, nearest-match resolution or package-folder
-  scanning.
-- Choice: structural roots, explicit package identity and canonical ownership.
-- Benefit: graph scheduling and diagnostics use the same source facts.
-- Cost: filesystem layout carries semantic constraints.
+**Alternative:** global search paths, nearest-match resolution or "scan the package folder and hope."
+
+**Choice:** structural roots, explicit package identity and canonical ownership.
+
+**Benefit:** graph scheduling and diagnostics share the same source facts. A missing provider is a graph fact, not a surprise during type checking.
+
+**Cost:** filesystem layout carries semantic constraints authors must learn.
 
 ## Roadmap and current status
 
-- Accepted design: canonical graph, provider-first waves and immutable module
-  compilation.
-- Current implementation: compare the progress matrix with the canonical
-  module plan.
-- Queued work: `canonical-module-compilation-and-scoped-packages-plan.md`.
-- Deferred or outside scope: old flat module handoff and default package-folder scanning.
-
-## Visual plan
-
-- Filesystem tree to graph nodes. Alt text: roots own files while imports
-  create provider edges. Caption: exact running-example identities simplified.
-  Question: what does a folder mean to the compiler?
-- Provider graph for `#page.bst` and `greeting.bst`. Alt text: page consumes
-  the greeting interface. Caption: teaching graph, not a complete package
-  graph. Question: who must compile first?
-- Ownership and reachability lanes. Alt text: owned files can remain outside
-  the semantic source set. Caption: conceptual distinction. Question: why
-  does ownership not imply import visibility?
-- Compile-wave sequence. Alt text: providers finish before consumers bind.
-  Caption: deterministic schedule. Question: when can interface binding start?
+- **Accepted design:** canonical graph, provider-first waves and immutable module compilation once per boundary.
+- **Current implementation:** compare the progress matrix with `canonical-module-compilation-and-scoped-packages-plan.md`.
+- **Queued work:** that canonical module plan.
+- **Deferred or outside scope:** old flat module handoff and default package-folder scanning as the primary model.
 
 ## Exit state
 
-- Output: canonical source graph, source sets and ordered compile waves.
-- Next question: how does the compiler prepare each selected source file once?
-
-## Links to include
-
-- `docs/build-system-design.md` source-index and source-set sections
-- `docs/compiler-design-overview.md`
-- `docs/roadmap/plans/canonical-module-compilation-and-scoped-packages-plan.md`
-- `docs/src/docs/codebase/progress/#page.bst`
+You leave with a canonical source graph, source sets and ordered compile waves. The next question: how does the compiler prepare each selected source file once, starting from characters?

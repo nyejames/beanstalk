@@ -12,7 +12,7 @@ page_head #= codebase_theme_head
 
     # Why templates need their own temporary IR
 
-    Outline for the later educational writing pass. The canonical architecture remains in the linked authority documents.
+    First-class templates keep structure in AST-local TIR, then hand folded strings or neutral runtime data downstream.
 ]
 
 #[section, reference_content]
@@ -20,4 +20,3 @@ page_head #= codebase_theme_head
 #[section, $md:
     @../ (Compiler design) / @../compile-time-semantics (Previous) / @../diagnostics (Next)
 ]
-

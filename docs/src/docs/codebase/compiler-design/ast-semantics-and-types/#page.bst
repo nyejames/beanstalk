@@ -12,7 +12,7 @@ page_head #= codebase_theme_head
 
     # Giving syntax checked meaning
 
-    Outline for the later educational writing pass. The canonical architecture remains in the linked authority documents.
+    Name resolution, type identity and receiving-boundary rules turn ordered shells into typed semantic structure.
 ]
 
 #[section, reference_content]
@@ -20,4 +20,3 @@ page_head #= codebase_theme_head
 #[section, $md:
     @../ (Compiler design) / @../declarations-imports-and-ordering (Previous) / @../compile-time-semantics (Next)
 ]
-

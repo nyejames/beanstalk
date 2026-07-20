@@ -12,7 +12,7 @@ page_head #= codebase_theme_head
 
     # A build starts before source compilation
 
-    Outline for the later educational writing pass. The canonical architecture remains in the linked authority documents.
+    A build chooses its command, builder and folded project values before any page source enters the compiler.
 ]
 
 #[section, reference_content]
@@ -20,4 +20,3 @@ page_head #= codebase_theme_head
 #[section, $md:
     @../ (Compiler design) / @../beanstalk-design-choices (Previous) / @../project-graphs-and-modules (Next)
 ]
-

@@ -12,7 +12,7 @@ page_head #= codebase_theme_head
 
     # Choosing what runs
 
-    Outline for the later educational writing pass. The canonical architecture remains in the linked authority documents.
+    Compilation and activation stay separate. Entry assembly selects roots and builds a reachable function union.
 ]
 
 #[section, reference_content]
@@ -20,4 +20,3 @@ page_head #= codebase_theme_head
 #[section, $md:
     @../ (Compiler design) / @../module-artefacts-and-reuse (Previous) / @../target-planning-and-validation (Next)
 ]
-

@@ -10,9 +10,9 @@ page_head #= codebase_theme_head
 #[section, $md:
     @../ (Compiler design) / 01. What a compiler does
 
-    # What a compiler actually does
+    # What a compiler does
 
-    Outline for the later educational writing pass. The canonical architecture remains in the linked authority documents.
+    Between source text and a finished page sits a ladder of representations. This article names the jobs on that ladder and the owners who hold them.
 ]
 
 #[section, reference_content]
@@ -20,4 +20,3 @@ page_head #= codebase_theme_head
 #[section, $md:
     @../ (Compiler design) / @../beanstalk-design-choices (Next)
 ]
-

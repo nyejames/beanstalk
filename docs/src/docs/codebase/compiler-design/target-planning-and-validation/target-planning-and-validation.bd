@@ -1,100 +1,104 @@
 # Deciding where code can run
 
-## Reader promise
+Semantically valid Beanstalk can still be unhostable on a chosen target. A function that touches the DOM does not belong in a pure Wasm partition that has no DOM. A shade plant fails in full desert light even when its genetics are fine. A backend should learn that **before** it emits half a module and shrugs.
 
-- Explain target capability, affinity, per-function JavaScript or Wasm
-  assignment and validation before emission.
+**Target planning** assigns functions. **Target validation** checks the assignment against capabilities.
 
-## Entry state
+## Roots and capabilities
 
-- Explicit entry roots and reachable function union.
-- Running checkpoint: `start`, `greet` and template runtime work have link
-  facts and capability requirements.
+The build system supplies **validation roots** and candidate assignments from entry or package link planning. The compiler owns validation semantics over those inputs.
 
-## Opening problem
+Distinguish two ideas people conflate:
 
-- Semantically valid code may need a target-specific capability such as the DOM.
-- A backend should not discover that mismatch while emitting code.
+- **semantic package provenance** records where a fact came from in the Beanstalk sense
+- **target capability** records what a runtime target can host
 
-## Section sequence
+A function can be perfectly typed and still require a capability its assigned target lacks.
 
-### Roots and capabilities
+For the greeting walkthrough, `start`, `greet` and any template runtime work arrive with link facts and capability requirements. Even a humble string page teaches the machinery that larger apps need for DOM and friends.
 
-- Introduce validation roots supplied by the build system.
-- Distinguish semantic package provenance from target capability.
+**Diagram placeholder:** Each function carries capability facts and target affinity
 
-### Affinity and propagation
+*Caption: simplified link input.*
+*Question: what constrains assignment?*
 
-- Show JavaScript-owned `start`, DOM requirements and backwards propagation.
-- Explain neutral functions defaulting to Wasm where supported.
+## Affinity and propagation
 
-### Deterministic assignment
+Some functions are born with **affinity**. A JavaScript-owned `start` that must orchestrate page lifecycle wants the JS side. A DOM-touching helper wants JS. Neutral pure computation may default toward Wasm where the design supports it.
 
-- Walk reachable union, affinity analysis, assignment, compiler validation and
-  cross-target edge validation.
-- Give every assignment an explicit reason.
+Requirements **propagate backwards** along call edges, like a drought signal climbing from leaf to stem. If a callee needs the DOM, callers that must reach it inherit the constraint under the accepted propagation rules. Neutral callees can still sit in Wasm when callers bridge correctly.
 
-### Cross-target calls
+**Diagram placeholder:** A DOM requirement travels from callee to callers
 
-- Show JavaScript-to-Wasm wrappers.
-- Explain why Wasm-to-JavaScript Beanstalk calls remain prohibited after
-  propagation.
+*Caption: accepted propagation rule.*
+*Question: why does a caller move targets?*
 
-### Entry-specific variants and check
+## Deterministic assignment
 
-- Introduce entry-specific partitioning and physical variant keys.
-- Explain that `check` plans and validates before stopping.
+A clean mental loop:
+
+1. take the reachable union
+2. run affinity analysis
+3. assign each function to JavaScript or Wasm (or the relevant targets)
+4. record an **explicit reason** for every assignment
+5. run compiler target validation
+6. validate cross-target edges
+
+Determinism matters. The same program should not flip partitions because a hash map iterated differently at breakfast.
+
+**Diagram placeholder:** One reachable union splits into target-labelled functions
+
+*Caption: conceptual assignment.*
+*Question: where does each function run?*
+
+## Cross-target calls
+
+Mixed output needs bridges.
+
+**JavaScript-to-Wasm** calls may use wrappers under explicit ABI rules.
+
+**Wasm-to-JavaScript Beanstalk calls** remain prohibited after propagation in the accepted model. The planner should push the JS requirement outward rather than leave a forbidden reverse edge for emission to discover.
+
+That asymmetry is deliberate engineering, not an accident of today's engine.
+
+**Diagram placeholder:** JS-to-Wasm wrapper is allowed while Wasm-to-JS edge is rejected
+
+*Caption: exact edge rule simplified.*
+*Question: which bridge is legal?*
+
+## Entry-specific variants and check
+
+Partitioning is **entry-specific**. Different entries may need different physical variants of shared logic when their capability sets differ. Variant keys make those physical artefacts addressable.
+
+The `check` command plans and validates, then stops before writing a full page output set. Tooling overlays extend analysis. They do not become a second artefact builder competing with HTML output.
 
 ## What can fail here
 
-- Unsupported target feature, missing capability, invalid cross-target edge or
-  unresolved layout requirement.
-- Mark whole-module HTML-Wasm behaviour as transitional or experimental when
-  the progress matrix still reports it.
+- unsupported target feature on a reachable function
+- missing capability
+- invalid cross-target edge
+- unresolved layout requirement
+- whole-module HTML-Wasm behaviour still marked transitional or experimental in the progress matrix
+
+Unsupported features in unreachable private functions should not fail validation.
 
 ## Why Beanstalk does it this way
 
-- Alternative: compile a whole page to one target or let emission discover
-  unsupported calls.
-- Choice: per-function deterministic partitioning with explicit validation.
-- Benefit: mixed output can keep browser work in JavaScript and neutral work in
-  Wasm.
-- Cost: wrappers, ABI rules and assignment reasons add planning machinery.
+**Alternative:** compile a whole page to one target, or let emission discover unsupported calls mid-write.
+
+**Choice:** per-function deterministic partitioning with explicit validation.
+
+**Benefit:** mixed output can keep browser work in JavaScript and neutral work in Wasm.
+
+**Cost:** wrappers, ABI rules and assignment reasons add planning machinery.
 
 ## Roadmap and current status
 
-- Accepted design: entry-specific target assignment and compiler-owned target
-  validation.
-- Current implementation: link the progress matrix for current mixed-target
-  coverage.
-- Queued work: `html_project_backend_wasm_final_implementation_plan.md`.
-- Deferred or outside scope: whole-module target selection as the final model.
-
-## Visual plan
-
-- Capability-labelled call graph. Alt text: each function carries capability
-  facts and target affinity. Caption: simplified link input. Question: what
-  constrains assignment?
-- Backwards JavaScript propagation. Alt text: a DOM requirement travels from
-  callee to callers. Caption: accepted propagation rule. Question: why does a
-  caller move targets?
-- Completed JS and Wasm partition. Alt text: one reachable union splits into
-  target-labelled functions. Caption: conceptual assignment. Question: where
-  does each function run?
-- Wrapper and rejected reverse edge. Alt text: JS-to-Wasm wrapper is allowed
-  while Wasm-to-JS edge is red and rejected. Caption: exact edge rule
-  simplified. Question: which bridge is legal?
+- **Accepted design:** entry-specific target assignment and compiler-owned target validation.
+- **Current implementation:** progress matrix for mixed-target coverage.
+- **Queued work:** `html_project_backend_wasm_final_implementation_plan.md`.
+- **Deferred or outside scope:** whole-module target selection as the final model.
 
 ## Exit state
 
-- Output: validated target assignments, capabilities, imports and physical
-  variants.
-- Next question: how do lowerers turn these explicit inputs into code?
-
-## Links to include
-
-- `docs/build-system-design.md` mixed-target planning and validation
-- `docs/compiler-design-overview.md` backend validation contract
-- `docs/src/docs/progress/#page.bst`
-- `docs/roadmap/plans/html_project_backend_wasm_final_implementation_plan.md`
-
+You leave with validated target assignments, capabilities, imports and physical variants. The next question: how do lowerers turn these explicit inputs into JavaScript and Wasm without reopening source?

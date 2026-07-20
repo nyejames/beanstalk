@@ -1,98 +1,116 @@
 # Packaging a module once
 
-## Reader promise
+Later stages need a coherent object, not a loose mutable AST and a prayer. One shared module must serve every entry that needs it without recompiling once per page.
 
-- Understand immutable module artefacts, separate data lanes, fingerprints,
-  generated sidecars and deterministic reuse.
+A successful module compilation produces an immutable **`CompiledModuleArtifact`**, a sealed growth ring the rest of the build can graft onto without cutting the trunk open again.
 
-## Entry state
+## Four artefact lanes
 
-- Validated HIR, borrow facts, folded metadata and static requests.
-- Running checkpoint: place `greeting.bst` facts into an artefact.
+Think of four layers in one stem, plus rings that record what changed:
 
-## Opening problem
+**Public semantic interface.** What consumers may observe: exported identities, canonical types, folded constants, generic templates, traits, receiver surfaces, access and effect summaries, project-context provenance.
 
-- Later stages need coherent facts, not a loose mutable AST or repeated source
-  scans.
-- One shared module must serve every entry without entry-specific recompilation.
+**Executable state.** Module-local `TypeEnvironment`, validated HIR and borrow-analysis facts.
 
-## Section sequence
+**Link facts.** Backend-neutral per-function edges, binding-backed call ids, helpers, capabilities, reactive features, numeric and cast operations, paths, assets, provenance and generated-function requests.
 
-### Four artefact lanes
+**Compiler and builder metadata.** Dormant root activity, folded fragment values and insertion indexes, entry metadata, documentation fragments, path usages, structured warnings.
 
-- Public semantic interface.
-- Executable HIR and borrow facts.
-- Per-function link facts.
-- Compiler and builder metadata.
+**Fingerprints** sit beside the lanes so reuse can say what changed.
 
-### Fingerprints and identity
+Backend planning facts do not live in the public interface. Private bodies do not leak into consumer-visible identity.
 
-- Introduce base fingerprints, stable origin identities and export bindings.
-- Put the greeting constant and function in their lanes.
+For `greeting.bst`, the constant and function land in the interface when exported, in executable state as HIR and types, and in link facts as call and capability edges as needed.
 
-### Success, diagnosed and blocked
+**Diagram placeholder:** Interface, executable, link and metadata lanes sit beside fingerprints
 
-- Show success-only public interfaces.
-- Explain diagnosed modules and blocked consumers.
+*Caption: accepted artefact shape simplified.*
+*Question: where does each fact live?*
 
-### Generated sidecars
+## Fingerprints and identity
 
-- Show concrete generic functions beside the base module.
-- Explain a project-wide fixed-point request worklist.
+Accepted design records separate fingerprints, including:
 
-### Parallelism and reuse
+- **public-interface** fingerprint
+- **implementation** fingerprint
+- **dormant root-activity** fingerprint
+- **runtime-dependency** fingerprint
+- **documentation** fingerprint
 
-- Canonical identity before workers.
-- Canonical merge order after workers.
-- Separate semantic, implementation, root, link and documentation changes.
+Invalidation meaning follows the split:
+
+- a private body change need not recompile semantic consumers unless a public fact changes
+- an implementation change may force relinking or codegen without semantic consumer recompilation
+- a root-activity change relinks entries that activate the module
+- a runtime-dependency change updates capability, glue and asset planning
+- a documentation-only change regenerates docs without invalidating executable instances
+
+Stable **origin identities** and **export bindings** keep re-exports honest. Renaming a re-export alias changes the exporting module's public fingerprint. It does not rewrite the origin declaration's identity.
+
+**Diagram placeholder:** Semantic and implementation changes invalidate different lanes
+
+*Caption: conceptual matrix.*
+*Question: what can be reused on a second build?*
+
+## Success, diagnosed and blocked
+
+Outcomes stay strict:
+
+- **Success** yields a full artefact with no errors inside
+- **Diagnosed** yields diagnostics and **no partial public interface**
+- blocked consumers waiting on a required diagnosed provider do not pretend to link
+- **CompilerError** aborts the owning compilation boundary
+
+A diagnosed provider cannot expose "half of `greet`" for experimental linking. Partial linkable data is a bug farm.
+
+## Generated sidecars
+
+Base module artefacts remain immutable. Concrete generic functions live in **generated sidecars** owned by the consuming project or package compilation.
+
+Each sidecar carries its request identity, type environment story, concrete HIR, borrow facts, link facts and fingerprints. A generated function may request further instances. The build system runs a worklist to a fixed point.
+
+This avoids mutating the declaring module every time a consumer monomorphises a call. New shoots grow beside the trunk. The trunk stays put.
+
+**Diagram placeholder:** A concrete function sidecar points to its base module request
+
+*Caption: accepted sidecar relation.*
+*Question: how does generic reuse avoid mutation?*
+
+## Parallelism and reuse
+
+Canonical identity is assigned **before** workers race. Canonical merge order applies **after** workers finish. Semantic, implementation, root, link and documentation changes invalidate different dependents.
+
+The second build of the greeting project should reuse an unchanged `greeting` artefact and only rebuild what fingerprints say moved.
+
+**Diagram placeholder:** The second build reuses unchanged module artefacts and recompiles affected consumers
+
+*Caption: teaching schedule.*
+*Question: what does deterministic reuse mean?*
 
 ## What can fail here
 
-- Missing fingerprint input, inconsistent identity or a generated request that
-  cannot be materialised.
-- A diagnosed provider cannot expose partial linkable data.
-- Keep source diagnostics distinct from internal artefact failures.
+- missing fingerprint input or inconsistent identity
+- a generated request that cannot be materialised
+- attempts to publish partial interfaces from diagnosed modules
+- internal artefact failures distinct from source diagnostics
 
 ## Why Beanstalk does it this way
 
-- Alternative: recompile each module for every entry or let backends inspect
-  mutable frontend state.
-- Choice: immutable canonical artefacts with explicit lanes and fingerprints.
-- Benefit: reuse and parallel scheduling preserve one semantic result.
-- Cost: invalidation and sidecar ownership need precise contracts.
+**Alternative:** recompile each module for every entry, or let backends inspect mutable frontend state.
+
+**Choice:** immutable canonical artefacts with explicit lanes and fingerprints.
+
+**Benefit:** reuse and parallel scheduling preserve one semantic result.
+
+**Cost:** invalidation and sidecar ownership need precise contracts.
 
 ## Roadmap and current status
 
-- Accepted design: immutable `CompiledModuleArtifact` lanes and fingerprints.
-- Current implementation: compare progress rows for current reuse and generated
-  function support.
-- Queued work: canonical module compilation and future persistent reuse plans.
-- Deferred or outside scope: a backend-owned source cache.
-
-## Visual plan
-
-- Four-lane artefact box. Alt text: interface, executable, link and metadata
-  lanes sit beside fingerprints. Caption: accepted artefact shape simplified.
-  Question: where does each fact live?
-- Fingerprint invalidation matrix. Alt text: semantic and implementation
-  changes invalidate different lanes. Caption: conceptual matrix. Question:
-  what can be reused?
-- Generated sidecar diagram. Alt text: a concrete function sidecar points to
-  its base module request. Caption: accepted sidecar relation. Question: how
-  does generic reuse avoid mutation?
-- First and second build wave. Alt text: the second build reuses unchanged
-  module artefacts and recompiles affected consumers. Caption: teaching
-  schedule. Question: what does deterministic reuse mean?
+- **Accepted design:** immutable `CompiledModuleArtifact` lanes and fingerprints.
+- **Current implementation:** progress rows for reuse and generated function support.
+- **Queued work:** canonical module compilation and future persistent reuse plans.
+- **Deferred or outside scope:** a backend-owned source cache as authority.
 
 ## Exit state
 
-- Output: successful immutable module artefacts and fingerprints.
-- Next question: which compiled roots and functions form one entry?
-
-## Links to include
-
-- `docs/compiler-design-overview.md` compiled module artefact contract
-- `docs/build-system-design.md` scheduling and reuse sections
-- `src/compiler_frontend/`
-- `docs/roadmap/plans/canonical-module-compilation-and-scoped-packages-plan.md`
-
+You leave with successful immutable module artefacts and fingerprints. The next question: which compiled roots and functions form one entry when the builder finally chooses what runs?

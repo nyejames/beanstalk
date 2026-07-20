@@ -12,7 +12,7 @@ page_head #= codebase_theme_head
 
     # Borrow checking, race prevention and inferred destruction
 
-    Outline for the later educational writing pass. The canonical architecture remains in the linked authority documents.
+    Data-flow over HIR enforces shared and exclusive access, infers moves and records advisory drops beside unchanged HIR.
 ]
 
 #[section, reference_content]
@@ -20,4 +20,3 @@ page_head #= codebase_theme_head
 #[section, $md:
     @../ (Compiler design) / @../memory-management-and-gc (Previous) / @../module-artefacts-and-reuse (Next)
 ]
-

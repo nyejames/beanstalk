@@ -12,7 +12,7 @@ page_head #= codebase_theme_head
 
     # Why Beanstalk makes different choices
 
-    Outline for the later educational writing pass. The canonical architecture remains in the linked authority documents.
+    Beanstalk keeps the source language small and moves complexity into the compiler on purpose. This article names the bias before the pipeline walk begins.
 ]
 
 #[section, reference_content]
@@ -20,4 +20,3 @@ page_head #= codebase_theme_head
 #[section, $md:
     @../ (Compiler design) / @../what-a-compiler-does (Previous) / @../starting-a-build (Next)
 ]
-

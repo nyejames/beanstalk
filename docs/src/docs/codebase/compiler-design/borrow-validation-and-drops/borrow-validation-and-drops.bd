@@ -1,110 +1,133 @@
 # Borrow checking, race prevention and inferred destruction
 
-## Reader promise
+Two aliases may read the same value in peace. An overlapping mutation can poison every reader's assumptions while the bytes still sit in live memory. GC will not save you from that story. Live tissue can still be torn. **Borrow validation** will try.
 
-- Follow shared and exclusive access through HIR data-flow.
-- Understand future-use analysis, inferred moves and advisory drops without
-  introducing source lifetime syntax.
+## Access modes and roots
 
-## Entry state
+Beanstalk's access rule in plain form:
 
-- Validated HIR plus the memory model from the previous article.
-- Running checkpoint: add a side example with two aliases and one mutation,
-  then return to the greeting project.
+- many **shared** reads may overlap
+- one **exclusive** access may proceed
+- shared and exclusive must not overlap on conflicting places
 
-## Opening problem
+Analysis reasons about **places** (locations), **storage roots** and **alias root sets**. A local, a field path or a temporary can participate. Fresh rvalues passed to mutable call slots materialise into hidden locals first so the checker sees ordinary local access.
 
-- Two aliases can read safely, but an overlapping mutation can invalidate the
-  reasoning of every reader.
-- Label the two-worker race example as general or future-concurrency context.
+Side example, then back to greetings:
 
-## Section sequence
+[codeblock, $code("text"):
+// conceptual: two shared readers of message
+// then an exclusive write through ~message while a reader still needs the old value
+]
 
-### Access modes and roots
+The pattern is the lesson. The greeting project itself may stay simple. The rule still guards every module.
 
-- Many shared reads, one exclusive access and no overlap.
-- Introduce places, storage roots and alias root sets.
+**Diagram placeholder:** Shared reads overlap while an exclusive interval excludes them
 
-### Data-flow facts
+*Caption: exact access rule simplified.*
+*Question: which overlap invalidates the program?*
 
-- Show uninitialised, slot, alias and conservative join states as internal
-  analysis facts.
-- Walk a branch and loop to a fixed point.
+## Data-flow facts
 
-### Cross-function access
+Borrow validation is a **data-flow analysis** over HIR's control-flow graph. It tracks facts such as:
 
-- Introduce function access and return-alias summaries.
-- Explain stable summaries across module boundaries.
+- uninitialised versus initialised storage
+- which aliases exist
+- exclusive versus shared state
+- conservative join results when paths meet
 
-### Future use and inferred moves
+On branches, facts split. At joins, they merge conservatively. On loops, the analysis revisits blocks until a **fixed point**, like water settling after rain: further iteration stops changing the facts.
 
-- Show a value consumed only when no later valid use is lost.
-- Contrast inferred transfer with an explicit move keyword.
+Conservative means "when unsure, assume the more restrictive story." That can reject programs a smarter oracle might accept. It should not accept programs that are unsafe.
 
-### Drops and backend use
+**Diagram placeholder:** Facts flow around a loop until the join stabilises
 
-- Introduce advisory drop sites, `drop_if_owned` and the unified ownership
-  ABI.
-- Show GC erasing ownership operations without changing validation.
+*Caption: analysis simplification.*
+*Question: why revisit earlier blocks?*
 
-### Reactive liveness
+## Cross-function access
 
-- Explain why observable state stays live while a template subscription can
-  observe it.
-- Return to the greeting example.
+Modules compile separately. The checker cannot always open a callee's HIR as local control flow when the call crosses a boundary.
+
+Public function interfaces export summaries:
+
+- parameter access modes
+- mutation effects
+- possible ownership consumption
+- return aliasing
+- relevant reactive effects
+
+Cross-module call transfer consumes those summaries. Missing or inconsistent summaries are internal `CompilerError` failures. Binding-backed functions resolve through semantic package metadata, not through source import spelling.
+
+## Future use and inferred moves
+
+There is no move keyword. The compiler asks a sharper question: may this value be **consumed** here without losing a later valid use?
+
+**Future-use analysis** answers. If a later path still needs the value, consumption is illegal. If this site is the last valid use on the paths that matter, an inferred transfer may proceed.
+
+That design keeps source APIs small. It also means analysis precision limits how often ownership optimisation can fire.
+
+**Diagram placeholder:** Last valid use permits inferred transfer and later use forbids it
+
+*Caption: teaching rule.*
+*Question: when can ownership move?*
+
+## Drops and backend use
+
+When ownership facts exist, the compiler may record **advisory drop sites** and operations in the spirit of `drop_if_owned` under a unified ownership ABI story.
+
+GC-backed backends may erase ownership operations. They must not skip validation. The same programs remain accepted or rejected either way.
+
+Borrow validation **reads validated HIR and writes side tables**. It does not rewrite HIR. Backends may consume the side facts. They may not treat absence of a drop as permission to accept unsafe aliasing.
+
+**Diagram placeholder:** Analysis facts sit beside unchanged HIR and feed optional drop lowering
+
+*Caption: exact side-table boundary.*
+*Question: what may a GC backend ignore?*
+
+## Reactive liveness
+
+Observable state that a template subscription can still see must remain live for that observation model. Borrow validation treats subscriptions as **read-only dependencies**, not as active borrow lifetimes that freeze the whole heap in Rust-like ways.
+
+Return to the greeting example: static content may fold away entirely. Dynamic reactive content, when present, keeps source and sink metadata honest through HIR and validation without inventing a second type system.
+
+## Future-concurrency context
+
+Imagine two workers and one mutable place. If both obtain conflicting access, you have a race-shaped hazard. Beanstalk's access rules reject the pattern at the language level even when today's runtime does not expose general threaded execution.
+
+Label that example carefully. It teaches why exclusivity exists. It does not claim current async actor syntax you have not shipped.
+
+**Diagram placeholder:** Two labelled workers access one mutable place, with a rejected overlap
+
+*Caption: general teaching example, not current runtime support.*
+*Question: why prevent the pattern before threads arrive?*
 
 ## What can fail here
 
-- Conflicting shared and exclusive access, invalid mutation, use after inferred
-  move and unsafe return alias.
-- Conservative joins can reject or retain more than an ideal analysis.
-- Do not claim current threaded or async execution.
+- conflicting shared and exclusive access
+- invalid mutation
+- use after inferred move
+- unsafe return alias
+- conservative joins that reject or retain more than an ideal analysis
+
+Do not claim current threaded or async execution as present tense support.
 
 ## Why Beanstalk does it this way
 
-- Alternative: expose source lifetimes and move syntax.
-- Choice: mandatory HIR analysis, inferred transfers and GC fallback.
-- Benefit: source APIs stay small while access safety remains explicit to the
-  compiler.
-- Cost: analysis precision limits ownership optimisation and can reject
-  ambiguous programs.
+**Alternative:** expose source lifetimes and move syntax.
+
+**Choice:** mandatory HIR analysis, inferred transfers and GC fallback.
+
+**Benefit:** source APIs stay small while access safety remains explicit to the compiler.
+
+**Cost:** analysis precision limits ownership optimisation and can reject ambiguous programs.
 
 ## Roadmap and current status
 
-- Accepted design: borrow validation reads HIR and writes side tables.
-- Current implementation: link memory and progress pages for supported checks.
-- Queued work: ownership-aware drops and backend ABI work remain roadmap work.
-- Deferred or outside scope: current concurrency syntax, trait objects and
-  source-visible references.
-
-## Visual plan
-
-- Shared versus exclusive timeline. Alt text: shared reads overlap while an
-  exclusive interval excludes them. Caption: exact access rule simplified.
-  Question: which overlap invalidates the program?
-- Future-concurrency race example. Alt text: two labelled workers access one
-  mutable place, with a red rejected overlap. Caption: general teaching
-  example, not current runtime support. Question: why prevent the pattern?
-- Branch and loop fixed-point graph. Alt text: facts flow around a loop until
-  the join stabilises. Caption: analysis simplification. Question: why revisit
-  earlier blocks?
-- Future-use decision tree. Alt text: last valid use permits inferred transfer
-  and later use forbids it. Caption: teaching rule. Question: when can ownership
-  move?
-- HIR side tables to backends. Alt text: analysis facts sit beside unchanged
-  HIR and feed optional drop lowering. Caption: exact side-table boundary.
-  Question: what may a GC backend ignore?
+- **Accepted design:** borrow validation reads HIR and writes side tables.
+- **Current implementation:** memory and progress pages for supported checks.
+- **Queued work:** ownership-aware drops and backend ABI work.
+- **Deferred or outside scope:** current concurrency syntax, trait objects and source-visible references.
 
 ## Exit state
 
-- Output: validated access facts, inferred ownership facts and advisory drop
-  sites.
-- Next question: how do these facts become one immutable module artefact?
-
-## Links to include
-
-- `docs/src/docs/codebase/memory-management/borrow-validation/borrow-validation.bd`
-- `docs/src/docs/codebase/memory-management/ownership-and-drops/ownership-and-drops.bd`
-- `src/compiler_frontend/analysis/borrow_checker/`
-- `docs/src/docs/codebase/memory-management/overview.bd`
-
+You leave with validated access facts, inferred ownership facts and advisory drop sites. The next question: how do these facts become one immutable module artefact the rest of the build can reuse?

@@ -12,7 +12,7 @@ page_head #= codebase_theme_head
 
     # Turning folders into a compiler graph
 
-    Outline for the later educational writing pass. The canonical architecture remains in the linked authority documents.
+    Folders become a canonical source graph with providers, consumers and one compile per physical module.
 ]
 
 #[section, reference_content]
@@ -20,4 +20,3 @@ page_head #= codebase_theme_head
 #[section, $md:
     @../ (Compiler design) / @../starting-a-build (Previous) / @../tokenization (Next)
 ]
-

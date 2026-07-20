@@ -12,7 +12,7 @@ page_head #= codebase_theme_head
 
     # Deciding where code can run
 
-    Outline for the later educational writing pass. The canonical architecture remains in the linked authority documents.
+    Per-function target assignment and validation catch capability mismatches before any backend emits code.
 ]
 
 #[section, reference_content]
@@ -20,4 +20,3 @@ page_head #= codebase_theme_head
 #[section, $md:
     @../ (Compiler design) / @../linking-entries-and-reachability (Previous) / @../backend-lowering (Next)
 ]
-

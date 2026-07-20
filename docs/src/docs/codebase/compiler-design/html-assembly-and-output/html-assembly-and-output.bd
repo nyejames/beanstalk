@@ -1,107 +1,139 @@
 # Building and writing the final page
 
-## Reader promise
+Every earlier stage produced records. The HTML builder's job is to turn the right records into one working document and a safe output set without rediscovering source structure or letting each backend spray files into the tree. Harvest, not another season of growth from seed.
 
-- Finish the walkthrough by combining compiler artefacts, runtime code, builder
-  policy and output ownership.
-- End with the exact fragment `<p>Hello, Priya!</p>`.
+This is the last primary stop on the chronological route. The fragment at the end is still:
 
-## Entry state
+[codeblock, $code("text"):
+<p>Hello, Priya!</p>
+]
 
-- Entry assembly, target-labelled functions, JavaScript and Wasm outputs,
-  runtime helpers, external glue and tracked assets.
-- Running checkpoint: all compiler and backend facts are explicit records.
+## Assembly inputs
 
-## Opening problem
+The builder consumes explicit inputs such as:
 
-- The builder must turn many selected artefacts into one working document and
-  a safe output set.
-- It must not rediscover source structure or let each backend write files.
+- entry assembly and activated root metadata
+- folded compile-time fragments and insertion indexes
+- runtime fragment slots and `start` invocation plan
+- selected functions and their target labels
+- JavaScript and Wasm outputs plus physical variants
+- runtime helpers and shared runtime modules
+- external glue and import maps
+- tracked assets and path usages
+- entry config values the builder schema allows
 
-## Section sequence
+If a fact is missing, an upstream owner failed. The builder should not open `greeting.bst` to peek at source again.
 
-### Assembly inputs
+**Diagram placeholder:** Compiler and backend records converge on a document and output plan
 
-- List entry assembly, folded fragments, runtime slots, selected functions,
-  Wasm variants, helpers, glue, assets and entry config.
+*Caption: accepted ownership map simplified.*
+*Question: what does the builder consume?*
 
-### Document shell and fragments
+## Document shell and fragments
 
-- Plan route and document metadata.
-- Insert compile-time fragments at recorded indexes.
-- Invoke `start` once and hydrate runtime fragments in source order.
+Assembly plans route and document metadata, then builds a shell.
 
-### Reactive and external work
+**Compile-time fragments** insert at recorded indexes first. They are already strings. The greeting's static paragraph content wants this path when everything folded.
 
-- Mark reactive mount work as a target-specific extension.
-- Explain demand-driven external JavaScript assets and import maps.
+**Runtime path:** invoke `start` once for the activated root and hydrate runtime fragments in source order. Dynamic pieces fill reserved slots without scrambling author order.
 
-### Tracked assets and records
+The result is a document anatomy: HTML shell, paragraph content, script tags, runtime references and whatever the entry needs to boot.
 
-- Connect path usages and builder-owned asset decisions.
-- Introduce output records, output-root validation and manifests.
+**Diagram placeholder:** Folded content enters first while runtime fragments hydrate in source order
 
-### Writing and ownership
+*Caption: conceptual sequence.*
+*Question: when does the paragraph appear?*
 
-- Explain skip-unchanged writes, stale cleanup and builder ownership.
-- State that one builder cannot delete another builder's files.
+**Diagram placeholder:** HTML shell contains paragraph, scripts and runtime references
 
-### Final checkpoint
+*Caption: article-specific shell details remain illustrative.*
+*Question: what makes the page runnable?*
 
-- Show the conceptual output tree.
-- Return to `<p>Hello, Priya!</p>` and stop the primary series here.
+## Reactive and external work
+
+Reactive mount work is a **target-specific extension** of the page model, not a second compiler. Where the entry needs it, the builder wires backend-owned update strategy to the compiled source and sink metadata.
+
+External JavaScript assets arrive **demand-driven**. Import maps and glue appear because link facts and bindings required them, not because a global script tag fashion show looked nice.
+
+## Tracked assets and records
+
+Path usages from compilation become builder decisions: copy, hash, place, reference. Everything becomes **output records** under an output root the builder validates.
+
+Manifests remember what this builder produced. Incremental builds compare records. Humans and tools can audit the set.
+
+## Writing and ownership
+
+The build system owns output validation, writing, manifests and stale cleanup.
+
+Practical rules that keep disks sane:
+
+- skip writes when bytes did not change
+- clean stale files the builder still owns
+- never delete another builder's files by accident
+- declare every produced path so ownership transitions stay honest
+
+Backends emit data into central records. They do not each open a private output directory and hope the next clean step guesses right.
+
+**Diagram placeholder:** Current records define writes and safe removal of stale owned files
+
+*Caption: exact output principle simplified.*
+*Question: who may remove a file?*
+
+**Diagram placeholder:** HTML, JavaScript, Wasm, runtime assets and manifest sit under one owned output root
+
+*Caption: conceptual output tree.*
+*Question: which files belong together?*
+
+## Final checkpoint
+
+A conceptual output tree for the walkthrough might contain:
+
+[codeblock, $code("text"):
+output/
+├── index.html          -- or route-shaped HTML
+├── *.js                -- page scripts and helpers
+├── *.wasm              -- when the partition needs it
+├── runtime/            -- shared helpers as designed
+└── manifest            -- owned output inventory
+]
+
+Open the HTML. Find the fragment:
+
+[codeblock, $code("text"):
+<p>Hello, Priya!</p>
+]
+
+That string travelled a long way: characters, tokens, shells, bindings, types, folded constants, template handoff, diagnostics that stayed quiet, HIR, memory rules, artefacts, entry plans, target assignment, lowering and assembly. Each owner shed one ambiguity and refused to grow the previous owner's work again from bare soil.
+
+There is no later primary tutorial page in this series. Deep dives live in language, memory and progress authorities when you need the fine print.
 
 ## What can fail here
 
-- Invalid route or output path, missing asset, duplicate output, failed target
-  record or stale-file ownership conflict.
-- Keep backend generation failures in the backend article.
+- invalid route or output path
+- missing asset
+- duplicate output
+- failed target record
+- stale-file ownership conflict
+
+Backend generation failures belong to the backend article. Assembly failures belong here.
 
 ## Why Beanstalk does it this way
 
-- Alternative: let each backend write files or let builders rescan source.
-- Choice: central output records, validation, manifests and stale cleanup.
-- Benefit: output ownership stays auditable and repeatable.
-- Cost: builders must declare every produced file and ownership transition.
+**Alternative:** let each backend write files, or let builders rescan source.
+
+**Choice:** central output records, validation, manifests and stale cleanup.
+
+**Benefit:** output ownership stays auditable and repeatable.
+
+**Cost:** builders must declare every produced file and ownership transition.
 
 ## Roadmap and current status
 
-- Accepted design: build-system-owned output writing and manifests.
-- Current implementation: link current HTML, asset and backend progress rows.
-- Queued work: `html_project_backend_wasm_final_implementation_plan.md` and
-  `entry-config-blocks-runtime-title-plan.md`.
-- Deferred or outside scope: backend-owned output directories and hidden
-  stale-file deletion.
-
-## Visual plan
-
-- Final assembly funnel. Alt text: compiler and backend records converge on a
-  document and output plan. Caption: accepted ownership map simplified.
-  Question: what does the builder consume?
-- Fragment insertion and hydration timeline. Alt text: folded content enters
-  first while runtime fragments hydrate in source order. Caption: conceptual
-  sequence. Question: when does the paragraph appear?
-- Final document anatomy. Alt text: HTML shell contains paragraph, scripts and
-  runtime references. Caption: article-specific shell details remain
-  illustrative. Question: what makes the page runnable?
-- Output tree. Alt text: HTML, JavaScript, Wasm, runtime assets and manifest
-  sit under one owned output root. Caption: conceptual output tree. Question:
-  which files belong together?
-- Manifest and stale cleanup diagram. Alt text: current records define writes
-  and safe removal of stale owned files. Caption: exact output principle
-  simplified. Question: who may remove a file?
+- **Accepted design:** build-system-owned output writing and manifests.
+- **Current implementation:** HTML, asset and backend progress rows.
+- **Queued work:** `html_project_backend_wasm_final_implementation_plan.md` and entry-config plans.
+- **Deferred or outside scope:** backend-owned output directories and hidden stale-file deletion.
 
 ## Exit state
 
-- Output: generated HTML, runtime assets and an owned output manifest on disk.
-- Final fragment: `<p>Hello, Priya!</p>`.
-- No later primary tutorial page.
-
-## Links to include
-
-- `docs/build-system-design.md` HTML builder, output and manifest sections
-- `docs/compiler-design-overview.md`
-- `src/project_builder/`
-- `docs/src/docs/progress/#page.bst`
-- `docs/roadmap/plans/html_project_backend_wasm_final_implementation_plan.md`
-
+Generated HTML, runtime assets and an owned output manifest sit on disk. The final fragment is `<p>Hello, Priya!</p>`. The chronological educational route ends here.

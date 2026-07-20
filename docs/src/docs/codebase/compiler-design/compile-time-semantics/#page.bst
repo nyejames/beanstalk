@@ -12,7 +12,7 @@ page_head #= codebase_theme_head
 
     # Constants, generics, traits and casts before HIR
 
-    Outline for the later educational writing pass. The canonical architecture remains in the linked authority documents.
+    Folded constants, concrete generic requests, static trait evidence and explicit casts finish before HIR begins.
 ]
 
 #[section, reference_content]
@@ -20,4 +20,3 @@ page_head #= codebase_theme_head
 #[section, $md:
     @../ (Compiler design) / @../ast-semantics-and-types (Previous) / @../templates-and-tir (Next)
 ]
-

@@ -12,7 +12,7 @@ page_head #= codebase_theme_head
 
     # Turning HIR into JavaScript and Wasm
 
-    Outline for the later educational writing pass. The canonical architecture remains in the linked authority documents.
+    Lowerers translate validated HIR into target code without reopening source or rewriting language meaning.
 ]
 
 #[section, reference_content]
@@ -20,4 +20,3 @@ page_head #= codebase_theme_head
 #[section, $md:
     @../ (Compiler design) / @../target-planning-and-validation (Previous) / @../html-assembly-and-output (Next)
 ]
-

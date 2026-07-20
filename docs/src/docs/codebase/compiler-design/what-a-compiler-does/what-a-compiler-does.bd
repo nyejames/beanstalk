@@ -1,93 +1,157 @@
-# What a compiler actually does
+# What a compiler does
 
-## Reader promise
+You type source. Something emits `<p>Hello, Priya!</p>`. Between those two facts sits a long chain of careful transformations, each one slightly less human and slightly more machine-shaped than the last.
 
-- Distinguish compiler, interpreter, transpiler, linker, build system,
-  frontend, backend and intermediate representation.
-- See why a compiler creates several representations instead of one large
-  syntax tree.
+People often shrink that chain to a slogan: "the compiler turns code into machine instructions." That slogan fails the greeting project before lunch. The page may never touch native machine code. It may still need tokens, types, control-flow graphs, link plans and a builder that writes HTML. The work still deserves the word *compiler*.
 
-## Entry state
+## Meaning versus representation
 
-- Raw project files from the landing page.
-- Reader knows Rust functions, enums, structs and ownership.
-- Reader does not yet need compiler terminology.
+**Source meaning** answers "what did the author intend under the language rules?"
 
-## Opening problem
+**Target representation** answers "what concrete form will some host execute or display?"
 
-- Question: what happens between source text and `<p>Hello, Priya!</p>`?
-- Challenge the shortcut that a compiler only emits machine instructions.
-- Running example: mark `config.bst`, `#page.bst` and `greeting.bst` as source
-  rather than meaning.
+**Transformation** answers "how do we move from one to the other without losing the meaning we care about?"
 
-## Section sequence
+The project tree enters as authored text:
 
-### Meaning versus representation
+[codeblock, $code("text"):
+compiler_walkthrough/
+├── config.bst
+└── src/
+    ├── #page.bst
+    └── greeting.bst
+]
 
-- Define source meaning, target representation and transformation.
-- Running checkpoint: project tree enters as authored text.
+Those files hold characters on disk. They do not yet hold a typed call graph, a borrow fact or a Wasm export. Meaning arrives only when a stage applies language rules and records the result in a structure later stages trust.
 
-### A compiler vocabulary
+A seed is not a vine. The same genetic plan can become different adult forms under different conditions, yet the plan stays one plan. Source meaning is the plan. Target code is the grown plant in a particular climate: browser JavaScript, Wasm, HTML shell. Compilers live in the gap between seed and stand of growth.
 
-- Explain compiler, interpreter and transpiler by responsibility.
-- Introduce linker and build system as adjacent owners.
-- Keep the examples small and return to Beanstalk.
+**Diagram placeholder:** One seed plan becomes different grown forms while keeping the same meaning
 
-### Frontend, analysis and backend
+*Caption: teaching analogy for source meaning and target form.*
+*Question: which parts of the greeting project still look like a seed, and which already look like a grown page?*
 
-- Explain frontend, middle analysis and backend as responsibilities.
-- Avoid requiring a fixed universal phase diagram.
-- Place Beanstalk's compiler library and project tool.
+## A small vocabulary
 
-### Why intermediate representations exist
+Words collide in casual talk. Pin them by responsibility.
 
-- Show raw text, tokens, typed AST, HIR and target output as a ladder.
-- Explain that each representation removes ambiguity for its consumer.
-- State the one-fact, one-owner rule.
+A **compiler** reads source under language rules and produces another representation a machine or host can use. That product might be native code, bytecode, JavaScript, Wasm, HTML fragments or a structured artefact a builder will assemble.
+
+An **interpreter** walks a representation and performs the operations as it goes. It may parse first. Execution still happens inside the interpreter process rather than as a finished artefact handed to another runtime.
+
+A **transpiler** usually means a compiler whose target is another human-authored language at a similar level, such as TypeScript to JavaScript. The word names a popular special case. It does not name a third kingdom of computation.
+
+A **linker** connects separately compiled pieces. It resolves which functions call which others, which symbols an entry needs and which objects belong in one final image or bundle.
+
+A **build system** decides *what* to compile, in which order, with which inputs and where outputs land. It schedules work. It does not replace the language's type checker.
+
+Beanstalk splits those jobs on purpose. The compiler library owns semantic meaning for modules. The build system owns project graphs, entry plans and writing files. Backends lower already-validated meaning into JavaScript or Wasm. The HTML builder assembles page-shaped outputs.
+
+**Diagram placeholder:** Three routes from source toward execution with overlapping responsibilities
+
+*Caption: teaching simplification, not a complete taxonomy.*
+*Question: where does execution happen for Priya's page?*
+
+## Frontend, analysis and backend
+
+Compilers often speak of a **frontend**, **middle** analysis and a **backend**. Treat those as responsibilities rather than a sacred phase diagram every language must photocopy.
+
+The **frontend** faces source text. It tokenises, parses shells, binds names, checks types and builds a typed structure that captures source meaning.
+
+**Analysis** walks that structure to prove properties: terminal control flow, borrow safety, reachability, target capability. Some languages fold analysis into the frontend. Beanstalk keeps several analyses after a first backend-facing IR exists.
+
+The **backend** faces a concrete target. It lowers validated meaning into JavaScript, Wasm, helpers and glue. It should not reopen source files to rediscover what `greet` means.
+
+Beanstalk's compiler library holds frontend and analysis stages. The project tool and builders sit around that library. Stage 0 graph construction belongs to the build system even though people sometimes wave at "the compiler" as a whole CLI.
+
+**Diagram placeholder:** Owner map for build system, frontend, analysis and backend
+
+*Caption: ownership categories from the canonical authorities.*
+*Question: who decides which files enter the graph, and who decides whether `visitor` type-checks?*
+
+## Why intermediate representations exist
+
+Why not keep one giant syntax tree until the end?
+
+Because each consumer wants a different kind of clarity. A vine does not jump from seed to canopy in one step. Roots, stem and leaves each solve a different problem.
+
+[table:
+    [th:
+        [: Representation]
+        [: Ambiguity it removes]
+    ]
+
+    [td:
+        [: Raw text]
+        [: none yet: characters only]
+    ]
+
+    [td:
+        [: Tokens]
+        [: word and punctuation boundaries]
+    ]
+
+    [td:
+        [: Prepared shells]
+        [: top-level shape before bodies]
+    ]
+
+    [td:
+        [: Typed AST]
+        [: names, types and source meaning]
+    ]
+
+    [td:
+        [: HIR]
+        [: evaluation order and control flow]
+    ]
+
+    [td:
+        [: Target code]
+        [: host instructions and calling conventions]
+    ]
+]
+
+Raw text still confuses a parser about where one token ends. Tokens still confuse a type checker about which `greet` you meant. A typed AST still nests expressions so a borrow checker must rediscover evaluation order. HIR still refuses to choose JavaScript versus Wasm spelling.
+
+Each step deletes one class of question so the next owner can ask a harder one.
+
+**One fact, one owner.** If the AST already folded `greeting_prefix` to `"Hello"`, HIR should not re-parse the constant. If HIR already recorded a call edge to `greet`, the linker should not guess callees from string names in source. Duplication invites drift. Drift invites bugs that only appear on one backend.
+
+**Diagram placeholder:** Representation path from source text to target code
+
+*Caption: simplified Beanstalk walkthrough.*
+*Question: why retain multiple forms instead of overwriting one tree in place?*
 
 ## What can fail here
 
-- Outline only: malformed source, unsupported target capability and missing
-  project input as distinct failure families.
-- Defer exact diagnostic ownership to the diagnostics article.
+Failures arrive in families, not one grey cloud labelled "error."
+
+**Malformed source** breaks spelling, structure or language rules: a bad escape, an unknown name, a type mismatch.
+
+**Unsupported target capability** means the program makes sense as Beanstalk yet needs something the chosen target cannot host, such as a DOM API on a pure Wasm partition.
+
+**Missing project input** means the build never obtained a required config value or source file before semantic work could start.
+
+Later articles assign exact diagnostic ownership. Here only the families matter: user source, target contract and project bootstrap fail for different reasons and travel different lanes.
 
 ## Why Beanstalk does it this way
 
-- Alternative: one target-specific compiler path.
-- Choice: backend-neutral compiler facts with build-system orchestration.
-- Benefit: multiple builders and targets consume the same semantic work.
-- Cost: explicit boundaries and more intermediate data to maintain.
+**Alternative:** one target-specific compiler path that thinks in HTML and JavaScript from the first token.
+
+**Choice:** backend-neutral compiler facts, with the build system orchestrating projects and builders.
+
+**Benefit:** multiple builders and targets consume the same semantic work. A `check` command can validate without writing a page. A future non-HTML builder can reuse module artefacts.
+
+**Cost:** explicit boundaries and more intermediate data to maintain. You pay in structure so you do not pay in repeated meaning.
 
 ## Roadmap and current status
 
-- Accepted design: staged compiler library and build-owned project pipeline.
-- Current implementation: link to the progress matrix without freezing
-  transitional backend handoff details.
-- Queued work: canonical module and mixed-target plans where relevant.
-- Deferred or outside scope: this article does not teach a universal compiler taxonomy.
-
-## Visual plan
-
-- Responsibility diagram: compiler, interpreter and transpiler. Alt text:
-  three routes from source to execution with overlapping responsibilities.
-  Caption: teaching simplification, not a complete taxonomy. Question:
-  where does execution happen?
-- Representation ladder from source text to target code. Alt text: each stage
-  removes one class of ambiguity. Caption: simplified Beanstalk walkthrough.
-  Question: why retain multiple forms?
-- Owner map for build system, frontend, analysis and backend. Alt text:
-  arrows show ownership and handoff. Caption: exact ownership categories from
-  the canonical authorities. Question: who decides what?
+- **Accepted design:** a staged compiler library plus a build-owned project pipeline.
+- **Current implementation:** follow the progress matrix. Do not freeze transitional backend handoff details into memory as eternal law.
+- **Queued work:** canonical module compilation and mixed-target plans still shape how cleanly some handoffs land.
+- **Deferred or outside scope:** this article does not teach a universal compiler taxonomy for every language on Earth.
 
 ## Exit state
 
-- Output: vocabulary and a representation ladder.
-- Next question: why does Beanstalk place language and build-system choices
-  together?
-
-## Links to include
-
-- `docs/compiler-design-overview.md`
-- `docs/build-system-design.md`
-- `docs/src/docs/codebase/design-scope/overview.bd`
-- `src/compiler_frontend/`
+You leave with a vocabulary and a representation path. The next question sits closer to Beanstalk's personality: why does this language place language design and build-system design in the same conversation?

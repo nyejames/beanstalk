@@ -12,7 +12,7 @@ page_head #= codebase_theme_head
 
     # Building and writing the final page
 
-    Outline for the later educational writing pass. The canonical architecture remains in the linked authority documents.
+    The HTML builder assembles records into a document and owned output set, ending at the greeting fragment.
 ]
 
 #[section, reference_content]
@@ -20,4 +20,3 @@ page_head #= codebase_theme_head
 #[section, $md:
     @../ (Compiler design) / @../backend-lowering (Previous)
 ]
-

@@ -12,7 +12,7 @@ page_head #= codebase_theme_head
 
     # Automatic memory management before the borrow checker
 
-    Outline for the later educational writing pass. The canonical architecture remains in the linked authority documents.
+    GC answers liveness. Access validation answers conflicting use. Beanstalk runs both on purpose.
 ]
 
 #[section, reference_content]
@@ -20,4 +20,3 @@ page_head #= codebase_theme_head
 #[section, $md:
     @../ (Compiler design) / @../hir (Previous) / @../borrow-validation-and-drops (Next)
 ]
-
