@@ -3,4 +3,9 @@ entry = "."
 [backends.html]
 mode = "success"
 warnings = "forbid"
-golden_mode = "normalized"
+artifacts_must_not_exist = ["assets/unused.png"]
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = ["<h1>Hello</h1>"]

@@ -3,4 +3,8 @@ entry = "."
 [backends.html]
 mode = "success"
 warnings = "forbid"
-golden_mode = "normalized"
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = ["<h1>Hello</h1>"]

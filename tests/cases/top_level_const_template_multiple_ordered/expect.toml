@@ -1,4 +1,9 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
-golden_mode = "normalized"
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain_in_order = ["FIRST", "SECOND", "THIRD"]
+must_contain_exactly_once = ["FIRST", "SECOND", "THIRD"]

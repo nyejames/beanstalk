@@ -30,27 +30,27 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 5D4 — nine template/import normalized goldens converted to runtime and narrow static artifact contracts and ready to commit
-LAST_ACCEPTED_COMMIT: `914c1c131` (Phase 5D3)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 5D4 expectations, nine golden deletions, and this plan are ready to commit; unrelated docs source and generated rebuild work remains unstaged
+CURRENT_SLICE: Phase 5D5 — final five normalized goldens converted to narrow static artifact and absence contracts and ready to commit
+LAST_ACCEPTED_COMMIT: `71f75c220` (Phase 5D4)
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 5D5 expectations, five golden deletions, and this plan are ready to commit; unrelated docs source and generated rebuild work remains unstaged
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: testing standards reserve goldens for exact emitted text and prefer runtime behavior or narrow artifact assertions when those own the contract
-- code: nine template/import cases now use exact, order/exact-once, or narrow static artifact owners; nine whole-page goldens are removed
+- code: zero golden backend blocks remain; the final five static cases use narrow HTML content/order/exact-once and artifact-absence contracts
 ACCEPTANCE_CRITERIA:
-- replace all nine normalized whole-page goldens with exact or ordered runtime contracts confirmed by focused execution
-- add narrow `index.html` assertions only for compile-time/static fragment behavior not visible through runtime events
-- do not edit source; remove superseded golden files and empty trees while preserving warning/backend intent
+- replace the final five normalized whole-page goldens with narrow `index.html` content/order or artifact-absence assertions
+- prove the unreferenced asset is not emitted without pinning unrelated page scaffolding
+- do not edit source; remove the final golden files and empty trees while preserving warning/backend intent
 VALIDATION_STATE:
 - `just validate`: passed; cross-target Clippy, 3,575 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
-- Phase 5D4 selected case executions: passed; all nine selected HTML cases
-- `cargo run --quiet -- tests --audit`: passed; 1,645 cases, 1,778 executions, five golden backend blocks, zero hard findings
+- Phase 5D5 selected case executions: passed; all five selected HTML cases
+- `cargo run --quiet -- tests --audit`: passed; 1,645 cases, 1,778 executions, zero golden backend blocks, zero hard findings
 DOCS_IMPACT: `testing.bd` still names schema 5 and must be updated with the complete runtime assertion workflow during Phase 5 documentation/closure; progress matrix and `index.md` unchanged
 BLOCKERS_OR_OPEN_DECISIONS: the user requires Ollama for every delegated implementation slice after Phase 5C2, with no provider substitution; 19 justified diagnostic-contains blocks separately record duplicate module compilation that the queued canonical-module plan must remove
-DELEGATION_DECISION: Ollama accepted with parent strengthening — two console markers now assert both order and exact-once
+DELEGATION_DECISION: Ollama accepted with parent narrowing — the bare const output no longer pins the body tag
 NEXT_WORKER_ORDER: none for this accepted slice; Ollama only afterward
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit Phase 5D4, refresh its hash, then launch the five-case Phase 5D5 static artifact/absence conversion through Ollama
+NEXT_RESUME_ACTION: commit Phase 5D5, refresh its hash, then complete Phase 5 documentation/acceptance closure before Phase 6
 
 ---
 
@@ -178,7 +178,8 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 5C2 exact runtime behavior | `c32dea5ef` | Accepted | Loop-control output is ordered and single-use; loop/map/reactive cases assert complete exact output; 1,778/1,778 executions |
 | Phase 5D2 runtime golden conversion | `d5256868b` | Accepted | 15 behavior-first whole-page goldens replaced by exact runtime output; 23 golden backend blocks remain; 1,778/1,778 executions |
 | Phase 5D3 receiver golden conversion | `914c1c131` | Accepted | Nine receiver whole-page goldens replaced by exact context-rich output; seven scalar markers relabeled; 14 golden backend blocks remain; 1,778/1,778 executions |
-| Phase 5D4 template/import golden conversion | pending acceptance commit | Accepted | Nine whole-page goldens replaced by runtime and narrow static owners; order-sensitive console markers are exact-once; five golden backend blocks remain; 1,778/1,778 executions |
+| Phase 5D4 template/import golden conversion | `71f75c220` | Accepted | Nine whole-page goldens replaced by runtime and narrow static owners; order-sensitive console markers are exact-once; five golden backend blocks remain; 1,778/1,778 executions |
+| Phase 5D5 static golden conversion | pending acceptance commit | Accepted | Final five whole-page goldens replaced by narrow static content/order/exact-once and absence contracts; zero golden backend blocks; 1,778/1,778 executions |
 
 ---
 
@@ -870,11 +871,11 @@ At minimum protect:
 ## 5D — Golden audit
 
 - [x] Inventory every current golden using the Phase 2R file inventory.
-- [ ] Keep exact or normalized goldens only where generated structure itself is contractual.
-- [ ] Convert behavior-only goldens to runtime assertions.
-- [ ] Convert structural contracts to narrow artifact assertions.
-- [ ] Delete unused files and empty directories.
-- [ ] Record conversions/removals in the pruning ledger.
+- [x] Keep exact or normalized goldens only where generated structure itself is contractual.
+- [x] Convert behavior-only goldens to runtime assertions.
+- [x] Convert structural contracts to narrow artifact assertions.
+- [x] Delete unused files and empty directories.
+- [x] Record conversions/removals in the pruning ledger.
 
 ### Phase 5D1 accepted audit disposition
 
@@ -1311,7 +1312,8 @@ Do not present lower counts or faster time as proof of correctness.
 | `choice_import_visibility_non_exported` → `choice_same_module_private_import_success` | Same-module import and construction of a private choice declaration | `choice_same_module_private_import_success` | none | `4e0b4ca7b` |
 | Phase 5D2 15 normalized HTML whole-page goldens | Runtime values for calls, collections, logical expressions, chars, structs, and short-circuit behavior | The same 15 canonical cases through `rendered_output_exact` | none | `d5256868b` |
 | Phase 5D3 nine normalized receiver HTML whole-page goldens | Immutable, mutable, nested, chained, exported, alias-return, and post-mutation receiver behavior | The same nine canonical cases through exact context-rich runtime output | none | `914c1c131` |
-| Phase 5D4 nine normalized template/import HTML whole-page goldens | Import execution/suppression, runtime templates, const slots, CSS, Markdown, and positional slot behavior | Runtime exact/order/exact-once plus narrow static `index.html` assertions in the same nine cases | none | pending acceptance commit |
+| Phase 5D4 nine normalized template/import HTML whole-page goldens | Import execution/suppression, runtime templates, const slots, CSS, Markdown, and positional slot behavior | Runtime exact/order/exact-once plus narrow static `index.html` assertions in the same nine cases | none | `71f75c220` |
+| Phase 5D5 five normalized static HTML whole-page goldens | Page/static const-template content, source order, and unreferenced tracked-asset non-emission | Narrow `index.html` content/order/exact-once assertions plus `artifacts_must_not_exist` | none | pending acceptance commit |
 
 ### Coverage gap and handoff ledger
 
