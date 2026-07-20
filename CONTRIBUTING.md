@@ -106,6 +106,22 @@ A successful HTML or HTML-Wasm backend always runs its universal backend baselin
 semantic, artifact, golden, absence or expected-warning assertion. A whole-case acceptance-only
 fixture uses `role = "smoke"`.
 
+Failure `diagnostic_codes` and exact `warning_codes` are unordered multisets, so duplicate codes
+must be repeated. Exact diagnostic matching is the default:
+
+```toml
+[backends.html]
+mode = "failure"
+warnings = "forbid"
+diagnostic_codes = ["BST-RULE-0033", "BST-RULE-0033"]
+```
+
+Use `diagnostic_match = "contains"` only for an intentional independent cascade or recovery path,
+and always add a substantive `diagnostic_match_reason`. The suite audit treats an unjustified
+contains block as a hard finding. Expected warnings use `warnings = "exact"` with an exact
+`warning_codes` multiset. `warnings = "forbid"` rejects every warning, while `warnings = "ignore"`
+intentionally leaves warnings unchecked.
+
 ## Validation
 
 The executable validation policy is summarized in [validation.bd](docs/src/docs/codebase/style-guide/validation.bd).

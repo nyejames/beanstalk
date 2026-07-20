@@ -30,26 +30,26 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 3F — diagnostic and warning assertion documentation closure
-LAST_ACCEPTED_COMMIT: `e3f820ec1` (Phase 3C2)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 3E contains-policy slice is ready to commit; no unrelated changes currently visible
+CURRENT_SLICE: Phase 4A — compiler-owned diagnostic reason identity
+LAST_ACCEPTED_COMMIT: `ec6c828a1` (Phase 3E)
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; Phase 3F documentation closure is ready to commit; unrelated generated font/style rebuild churn from `a83e9587f` must remain unstaged
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: `testing.bd` and contributor examples need schema-5 exact diagnostic/warning and justified contains wording; `index.md` needs review only
-- code: Phase 3 assertion ownership, exact diagnostic/warning identity, schema 5, and contains hard policy are complete
+- docs: Phase 3 schema-5 exact diagnostics, exact warnings, and justified contains workflow wording is current; `index.md` already maps the assertion-family tree
+- code: Phase 4A must extend the compiler-owned typed diagnostic payload/reason owner without creating a runner taxonomy
 ACCEPTANCE_CRITERIA:
-- document exact diagnostic and warning code multisets, duplicate counts, and justified contains mode without exposing implementation details
-- update canonical expectation examples and review `index.md` for moved-module accuracy
-- rebuild documentation from source, inspect the changed routes/diff, and close Phase 3 in the active plan
+- add one crate-private stable reason-identity path beside typed diagnostic payload definitions
+- expose code, severity, and optional qualified reason key independently of rendering and `Debug`
+- add representative reason-key and uniqueness coverage while keeping the runner out of compiler payload taxonomy
 VALIDATION_STATE:
+- `cargo run --quiet -- build docs --release`: passed for Phase 3F; codebase style-guide route inspected
 - `just validate`: passed for Phase 3E; cross-target Clippy, 3,540 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
-- `cargo run --quiet -- tests --audit`: passed for Phase 3E; schema 5, 19 justified contains blocks, 1,645 cases, 1,778 executions, and zero hard findings
-DOCS_IMPACT: `index.md` updated for the moved assertion module tree; progress matrix unchanged
+DOCS_IMPACT: Phase 3 testing workflow and contributor examples updated; `index.md` reviewed without edits; progress matrix unchanged
 BLOCKERS_OR_OPEN_DECISIONS: Ollama wrapper still requires removed `docs/codebase-style-guide.md`; 19 justified diagnostic-contains blocks record duplicate module compilation that the queued canonical-module plan must remove
-DELEGATION_DECISION: parent-direct — only the parent may edit authorized workflow documentation
-NEXT_WORKER_ORDER: none
+DELEGATION_DECISION: codex-cli fallback — the user-selected Ollama default is cleanly blocked before edits by its stale required-document path
+NEXT_WORKER_ORDER: codex-cli, parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit Phase 3E, refresh its hash, update Phase 3 documentation/examples, and run the documentation release-build gate
+NEXT_RESUME_ACTION: commit Phase 3F with exact documentation paths/hunks, refresh its hash, inspect the diagnostic owner, and delegate bounded Phase 4A implementation through Codex CLI fallback
 
 ---
 
@@ -155,7 +155,8 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 3D2 import-alias warning migration | `c566da516` | Accepted | `BST-IMPORT-0003` exact counts preserved across three fixtures; three count-only fixtures remain |
 | Phase 3D3 final warning migration | `d1057bc5a` | Accepted | All 21 exact-warning fixtures author stable code multisets; zero canonical `warning_count` occurrences |
 | Phase 3C2 warning compatibility deletion | `e3f820ec1` | Accepted | Schema 5 exact-code-only warnings; 129 focused runner tests; 3,534 Rust tests; no active count path |
-| Phase 3E contains-mode hard policy | pending acceptance commit | Accepted | One hard-policy owner; 135 focused runner tests; 19 justified canonical contains blocks; zero hard findings |
+| Phase 3E contains-mode hard policy | `ec6c828a1` | Accepted | One hard-policy owner; 135 focused runner tests; 19 justified canonical contains blocks; zero hard findings |
+| Phase 3F assertion workflow documentation | pending acceptance commit | Accepted | Schema 5 exact multiset and justified-contains workflow documented; release docs build passed; `index.md` current |
 
 ---
 
@@ -745,12 +746,12 @@ Migrate one semantic family per slice:
 
 ## Phase 3 acceptance
 
-- [ ] Assertion modules have one responsibility each.
-- [ ] Unexpected diagnostics and warnings fail.
-- [ ] Contains mode is rare, justified, and reported.
+- [x] Assertion modules have one responsibility each.
+- [x] Unexpected diagnostics and warnings fail.
+- [x] Contains mode is rare, justified, and reported.
 - [x] No warning-count compatibility path remains.
-- [ ] `testing.bd`, examples, and `index.md` are current.
-- [ ] Full validation passes.
+- [x] `testing.bd`, examples, and `index.md` are current.
+- [x] Full validation passes.
 
 ---
 

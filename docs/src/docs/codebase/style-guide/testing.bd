@@ -235,10 +235,11 @@ Audit cannot be combined with filters or `--list`. It writes the reporting-owned
 expectation facts, hard-policy violations and advisory missing-classification findings. The report
 is review input only; it never deletes, merges or rewrites fixtures.
 
-The inventory reports acceptance-only, rendered-output, artifact, golden, absence and
+The schema 5 inventory reports acceptance-only, rendered-output, artifact, golden, absence and
 expected-warning backend counts, plus the zero baseline-only invariant. Per-backend fields keep
-`baseline_applied`, `acceptance_only`, `assertion_kinds`, `golden_present` and `golden_mode`
-separate so the report matches what ran.
+`baseline_applied`, `acceptance_only`, `assertion_kinds`, `golden_present`, `golden_mode`, exact
+warning codes, diagnostic match mode and any contains-mode reason separate so the report matches
+what ran.
 
 Hard policy has one suite-policy owner. Duplicate primary contracts, a primary without a contract
 and a whole-case acceptance-only fixture without `role = "smoke"` are hard findings. Normal list
@@ -248,11 +249,46 @@ complete JSON report, then returns failure. Advisory classification findings rem
 ### Diagnostics assertions
 
 - Ordinary source/config/import/type/rule/borrow failures should assert stable `diagnostic_codes`.
+- `diagnostic_codes` is an exact unordered multiset by default. Repeat a code when the diagnostic
+  must occur more than once.
 - Add rendered message fragments only when wording or rendered labels are part of the contract.
 - Infrastructure-boundary tests may assert infrastructure `ErrorType`.
 - Preserve source location assertions where location behavior is important.
 - Do not use full rendered diagnostic snapshots when a stable code and structured assertion are sufficient.
 - Do not weaken a diagnostic case into a generic "must fail" assertion.
+
+[codeblock, $code("text"):
+    [backends.html]
+    mode = "failure"
+    warnings = "forbid"
+    diagnostic_codes = ["BST-RULE-0033", "BST-RULE-0033"]
+]
+
+Use `diagnostic_match = "contains"` only when intentional independent recovery or cascades make
+additional diagnostics part of the accepted current behaviour. Every contains-mode block needs a
+substantive `diagnostic_match_reason`. The suite audit reports the reason and treats a missing or
+blank reason as a hard policy finding.
+
+[codeblock, $code("text"):
+    diagnostic_match = "contains"
+    diagnostic_match_reason = "Independent recovery may emit additional diagnostics from another source unit."
+]
+
+Warnings use a separate backend-local contract:
+
+- `warnings = "forbid"` rejects every warning and accepts no `warning_codes` field.
+- `warnings = "ignore"` deliberately makes warnings non-contractual and accepts no
+  `warning_codes` field.
+- `warnings = "exact"` requires `warning_codes` as an exact unordered multiset. Repeat duplicate
+  codes to preserve their required count.
+
+[codeblock, $code("text"):
+    [backends.html]
+    mode = "success"
+    warnings = "exact"
+    warning_codes = ["BST-RULE-0022", "BST-RULE-0022"]
+    rendered_output_contains = ["warning-contract result=one"]
+]
 
 ### Backend matrices and artifact assertions
 
