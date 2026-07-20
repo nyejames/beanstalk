@@ -2929,6 +2929,20 @@ contract = "language.maps.explicit_copy_independent_after_mutation"
 role = "primary"
 
 [[case]]
+id = "map_remove_returns_owned_value"
+path = "map_remove_returns_owned_value"
+tags = ["integration", "borrows", "hashmaps"]
+contract = "language.maps.remove_returns_owned_value_outlives_mutation"
+role = "primary"
+
+[[case]]
+id = "map_borrowed_lookup_key"
+path = "map_borrowed_lookup_key"
+tags = ["integration", "borrows", "hashmaps"]
+contract = "language.maps.lookup_key_borrowed_by_contains_get_remove"
+role = "primary"
+
+[[case]]
 id = "literal_match_requires_else_failure"
 path = "literal_match_requires_else_failure"
 tags = ["integration","control-flow","diagnostics"]
