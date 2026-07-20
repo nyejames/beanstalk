@@ -30,26 +30,26 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 6 inserted non-copy key/value consumption and explicit-copy integration ownership
-LAST_ACCEPTED_COMMIT: `d9e4d7fa3` (Phase 6 removed-value ownership and borrowed lookup-key integration owners)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; removed-value/key-borrow slice is committed; unrelated compiler-design docs source and generated work remains unstaged
+CURRENT_SLICE: Phase 7 prune and narrow source-shaped hashmap borrow-checker units
+LAST_ACCEPTED_COMMIT: `4c323a4f4` (Phase 6 inserted non-copy key/value and explicit-copy integration owners)
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; Phase 6 is complete; unrelated compiler-design docs source and generated work remains unstaged
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: access-and-aliasing and borrow-validation leaves own hashmap alias legality; testing standards require exact diagnostic identity and source locations
-- code: removed values and lookup-key borrowing are integration-owned; inserted non-copy key/value consumption remains unit-only or unclassified
+- code: Phase 6 has primary integration owners for all required hashmap access/ownership behavior; `borrow_checker_map_tests.rs` still contains 15 whole-source units to classify and prune
 ACCEPTANCE_CRITERIA:
-- add primary negative integration owners for the current inserted non-copy key and value consumption rules where distinct
-- add a positive explicit-copy insertion owner when independence requires it, without duplicating the existing lookup-copy contract
-- use exact compiler-owned diagnostics or runtime values with structured HTML-Wasm rejection; do not prune units
+- classify every map unit against a Phase 6 primary owner or a distinct hidden transfer/state invariant
+- delete source-visible duplicates and replace only genuinely hidden `MayConsume` or aggregate-transfer coverage with narrow fact tests
+- remove stale helpers and rename retained tests after stage invariants without changing production behavior
 VALIDATION_STATE:
-- `just validate`: passed; cross-target Clippy, 3,576 Rust tests, 1,788 integration executions, docs check, and 28 benchmark cases
-- focused removed-value/key cases: passed; four backend blocks and zero audit hard findings across 1,650 cases
+- `just validate`: passed; cross-target Clippy, 3,576 Rust tests, 1,796 integration executions, docs check, and 28 benchmark cases
+- focused insertion cases: passed; eight backend blocks and zero audit hard findings across 1,654 cases
 DOCS_IMPACT: progress matrix reviewed; existing broad hashmap borrow/diagnostic and final-use wording remains accurate; index unchanged
 BLOCKERS_OR_OPEN_DECISIONS: none for the next slice; Ollama remains required with no provider substitution
-DELEGATION_DECISION: Ollama — bounded inserted-key/value consumption and explicit-copy ownership slice
+DELEGATION_DECISION: Ollama — bounded `borrow_checker_map_tests.rs` ownership/pruning slice
 NEXT_WORKER_ORDER: Ollama only; no provider substitution
 STOP_REASON: none
-NEXT_RESUME_ACTION: launch the inserted non-copy key/value consumption and explicit-copy integration slice through Ollama
+NEXT_RESUME_ACTION: launch Phase 7 hashmap borrow-checker unit pruning through Ollama
 
 ---
 
@@ -183,6 +183,7 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 6 live hashmap lookup alias conflict | `3e27e8d95` | Accepted | Fallible-success aliases survive catch joins; final-use semantics are restored; live `get` alias blocks `set` with exact reason and primary/secondary locations; 1,646 cases and 1,780 executions |
 | Phase 6 alias final-use and explicit-copy independence | `d002a80cf` | Accepted | Two primary HTML runtime owners prove final-use mutation and non-copy explicit-copy independence with HTML-Wasm structured rejection; 1,648 cases and 1,784 executions |
 | Phase 6 removed-value ownership and borrowed lookup keys | `d9e4d7fa3` | Accepted | Two primary HTML runtime owners prove removed non-copy values outlive later mutation/clear and lookup keys remain usable after contains/get/remove; 1,650 cases and 1,788 executions |
+| Phase 6 inserted ownership and explicit-copy insertion | `4c323a4f4` | Accepted | Three primary negatives distinguish immutable `set` later-use access from literal key/value ownership transfer; one exact runtime owner proves copied insertion independence; 1,654 cases and 1,796 executions |
 
 ---
 
@@ -930,23 +931,23 @@ Add end-to-end owners before pruning source-shaped borrow/map units.
 
 - [x] Removed value remains usable after later map mutation/clear.
 - [x] Lookup keys are borrowed, not consumed.
-- [ ] Inserted non-copy keys/values follow current consumption rules.
-- [ ] Explicit-copy success exists where independence is required.
+- [x] Inserted non-copy keys/values follow current consumption rules.
+- [x] Explicit-copy success exists where independence is required.
 - [ ] Reuse the existing runtime map ordering case rather than duplicate it.
 
 ### Backend matrix
 
-- [ ] Use one input with HTML success and HTML-Wasm structured rejection where map reachability matters.
-- [ ] Do not require unsupported Wasm success.
+- [x] Use one input with HTML success and HTML-Wasm structured rejection where map reachability matters.
+- [x] Do not require unsupported Wasm success.
 
 ## Phase 6 acceptance
 
-- [ ] Map access/ownership contracts have primary integration owners.
-- [ ] Negative cases fail for the intended reason.
-- [ ] Positive cases observe exact runtime values.
-- [ ] No unit has been deleted yet.
-- [ ] No deferred map feature was introduced.
-- [ ] Full validation passes.
+- [x] Map access/ownership contracts have primary integration owners.
+- [x] Negative cases fail for the intended reason.
+- [x] Positive cases observe exact runtime values.
+- [x] No unit has been deleted yet.
+- [x] No deferred map feature was introduced.
+- [x] Full validation passes.
 
 ---
 
