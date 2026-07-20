@@ -30,26 +30,27 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 14A canonical contract and role backfill, batch 10 (entries 1501–1647)
-LAST_ACCEPTED_COMMIT: `901fcbacd` (Phase 14A classification batch 9)
+CURRENT_SLICE: Phase 14B final suite-policy enforcement and ownership reporting
+LAST_ACCEPTED_COMMIT: `292b50350` (Phase 14A classification closure)
 WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; accepted code is committed; concurrent docs work is out of scope and remains separate if present
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: canonical case metadata, suite-policy, and final governance rules govern the next slice
-- code: tests/cases/manifest.toml and the schema-6 audit inventory own the contract/role backfill
+- docs: canonical case metadata, suite-policy, validation, and final governance rules govern the next slice
+- code: integration_test_runner/policy.rs and its focused tests own final classification enforcement and ownership findings
 ACCEPTANCE_CRITERIA:
-- the final 147 canonical cases receive explicit contracts and roles
-- duplicate primary contracts remain hard failures and secondary owners stay deliberate
-- tag spelling/order and obsolete tags are normalized without changing behavior
+- missing roles and non-smoke missing contracts are hard findings from the existing policy owner
+- intentional whole-case acceptance-only smoke cases remain valid without invented contracts
+- contract families without a primary are reported while backend-only and adversarial-only ownership remains distinguishable
+- normal list/execution and audit share the same evaluator without a parallel validation path
 VALIDATION_STATE:
 - `just validate`: passed; cross-target Clippy, 3,526 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
-- Phase 14A audit: passed; zero hard findings; 143 missing roles and 147 missing contracts remain after batch 9
+- Phase 14A audit: passed; zero hard findings; all 1,647 roles are explicit; every non-smoke case has a contract; 12 intentional smoke cases remain contractless under the transitional advisory policy
 DOCS_IMPACT: progress matrix reviewed; support and backend coverage are unchanged by fixture consolidation; index unchanged
-BLOCKERS_OR_OPEN_DECISIONS: none for the next slice; Ollama remains required with no provider substitution
+BLOCKERS_OR_OPEN_DECISIONS: none; 81 contract families without a primary are intentionally 66 backend-only and 15 adversarial-only families, with no ordinary orphan family
 DELEGATION_DECISION: Ollama — bounded Phase 14 implementation slices
 NEXT_WORKER_ORDER: Ollama only; no provider substitution
 STOP_REASON: none
-NEXT_RESUME_ACTION: launch Phase 14A classification batch 10 (entries 1501–1647) through Ollama
+NEXT_RESUME_ACTION: launch Phase 14B final suite-policy enforcement through Ollama
 
 ---
 
@@ -214,6 +215,8 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 14A classification batch 7 | `4908f02e0` | Accepted | Entries 901–1100 reviewed; 199 contracts and roles added while one whole-case acceptance-only fixture remained smoke, cast/char/assert families gained explicit ownership, eight target-lowering/ABI cases remained backend-role, and the shared unhandled-fallible-expression family received context-neutral naming; zero hard findings; 543 missing roles and 547 missing contracts remain; 3,526 Rust tests and 1,793 integration executions |
 | Phase 14A classification batch 8 | `925d446e9` | Accepted | Entries 1101–1300 reviewed; 200 contracts and roles added, four JS lowering cases remained backend-role, observable Core package behavior stayed primary, and config/facade policy families were narrowed so distinct rejection reasons do not hide under broad secondary ownership; zero hard findings; 343 missing roles and 347 missing contracts remain; 3,526 Rust tests and 1,793 integration executions |
 | Phase 14A classification batch 9 | `901fcbacd` | Accepted | Entries 1301–1500 reviewed; 200 contracts and roles added, eight target/reachability/asset cases remained backend-role, and namespace misuse, value-producing if, match-warning, and facade private-type families were split into distinct ownership contracts; zero hard findings; 143 missing roles and 147 missing contracts remain; 3,526 Rust tests and 1,793 integration executions |
+| Phase 14A classification batch 10 | `6d51d6e07` | Accepted | Entries 1501–1647 reviewed; all 143 incomplete cases classified, reactive subscription positions were narrowed into distinct semantic owners, 22 target/helper cases remained backend-role, and zero roles remained missing; 3,526 Rust tests and 1,793 integration executions |
+| Phase 14A classification closure | `292b50350` | Accepted | Eight invented contracts were removed from whole-case acceptance-only smoke fixtures; all 1,647 cases now have explicit roles, every non-smoke case has a contract, and the only primary-less contract families are 66 backend-only plus 15 adversarial-only owners; zero hard findings; 3,526 Rust tests and 1,793 integration executions |
 
 ---
 
