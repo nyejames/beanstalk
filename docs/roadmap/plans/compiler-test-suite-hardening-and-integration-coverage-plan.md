@@ -30,21 +30,21 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 14C14e compile-project frontend unit ownership review
-LAST_ACCEPTED_COMMIT: `afa944551` (Phase 14C14c code)
+CURRENT_SLICE: Phase 14C14f builder-surface registry and source-kind unit ownership review
+LAST_ACCEPTED_COMMIT: `2aa652d29` (Phase 14C14e code)
 WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; accepted code is committed; concurrent example-name work remains separately committed
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: unit-test ownership, pruning, compiler-stage boundaries, and final governance rules govern the next slice
-- code: all 124 reviewed Stage 0, frontend-preparation, and filesystem-identity units now have distinct owners; compile-project frontend orchestration is next
+- code: all 149 retained tests across the reviewed Stage 0, frontend-preparation, filesystem-identity, and compile-project frontend groups now have distinct owners; builder-surface registries and source-kind policy are next
 ACCEPTANCE_CRITERIA:
 - every remaining full-source unit has a distinct hidden invariant, parser fact, stage boundary, or policy owner
 - units superseded by a stronger canonical integration primary are deleted with replacement evidence
 - stale test-only helpers or production APIs are removed with their final caller
 - HIR, build-system, backend, and final TIR units keep only their owning semantic relationships and hidden facts
 VALIDATION_STATE:
-- `just validate`: passed; cross-target Clippy, 3,484 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
-- Phase 14C14d focused groups: passed; 19 frontend-orchestration tests and five host-runnable filesystem-identity tests, with eight strict non-UTF-8 identity tests gated to Linux
+- `just validate`: passed; cross-target Clippy, 3,480 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
+- Phase 14C14e focused group: passed; 25 compile-project frontend tests
 - Phase 14B audit: passed; zero hard findings; 66 backend-only and 15 adversarial-only primary-less contract advisories
 - Priya expectation alignment: accepted at `6efac7012`; 13 stale Rust and integration expectation files now match renamed inputs
 DOCS_IMPACT: testing, validation, and contributor workflow aligned with final suite policy; progress matrix and index unchanged
@@ -52,7 +52,7 @@ BLOCKERS_OR_OPEN_DECISIONS: none; 81 contract families without a primary are int
 DELEGATION_DECISION: Ollama — bounded Phase 14 implementation slices
 NEXT_WORKER_ORDER: Ollama only; no provider substitution
 STOP_REASON: none
-NEXT_RESUME_ACTION: launch the compile-project frontend unit group through Ollama
+NEXT_RESUME_ACTION: launch the builder-surface registry and source-kind unit group through Ollama
 
 ---
 
@@ -237,6 +237,7 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 14C14b Stage 0 discovery and topology units | `0828bb7ea` | Accepted | Eight duplicate, cosmetic config-shape, and generic mixed-collection units removed in favor of identical focused owners or canonical cases; entry-root fallback now proves the same-stem package file is excluded; retained string and bool shape units assert the exact expected-shape payload; 46 assigned graph, config, topology, collision, and source-kind policy owners remain; 3,484 Rust tests and 1,793 integration executions |
 | Phase 14C14c Stage 0 source loading and provider orchestration | `afa944551` | Accepted | All 11 source-kind diagnostic, one-read cache, deterministic ordering, infrastructure error, provider separation/call-count, parallel/serial strategy, and cross-module-root queuing units retained as hidden Stage 0 owners; Markdown explicit-extension and unsupported-kind units now assert exact typed path and extension payloads; 3,484 Rust tests and 1,793 integration executions |
 | Phase 14C14d frontend preparation and filesystem identity | no code change after `afa944551` | Accepted | All 20 frontend-preparation and 13 filesystem-identity tests retained as deterministic merge/remapping, scheduling-policy, chunk-planning, counter, malformed-payload, canonicalization, discovery-outcome, and strict platform filesystem-identity owners; 19 frontend tests and five host-runnable filesystem tests pass on macOS, while eight non-UTF-8 identity tests remain Linux-gated; latest full gate remains 3,484 Rust tests and 1,793 integration executions |
+| Phase 14C14e compile-project frontend units | `2aa652d29` | Accepted | Four weak source-visible or cosmetic duplicates removed in favor of canonical import-collision and unsupported-JS owners, an exact external-JS parser owner, and the retained realistic project-local receiver rejection; missing entry-root coverage now asserts `ConfiguredEntryRootMissing`; 25 provider registry, cache, runtime-metadata reachability, identity/remapping, capability, infrastructure, discovery, and HIR metadata owners remain; 3,480 Rust tests and 1,793 integration executions |
 
 ---
 
@@ -1417,6 +1418,10 @@ Do not present lower counts or faster time as proof of correctness.
 | `create_project_modules_tests::{rejects_core_string_key_with_int_value,rejects_core_string_key_with_char_value,rejects_backend_bool_key_with_int_value,rejects_backend_string_key_with_bool_value}` | Config schema rejects values with the wrong primitive shape | `config_wrong_shape_string_rejected` (`language.config.value_type_mismatch_rejected`) owns the source-visible family | `rejects_core_string_key_with_bool_value` and `rejects_backend_bool_key_with_string_value` retain exact string/bool expected-shape payloads | `0828bb7ea` |
 | `create_project_modules_tests::rejects_closed_string_set_config_key_with_unsupported_value` | Closed-set config values reject unsupported strings | `config_invalid_project_value_rejected` (`language.config.invalid_project_value_rejected`) | focused string/bool shape units retain the shared typed payload family | `0828bb7ea` |
 | `create_project_modules_tests::rejects_package_folders_with_mixed_collection` | Heterogeneous collection literals are rejected while parsing config | `mixed_collection_literal_rejected` (`language.collections.mixed_literal_rejected`) | none; the removed unit asserted only that some ordinary AST diagnostic existed | `0828bb7ea` |
+| `compile_project_frontend_tests::provider_backed_import_participates_in_visible_name_collisions` | Provider-backed grouped imports participate in the ordinary visible-name collision rule | `source_import_alias_collision_with_local_rejected` (`language.imports.import_name_collision_rejected`) plus external boundary cases including `external_import_alias_collision_with_source_rejected` | provider grouped/namespace compile and cache tests retain provider registration and lowering facts | `2aa652d29` |
+| `compile_project_frontend_tests::html_js_provider_invalid_js_file_surfaces_diagnostics` | Unannotated project-local JavaScript exports are rejected | `unsupported_external_js_import_rejected` (`language.imports.unsupported_external_js_import_rejected`) with exact `BST-IMPORT-0022` | none; the removed unit asserted only generic failure | `2aa652d29` |
+| `compile_project_frontend_tests::html_js_provider_malformed_receiver_signature_surfaces_diagnostics` | A receiver parameter after a normal parameter is rejected | `external_js::parser::tests::receiver_parameter_must_be_first` with exact `InvalidReceiverParameter` and free-function classification | `unsupported_external_js_import_rejected` owns end-to-end `BST-IMPORT-0022` propagation | `2aa652d29` |
+| `compile_project_frontend_tests::html_js_provider_rejects_well_formed_receiver_methods_in_project_local_js` | Project-local JavaScript cannot expose receiver-style signatures | `html_js_provider_receiver_method_in_project_local_js_rejected` | none; the removed bare-import form was a cosmetic duplicate of the retained call-site fixture | `2aa652d29` |
 
 ### Coverage gap and handoff ledger
 
