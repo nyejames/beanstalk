@@ -153,31 +153,16 @@ path = "function_call_mutable_param_requires_explicit_tilde"
 tags = ["integration","functions","diagnostics"]
 
 [[case]]
-id = "function_call_mutable_param_fresh_template_arg"
-path = "function_call_mutable_param_fresh_template_arg"
-tags = ["integration","functions"]
-
-[[case]]
-id = "function_call_mutable_param_fresh_collection_arg"
-path = "function_call_mutable_param_fresh_collection_arg"
-tags = ["integration","functions","collections"]
-
-[[case]]
-id = "function_call_mutable_param_fresh_computed_arg"
-path = "function_call_mutable_param_fresh_computed_arg"
-tags = ["integration","functions"]
-contract = "language.functions.mutable_parameter_accepts_fresh_computed_value"
+id = "function_call_mutable_param_fresh_values"
+path = "function_call_mutable_param_fresh_values"
+tags = ["integration","functions","collections","structs"]
+contract = "language.functions.mutable_parameter_accepts_fresh_values"
 role = "primary"
 
 [[case]]
 id = "function_call_mutable_param_copy_arg"
 path = "function_call_mutable_param_copy_arg"
 tags = ["integration","functions"]
-
-[[case]]
-id = "function_call_mutable_param_fresh_struct_arg"
-path = "function_call_mutable_param_fresh_struct_arg"
-tags = ["integration","functions","structs"]
 
 [[case]]
 id = "function_call_immutable_place_missing_tilde"

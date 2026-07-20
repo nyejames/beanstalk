@@ -1,0 +1,4 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_exact = "function_call_mutable_param_fresh_values computed=4 template=after collection=4 struct=after"
