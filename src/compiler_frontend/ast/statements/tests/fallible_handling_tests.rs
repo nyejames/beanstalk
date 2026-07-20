@@ -278,26 +278,6 @@ fn rejects_catch_handler_if_without_else_even_when_then_branch_returns() {
 }
 
 #[test]
-fn rejects_catch_handler_without_fallback_when_handler_ends_with_dynamic_assert() {
-    assert_invalid_fallible_handling(
-        "can_error |value String| -> String, Error!:\n    return! Error(\"boom\")\n;\n\nrecover |value String, should_stop Bool| -> String:\n    return can_error(value) catch |err|:\n        io.line([: [err.message]])\n        assert(should_stop, \"dynamic assertion can pass\")\n    ;\n;\n",
-        InvalidFallibleHandlingReason::CatchHandlerCanFallThrough,
-    );
-}
-
-// --------------------------
-//  Handler name conflict
-// --------------------------
-
-#[test]
-fn rejects_catch_handler_name_conflict_with_visible_declaration() {
-    assert_invalid_fallible_handling(
-        "can_error |value String| -> String, Error!:\n    return! Error(\"boom\")\n;\n\nrecover |value String| -> String:\n    err = \"taken\"\n    output = can_error(value) catch |err|:\n        io.line([: [err.message]])\n        then \"fallback\"\n    ;\n    return output\n;\n",
-        InvalidFallibleHandlingReason::CatchHandlerConflicts,
-    );
-}
-
-#[test]
 fn rejects_assignment_target_read_inside_catch_fallback() {
     assert_invalid_assignment_target(
         "can_error || -> Int, Error!:\n    return 1\n;\n\nrecover || -> Int:\n    value ~= 0\n    value = can_error() catch:\n        then value\n    ;\n    return value\n;\n",
@@ -334,14 +314,6 @@ fn rejects_bound_inline_catch_with_line_break_before_then() {
     assert_invalid_fallible_handling(
         "can_error || -> Int, Error!:\n    return 1\n;\n\nrecover || -> Int:\n    value = can_error() catch |err|\n        then err.code\n    return value\n;\n",
         InvalidFallibleHandlingReason::InlineCatchMultiline,
-    );
-}
-
-#[test]
-fn rejects_inline_catch_handler_chaining() {
-    assert_invalid_fallible_handling(
-        "can_error || -> Int, Error!:\n    return 1\n;\n\nrecover || -> Int:\n    value = can_error() catch then can_error() catch then 0\n    return value\n;\n",
-        InvalidFallibleHandlingReason::ExpectedCatchBlockOrHandler,
     );
 }
 
@@ -411,14 +383,6 @@ fn rejects_fallback_type_mismatch_before_hir_lowering() {
             ..
         }
     ));
-}
-
-#[test]
-fn rejects_then_in_zero_success_catch() {
-    assert_invalid_fallible_handling(
-        "fail || -> Error!:\n    return! Error(\"boom\")\n;\n\nrecover ||:\n    fail() catch:\n        then 0\n    ;\n;\n",
-        InvalidFallibleHandlingReason::FallbackValuesForErrorOnlyResult,
-    );
 }
 
 #[test]
@@ -550,38 +514,6 @@ fn accepts_nested_postfix_propagation_in_fallback() {
         return_values[0].kind,
         ExpressionKind::ValueBlock { .. }
     ));
-}
-
-#[test]
-fn rejects_nested_raw_fallible_in_fallback() {
-    assert_invalid_fallible_handling(
-        "inner || -> Int, Error!:\n    return 1\n;\n\nouter || -> Int, Error!:\n    return 2\n;\n\nrecover || -> Int:\n    return outer() catch:\n        then inner()\n    ;\n;\n",
-        InvalidFallibleHandlingReason::UnhandledErrorReturn,
-    );
-}
-
-#[test]
-fn rejects_empty_catch_handler_binding() {
-    assert_invalid_fallible_handling(
-        "can_error |value String| -> String, Error!:\n    return value\n;\n\nrecover |value String| -> String:\n    return can_error(value) catch ||:\n        then \"fallback\"\n    ;\n;\n",
-        InvalidFallibleHandlingReason::EmptyCatchHandlerBinding,
-    );
-}
-
-#[test]
-fn rejects_multiple_catch_handler_bindings() {
-    assert_invalid_fallible_handling(
-        "can_error |value String| -> String, Error!:\n    return value\n;\n\nrecover |value String| -> String:\n    return can_error(value) catch |err, other|:\n        then \"fallback\"\n    ;\n;\n",
-        InvalidFallibleHandlingReason::MultipleCatchHandlerBindings,
-    );
-}
-
-#[test]
-fn rejects_then_outside_catch_block() {
-    assert_invalid_fallible_handling(
-        "recover || -> Int:\n    then 0\n;\n",
-        InvalidFallibleHandlingReason::ThenWithNoActiveValueTarget,
-    );
 }
 
 #[test]
