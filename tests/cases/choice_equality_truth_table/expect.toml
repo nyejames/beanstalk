@@ -1,0 +1,4 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_exact = "choice_equality_truth_table unit_same=true unit_different=false word_same_payload=true word_different_payload=false unit_vs_payload=false different_payload_variants=false nested_same=true nested_different=false"

@@ -506,9 +506,11 @@ path = "choice_payload_const_non_const_field_rejected"
 tags = ["integration","diagnostics","choices"]
 
 [[case]]
-id = "choice_unit_equality_success"
-path = "choice_unit_equality_success"
+id = "choice_equality_truth_table"
+path = "choice_equality_truth_table"
 tags = ["integration","language","choices","equality"]
+contract = "language.choices.structural_equality_truth_table"
+role = "primary"
 
 [[case]]
 id = "choice_unit_equality_imported_variant_success"
@@ -534,41 +536,6 @@ tags = ["integration","language","choices","equality","imports"]
 id = "choice_unit_equality_in_function_return"
 path = "choice_unit_equality_in_function_return"
 tags = ["integration","language","choices","equality"]
-
-[[case]]
-id = "choice_payload_equality_same_payload_true"
-path = "choice_payload_equality_same_payload_true"
-tags = ["integration","language","choices","equality","js-backend"]
-
-[[case]]
-id = "choice_payload_structural_equality_success"
-path = "choice_payload_structural_equality_success"
-tags = ["integration","language","choices","equality","js-backend"]
-
-[[case]]
-id = "choice_payload_equality_different_payload_false"
-path = "choice_payload_equality_different_payload_false"
-tags = ["integration","language","choices","equality","js-backend"]
-
-[[case]]
-id = "choice_payload_equality_unit_vs_payload_false"
-path = "choice_payload_equality_unit_vs_payload_false"
-tags = ["integration","language","choices","equality","js-backend"]
-
-[[case]]
-id = "choice_payload_equality_same_choice_different_variants_false"
-path = "choice_payload_equality_same_choice_different_variants_false"
-tags = ["integration","language","choices","equality","js-backend"]
-
-[[case]]
-id = "choice_payload_equality_nested_choice_true"
-path = "choice_payload_equality_nested_choice_true"
-tags = ["integration","language","choices","equality","js-backend"]
-
-[[case]]
-id = "choice_payload_equality_nested_choice_false"
-path = "choice_payload_equality_nested_choice_false"
-tags = ["integration","language","choices","equality","js-backend"]
 
 [[case]]
 id = "choice_payload_equality_side_effects_evaluated_once"
