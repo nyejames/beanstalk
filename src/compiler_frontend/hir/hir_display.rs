@@ -114,7 +114,7 @@ impl<'a> HirDisplayContext<'a> {
         self
     }
 
-    #[cfg(any(test, feature = "show_hir"))]
+    #[cfg(feature = "show_hir")]
     pub(crate) fn with_type_environment(mut self, type_environment: &'a TypeEnvironment) -> Self {
         self.type_environment = Some(type_environment);
         self
