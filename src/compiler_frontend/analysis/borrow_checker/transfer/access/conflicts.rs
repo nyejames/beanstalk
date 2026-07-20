@@ -139,6 +139,7 @@ pub(super) fn check_mutable_access(
                 place,
                 InvalidMutableAccessReason::ImmutablePlace,
                 None,
+                None,
                 check.location.clone(),
             ));
         }
@@ -192,17 +193,25 @@ pub(super) fn check_mutable_access(
                 ));
             }
 
+            let conflicting_place = conflicting_local_index
+                .map(|index| {
+                    check
+                        .context
+                        .diagnostics
+                        .local_place(check.layout.local_ids[index])
+                })
+                .or(Some(DiagnosticPlace::Unknown));
+            let conflicting_location = conflicting_local_index.and_then(|index| {
+                check
+                    .context
+                    .diagnostics
+                    .local_source_location(check.layout.local_ids[index])
+            });
             return Err(check.context.diagnostics.invalid_mutable_access(
                 place,
                 InvalidMutableAccessReason::AliasedValueRequiresExclusiveAccess,
-                conflicting_local_index
-                    .map(|index| {
-                        check
-                            .context
-                            .diagnostics
-                            .local_place(check.layout.local_ids[index])
-                    })
-                    .or(Some(DiagnosticPlace::Unknown)),
+                conflicting_place,
+                conflicting_location,
                 check.location.clone(),
             ));
         }

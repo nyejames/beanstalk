@@ -483,8 +483,17 @@ impl CompilerDiagnostic {
         place: DiagnosticPlace,
         reason: InvalidMutableAccessReason,
         conflicting_place: Option<DiagnosticPlace>,
+        conflicting_location: Option<SourceLocation>,
         location: SourceLocation,
     ) -> Self {
+        let mut labels = vec![DiagnosticLabel::primary(location.clone())];
+        if let Some(conflicting_location) = conflicting_location.clone() {
+            labels.push(DiagnosticLabel::secondary(
+                conflicting_location,
+                Some(DiagnosticLabelMessage::ConflictingAccess),
+            ));
+        }
+
         Self::new(
             DiagnosticKind::Borrow(BorrowDiagnosticKind::InvalidMutableAccess),
             location,
@@ -492,8 +501,10 @@ impl CompilerDiagnostic {
                 place,
                 reason,
                 conflicting_place,
+                conflicting_location,
             },
         )
+        .with_labels(labels)
     }
 
     pub(crate) fn invalid_access_after_possible_ownership_transfer(

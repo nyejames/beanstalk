@@ -2908,6 +2908,13 @@ contract = "language.bindings.live_shared_alias_blocks_mutable_rebinding"
 role = "primary"
 
 [[case]]
+id = "map_get_alias_blocks_set_when_used_after_mutation"
+path = "map_get_alias_blocks_set_when_used_after_mutation"
+tags = ["integration", "borrows", "diagnostics", "hashmaps"]
+contract = "language.maps.get_alias_blocks_set_when_used_after_mutation"
+role = "primary"
+
+[[case]]
 id = "literal_match_requires_else_failure"
 path = "literal_match_requires_else_failure"
 tags = ["integration","control-flow","diagnostics"]

@@ -20,6 +20,7 @@ use crate::compiler_frontend::compiler_errors::SourceLocation;
 use crate::compiler_frontend::compiler_messages::InvalidMutableAccessReason;
 use crate::compiler_frontend::datatypes::builtin_type_ids;
 use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind, ValueKind};
+use crate::compiler_frontend::hir::hir_side_table::HirLocalOriginKind;
 use crate::compiler_frontend::hir::ids::{BlockId, HirNodeId};
 use crate::compiler_frontend::hir::patterns::{HirMatchArm, HirPattern};
 use crate::compiler_frontend::hir::places::HirPlace;
@@ -202,7 +203,19 @@ fn transfer_assign_target(
                 match rhs_alias_roots {
                     Some(rhs_roots) => {
                         let target_is_mutable = layout.local_mutable[local_index];
-                        if target_is_mutable && !rhs_roots.is_empty() {
+                        let target_is_compiler_owned_scratch =
+                            is_compiler_owned_scratch_local(transfer_context, layout, local_index);
+                        // WHAT: a fresh compiler-owned scratch/result local carries a shared alias
+                        // through compiler-introduced control flow (notably fallible catch joins)
+                        // without requesting source-exclusive access. Ordinary user mutable bindings
+                        // keep their exclusive-access rules.
+                        // WHY: treating scratch-to-scratch alias transfer as a source mutation
+                        //      produced a false AliasedValueRequiresExclusiveAccess at the producing
+                        //      get and stopped the alias before it could reach the user binding.
+                        if target_is_mutable
+                            && !rhs_roots.is_empty()
+                            && !target_is_compiler_owned_scratch
+                        {
                             let mut check = AccessCheckContext {
                                 context: transfer_context,
                                 layout,
@@ -349,6 +362,25 @@ fn transfer_assign_target(
     Ok(())
 }
 
+// WHAT: Reports whether a local is compiler-owned scratch/result storage rather than a
+//      user-declared mutable binding.
+// WHY: fresh compiler-owned scratch locals carry shared alias state through compiler-introduced
+//      control flow without requesting source-exclusive access, so the uninit-assignment
+//      exclusive-access check must be skipped for them. User bindings and any origin outside the
+//      proven compiler-owned set keep the existing rules.
+fn is_compiler_owned_scratch_local(
+    context: &BorrowTransferContext<'_>,
+    layout: &FunctionLayout,
+    local_index: usize,
+) -> bool {
+    matches!(
+        context
+            .diagnostics
+            .local_origin_kind(layout.local_ids[local_index]),
+        Some(HirLocalOriginKind::CompilerTemp)
+    )
+}
+
 fn apply_slot_rebinding(
     state: &mut BorrowState,
     local_count: usize,
@@ -401,6 +433,14 @@ fn direct_place_roots_from_expression(
     location: SourceLocation,
     diagnostics: &BorrowDiagnostics<'_>,
 ) -> Result<Option<RootSet>, BorrowCheckError> {
+    // WHAT: a fallible success unwrap carries the success payload's alias roots through the
+    //      carrier local, so a map `get` result keeps aliasing the map across the catch join.
+    // WHY: without this, the shared alias established at `get` is dropped at the unwrap and
+    //      never reaches the user binding, so a later mutation is not blocked.
+    if let HirExpressionKind::FallibleUnwrapSuccess { result } = &expression.kind {
+        return direct_place_roots_from_expression(layout, state, result, location, diagnostics);
+    }
+
     let HirExpressionKind::Load(place) = &expression.kind else {
         return Ok(None);
     };
@@ -1034,6 +1074,7 @@ fn transfer_aggregate_child(
                 return Err(diagnostics.invalid_mutable_access(
                     diagnostics.local_place(layout.local_ids[root_index]),
                     InvalidMutableAccessReason::AliasedValueRequiresExclusiveAccess,
+                    None,
                     None,
                     location.clone(),
                 ));

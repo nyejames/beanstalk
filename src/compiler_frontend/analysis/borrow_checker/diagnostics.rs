@@ -50,6 +50,18 @@ impl<'a> BorrowDiagnostics<'a> {
         self.module.side_table.local_origin_kind(local_id)
     }
 
+    pub(super) fn local_source_location(&self, local_id: LocalId) -> Option<SourceLocation> {
+        self.module
+            .side_table
+            .hir_source_location_for_hir(HirLocation::Local(local_id))
+            .or_else(|| {
+                self.module
+                    .side_table
+                    .ast_location_for_hir(HirLocation::Local(local_id))
+            })
+            .cloned()
+    }
+
     pub(super) fn reactive_source_id_for_local(
         &self,
         local_id: LocalId,
@@ -173,10 +185,17 @@ impl<'a> BorrowDiagnostics<'a> {
         place: DiagnosticPlace,
         reason: InvalidMutableAccessReason,
         conflicting_place: Option<DiagnosticPlace>,
+        conflicting_location: Option<SourceLocation>,
         location: SourceLocation,
     ) -> BorrowCheckError {
-        CompilerDiagnostic::invalid_mutable_access(place, reason, conflicting_place, location)
-            .into()
+        CompilerDiagnostic::invalid_mutable_access(
+            place,
+            reason,
+            conflicting_place,
+            conflicting_location,
+            location,
+        )
+        .into()
     }
 
     pub(super) fn invalid_access_after_possible_ownership_transfer(

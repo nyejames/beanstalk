@@ -152,9 +152,11 @@ impl DiagnosticPayload {
             DiagnosticPayload::InvalidMutableAccess {
                 place,
                 conflicting_place,
+                conflicting_location,
                 ..
             } => {
                 remap_place_with_optional_conflict(place, conflicting_place, remap);
+                remap_optional_location(conflicting_location, remap);
             }
 
             DiagnosticPayload::InvalidConfig { key, reason } => {

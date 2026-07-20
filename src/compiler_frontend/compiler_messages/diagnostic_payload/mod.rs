@@ -206,6 +206,7 @@ pub enum DiagnosticPayload {
         place: DiagnosticPlace,
         reason: InvalidMutableAccessReason,
         conflicting_place: Option<DiagnosticPlace>,
+        conflicting_location: Option<SourceLocation>,
     },
 
     InvalidAccessAfterPossibleOwnershipTransfer {

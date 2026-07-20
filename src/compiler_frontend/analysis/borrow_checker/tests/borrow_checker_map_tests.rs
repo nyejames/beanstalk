@@ -9,7 +9,7 @@ use crate::compiler_frontend::tests::hir_fixture_support::lower_hir;
 use crate::compiler_frontend::tests::parse_support::parse_single_file_ast;
 
 #[test]
-fn map_get_blocks_later_set() {
+fn map_get_alias_blocks_set_when_used_after_mutation() {
     let source = r#"
 scores ~{String = Int} = {"Ada" = 10}
 score = scores.get("Ada") catch:
@@ -17,16 +17,35 @@ score = scores.get("Ada") catch:
 ;
 ~scores.set("Linus", 7) catch:
 ;
+io.line([: [score]])
 "#;
     let (ast, mut string_table) = parse_single_file_ast(source);
     let hir = lower_hir(ast, &mut string_table);
     let external_package_registry = default_external_package_registry(&mut string_table);
     run_borrow_checker(&hir, &external_package_registry, &string_table)
-        .expect_err("get result should block later set");
+        .expect_err("a live get alias used after mutation should block the set");
 }
 
 #[test]
-fn map_get_blocks_later_remove() {
+fn map_get_alias_allows_set_when_used_before_mutation() {
+    let source = r#"
+scores ~{String = Int} = {"Ada" = 10}
+score = scores.get("Ada") catch:
+    then 0
+;
+io.line([: [score]])
+~scores.set("Linus", 7) catch:
+;
+"#;
+    let (ast, mut string_table) = parse_single_file_ast(source);
+    let hir = lower_hir(ast, &mut string_table);
+    let external_package_registry = default_external_package_registry(&mut string_table);
+    run_borrow_checker(&hir, &external_package_registry, &string_table)
+        .expect("a get alias consumed before mutation should allow the later set");
+}
+
+#[test]
+fn map_get_alias_blocks_remove_when_used_after_mutation() {
     let source = r#"
 scores ~{String = Int} = {"Ada" = 10}
 score = scores.get("Ada") catch:
@@ -35,28 +54,30 @@ score = scores.get("Ada") catch:
 removed = ~scores.remove("Linus") catch:
     then 0
 ;
+io.line([: [score]])
 "#;
     let (ast, mut string_table) = parse_single_file_ast(source);
     let hir = lower_hir(ast, &mut string_table);
     let external_package_registry = default_external_package_registry(&mut string_table);
     run_borrow_checker(&hir, &external_package_registry, &string_table)
-        .expect_err("get result should block later remove");
+        .expect_err("a live get alias used after mutation should block the remove");
 }
 
 #[test]
-fn map_get_blocks_later_clear() {
+fn map_get_alias_blocks_clear_when_used_after_mutation() {
     let source = r#"
 scores ~{String = Int} = {"Ada" = 10}
 score = scores.get("Ada") catch:
     then 0
 ;
 ~scores.clear()
+io.line([: [score]])
 "#;
     let (ast, mut string_table) = parse_single_file_ast(source);
     let hir = lower_hir(ast, &mut string_table);
     let external_package_registry = default_external_package_registry(&mut string_table);
     run_borrow_checker(&hir, &external_package_registry, &string_table)
-        .expect_err("get result should block later clear");
+        .expect_err("a live get alias used after mutation should block the clear");
 }
 
 #[test]

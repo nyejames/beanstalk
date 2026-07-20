@@ -912,6 +912,7 @@ fn borrow_payload_message(payload: &DiagnosticPayload, string_table: &StringTabl
             place,
             reason,
             conflicting_place,
+            ..
         } => {
             invalid_mutable_access_message(place, *reason, conflicting_place.as_ref(), string_table)
         }

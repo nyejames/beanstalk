@@ -1,0 +1,8 @@
+-- A live shared alias from map `get` blocks a later `set` while the alias is still used.
+scores ~{String = Int} = {"Ada" = 10}
+score = scores.get("Ada") catch:
+    then 0
+;
+~scores.set("Linus", 7) catch:
+;
+io.line([: [score]])
