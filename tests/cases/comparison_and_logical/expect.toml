@@ -1,4 +1,4 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
-golden_mode = "normalized"
+rendered_output_exact = "comparison logical eq=true ne=true lt=true gt=true le=true ge=true and_t=true and_f=false or_t=true or_f=false not_y=true complex=true"

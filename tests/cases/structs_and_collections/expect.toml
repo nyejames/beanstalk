@@ -1,4 +1,4 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
-golden_mode = "normalized"
+rendered_output_exact = "structs_and_collections p1=10-20 person=Alice-30 p2=5-10 lens=0-5-2 first_name=Alice"
