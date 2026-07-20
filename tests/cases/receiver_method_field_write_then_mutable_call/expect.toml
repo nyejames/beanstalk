@@ -3,5 +3,4 @@ entry = "."
 [backends.html]
 mode = "success"
 warnings = "forbid"
-golden_mode = "normalized"
-rendered_output_contains = ["7"]
+rendered_output_exact = "receiver_method_field_write_then_mutable_call value=7\n"

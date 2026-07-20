@@ -8,4 +8,4 @@ increment |this ~Counter|:
 
 c ~= Counter(5)
 ~c.increment()
-io.line([: [c.count]])
+io.line([:receiver_method_mutable_struct_success value=[c.count]])

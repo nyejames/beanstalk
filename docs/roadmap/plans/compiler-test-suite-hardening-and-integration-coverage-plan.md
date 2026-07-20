@@ -30,27 +30,27 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 5D2 — 15 behavior-first normalized goldens converted to exact runtime output and ready to commit
-LAST_ACCEPTED_COMMIT: `c32dea5ef` (Phase 5C2)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 5D2 expectations, 15 golden deletions, and this plan are ready to commit; unrelated generated font/style rebuild churn from `a83e9587f` remains unstaged
+CURRENT_SLICE: Phase 5D3 — nine receiver-behavior normalized goldens converted to exact context-rich runtime output and ready to commit
+LAST_ACCEPTED_COMMIT: `d5256868b` (Phase 5D2)
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 5D3 expectations, seven marker-only source edits, nine golden deletions, and this plan are ready to commit; unrelated docs source and generated rebuild work remains unstaged
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: testing standards reserve goldens for exact emitted text and prefer runtime behavior or narrow artifact assertions when those own the contract
-- code: 15 behavior-first cases now use complete exact runtime output; their superseded normalized full-page HTML goldens and empty golden trees are removed
+- code: all nine receiver cases now use exact context-rich output; seven scalar console markers were relabeled and nine whole-page goldens removed
 ACCEPTANCE_CRITERIA:
-- replace each of the 15 normalized golden contracts with exact runtime output confirmed by focused execution
-- remove each superseded golden file and `golden_mode` without changing fixture source or weakening warning/backend intent
-- leave zero file-backed goldens in this batch and preserve one externally observable primary owner per case
+- replace all nine normalized receiver goldens with exact runtime output confirmed by focused execution
+- relabel only the seven ambiguous scalar console markers without changing receiver behavior
+- remove weaker contains assertions, superseded golden files, and empty golden trees while preserving entry and warning policy
 VALIDATION_STATE:
 - `just validate`: passed; cross-target Clippy, 3,575 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
-- Phase 5D2 exact case executions: passed; all 15 selected HTML cases
-- `cargo run --quiet -- tests --audit`: passed; 1,645 cases, 1,778 executions, 23 golden backend blocks, 19 exact-output backend blocks, zero hard findings
+- Phase 5D3 exact case executions: passed; all nine selected HTML cases
+- `cargo run --quiet -- tests --audit`: passed; 1,645 cases, 1,778 executions, 14 golden backend blocks, 28 exact-output backend blocks, zero hard findings
 DOCS_IMPACT: `testing.bd` still names schema 5 and must be updated with the complete runtime assertion workflow during Phase 5 documentation/closure; progress matrix and `index.md` unchanged
 BLOCKERS_OR_OPEN_DECISIONS: the user requires Ollama for every delegated implementation slice after Phase 5C2, with no provider substitution; 19 justified diagnostic-contains blocks separately record duplicate module compilation that the queued canonical-module plan must remove
-DELEGATION_DECISION: Ollama accepted — `glm-5.2:cloud` completed the bounded Phase 5D2 fixture conversion without scope violations
+DELEGATION_DECISION: Ollama accepted — `glm-5.2:cloud` completed the bounded Phase 5D3 conversion without scope violations
 NEXT_WORKER_ORDER: none for this accepted slice; Ollama only afterward
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit Phase 5D2, refresh its hash, then launch the Phase 5D3 receiver-behavior conversion through Ollama
+NEXT_RESUME_ACTION: commit Phase 5D3, refresh its hash, then launch the Phase 5D4 template/import conversion through Ollama
 
 ---
 
@@ -176,7 +176,8 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 5B stronger runtime assertion schema | `323d54aae` | Accepted | Typed exact/order/exact-once contracts use one Node harness; schema 6 reports all five runtime forms; 3,575 Rust tests and 1,778 integration executions |
 | Phase 5C1 root and fragment runtime order | `2871e776d` | Accepted | Active and facade root markers execute once; imported root remains suppressed; runtime fragment exact-once/order complements static slot order; 1,778/1,778 executions |
 | Phase 5C2 exact runtime behavior | `c32dea5ef` | Accepted | Loop-control output is ordered and single-use; loop/map/reactive cases assert complete exact output; 1,778/1,778 executions |
-| Phase 5D2 runtime golden conversion | pending acceptance commit | Accepted | 15 behavior-first whole-page goldens replaced by exact runtime output; 23 golden backend blocks remain; 1,778/1,778 executions |
+| Phase 5D2 runtime golden conversion | `d5256868b` | Accepted | 15 behavior-first whole-page goldens replaced by exact runtime output; 23 golden backend blocks remain; 1,778/1,778 executions |
+| Phase 5D3 receiver golden conversion | pending acceptance commit | Accepted | Nine receiver whole-page goldens replaced by exact context-rich output; seven scalar markers relabeled; 14 golden backend blocks remain; 1,778/1,778 executions |
 
 ---
 
@@ -1307,7 +1308,8 @@ Do not present lower counts or faster time as proof of correctness.
 | `last_use_precision` | Alias final use permits mutation-capable rebinding | `borrow_conflict_resolved_by_reordering` | none | `5fbf183a4` |
 | `borrow_checker_use_after_move` → `mutable_alias_blocks_later_source_access` | Mutable alias blocks later source access | `mutable_alias_blocks_later_source_access` | none | `5fbf183a4` |
 | `choice_import_visibility_non_exported` → `choice_same_module_private_import_success` | Same-module import and construction of a private choice declaration | `choice_same_module_private_import_success` | none | `4e0b4ca7b` |
-| Phase 5D2 15 normalized HTML whole-page goldens | Runtime values for calls, collections, logical expressions, chars, structs, and short-circuit behavior | The same 15 canonical cases through `rendered_output_exact` | none | pending acceptance commit |
+| Phase 5D2 15 normalized HTML whole-page goldens | Runtime values for calls, collections, logical expressions, chars, structs, and short-circuit behavior | The same 15 canonical cases through `rendered_output_exact` | none | `d5256868b` |
+| Phase 5D3 nine normalized receiver HTML whole-page goldens | Immutable, mutable, nested, chained, exported, alias-return, and post-mutation receiver behavior | The same nine canonical cases through exact context-rich runtime output | none | pending acceptance commit |
 
 ### Coverage gap and handoff ledger
 

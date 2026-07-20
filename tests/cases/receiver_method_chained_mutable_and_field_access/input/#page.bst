@@ -8,4 +8,4 @@ shift |this ~Box|:
 
 b ~= Box(7)
 ~b.shift()
-io.line([: [b.x]])
+io.line([:receiver_method_chained_mutable_and_field_access value=[b.x]])

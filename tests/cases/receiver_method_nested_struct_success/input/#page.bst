@@ -13,4 +13,4 @@ bump_inner |this ~Outer|:
 
 o ~= Outer(Inner(10), "test")
 ~o.bump_inner()
-io.line([: [o.inner.value]])
+io.line([:receiver_method_nested_struct_success value=[o.inner.value]])
