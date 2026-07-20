@@ -81,7 +81,7 @@ Before declaring a non-trivial code-bearing slice complete, run:
     [td:
         [: Compiler integration tests]
         [: `cargo run --quiet -- tests`]
-        [: End-to-end compiler cases]
+        [: Canonical suite policy followed by end-to-end compiler cases]
     ]
 
     [td:
@@ -101,6 +101,15 @@ Before declaring a non-trivial code-bearing slice complete, run:
 - Warnings are denied.
 - It checks the native host, Linux x64 and Windows x64 targets.
 - Benchmark checking must not update tracked benchmark history.
+
+The integration command loads the complete canonical suite and applies the shared hard-policy
+evaluator before selection or compilation. This makes missing ownership, duplicate primaries and
+other hard suite-policy findings part of the normal validation gate. Run the audit command when the
+JSON inventory under `target/test-reports/` is also required:
+
+[codeblock, $code("text"):
+    cargo run --quiet -- tests --audit
+]
 
 ### Documentation-only release-build gate
 

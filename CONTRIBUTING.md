@@ -99,7 +99,10 @@ Audit cannot be combined with filters or `--list`. It writes
 `target/test-reports/integration_suite_inventory.json`. The report keeps the universal backend
 baseline separate from authored acceptance-only intent and other case-specific assertions. Hard
 suite-policy findings make audit fail after the report is written and make normal list or execution
-fail before compilation. Advisory classification findings remain non-fatal.
+fail before compilation. Missing roles and missing contracts on non-smoke cases are hard findings.
+A contractless whole-case acceptance-only smoke is valid. Primary-less backend-only and
+adversarial-only contract families remain non-fatal advisories, while mixed or ordinary
+secondary-only families stay visible for ownership review.
 
 A successful HTML or HTML-Wasm backend always runs its universal backend baseline. Use
 `success_contract = "acceptance_only"` only when that backend intentionally has no case-specific

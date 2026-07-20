@@ -30,27 +30,27 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 14B final suite-policy enforcement and ownership reporting
-LAST_ACCEPTED_COMMIT: `292b50350` (Phase 14A classification closure)
+CURRENT_SLICE: Phase 14C unit ownership final pass
+LAST_ACCEPTED_COMMIT: `5614e7d01` (Phase 14B final suite-policy enforcement)
 WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; accepted code is committed; concurrent docs work is out of scope and remains separate if present
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: canonical case metadata, suite-policy, validation, and final governance rules govern the next slice
-- code: integration_test_runner/policy.rs and its focused tests own final classification enforcement and ownership findings
+- docs: unit-test ownership, pruning, compiler-stage boundaries, and final governance rules govern the next slice
+- code: source-shaped unit clusters across AST, HIR, build-system, and backend owners require a final bounded review
 ACCEPTANCE_CRITERIA:
-- missing roles and non-smoke missing contracts are hard findings from the existing policy owner
-- intentional whole-case acceptance-only smoke cases remain valid without invented contracts
-- contract families without a primary are reported while backend-only and adversarial-only ownership remains distinguishable
-- normal list/execution and audit share the same evaluator without a parallel validation path
+- every remaining full-source unit has a distinct hidden invariant, parser fact, stage boundary, or policy owner
+- units superseded by a stronger canonical integration primary are deleted with replacement evidence
+- stale test-only helpers or production APIs are removed with their final caller
+- HIR, build-system, backend, and final TIR units keep only their owning semantic relationships and hidden facts
 VALIDATION_STATE:
-- `just validate`: passed; cross-target Clippy, 3,526 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
-- Phase 14A audit: passed; zero hard findings; all 1,647 roles are explicit; every non-smoke case has a contract; 12 intentional smoke cases remain contractless under the transitional advisory policy
-DOCS_IMPACT: progress matrix reviewed; support and backend coverage are unchanged by fixture consolidation; index unchanged
+- `just validate`: passed; cross-target Clippy, 3,535 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
+- Phase 14B audit: passed; zero hard findings; 66 backend-only and 15 adversarial-only primary-less contract advisories
+DOCS_IMPACT: testing, validation, and contributor workflow aligned with final suite policy; progress matrix and index unchanged
 BLOCKERS_OR_OPEN_DECISIONS: none; 81 contract families without a primary are intentionally 66 backend-only and 15 adversarial-only families, with no ordinary orphan family
 DELEGATION_DECISION: Ollama — bounded Phase 14 implementation slices
 NEXT_WORKER_ORDER: Ollama only; no provider substitution
 STOP_REASON: none
-NEXT_RESUME_ACTION: launch Phase 14B final suite-policy enforcement through Ollama
+NEXT_RESUME_ACTION: launch the first bounded Phase 14C source-shaped unit ownership review through Ollama
 
 ---
 
@@ -217,6 +217,7 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 14A classification batch 9 | `901fcbacd` | Accepted | Entries 1301–1500 reviewed; 200 contracts and roles added, eight target/reachability/asset cases remained backend-role, and namespace misuse, value-producing if, match-warning, and facade private-type families were split into distinct ownership contracts; zero hard findings; 143 missing roles and 147 missing contracts remain; 3,526 Rust tests and 1,793 integration executions |
 | Phase 14A classification batch 10 | `6d51d6e07` | Accepted | Entries 1501–1647 reviewed; all 143 incomplete cases classified, reactive subscription positions were narrowed into distinct semantic owners, 22 target/helper cases remained backend-role, and zero roles remained missing; 3,526 Rust tests and 1,793 integration executions |
 | Phase 14A classification closure | `292b50350` | Accepted | Eight invented contracts were removed from whole-case acceptance-only smoke fixtures; all 1,647 cases now have explicit roles, every non-smoke case has a contract, and the only primary-less contract families are 66 backend-only plus 15 adversarial-only owners; zero hard findings; 3,526 Rust tests and 1,793 integration executions |
+| Phase 14B final suite policy | `5614e7d01` | Accepted | Missing roles and non-smoke contracts are hard findings; contractless whole-case smoke remains valid; primary-less families are reported once with backend-only and adversarial-only ownership distinguished; normal execution and audit share one evaluator; zero hard findings; 3,535 Rust tests and 1,793 integration executions |
 
 ---
 
@@ -1220,13 +1221,13 @@ When current implementation does not support the accepted canonical-module end s
 
 ## Contract and role classification
 
-- [ ] Backfill `contract` and `role` for every canonical non-harness case.
-- [ ] Classify adversarial cases explicitly.
-- [ ] Classify whole-case acceptance-only cases as smoke.
-- [ ] Reject duplicate primary contracts and primary-without-contract through the single policy owner.
-- [ ] Report contracts with no primary owner.
-- [ ] Review every boundary/backend secondary owner.
-- [ ] Normalize tag spelling and ordering; remove obsolete tags.
+- [x] Backfill `contract` and `role` for every canonical non-harness case, with contractless whole-case smoke as the explicit exception.
+- [x] Classify adversarial cases explicitly.
+- [x] Classify whole-case acceptance-only cases as smoke.
+- [x] Reject duplicate primary contracts and primary-without-contract through the single policy owner.
+- [x] Report contracts with no primary owner.
+- [x] Review every boundary/backend secondary owner.
+- [x] Normalize tag spelling and ordering; remove obsolete tags.
 
 ## Final audit hard failures
 
@@ -1254,10 +1255,10 @@ Resolve or explicitly document advisories for:
 
 ## Put policy in the normal gate
 
-- [ ] Keep `bean tests --audit` as the JSON report command.
-- [ ] Add the fast hard-policy check to `just validate` before full integration execution, or make canonical suite loading enforce the same evaluator.
-- [ ] Update `validation.bd`.
-- [ ] Keep reports under `target/` and never mutate tracked fixtures.
+- [x] Keep `bean tests --audit` as the JSON report command.
+- [x] Add the fast hard-policy check to `just validate` before full integration execution, or make canonical suite loading enforce the same evaluator.
+- [x] Update `validation.bd`.
+- [x] Keep reports under `target/` and never mutate tracked fixtures.
 
 ## Unit ownership final pass
 

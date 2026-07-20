@@ -187,9 +187,14 @@ Canonical fixture shape:
   including through symlinks.
 - IDs, paths, tags, contracts, roles and configured entries reject leading or trailing whitespace.
   Tags within one case must be unique.
-- `contract` and `role` are optional while classification is being backfilled. Supported roles are
-  `primary`, `boundary`, `backend`, `adversarial` and `smoke`.
+- Every canonical case declares a `role`. Supported roles are `primary`, `boundary`, `backend`,
+  `adversarial` and `smoke`.
+- Every non-smoke case declares a `contract`. A whole-case acceptance-only smoke may remain
+  contractless because it has no case-specific semantic owner. Do not invent a contract for it.
 - A `primary` case requires a contract, and one contract may have at most one primary case.
+- A contract family without a primary is reported once in manifest order. Backend-only and
+  adversarial-only families are deliberate advisories. Mixed or ordinary secondary-only families
+  remain visible for ownership review.
 - Case IDs, tags, contracts and roles are retained as typed runner metadata. Do not reconstruct
   them from display text or fixture paths.
 - One case folder owns all inputs and expectations for that scenario.
@@ -230,9 +235,14 @@ Use the audit mode to validate and inventory the complete canonical suite withou
     cargo run --quiet -- tests --audit
 ]
 
+Audit writes its JSON inventory before returning hard-policy failure. Normal listing and execution
+use the same policy evaluator and reject hard findings before compiling a case. Missing roles,
+missing contracts on non-smoke cases, primary cases without contracts and duplicate primary owners
+are hard findings. Contractless whole-case acceptance-only smoke cases are valid.
+
 Audit cannot be combined with filters or `--list`. It writes the reporting-owned JSON inventory to
 `target/test-reports/integration_suite_inventory.json`, including canonical metadata, backend
-expectation facts, hard-policy violations and advisory missing-classification findings. The report
+expectation facts, hard-policy violations and primary-less contract-family advisories. The report
 is review input only; it never deletes, merges or rewrites fixtures.
 
 The schema 6 inventory reports acceptance-only, rendered-output, artifact, golden, absence and
@@ -242,10 +252,11 @@ and exact-once runtime contracts separately. Per-backend fields keep `baseline_a
 exact warning codes, diagnostic match mode and any contains-mode reason separate so the report
 matches what ran.
 
-Hard policy has one suite-policy owner. Duplicate primary contracts, a primary without a contract
-and a whole-case acceptance-only fixture without `role = "smoke"` are hard findings. Normal list
-and execution modes reject hard findings before selection or compilation. Audit still writes the
-complete JSON report, then returns failure. Advisory classification findings remain non-fatal.
+Hard policy has one suite-policy owner. Missing roles, missing non-smoke contracts, duplicate
+primary contracts, a primary without a contract and a whole-case acceptance-only fixture without
+`role = "smoke"` are hard findings. Normal list and execution modes reject hard findings before
+selection or compilation. Audit still writes the complete JSON report, then returns failure.
+Primary-less contract-family advisories remain non-fatal.
 
 ### Runtime output assertions
 
