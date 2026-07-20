@@ -4900,7 +4900,7 @@ role = "primary"
 id = "result_operand_without_handler_in_operator"
 path = "result_operand_without_handler_in_operator"
 tags = ["integration","results","diagnostics"]
-contract = "language.results.unhandled_operand_in_operator_rejected"
+contract = "language.results.unhandled_fallible_expression_rejected"
 role = "primary"
 
 [[case]]
@@ -6300,336 +6300,470 @@ role = "primary"
 id = "trait_incompatibility_unknown_trait_rejected"
 path = "trait_incompatibility_unknown_trait_rejected"
 tags = ["integration","traits","diagnostics"]
+contract = "language.traits.incompatibility_unknown_trait_rejected"
+role = "primary"
 
 [[case]]
 id = "trait_incompatibility_forward_relation_rejected"
 path = "trait_incompatibility_forward_relation_rejected"
 tags = ["integration","traits","diagnostics"]
+contract = "language.traits.incompatibility_forward_relation_rejected"
+role = "primary"
 
 [[case]]
 id = "trait_incompatibility_duplicate_rejected"
 path = "trait_incompatibility_duplicate_rejected"
 tags = ["integration","traits","diagnostics"]
+contract = "language.traits.incompatibility_duplicate_rejected"
+role = "primary"
 
 [[case]]
 id = "trait_relation_facade_public_leaks_private_rejected"
 path = "trait_relation_facade_public_leaks_private_rejected"
 tags = ["integration","traits","diagnostics","facade"]
+contract = "language.traits.incompatibility_facade_leaks_private_rejected"
+role = "primary"
 
 [[case]]
 id = "trait_relation_facade_private_private_success"
 path = "trait_relation_facade_private_private_success"
 tags = ["integration","traits","facade"]
+contract = "language.traits.incompatibility_private_relation_acceptance"
+role = "primary"
 
 [[case]]
 id = "core_cast_trait_name_used_as_value_rejected"
 path = "core_cast_trait_name_used_as_value_rejected"
 tags = ["integration","traits","diagnostics","cast"]
+contract = "language.traits.core_cast_trait_name_as_value_rejected"
+role = "primary"
 
 [[case]]
 id = "cast_parenthesized_operator_operand_rejected"
 path = "cast_parenthesized_operator_operand_rejected"
 tags = ["integration","diagnostics","cast"]
+contract = "language.casts.parenthesized_operator_operand_rejected"
+role = "primary"
 
 [[case]]
 id = "cast_non_builtin_target_rejected"
 path = "cast_non_builtin_target_rejected"
 tags = ["integration","diagnostics","cast"]
+contract = "language.casts.non_builtin_target_rejected"
+role = "primary"
 
 [[case]]
 id = "cast_concrete_function_parameter_fallible_rejected"
 path = "cast_concrete_function_parameter_fallible_rejected"
 tags = ["integration","diagnostics","cast"]
+contract = "language.casts.fallible_source_in_plain_cast_position_rejected"
+role = "primary"
 
 [[case]]
 id = "cast_struct_constructor_field_fallible_rejected"
 path = "cast_struct_constructor_field_fallible_rejected"
 tags = ["integration","diagnostics","cast"]
+contract = "language.casts.fallible_source_in_plain_cast_position_rejected"
+role = "boundary"
 
 [[case]]
 id = "cast_choice_constructor_field_fallible_rejected"
 path = "cast_choice_constructor_field_fallible_rejected"
 tags = ["integration","diagnostics","cast"]
+contract = "language.casts.fallible_source_in_plain_cast_position_rejected"
+role = "boundary"
 
 [[case]]
 id = "cast_generic_parameter_target_rejected"
 path = "cast_generic_parameter_target_rejected"
 tags = ["integration","diagnostics","cast"]
+contract = "language.casts.generic_parameter_target_rejected"
+role = "primary"
 
 [[case]]
 id = "cast_struct_field_default_fallible_rejected"
 path = "cast_struct_field_default_fallible_rejected"
 tags = ["integration","diagnostics","cast"]
+contract = "language.casts.fallible_source_in_plain_cast_position_rejected"
+role = "boundary"
 
 [[case]]
 id = "cast_const_infallible_success"
 path = "cast_const_infallible_success"
 tags = ["integration","language","cast","const"]
+contract = "language.casts.const_infallible_acceptance"
+role = "primary"
 
 [[case]]
 id = "cast_const_fallible_catch_success"
 path = "cast_const_fallible_catch_success"
 tags = ["integration","language","cast","const"]
+contract = "language.casts.const_fallible_catch_acceptance"
+role = "primary"
 
 [[case]]
 id = "cast_const_failed_builtin_propagate_rejected"
 path = "cast_const_failed_builtin_propagate_rejected"
 tags = ["integration","diagnostics","cast","const"]
+contract = "language.casts.const_failed_builtin_propagate_rejected"
+role = "primary"
 
 [[case]]
 id = "cast_const_catch_branching_rejected"
 path = "cast_const_catch_branching_rejected"
 tags = ["integration","diagnostics","cast","const"]
+contract = "language.casts.const_catch_branching_rejected"
+role = "primary"
 
 [[case]]
 id = "cast_struct_field_default_builtin_cast_success"
 path = "cast_struct_field_default_builtin_cast_success"
 tags = ["integration","language","cast","const","struct"]
+contract = "language.casts.struct_field_default_builtin_cast_acceptance"
+role = "primary"
 
 [[case]]
 id = "cast_function_parameter_default_builtin_cast_success"
 path = "cast_function_parameter_default_builtin_cast_success"
 tags = ["integration","language","cast","const","function"]
+contract = "language.casts.function_parameter_default_builtin_cast_acceptance"
+role = "primary"
 
 [[case]]
 id = "cast_function_parameter_default_fallible_catch_success"
 path = "cast_function_parameter_default_fallible_catch_success"
 tags = ["integration","language","cast","const","function"]
+contract = "language.casts.function_parameter_default_fallible_catch_acceptance"
+role = "primary"
 
 [[case]]
 id = "cast_struct_field_default_fallible_catch_success"
 path = "cast_struct_field_default_fallible_catch_success"
 tags = ["integration","language","cast","const","struct"]
+contract = "language.casts.struct_field_default_fallible_catch_acceptance"
+role = "primary"
 
 [[case]]
 id = "cast_const_error_materialization_rejected"
 path = "cast_const_error_materialization_rejected"
 tags = ["integration","diagnostics","cast","const"]
+contract = "language.casts.const_error_materialization_rejected"
+role = "primary"
 
 [[case]]
 id = "cast_int_i32_boundary_const_success"
 path = "cast_int_i32_boundary_const_success"
 tags = ["integration","language","cast","const","i32"]
+contract = "language.casts.int_i32_boundary_const_acceptance"
+role = "primary"
 
 [[case]]
 id = "cast_int_i32_boundary_const_rejected"
 path = "cast_int_i32_boundary_const_rejected"
 tags = ["integration","diagnostics","cast","const","i32"]
+contract = "language.casts.int_i32_boundary_const_overflow_rejected"
+role = "primary"
 
 [[case]]
 id = "cast_int_i32_boundary_runtime_success"
 path = "cast_int_i32_boundary_runtime_success"
 tags = ["integration","language","cast","runtime","i32"]
+contract = "language.casts.int_i32_boundary_runtime_acceptance"
+role = "primary"
 
 [[case]]
 id = "cast_int_i32_boundary_runtime_catch"
 path = "cast_int_i32_boundary_runtime_catch"
 tags = ["integration","language","cast","runtime","i32"]
+contract = "language.casts.int_i32_boundary_runtime_catch_acceptance"
+role = "primary"
 
 [[case]]
 id = "cast_float_to_string_runtime_formatting"
 path = "cast_float_to_string_runtime_formatting"
 tags = ["integration","language","cast","runtime","float","formatting"]
+contract = "language.casts.float_to_string_runtime_formatting_acceptance"
+role = "primary"
 
 [[case]]
 id = "template_float_interpolation_runtime_formatting"
 path = "template_float_interpolation_runtime_formatting"
 tags = ["integration","language","templates","runtime","float","formatting"]
+contract = "language.templates.float_interpolation_runtime_formatting_acceptance"
+role = "primary"
 
 [[case]]
 id = "cast_runtime_string_bool_catch_success"
 path = "cast_runtime_string_bool_catch_success"
 tags = ["integration","language","cast","runtime"]
+contract = "language.casts.runtime_string_bool_catch_acceptance"
+role = "primary"
 
 [[case]]
 id = "cast_runtime_string_int_underscore_success"
 path = "cast_runtime_string_int_underscore_success"
 tags = ["integration","language","cast","runtime"]
+contract = "language.casts.runtime_string_int_underscore_acceptance"
+role = "primary"
 
 [[case]]
 id = "cast_runtime_builtin_infallible_success"
 path = "cast_runtime_builtin_infallible_success"
 tags = ["integration","language","cast","runtime"]
+contract = "language.casts.runtime_builtin_infallible_acceptance"
+role = "primary"
 
 [[case]]
 id = "cast_runtime_fallible_success"
 path = "cast_runtime_fallible_success"
 tags = ["integration","language","cast","runtime"]
+contract = "language.casts.runtime_fallible_acceptance"
+role = "primary"
 
 [[case]]
 id = "cast_runtime_fallible_catch_recovery"
 path = "cast_runtime_fallible_catch_recovery"
 tags = ["integration","language","cast","runtime"]
+contract = "language.casts.runtime_fallible_catch_recovery_acceptance"
+role = "primary"
 
 [[case]]
 id = "cast_target_propagation_success"
 path = "cast_target_propagation_success"
 tags = ["integration","language","cast","target-sites"]
+contract = "language.casts.target_propagation_acceptance"
+role = "primary"
 
 [[case]]
 id = "cast_user_same_file_string_success"
 path = "cast_user_same_file_string_success"
 tags = ["integration","language","cast","user-defined","traits"]
+contract = "language.casts.user_same_file_string_acceptance"
+role = "primary"
 
 [[case]]
 id = "cast_user_same_file_error_success"
 path = "cast_user_same_file_error_success"
 tags = ["integration","language","cast","user-defined","traits","results"]
+contract = "language.casts.user_same_file_error_acceptance"
+role = "primary"
 
 [[case]]
 id = "cast_user_multiple_targets_success"
 path = "cast_user_multiple_targets_success"
 tags = ["integration","language","cast","user-defined","traits","results"]
+contract = "language.casts.user_multiple_targets_acceptance"
+role = "primary"
 
 [[case]]
 id = "cast_generic_builtin_evidence_success"
 path = "cast_generic_builtin_evidence_success"
 tags = ["integration","language","cast","generics","traits","runtime"]
+contract = "language.casts.generic_builtin_evidence_acceptance"
+role = "primary"
 
 [[case]]
 id = "cast_generic_user_evidence_success"
 path = "cast_generic_user_evidence_success"
 tags = ["integration","language","cast","generics","traits","user-defined"]
+contract = "language.casts.generic_user_evidence_acceptance"
+role = "primary"
 
 [[case]]
 id = "cast_missing_target_rejected"
 path = "cast_missing_target_rejected"
 tags = ["integration","diagnostics","cast"]
+contract = "language.casts.missing_builtin_target_rejected"
+role = "primary"
 
 [[case]]
 id = "cast_same_type_rejected"
 path = "cast_same_type_rejected"
 tags = ["integration","diagnostics","cast"]
+contract = "language.casts.same_type_rejected"
+role = "primary"
 
 [[case]]
 id = "cast_optional_source_rejected"
 path = "cast_optional_source_rejected"
 tags = ["integration","diagnostics","cast"]
+contract = "language.casts.optional_source_rejected"
+role = "primary"
 
 [[case]]
 id = "cast_optional_success_wraps_inner_value"
 path = "cast_optional_success_wraps_inner_value"
 tags = ["integration","cast","options"]
+contract = "language.casts.optional_wraps_inner_value_acceptance"
+role = "primary"
 
 [[case]]
 id = "cast_optional_catch_inner_value_success"
 path = "cast_optional_catch_inner_value_success"
 tags = ["integration","cast","options","results"]
+contract = "language.casts.optional_catch_inner_value_acceptance"
+role = "primary"
 
 [[case]]
 id = "cast_optional_catch_none_rejected"
 path = "cast_optional_catch_none_rejected"
 tags = ["integration","diagnostics","cast","options","results"]
+contract = "language.options.none_without_type_context_rejected"
+role = "boundary"
 
 [[case]]
 id = "cast_unhandled_operand_error_rejected"
 path = "cast_unhandled_operand_error_rejected"
 tags = ["integration","diagnostics","cast","results"]
+contract = "language.results.unhandled_fallible_expression_rejected"
+role = "boundary"
 
 [[case]]
 id = "cast_propagation_requires_error_return_rejected"
 path = "cast_propagation_requires_error_return_rejected"
 tags = ["integration","diagnostics","cast","results"]
+contract = "language.casts.propagation_requires_error_return_rejected"
+role = "primary"
 
 [[case]]
 id = "cast_propagation_recovery_conflict_rejected"
 path = "cast_propagation_recovery_conflict_rejected"
 tags = ["integration","diagnostics","cast","results"]
+contract = "language.casts.propagation_recovery_conflict_rejected"
+role = "primary"
 
 [[case]]
 id = "cast_infallible_with_bang_rejected"
 path = "cast_infallible_with_bang_rejected"
 tags = ["integration","diagnostics","cast","results"]
+contract = "language.casts.infallible_with_bang_rejected"
+role = "primary"
 
 [[case]]
 id = "cast_no_evidence_rejected"
 path = "cast_no_evidence_rejected"
 tags = ["integration","diagnostics","cast"]
+contract = "language.casts.no_evidence_rejected"
+role = "primary"
 
 [[case]]
 id = "cast_condition_target_rejected"
 path = "cast_condition_target_rejected"
 tags = ["integration","diagnostics","cast"]
+contract = "language.casts.missing_builtin_target_rejected"
+role = "boundary"
 
 [[case]]
 id = "cast_loop_target_rejected"
 path = "cast_loop_target_rejected"
 tags = ["integration","diagnostics","cast"]
+contract = "language.casts.missing_builtin_target_rejected"
+role = "boundary"
 
 [[case]]
 id = "cast_assert_target_rejected"
 path = "cast_assert_target_rejected"
 tags = ["integration","diagnostics","cast"]
+contract = "language.casts.missing_builtin_target_rejected"
+role = "boundary"
 
 [[case]]
 id = "cast_template_interpolation_target_rejected"
 path = "cast_template_interpolation_target_rejected"
 tags = ["integration","diagnostics","cast","templates"]
+contract = "language.casts.template_interpolation_target_rejected"
+role = "primary"
 
 [[case]]
 id = "cast_user_evidence_const_rejected"
 path = "cast_user_evidence_const_rejected"
 tags = ["integration","diagnostics","cast","const","traits","user-defined"]
+contract = "language.casts.user_evidence_must_be_const_rejected"
+role = "primary"
 
 [[case]]
 id = "cast_scalar_bool_constructor_removed"
 path = "cast_scalar_bool_constructor_removed"
 tags = ["integration","diagnostics","cast","scalar-constructors"]
+contract = "language.scalars.constructor_style_conversion_removed"
+role = "boundary"
 
 [[case]]
 id = "cast_scalar_string_constructor_removed"
 path = "cast_scalar_string_constructor_removed"
 tags = ["integration","diagnostics","cast","scalar-constructors"]
+contract = "language.scalars.constructor_style_conversion_removed"
+role = "boundary"
 
 [[case]]
 id = "cast_scalar_char_constructor_removed"
 path = "cast_scalar_char_constructor_removed"
 tags = ["integration","diagnostics","cast","scalar-constructors"]
+contract = "language.scalars.constructor_style_conversion_removed"
+role = "boundary"
 
 [[case]]
 id = "cast_core_trait_redeclaration_rejected"
 path = "cast_core_trait_redeclaration_rejected"
 tags = ["integration","diagnostics","cast","traits"]
+contract = "language.traits.reserved_core_cast_trait_name_rejected"
+role = "primary"
 
 [[case]]
 id = "cast_core_trait_import_alias_rejected"
 path = "cast_core_trait_import_alias_rejected"
 tags = ["integration","diagnostics","cast","traits","imports"]
+contract = "language.traits.reserved_core_cast_trait_name_rejected"
+role = "boundary"
 
 [[case]]
 id = "cast_core_trait_export_alias_rejected"
 path = "cast_core_trait_export_alias_rejected"
 tags = ["integration","diagnostics","cast","traits","imports","facade"]
+contract = "language.traits.reserved_core_cast_trait_name_rejected"
+role = "boundary"
 
 [[case]]
 id = "function_trailing_comma_returns"
 path = "function_trailing_comma_returns"
 tags = ["integration","diagnostics"]
+contract = "language.functions.trailing_comma_in_returns_rejected"
+role = "primary"
 
 [[case]]
 id = "undefined_variable_mutation"
 path = "undefined_variable_mutation"
 tags = ["integration","diagnostics"]
+contract = "language.bindings.undefined_variable_reference_rejected"
+role = "primary"
 
 [[case]]
 id = "variable_and_expression_basics"
 path = "variable_and_expression_basics"
 tags = ["integration","language"]
+contract = "backend.html.js_variable_expression_basics_lowering"
+role = "backend"
 
 [[case]]
 id = "variable_redeclaration"
 path = "variable_redeclaration"
 tags = ["integration","language", "diagnostics"]
+contract = "language.bindings.variable_redeclaration_rejected"
+role = "primary"
 
 [[case]]
 id = "variables_and_assignment"
 path = "variables_and_assignment"
 tags = ["integration","language"]
+contract = "backend.html.js_variable_binding_assignment_lowering"
+role = "backend"
 
 [[case]]
 id = "wasm_arithmetic"
 path = "wasm_arithmetic"
 tags = ["integration","language","wasm"]
+contract = "backend.html_wasm.arithmetic_lowering"
+role = "backend"
 
 [[case]]
 id = "white_space"
@@ -6641,661 +6775,925 @@ role = "smoke"
 id = "int_promotion_to_float_declaration"
 path = "int_promotion_to_float_declaration"
 tags = ["integration", "type-coercion"]
+contract = "language.floats.int_promotion_acceptance"
+role = "primary"
 
 [[case]]
 id = "int_promotion_to_float_return"
 path = "int_promotion_to_float_return"
 tags = ["integration", "type-coercion"]
+contract = "language.floats.int_promotion_acceptance"
+role = "boundary"
 
 [[case]]
 id = "int_promotion_to_float_via_function_call"
 path = "int_promotion_to_float_via_function_call"
 tags = ["integration", "type-coercion"]
+contract = "language.floats.int_promotion_acceptance"
+role = "boundary"
 
 [[case]]
 id = "float_declaration_from_bool_rejected"
 path = "float_declaration_from_bool_rejected"
 tags = ["integration", "type-coercion", "diagnostics"]
+contract = "language.floats.bool_promotion_rejected"
+role = "primary"
 
 [[case]]
 id = "int_declaration_from_float_rejected"
 path = "int_declaration_from_float_rejected"
 tags = ["integration", "type-coercion", "diagnostics"]
+contract = "language.floats.float_to_int_narrowing_rejected"
+role = "primary"
 
 [[case]]
 id = "integer_division_real_and_int_output"
 path = "integer_division_real_and_int_output"
 tags = ["integration", "language"]
+contract = "language.arithmetic.integer_and_real_division_output_acceptance"
+role = "primary"
 
 [[case]]
 id = "int_declaration_regular_division_rejected"
 path = "int_declaration_regular_division_rejected"
 tags = ["integration", "diagnostics", "type-coercion"]
+contract = "language.arithmetic.real_division_to_int_rejected"
+role = "primary"
 
 [[case]]
 id = "int_return_regular_division_rejected"
 path = "int_return_regular_division_rejected"
 tags = ["integration", "diagnostics", "type-coercion"]
+contract = "language.arithmetic.real_division_to_int_rejected"
+role = "boundary"
 
 [[case]]
 id = "int_declaration_and_return_integer_division_success"
 path = "int_declaration_and_return_integer_division_success"
 tags = ["integration", "language"]
+contract = "language.arithmetic.integer_division_acceptance"
+role = "primary"
 
 [[case]]
 id = "compound_assignment_division_success_matrix"
 path = "compound_assignment_division_success_matrix"
 tags = ["integration", "language"]
+contract = "language.arithmetic.compound_assignment_division_acceptance"
+role = "primary"
 
 [[case]]
 id = "compound_assignment_int_divide_assign_rejected"
 path = "compound_assignment_int_divide_assign_rejected"
 tags = ["integration", "diagnostics"]
+contract = "language.arithmetic.compound_assignment_real_divide_to_int_rejected"
+role = "primary"
 
 [[case]]
 id = "compound_assignment_spacing_rejected"
 path = "compound_assignment_spacing_rejected"
 tags = ["integration", "diagnostics"]
+contract = "language.syntax.compound_assignment_spacing_rejected"
+role = "primary"
 
 [[case]]
 id = "compound_assignment_modulus_success"
 path = "compound_assignment_modulus_success"
 tags = ["integration", "language", "mutation", "modulus"]
+contract = "language.operators.compound_modulus_assignment_acceptance"
+role = "primary"
 
 [[case]]
 id = "invalid_integer_division_mixed_numeric_rejected"
 path = "invalid_integer_division_mixed_numeric_rejected"
 tags = ["integration", "diagnostics"]
+contract = "language.arithmetic.integer_division_mixed_numeric_rejected"
+role = "primary"
 
 [[case]]
 id = "char_basic"
 path = "char_basic"
 tags = ["integration", "char"]
+contract = "language.chars.basic_acceptance"
+role = "primary"
 
 [[case]]
 id = "char_equality"
 path = "char_equality"
 tags = ["integration", "char"]
+contract = "language.chars.equality_acceptance"
+role = "primary"
 
 [[case]]
 id = "char_ordering"
 path = "char_ordering"
 tags = ["integration", "char"]
+contract = "language.chars.ordering_acceptance"
+role = "primary"
 
 [[case]]
 id = "char_receiver_method"
 path = "char_receiver_method"
 tags = ["integration", "char"]
+contract = "language.structs.receiver_method_on_scalar_rejected"
+role = "boundary"
 
 [[case]]
 id = "char_in_template"
 path = "char_in_template"
 tags = ["integration", "char"]
+contract = "language.chars.template_interpolation_acceptance"
+role = "primary"
 
 [[case]]
 id = "struct_field_mutation_immutable_binding_rejected"
 path = "struct_field_mutation_immutable_binding_rejected"
 tags = ["integration", "structs", "diagnostics"]
+contract = "language.structs.field_mutation_immutable_binding_rejected"
+role = "primary"
 
 [[case]]
 id = "struct_mutable_receiver_immutable_binding_rejected"
 path = "struct_mutable_receiver_immutable_binding_rejected"
 tags = ["integration", "structs", "receiver-methods", "diagnostics"]
+contract = "language.structs.mutable_receiver_immutable_binding_rejected"
+role = "primary"
 
 [[case]]
 id = "struct_field_mutation_through_temporary_rejected"
 path = "struct_field_mutation_through_temporary_rejected"
 tags = ["integration", "structs", "diagnostics"]
+contract = "language.structs.field_mutation_through_temporary_rejected"
+role = "primary"
 
 [[case]]
 id = "struct_constructor_all_defaults"
 path = "struct_constructor_all_defaults"
 tags = ["integration", "structs"]
+contract = "language.structs.constructor_all_defaults_acceptance"
+role = "primary"
 
 [[case]]
 id = "struct_nominal_type_mismatch_rejected"
 path = "struct_nominal_type_mismatch_rejected"
 tags = ["integration", "structs", "diagnostics", "type-checking"]
+contract = "language.structs.nominal_type_mismatch_rejected"
+role = "primary"
 
 [[case]]
 id = "receiver_this_not_first_parameter_rejected"
 path = "receiver_this_not_first_parameter_rejected"
 tags = ["integration", "receiver-methods", "diagnostics"]
+contract = "language.structs.receiver_this_not_first_parameter_rejected"
+role = "primary"
 
 [[case]]
 id = "receiver_unsupported_receiver_type_rejected"
 path = "receiver_unsupported_receiver_type_rejected"
 tags = ["integration", "receiver-methods", "diagnostics"]
+contract = "language.structs.receiver_unsupported_type_rejected"
+role = "primary"
 
 [[case]]
 id = "struct_nested_field_mutation_success"
 path = "struct_nested_field_mutation_success"
 tags = ["integration", "structs"]
+contract = "language.structs.nested_field_mutation_acceptance"
+role = "primary"
 
 [[case]]
 id = "struct_chained_immutable_receiver_method_call"
 path = "struct_chained_immutable_receiver_method_call"
 tags = ["integration", "structs", "receiver-methods"]
+contract = "language.structs.chained_receiver_method_call_acceptance"
+role = "primary"
 
 [[case]]
 id = "receiver_method_exported_cross_file_success"
 path = "receiver_method_exported_cross_file_success"
 tags = ["integration", "receiver-methods", "imports", "dependency-resolution"]
+contract = "language.structs.receiver_method_cross_file_export_acceptance"
+role = "primary"
 
 [[case]]
 id = "receiver_method_mutable_struct_success"
 path = "receiver_method_mutable_struct_success"
 tags = ["integration", "receiver-methods", "structs"]
+contract = "language.structs.mutable_receiver_method_acceptance"
+role = "primary"
 
 [[case]]
 id = "receiver_method_nested_struct_success"
 path = "receiver_method_nested_struct_success"
 tags = ["integration", "receiver-methods", "structs"]
+contract = "language.structs.nested_struct_receiver_method_acceptance"
+role = "primary"
 
 [[case]]
 id = "receiver_method_scalar_int_rejected"
 path = "receiver_method_scalar_int_rejected"
 tags = ["integration", "receiver-methods", "scalars"]
+contract = "language.structs.receiver_method_on_scalar_rejected"
+role = "primary"
 
 [[case]]
 id = "receiver_method_scalar_string_rejected"
 path = "receiver_method_scalar_string_rejected"
 tags = ["integration", "receiver-methods", "scalars"]
+contract = "language.structs.receiver_method_on_scalar_rejected"
+role = "boundary"
 
 [[case]]
 id = "receiver_method_chained_mutable_and_field_access"
 path = "receiver_method_chained_mutable_and_field_access"
 tags = ["integration", "receiver-methods", "structs"]
+contract = "language.structs.chained_mutable_receiver_and_field_access_acceptance"
+role = "primary"
 
 [[case]]
 id = "receiver_method_field_write_then_mutable_call"
 path = "receiver_method_field_write_then_mutable_call"
 tags = ["integration", "receiver-methods", "structs"]
+contract = "language.structs.field_write_then_mutable_call_acceptance"
+role = "primary"
 
 [[case]]
 id = "receiver_method_alias_return_success"
 path = "receiver_method_alias_return_success"
 tags = ["integration", "receiver-methods", "borrows"]
+contract = "language.structs.receiver_method_alias_return_acceptance"
+role = "primary"
 
 [[case]]
 id = "receiver_method_exported_cross_file_mutable_success"
 path = "receiver_method_exported_cross_file_mutable_success"
 tags = ["integration", "receiver-methods", "imports", "dependency-resolution"]
+contract = "language.structs.receiver_method_cross_file_mutable_export_acceptance"
+role = "primary"
 
 [[case]]
 id = "receiver_namespace_import_method_success"
 path = "receiver_namespace_import_method_success"
 tags = ["integration", "receiver-methods", "imports", "namespace-imports"]
+contract = "language.structs.receiver_method_namespace_import_acceptance"
+role = "primary"
 
 [[case]]
 id = "receiver_namespace_record_method_field_rejected"
 path = "receiver_namespace_record_method_field_rejected"
 tags = ["integration", "receiver-methods", "imports", "namespace-imports", "diagnostics"]
+contract = "language.structs.receiver_method_namespace_call_rejected"
+role = "primary"
 
 [[case]]
 id = "receiver_grouped_method_alias_rejected"
 path = "receiver_grouped_method_alias_rejected"
 tags = ["integration", "receiver-methods", "imports", "aliases"]
+contract = "language.structs.receiver_method_alias_import_rejected"
+role = "primary"
 
 [[case]]
 id = "receiver_type_import_auto_imports_methods"
 path = "receiver_type_import_auto_imports_methods"
 tags = ["integration", "receiver-methods", "imports"]
+contract = "language.structs.receiver_method_auto_imported_with_type_acceptance"
+role = "primary"
 
 [[case]]
 id = "receiver_facade_type_import_no_private_method"
 path = "receiver_facade_type_import_no_private_method"
 tags = ["integration", "receiver-methods", "imports", "facade", "diagnostics"]
+contract = "language.structs.receiver_method_facade_private_not_visible_acceptance"
+role = "primary"
 
 [[case]]
 id = "receiver_facade_type_import_exported_method_success"
 path = "receiver_facade_type_import_exported_method_success"
 tags = ["integration", "receiver-methods", "imports", "facade"]
+contract = "language.structs.receiver_method_facade_exported_method_acceptance"
+role = "primary"
 
 [[case]]
 id = "receiver_facade_method_reexport_without_type_rejected"
 path = "receiver_facade_method_reexport_without_type_rejected"
 tags = ["integration", "receiver-methods", "imports", "facade", "diagnostics"]
+contract = "language.structs.receiver_method_reexport_without_type_rejected"
+role = "primary"
 
 [[case]]
 id = "receiver_facade_authored_method_export_rejected"
 path = "receiver_facade_authored_method_export_rejected"
 tags = ["integration", "receiver-methods", "imports", "facade", "diagnostics"]
+contract = "language.structs.receiver_method_authored_export_rejected"
+role = "primary"
 
 [[case]]
 id = "receiver_facade_namespace_no_private_method"
 path = "receiver_facade_namespace_no_private_method"
 tags = ["integration", "receiver-methods", "imports", "namespace-imports", "facade", "diagnostics"]
+contract = "language.structs.receiver_method_facade_namespace_private_not_visible_acceptance"
+role = "primary"
 
 [[case]]
 id = "receiver_facade_namespace_exported_method_success"
 path = "receiver_facade_namespace_exported_method_success"
 tags = ["integration", "receiver-methods", "imports", "namespace-imports", "facade"]
+contract = "language.structs.receiver_method_facade_namespace_exported_method_acceptance"
+role = "primary"
 
 [[case]]
 id = "choice_receiver_method_basic_call"
 path = "choice_receiver_method_basic_call"
 tags = ["integration", "receiver-methods", "choices"]
+contract = "language.choices.receiver_method_acceptance"
+role = "primary"
 
 [[case]]
 id = "choice_receiver_type_import_auto_imports_methods"
 path = "choice_receiver_type_import_auto_imports_methods"
 tags = ["integration", "receiver-methods", "choices", "imports"]
+contract = "language.choices.receiver_method_auto_imported_with_type_acceptance"
+role = "primary"
 
 [[case]]
 id = "receiver_facade_type_alias_no_private_method"
 path = "receiver_facade_type_alias_no_private_method"
 tags = ["integration", "receiver-methods", "imports", "facade", "diagnostics"]
+contract = "language.structs.receiver_method_facade_type_alias_private_access_rejected"
+role = "primary"
 
 [[case]]
 id = "receiver_same_method_name_different_receivers_success"
 path = "receiver_same_method_name_different_receivers_success"
 tags = ["integration", "receiver-methods", "imports"]
+contract = "language.structs.receiver_method_same_name_different_receivers_acceptance"
+role = "primary"
 
 [[case]]
 id = "receiver_same_file_and_imported_same_name_success"
 path = "receiver_same_file_and_imported_same_name_success"
 tags = ["integration", "receiver-methods", "imports", "aliases"]
+contract = "language.structs.receiver_method_same_name_local_and_imported_acceptance"
+role = "primary"
 
 [[case]]
 id = "receiver_method_import_without_type_rejected"
 path = "receiver_method_import_without_type_rejected"
 tags = ["integration", "receiver-methods", "imports", "diagnostics"]
+contract = "language.structs.receiver_method_import_without_type_rejected"
+role = "primary"
 
 [[case]]
 id = "receiver_method_import_collision_rejected"
 path = "receiver_method_import_collision_rejected"
 tags = ["integration", "receiver-methods", "imports", "diagnostics"]
+contract = "language.structs.receiver_method_import_collision_rejected"
+role = "primary"
 
 [[case]]
 id = "receiver_method_html_wasm_basic"
 path = "receiver_method_html_wasm_basic"
 tags = ["integration", "receiver-methods", "html-wasm"]
+contract = "language.structs.receiver_method_on_scalar_rejected"
+role = "boundary"
 
 [[case]]
 id = "receiver_method_aliasing_borrow_after_mutable_call"
 path = "receiver_method_aliasing_borrow_after_mutable_call"
 tags = ["integration", "receiver-methods", "borrows"]
+contract = "language.bindings.alias_after_mutable_receiver_call_acceptance"
+role = "primary"
 
 [[case]]
 id = "struct_unknown_field_access_diagnostic"
 path = "struct_unknown_field_access_diagnostic"
 tags = ["integration", "structs", "diagnostics"]
+contract = "language.structs.unknown_field_access_rejected"
+role = "primary"
 
 [[case]]
 id = "identifier_naming_warnings_mixed"
 path = "identifier_naming_warnings_mixed"
 tags = ["integration", "diagnostics"]
+contract = "language.syntax.identifier_naming_warnings_acceptance"
+role = "primary"
 
 [[case]]
 id = "identifier_keyword_shadow_header_error"
 path = "identifier_keyword_shadow_header_error"
 tags = ["integration", "diagnostics"]
+contract = "language.syntax.reserved_keyword_declaration_rejected"
+role = "boundary"
 
 [[case]]
 id = "identifier_keyword_shadow_ast_error"
 path = "identifier_keyword_shadow_ast_error"
 tags = ["integration", "diagnostics"]
+contract = "language.syntax.reserved_keyword_binding_rejected"
+role = "primary"
 
 [[case]]
 id = "case_identifier_success"
 path = "case_identifier_success"
 tags = ["integration", "language", "reserved-names"]
+contract = "language.syntax.case_identifier_acceptance"
+role = "primary"
 
 [[case]]
 id = "assert_keyword_shadow_header_error"
 path = "assert_keyword_shadow_header_error"
 tags = ["integration", "diagnostics", "reserved-names"]
+contract = "language.syntax.reserved_keyword_declaration_rejected"
+role = "boundary"
 
 [[case]]
 id = "assert_keyword_shadow_body_error"
 path = "assert_keyword_shadow_body_error"
 tags = ["integration", "diagnostics", "reserved-names"]
+contract = "language.syntax.reserved_keyword_binding_rejected"
+role = "boundary"
 
 [[case]]
 id = "assert_statement_success"
 path = "assert_statement_success"
 tags = ["integration", "language", "assert"]
+contract = "language.assert.statement_acceptance"
+role = "primary"
 
 [[case]]
 id = "assert_statement_message_success"
 path = "assert_statement_message_success"
 tags = ["integration", "language", "assert"]
+contract = "language.assert.statement_with_message_acceptance"
+role = "primary"
 
 [[case]]
 id = "assert_false_runtime_stop"
 path = "assert_false_runtime_stop"
 tags = ["integration", "language", "assert"]
+contract = "language.assert.false_runtime_stop_acceptance"
+role = "primary"
 
 [[case]]
 id = "assert_false_message_runtime_stop"
 path = "assert_false_message_runtime_stop"
 tags = ["integration", "language", "assert"]
+contract = "language.assert.false_message_runtime_stop_acceptance"
+role = "primary"
 
 [[case]]
 id = "assert_message_escaping_runtime_stop"
 path = "assert_message_escaping_runtime_stop"
 tags = ["integration", "language", "assert"]
+contract = "language.assert.message_escaping_runtime_stop_acceptance"
+role = "primary"
 
 [[case]]
 id = "assert_false_terminal_function"
 path = "assert_false_terminal_function"
 tags = ["integration", "language", "assert", "control-flow"]
+contract = "language.assert.false_terminal_satisfies_non_unit_return_acceptance"
+role = "primary"
 
 [[case]]
 id = "assert_dynamic_not_terminal"
 path = "assert_dynamic_not_terminal"
 tags = ["integration", "language", "assert", "control-flow"]
+contract = "language.assert.dynamic_not_terminal_rejected"
+role = "primary"
 
 [[case]]
 id = "function_fallthrough_rejected"
 path = "function_fallthrough_rejected"
 tags = ["integration", "language", "control-flow", "diagnostics"]
+contract = "language.functions.fallthrough_rejected"
+role = "primary"
 
 [[case]]
 id = "function_partial_if_return_rejected"
 path = "function_partial_if_return_rejected"
 tags = ["integration", "language", "control-flow", "diagnostics"]
+contract = "language.functions.partial_if_return_rejected"
+role = "primary"
 
 [[case]]
 id = "function_assert_false_terminal"
 path = "function_assert_false_terminal"
 tags = ["integration", "language", "assert", "control-flow"]
+contract = "language.assert.false_terminal_satisfies_non_unit_return_acceptance"
+role = "boundary"
 
 [[case]]
 id = "generic_function_fallthrough_rejected"
 path = "generic_function_fallthrough_rejected"
 tags = ["integration", "language", "generics", "control-flow", "diagnostics"]
+contract = "language.functions.fallthrough_rejected"
+role = "boundary"
 
 [[case]]
 id = "error_only_function_implicit_unit"
 path = "error_only_function_implicit_unit"
 tags = ["integration", "language", "control-flow", "error-handling"]
+contract = "language.functions.error_only_implicit_unit_acceptance"
+role = "primary"
 
 [[case]]
 id = "assert_condition_not_bool"
 path = "assert_condition_not_bool"
 tags = ["integration", "language", "assert", "diagnostics"]
+contract = "language.assert.condition_not_bool_rejected"
+role = "primary"
 
 [[case]]
 id = "assert_missing_argument"
 path = "assert_missing_argument"
 tags = ["integration", "language", "assert", "diagnostics"]
+contract = "language.assert.missing_argument_rejected"
+role = "primary"
 
 [[case]]
 id = "assert_too_many_arguments"
 path = "assert_too_many_arguments"
 tags = ["integration", "language", "assert", "diagnostics"]
+contract = "language.assert.too_many_arguments_rejected"
+role = "primary"
 
 [[case]]
 id = "assert_non_string_message"
 path = "assert_non_string_message"
 tags = ["integration", "language", "assert", "diagnostics"]
+contract = "language.assert.non_string_message_rejected"
+role = "primary"
 
 [[case]]
 id = "assert_named_argument_rejected"
 path = "assert_named_argument_rejected"
 tags = ["integration", "language", "assert", "diagnostics"]
+contract = "language.assert.named_argument_rejected"
+role = "primary"
 
 [[case]]
 id = "assert_mutable_marker_rejected"
 path = "assert_mutable_marker_rejected"
 tags = ["integration", "language", "assert", "diagnostics"]
+contract = "language.assert.mutable_marker_rejected"
+role = "primary"
 
 [[case]]
 id = "assert_expression_position"
 path = "assert_expression_position"
 tags = ["integration", "language", "assert", "diagnostics"]
+contract = "language.assert.expression_position_rejected"
+role = "primary"
 
 [[case]]
 id = "assert_bang_rejected"
 path = "assert_bang_rejected"
 tags = ["integration", "language", "assert", "diagnostics"]
+contract = "language.assert.bang_rejected"
+role = "primary"
 
 [[case]]
 id = "assert_catch_rejected"
 path = "assert_catch_rejected"
 tags = ["integration", "language", "assert", "diagnostics"]
+contract = "language.assert.catch_rejected"
+role = "primary"
 
 [[case]]
 id = "if_logical_precedence"
 path = "if_logical_precedence"
 tags = ["integration", "control-flow"]
+contract = "language.operators.logical_precedence_acceptance"
+role = "primary"
 
 [[case]]
 id = "if_nested_boolean_conditions"
 path = "if_nested_boolean_conditions"
 tags = ["integration", "control-flow"]
+contract = "language.control_flow.nested_boolean_conditions_acceptance"
+role = "primary"
 
 [[case]]
 id = "logical_parenthesized_grouping"
 path = "logical_parenthesized_grouping"
 tags = ["integration", "control-flow"]
+contract = "language.operators.parenthesized_grouping_acceptance"
+role = "primary"
 
 [[case]]
 id = "logical_short_circuit_and"
 path = "logical_short_circuit_and"
 tags = ["integration", "control-flow"]
+contract = "language.operators.short_circuit_and_acceptance"
+role = "primary"
 
 [[case]]
 id = "logical_short_circuit_or"
 path = "logical_short_circuit_or"
 tags = ["integration", "control-flow"]
+contract = "language.operators.short_circuit_or_acceptance"
+role = "primary"
 
 [[case]]
 id = "short_circuit_mutable_rhs_later_plain_use"
 path = "short_circuit_mutable_rhs_later_plain_use"
 tags = ["integration", "control-flow", "borrows"]
+contract = "language.bindings.short_circuit_mutable_rhs_later_plain_use_acceptance"
+role = "primary"
 
 [[case]]
 id = "short_circuit_place_rhs_later_plain_use"
 path = "short_circuit_place_rhs_later_plain_use"
 tags = ["integration", "control-flow", "borrows"]
+contract = "language.bindings.short_circuit_place_rhs_later_plain_use_acceptance"
+role = "primary"
 
 [[case]]
 id = "short_circuit_mutable_rhs_later_runtime_capture"
 path = "short_circuit_mutable_rhs_later_runtime_capture"
 tags = ["integration", "control-flow", "borrows", "templates"]
+contract = "language.bindings.short_circuit_mutable_rhs_runtime_capture_acceptance"
+role = "primary"
 
 [[case]]
 id = "short_circuit_mutable_rhs_runtime_capture_dual"
 path = "short_circuit_mutable_rhs_runtime_capture_dual"
 tags = ["integration", "control-flow", "borrows", "templates"]
+contract = "language.bindings.short_circuit_mutable_rhs_runtime_capture_dual_acceptance"
+role = "primary"
 
 [[case]]
 id = "short_circuit_mutable_rhs_no_later_use_inconsistent"
 path = "short_circuit_mutable_rhs_no_later_use_inconsistent"
 tags = ["integration", "control-flow", "borrows", "diagnostics"]
+contract = "language.bindings.short_circuit_mutable_rhs_no_later_use_rejected"
+role = "primary"
 
 [[case]]
 id = "runtime_fragment_mutable_reassignment_capture"
 path = "runtime_fragment_mutable_reassignment_capture"
 tags = ["integration", "templates", "borrows"]
+contract = "language.bindings.runtime_fragment_mutable_reassignment_capture_acceptance"
+role = "primary"
 
 [[case]]
 id = "if_condition_requires_bool"
 path = "if_condition_requires_bool"
 tags = ["integration", "control-flow", "diagnostics"]
+contract = "language.control_flow.if_condition_requires_bool_rejected"
+role = "primary"
 
 [[case]]
 id = "if_statement_else_if_unsupported"
 path = "if_statement_else_if_unsupported"
 tags = ["integration", "control-flow", "diagnostics"]
+contract = "language.control_flow.else_if_unsupported_rejected"
+role = "primary"
 
 [[case]]
 id = "logical_invalid_operand_types"
 path = "logical_invalid_operand_types"
 tags = ["integration", "diagnostics"]
+contract = "language.operators.invalid_operand_types_rejected"
+role = "primary"
 
 [[case]]
 id = "not_requires_bool"
 path = "not_requires_bool"
 tags = ["integration", "diagnostics"]
+contract = "language.operators.not_requires_bool_rejected"
+role = "primary"
 
 [[case]]
 id = "html_wasm_vec_start_abi"
 path = "html_wasm_vec_start_abi"
 tags = ["html-wasm", "abi", "vec-runtime"]
+contract = "backend.html_wasm.vec_start_abi"
+role = "backend"
 
 [[case]]
 id = "html_wasm_collection_runtime_coverage"
 path = "html_wasm_collection_runtime_coverage"
 tags = ["html-wasm", "collections", "runtime"]
+contract = "backend.html_wasm.collection_runtime_rejected"
+role = "backend"
 
 [[case]]
 id = "char_requires_char_literal_diagnostic"
 path = "char_requires_char_literal_diagnostic"
 tags = ["integration", "char", "diagnostics"]
+contract = "language.chars.requires_char_literal_rejected"
+role = "primary"
 
 [[case]]
 id = "top_level_code_non_entry_file_rejected"
 path = "top_level_code_non_entry_file_rejected"
 tags = ["error", "frontend-contract"]
+contract = "language.modules.top_level_code_non_entry_file_rejected"
+role = "primary"
 
 [[case]]
 id = "top_level_runtime_template_non_entry_file_rejected"
 path = "top_level_runtime_template_non_entry_file_rejected"
 tags = ["error", "frontend-contract"]
+contract = "language.templates.top_level_runtime_template_non_entry_file_rejected"
+role = "primary"
 
 [[case]]
 id = "entry_start_sees_sorted_declarations"
 path = "entry_start_sees_sorted_declarations"
 tags = ["integration", "frontend-contract", "dependency-sort"]
+contract = "language.modules.entry_start_sorted_declarations_acceptance"
+role = "primary"
 
 [[case]]
 id = "html_docs_site_proving_ground"
 path = "html_docs_site_proving_ground"
 tags = ["integration", "html-builder", "routes", "assets"]
+contract = "backend.html.docs_site_multi_route_assembly"
+role = "primary"
 
 [[case]]
 id = "struct_mutable_receiver_temporary_receiver_rejected"
 path = "struct_mutable_receiver_temporary_receiver_rejected"
 tags = ["integration", "structs", "diagnostics"]
+contract = "language.structs.mutable_receiver_temporary_receiver_rejected"
+role = "primary"
 
 [[case]]
 id = "struct_mutable_receiver_requires_explicit_receiver_tilde"
 path = "struct_mutable_receiver_requires_explicit_receiver_tilde"
 tags = ["integration", "structs", "diagnostics"]
+contract = "language.structs.mutable_receiver_requires_explicit_tilde_rejected"
+role = "primary"
 
 [[case]]
 id = "io_rejects_struct_value"
 path = "io_rejects_struct_value"
 tags = ["integration", "diagnostics", "string-coercion"]
+contract = "language.strings.io_rejects_non_string_value_rejected"
+role = "primary"
 
 [[case]]
 id = "io_rejects_collection_value"
 path = "io_rejects_collection_value"
 tags = ["integration", "diagnostics", "string-coercion"]
+contract = "language.strings.io_rejects_non_string_value_rejected"
+role = "boundary"
 
 [[case]]
 id = "io_rejects_option_value"
 path = "io_rejects_option_value"
 tags = ["integration", "diagnostics", "string-coercion"]
+contract = "language.strings.io_rejects_non_string_value_rejected"
+role = "boundary"
 
 [[case]]
 id = "io_rejects_result_value"
 path = "io_rejects_result_value"
 tags = ["integration", "diagnostics", "string-coercion"]
+contract = "language.results.unhandled_fallible_expression_rejected"
+role = "boundary"
 
 [[case]]
 id = "io_rejects_multiple_return_value"
 path = "io_rejects_multiple_return_value"
 tags = ["integration", "diagnostics", "string-coercion"]
+contract = "language.strings.io_rejects_non_string_value_rejected"
+role = "boundary"
 
 [[case]]
 id = "template_head_rejects_struct_value"
 path = "template_head_rejects_struct_value"
 tags = ["integration", "diagnostics", "string-coercion", "templates"]
+contract = "language.strings.template_head_rejects_non_string_value_rejected"
+role = "primary"
 
 [[case]]
 id = "template_head_rejects_collection_value"
 path = "template_head_rejects_collection_value"
 tags = ["integration", "diagnostics", "string-coercion", "templates"]
+contract = "language.strings.template_head_rejects_non_string_value_rejected"
+role = "boundary"
 
 [[case]]
 id = "template_head_rejects_option_value"
 path = "template_head_rejects_option_value"
 tags = ["integration", "diagnostics", "string-coercion", "templates"]
+contract = "language.strings.template_head_rejects_non_string_value_rejected"
+role = "boundary"
 
 [[case]]
 id = "template_head_rejects_result_value"
 path = "template_head_rejects_result_value"
 tags = ["integration", "diagnostics", "string-coercion", "templates"]
+contract = "language.results.unhandled_fallible_expression_rejected"
+role = "boundary"
 
 [[case]]
 id = "template_head_rejects_multiple_return_value"
 path = "template_head_rejects_multiple_return_value"
 tags = ["integration", "diagnostics", "string-coercion", "templates"]
+contract = "language.strings.template_head_rejects_non_string_value_rejected"
+role = "boundary"
 
 [[case]]
 id = "template_head_alias_to_string_success"
 path = "template_head_alias_to_string_success"
 tags = ["integration", "diagnostics", "string-coercion", "templates", "aliases"]
+contract = "language.strings.template_head_alias_to_string_acceptance"
+role = "primary"
 
 [[case]]
 id = "template_head_alias_to_struct_rejected"
 path = "template_head_alias_to_struct_rejected"
 tags = ["integration", "diagnostics", "string-coercion", "templates", "aliases"]
+contract = "language.strings.template_head_alias_to_struct_rejected"
+role = "primary"
 
 [[case]]
 id = "template_head_generic_struct_instance_rejected"
 path = "template_head_generic_struct_instance_rejected"
 tags = ["integration", "diagnostics", "string-coercion", "templates", "generics"]
+contract = "language.strings.template_head_generic_struct_instance_rejected"
+role = "primary"
 
 [[case]]
 id = "template_head_unrelated_unresolved_const_does_not_defer_invalid_type"
 path = "template_head_unrelated_unresolved_const_does_not_defer_invalid_type"
 tags = ["integration", "diagnostics", "string-coercion", "templates", "constants"]
+contract = "language.strings.template_head_unrelated_const_does_not_defer_invalid_type_rejected"
+role = "primary"
 
 [[case]]
 id = "template_head_external_opaque_rejected"
 path = "template_head_external_opaque_rejected"
 tags = ["integration", "diagnostics", "string-coercion", "templates", "external"]
+contract = "language.strings.template_head_external_opaque_rejected"
+role = "primary"
 
 [[case]]
 id = "string_coercion_valid_paths_compile_invalid_fails_early"
 path = "string_coercion_valid_paths_compile_invalid_fails_early"
 tags = ["integration", "diagnostics", "string-coercion", "regression"]
+contract = "language.strings.coercion_valid_paths_invalid_fails_early_rejected"
+role = "primary"
 
 [[case]]
 id = "result_deep_propagation_stack"
 path = "result_deep_propagation_stack"
 tags = ["integration", "results", "js-backend"]
+contract = "language.results.deep_propagation_stack_acceptance"
+role = "primary"
 
 [[case]]
 id = "result_fallback_in_branch"
 path = "result_fallback_in_branch"
 tags = ["integration", "results", "control-flow", "js-backend"]
+contract = "language.results.fallback_in_branch_acceptance"
+role = "primary"
 
 [[case]]
 id = "result_fallback_in_match_arm"
 path = "result_fallback_in_match_arm"
 tags = ["integration", "results", "control-flow", "js-backend"]
+contract = "language.results.fallback_in_match_arm_acceptance"
+role = "primary"
 
 [[case]]
 id = "error_rethrow_multilayer"
 path = "error_rethrow_multilayer"
 tags = ["integration", "results", "js-backend"]
+contract = "language.results.rethrow_multilayer_acceptance"
+role = "primary"
 
 [[case]]
 id = "result_propagate_in_template_fragment"
 path = "result_propagate_in_template_fragment"
 tags = ["integration", "results", "templates", "js-backend"]
+contract = "language.results.propagation_in_template_fragment_acceptance"
+role = "primary"
 
 [[case]]
 id = "dispatcher_nested_loops_multi_break"
 path = "dispatcher_nested_loops_multi_break"
 tags = ["integration", "control-flow", "js-backend", "dispatcher"]
+contract = "backend.html.js_dispatcher_nested_loops_multi_break_lowering"
+role = "backend"
 
 [[case]]
 id = "dispatcher_loop_match_result_fallback"
 path = "dispatcher_loop_match_result_fallback"
 tags = ["integration", "control-flow", "results", "js-backend", "dispatcher"]
+contract = "backend.html.js_dispatcher_loop_match_result_fallback_lowering"
+role = "backend"
 
 [[case]]
 id = "dispatcher_break_continue_chain"
 path = "dispatcher_break_continue_chain"
 tags = ["integration", "control-flow", "js-backend", "dispatcher"]
+contract = "backend.html.js_dispatcher_break_continue_chain_lowering"
+role = "backend"
 
 [[case]]
 id = "dispatcher_branch_heavy_cyclic"
