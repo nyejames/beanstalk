@@ -2915,6 +2915,20 @@ contract = "language.maps.get_alias_blocks_set_when_used_after_mutation"
 role = "primary"
 
 [[case]]
+id = "map_alias_final_use_allows_mutation"
+path = "map_alias_final_use_allows_mutation"
+tags = ["integration", "borrows", "hashmaps"]
+contract = "language.maps.alias_final_use_allows_mutable_set"
+role = "primary"
+
+[[case]]
+id = "map_explicit_copy_independent_after_mutation"
+path = "map_explicit_copy_independent_after_mutation"
+tags = ["integration", "borrows", "hashmaps"]
+contract = "language.maps.explicit_copy_independent_after_mutation"
+role = "primary"
+
+[[case]]
 id = "literal_match_requires_else_failure"
 path = "literal_match_requires_else_failure"
 tags = ["integration","control-flow","diagnostics"]
