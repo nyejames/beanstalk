@@ -106,6 +106,12 @@ A successful HTML or HTML-Wasm backend always runs its universal backend baselin
 semantic, artifact, golden, absence or expected-warning assertion. A whole-case acceptance-only
 fixture uses `role = "smoke"`.
 
+Runtime behavior uses the existing Node harness through `rendered_output_*` fields. Use
+`rendered_output_exact` for complete deterministic output, `rendered_output_contains_in_order` for
+chronology, and `rendered_output_contains_exactly_once` for activation or mount multiplicity. Exact
+mode normalizes line endings only. Prefer narrow artifact assertions for static output and reserve
+goldens for exact emitted text that is genuinely contractual.
+
 Failure `diagnostic_codes` and exact `warning_codes` are unordered multisets, so duplicate codes
 must be repeated. Exact diagnostic matching is the default:
 

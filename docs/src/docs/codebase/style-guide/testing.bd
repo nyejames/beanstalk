@@ -235,16 +235,52 @@ Audit cannot be combined with filters or `--list`. It writes the reporting-owned
 expectation facts, hard-policy violations and advisory missing-classification findings. The report
 is review input only; it never deletes, merges or rewrites fixtures.
 
-The schema 5 inventory reports acceptance-only, rendered-output, artifact, golden, absence and
-expected-warning backend counts, plus the zero baseline-only invariant. Per-backend fields keep
-`baseline_applied`, `acceptance_only`, `assertion_kinds`, `golden_present`, `golden_mode`, exact
-warning codes, diagnostic match mode and any contains-mode reason separate so the report matches
-what ran.
+The schema 6 inventory reports acceptance-only, rendered-output, artifact, golden, absence and
+expected-warning backend counts, plus the zero baseline-only invariant. It reports exact, ordered
+and exact-once runtime contracts separately. Per-backend fields keep `baseline_applied`,
+`acceptance_only`, `assertion_kinds`, `golden_present`, `golden_mode`, every rendered-output form,
+exact warning codes, diagnostic match mode and any contains-mode reason separate so the report
+matches what ran.
 
 Hard policy has one suite-policy owner. Duplicate primary contracts, a primary without a contract
 and a whole-case acceptance-only fixture without `role = "smoke"` are hard findings. Normal list
 and execution modes reject hard findings before selection or compilation. Audit still writes the
 complete JSON report, then returns failure. Advisory classification findings remain non-fatal.
+
+### Runtime output assertions
+
+Runtime assertions use one Node harness. It records console output and HTML fragment inserts in one
+event array when each event happens, then joins their text with newlines in that same order. Channel
+views are derived from the event array. They never reconstruct chronology after execution.
+
+The harness runs only when a backend declares a rendered-output assertion. It executes the emitted
+page scripts and waits for one documented microtask tick so scheduled reactive updates can flush.
+Do not make extra scheduler turns or incidental microtask counts contractual.
+
+Choose the narrowest field that owns the behaviour:
+
+- `rendered_output_exact` protects the complete combined output. It is mutually exclusive with the
+  other rendered-output fields. Exact comparison normalizes line endings only and preserves every
+  other whitespace difference.
+- `rendered_output_contains_in_order` protects the relative order of two or more fragments.
+- `rendered_output_contains_exactly_once` protects activation, mounting and helper output from
+  duplication.
+- `rendered_output_contains` and `rendered_output_not_contains` protect required and forbidden
+  fragments when complete output isn't the contract.
+
+[codeblock, $code("text"):
+    [backends.html]
+    mode = "success"
+    warnings = "forbid"
+    rendered_output_contains = ["active-root"]
+    rendered_output_not_contains = ["imported-root"]
+    rendered_output_contains_in_order = ["before-loop", "after-loop"]
+    rendered_output_contains_exactly_once = ["active-root", "mounted"]
+]
+
+Use exact output for small deterministic behaviours such as loop or map operation results. Use
+ordered and exact-once fragments when unrelated output may coexist. Prefer these runtime contracts
+over generated JavaScript text or a whole-page golden when execution is the real owner.
 
 ### Diagnostics assertions
 
@@ -354,6 +390,8 @@ Use one `expect.toml` per case with backend-specific assertion blocks.
 - Use artifact assertions for structure: file presence, Wasm validity, exports, imports, expected snippets, absence of forbidden output.
 - Use `artifacts_must_not_exist` for success cases whose contract requires an exact normalized output path to be absent. Paths reported as `NotBuilt` are ignored because they were never emitted.
 - Use strict goldens only where exact emitted text is contractual.
+- The canonical suite currently has no file-backed golden blocks. A future golden needs an explicit
+  exact-artifact rationale that a runtime or narrow artifact assertion cannot express.
 - Golden discovery recursively counts actual files. Empty or directory-only golden trees do not
   create a contract. Nested files do.
 - `golden_mode` without at least one discovered file is invalid. When files exist, strict is the
