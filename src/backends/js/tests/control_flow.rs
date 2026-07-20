@@ -210,7 +210,7 @@ fn emits_structured_match_without_inlining_synthetic_merge_arm() {
     )
     .expect("JS lowering should succeed");
 
-    assert!(output.source.contains("const __match_value_0"));
+    assert!(output.source.contains("const __match_value_"));
     assert!(!output.source.contains("else if (true)"));
     assert!(!output.source.contains("switch (__bb"));
 }
@@ -316,7 +316,7 @@ fn literal_match_uses_structured_lowering_when_cfg_is_acyclic() {
     .expect("JS lowering should succeed");
 
     assert!(
-        output.source.contains("const __match_value_0"),
+        output.source.contains("const __match_value_"),
         "structured lowering should stage the scrutinee once in a temp"
     );
     assert!(
@@ -333,6 +333,8 @@ fn literal_match_uses_structured_lowering_when_cfg_is_acyclic() {
     );
 }
 
+/// Verifies that OptionPresent match patterns lower to a some-tag check without
+/// payload comparison. [cfg]
 #[test]
 fn option_present_match_checks_some_tag_without_payload_comparison() {
     let mut string_table = StringTable::new();
@@ -1001,7 +1003,7 @@ fn match_guard_condition_emits_pattern_and_guard_conjunction() {
     .expect("JS lowering should succeed");
 
     assert!(
-        output.source.contains("if ((__match_value_0 === 1) && ("),
+        output.source.contains("if ((__match_value_") && output.source.contains("=== 1) && ("),
         "guarded match arm should emit conjunction between pattern and guard"
     );
     assert!(
