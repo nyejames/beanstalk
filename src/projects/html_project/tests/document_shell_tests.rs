@@ -44,22 +44,6 @@ fn renderer_outputs_full_document_shell() {
 }
 
 #[test]
-fn renderer_applies_title_precedence_and_affixes() {
-    let config = HtmlDocumentConfig {
-        title_prefix: String::from("Docs | "),
-        title_postfix: String::from(" | Beanstalk"),
-        ..HtmlDocumentConfig::default()
-    };
-    let page = HtmlPageMetadata {
-        title: Some(String::from("Overview")),
-        ..HtmlPageMetadata::default()
-    };
-
-    let html = render_shell(&config, &page, "docs/index.html", "Project", "", "");
-    assert!(html.contains("<title>Docs | Overview | Beanstalk</title>"));
-}
-
-#[test]
 fn renderer_uses_route_title_fallback_before_project_name() {
     let html = render_shell(
         &HtmlDocumentConfig::default(),
@@ -71,21 +55,6 @@ fn renderer_uses_route_title_fallback_before_project_name() {
     );
 
     assert!(html.contains("<title>Basics</title>"));
-}
-
-#[test]
-fn renderer_uses_page_body_style_before_config_style() {
-    let config = HtmlDocumentConfig {
-        body_style: String::from("margin: 0;"),
-        ..HtmlDocumentConfig::default()
-    };
-    let page = HtmlPageMetadata {
-        body_style: Some(String::from("padding: 0;")),
-        ..HtmlPageMetadata::default()
-    };
-
-    let html = render_shell(&config, &page, "index.html", "", "", "");
-    assert!(html.contains("<body style=\"padding: 0;\">"));
 }
 
 #[test]

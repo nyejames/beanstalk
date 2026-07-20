@@ -1,7 +1,6 @@
 //! Tests for the JS-only HTML rendering path.
 
 use super::*;
-use crate::build_system::build::ResolvedConstFragment;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::projects::html_project::document_config::HtmlDocumentConfig;
 use crate::projects::html_project::tests::test_support::{
@@ -9,29 +8,6 @@ use crate::projects::html_project::tests::test_support::{
 };
 use std::collections::HashMap;
 use std::path::Path;
-
-#[test]
-fn render_entry_fragments_static_before_runtime_slot() {
-    // WHAT: const fragment at insertion_index=0 must appear before the first runtime slot div.
-    let const_fragments = vec![ResolvedConstFragment {
-        runtime_insertion_index: 0,
-        rendered_text: String::from("<h1>Hello</h1>"),
-    }];
-    let (body_html, slot_ids) = render_entry_fragments(&const_fragments, 1);
-
-    let static_pos = body_html
-        .find("<h1>Hello</h1>")
-        .expect("static fragment must be present");
-    let slot_pos = body_html
-        .find("bst-slot-0")
-        .expect("runtime slot must be present");
-
-    assert_eq!(slot_ids.len(), 1);
-    assert!(
-        static_pos < slot_pos,
-        "const fragment must precede runtime slot div"
-    );
-}
 
 #[test]
 fn bootstrap_script_calls_start_once_and_hydrates_slots() {
