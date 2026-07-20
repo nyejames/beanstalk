@@ -30,26 +30,26 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 12 collection/map ordered runtime consolidation
-LAST_ACCEPTED_COMMIT: `4b9bd49e7` (Phase 12C named/default arguments)
+CURRENT_SLICE: Phase 13 backend test ownership classification
+LAST_ACCEPTED_COMMIT: `7c4e33a99` (Phase 12D ordered collection runtime)
 WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; accepted code is committed; unrelated concurrent docs source and generated-release edits remain unstaged
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: test ownership, pruning, exact runtime assertion, and failure-localization rules govern the next slice
-- code: ordered collection/map positive cases are the final Phase 12 consolidation inventory
+- docs: backend lowering, ABI, artifact, and semantic-substitute ownership rules govern the next slice
+- code: JS/Wasm backend tests and their existing integration runtime/artifact owners are the Phase 13 inventory
 ACCEPTANCE_CRITERIA:
-- consolidate only exact shared positive contracts into the strongest existing primary owner
-- retain distinct negative diagnostic reasons and avoid cross-feature mega-fixtures
-- remove superseded folders/manifest entries atomically with no semantic coverage loss
+- classify backend tests as ABI, helper, mapping, planning, malformed HIR, artifact, or semantic substitute
+- remove only semantic substitutes with verified integration owners
+- retain deliberate target representation and malformed-HIR contracts without broadening backend support
 VALIDATION_STATE:
-- `just validate`: passed; cross-target Clippy, 3,541 Rust tests, 1,795 integration executions, docs check, and 28 benchmark cases
-- focused Phase 12C coverage: passed; consolidated ordinary named/default owner, distinct mutable named owner, functions-plus-named-args selection, and zero audit hard findings across 1,649 cases
+- `just validate`: passed; cross-target Clippy, 3,541 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
+- focused Phase 12D coverage: passed; consolidated ordered collection owner, retained map and backend artifact owners, collections selection, and zero audit hard findings across 1,647 cases
 DOCS_IMPACT: progress matrix reviewed; support and backend coverage are unchanged by fixture consolidation; index unchanged
 BLOCKERS_OR_OPEN_DECISIONS: none for the next slice; Ollama remains required with no provider substitution
-DELEGATION_DECISION: Ollama — bounded Phase 12 consolidation slices
+DELEGATION_DECISION: Ollama — bounded Phase 13 backend ownership slices
 NEXT_WORKER_ORDER: Ollama only; no provider substitution
 STOP_REASON: none
-NEXT_RESUME_ACTION: inventory collection/map ordered runtime cases and launch the final Phase 12 consolidation through Ollama
+NEXT_RESUME_ACTION: inventory backend tests by owner/category and launch the first coherent Phase 13 slice through Ollama
 
 ---
 
@@ -195,6 +195,7 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 12A fresh mutable values | `73f13864c` | Accepted | Four positive fresh-rvalue forms consolidated into one exact-output primary owner; every mutable callee mutates its fresh local; explicit-copy and negative diagnostic owners remain separate; 3,541 Rust tests, 1,658 cases, and 1,804 integration executions |
 | Phase 12B choice equality truth table | `f601ebe2c` | Accepted | Eight local equality micro-fixtures consolidated into one exact-output primary truth table; single-evaluation, imported/aliased/generic, constructor-routing, and negative owners remain separate; 3,541 Rust tests, 1,651 cases, and 1,797 integration executions |
 | Phase 12C named/default arguments | `4b9bd49e7` | Accepted | Three ordinary call-routing successes consolidated into one exact-output primary owner for mixed positional/named, reversed all-named, and skipped-default binding; mutable named access, constructors, and diagnostics remain separate; 3,541 Rust tests, 1,649 cases, and 1,795 integration executions |
+| Phase 12D ordered collection runtime | `7c4e33a99` | Accepted | Literal/set/method semantic positives consolidated into one exact ordered push/set/remove/readback primary owner; map ordering, empty/fixed/control-flow, and backend artifact owners remain separate; 3,541 Rust tests, 1,647 cases, and 1,793 integration executions |
 
 ---
 
@@ -901,7 +902,7 @@ so Phase 5D retains no whole-page golden.
 
 | Conversion batch | Cases | Replacement owner |
 |---|---|---|
-| 5D2 runtime values | `function_call_named_args_mutable_success`, `collection_literal_smoke`, `comparison_and_logical`, `function_call_named_and_default_args_success`, `functions`, `structs_and_collections`, `char_basic`, `char_equality`, `char_ordering`, `char_in_template`, `struct_constructor_all_defaults`, `struct_nested_field_mutation_success`, `short_circuit_place_rhs_later_plain_use` | Exact runtime output over existing context-rich markers. |
+| 5D2 runtime values | `function_call_named_args_mutable_success`, `collection_ordered_runtime_operations`, `comparison_and_logical`, `function_call_named_and_default_args_success`, `functions`, `structs_and_collections`, `char_basic`, `char_equality`, `char_ordering`, `char_in_template`, `struct_constructor_all_defaults`, `struct_nested_field_mutation_success`, `short_circuit_place_rhs_later_plain_use` | Exact runtime output over existing context-rich markers. |
 | 5D3 receiver behavior | `struct_chained_immutable_receiver_method_call`, `receiver_method_exported_cross_file_success`, `receiver_method_mutable_struct_success`, `receiver_method_nested_struct_success`, `receiver_method_chained_mutable_and_field_access`, `receiver_method_field_write_then_mutable_call`, `receiver_method_alias_return_success`, `receiver_method_exported_cross_file_mutable_success`, `receiver_method_aliasing_borrow_after_mutable_call` | Exact runtime output; add context-rich fixture markers where the current console value is ambiguous. |
 | 5D4 template/import runtime behavior | `imported_start_function_callable_not_auto_run`, `relative_import_dot_segments`, `template_output_test`, `template_slots_const_folding`, `import_path_separator_normalized_diagnostic`, `template_positional_named_mixed`, `template_positional_slot_children_body`, `template_style_css_success`, `template_style_markdown_success` | Exact or ordered runtime output, plus narrow static artifact/absence assertions where a mixed case owns both lanes. |
 | 5D5 static artifact and absence | `basic_page_output`, `html_tracked_asset_unreferenced_not_emitted`, `top_level_const_template`, `top_level_const_template_multiple_ordered`, `top_level_const_template_single_item` | Narrow HTML contains/order and unreferenced-asset absence assertions. |
@@ -1137,24 +1138,24 @@ When current implementation does not support the accepted canonical-module end s
 
 ## Rules for every consolidation
 
-- [ ] Identify one exact shared semantic contract.
-- [ ] Choose the strongest existing primary case.
-- [ ] Add distinct semantic output markers and exact/ordered assertions.
-- [ ] Run the combined case before deletion.
-- [ ] Keep negative reason cases separate.
-- [ ] Delete superseded folders, expectations, goldens, and manifest entries atomically.
-- [ ] Update tags/contracts/roles.
-- [ ] Record every deletion.
-- [ ] Confirm failure localization remains acceptable.
-- [ ] Do not create cross-feature mega-fixtures.
+- [x] Identify one exact shared semantic contract.
+- [x] Choose the strongest existing primary case.
+- [x] Add distinct semantic output markers and exact/ordered assertions.
+- [x] Run the combined case before deletion.
+- [x] Keep negative reason cases separate.
+- [x] Delete superseded folders, expectations, goldens, and manifest entries atomically.
+- [x] Update tags/contracts/roles.
+- [x] Record every deletion.
+- [x] Confirm failure localization remains acceptable.
+- [x] Do not create cross-feature mega-fixtures.
 
 ## Phase 12 acceptance
 
-- [ ] Positive coverage is denser without becoming ambiguous.
-- [ ] Negative diagnostics remain isolated.
-- [ ] No stale files or manifest entries remain.
-- [ ] No semantic coverage was lost.
-- [ ] Full validation passes.
+- [x] Positive coverage is denser without becoming ambiguous.
+- [x] Negative diagnostics remain isolated.
+- [x] No stale files or manifest entries remain.
+- [x] No semantic coverage was lost.
+- [x] Full validation passes.
 
 ---
 
@@ -1352,6 +1353,7 @@ Do not present lower counts or faster time as proof of correctness.
 | `function_call_mutable_param_fresh_computed_arg` -> `function_call_mutable_param_fresh_values`; removed `function_call_mutable_param_fresh_{template_arg,collection_arg,struct_arg}` | Fresh computed, template, collection, and struct values satisfy mutable parameters without authored `~` | `function_call_mutable_param_fresh_values` | `function_call_mutable_param_copy_arg` retains explicit-copy independence; negative access forms remain isolated | `73f13864c` |
 | `choice_payload_equality_nested_choice_true` -> `choice_equality_truth_table`; removed `choice_unit_equality_success`, `choice_payload_equality_{same_payload_true,different_payload_false,unit_vs_payload_false,same_choice_different_variants_false,nested_choice_false}`, and `choice_payload_structural_equality_success` | Local structural equality truth table across unit, scalar-payload, variant, and nested-choice dimensions | `choice_equality_truth_table` | `choice_payload_equality_side_effects_evaluated_once` retains single-evaluation behavior; imported, aliased, generic, constructor-routing, and negative cases remain separate | `f601ebe2c` |
 | `function_call_named_args_success` -> `function_call_named_and_default_args_success`; removed `function_call_named_args_{all_named,default_skip}` | Ordinary mixed positional/named, all-named, and skipped-default call binding | `function_call_named_and_default_args_success` | `function_call_named_args_mutable_success` retains exclusive-access routing; constructor defaults and all diagnostics remain separate | `4b9bd49e7` |
+| `collection_methods_end_to_end` -> `collection_ordered_runtime_operations`; removed `collection_set_end_to_end` and `collection_literal_smoke` | Growable collection literal plus ordered push, set, remove, complete readback, and length semantics | `collection_ordered_runtime_operations` | `hashmap_js_runtime_contract` retains map ordering; collection helper/artifact, empty/fixed/control-flow, borrow, and error owners remain separate | `7c4e33a99` |
 | Phase 5D2 15 normalized HTML whole-page goldens | Runtime values for calls, collections, logical expressions, chars, structs, and short-circuit behavior | The same 15 canonical cases through `rendered_output_exact` | none | `d5256868b` |
 | Phase 5D3 nine normalized receiver HTML whole-page goldens | Immutable, mutable, nested, chained, exported, alias-return, and post-mutation receiver behavior | The same nine canonical cases through exact context-rich runtime output | none | `914c1c131` |
 | Phase 5D4 nine normalized template/import HTML whole-page goldens | Import execution/suppression, runtime templates, const slots, CSS, Markdown, and positional slot behavior | Runtime exact/order/exact-once plus narrow static `index.html` assertions in the same nine cases | none | `71f75c220` |
