@@ -4,3 +4,14 @@ entry = "."
 mode = "failure"
 warnings = "forbid"
 diagnostic_codes = ["BST-BORROW-0002"]
+
+[[backends.html.diagnostic_assertions]]
+code = "BST-BORROW-0002"
+path = "input/#page.bst"
+line = 10
+count = 1
+
+[[backends.html.diagnostic_assertions.secondary_labels]]
+occurrence = 1
+path = "input/#page.bst"
+line = 10

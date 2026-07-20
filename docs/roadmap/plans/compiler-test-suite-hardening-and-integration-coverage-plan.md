@@ -30,26 +30,26 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 4C9 — generated generic diagnostic remapping across source files
-LAST_ACCEPTED_COMMIT: `d71dfa6a5` (Phase 4C8b)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 4C9 fixture and plan update are ready to commit; unrelated generated font/style rebuild churn from `a83e9587f` remains unstaged
+CURRENT_SLICE: Phase 4C10 — declaration and borrow-conflict secondary-label owners
+LAST_ACCEPTED_COMMIT: `a72876029` (Phase 4C9)
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 4C10 expectations and plan update are ready to commit; unrelated generated font/style rebuild churn from `a83e9587f` remains unstaged
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: compiler architecture requires diagnostic paths and labels to survive deterministic source remapping; generic instances are materialized before HIR with call-site diagnostics and declaration-owned templates
-- code: `generic_function_recursive_instantiation_rejected` already emits a call-site primary plus body, declaration, and substitution secondary labels, but remains single-file and asserts rendered label prose
+- docs: testing standards preserve source locations where they are contractual; compiler diagnostics retain structured secondary labels instead of requiring rendered prose
+- code: `duplicate_function_names` and `borrow_checker_duplicate_mutable_args` emit real previous-declaration and earlier-conflicting-access secondary labels but currently assert codes only
 ACCEPTANCE_CRITERIA:
-- move the recursive generic declaration into a case-owned helper source without changing the rejected program contract
-- assert the exact recursive-instantiation reason, call-site path/line, and all helper-file secondary label paths/lines
-- remove rendered label wording whose contract is now structured while preserving the exact code and backend outcome
+- add representative structured primary and secondary-label path/line assertions in the rule and borrow diagnostic lanes
+- preserve exact codes, source fixtures, backend outcomes, and compiler-owned payload identity without inventing runner reasons
+- keep one owner per distinct declaration/conflict label contract
 VALIDATION_STATE:
 - `just validate`: passed; cross-target Clippy, 3,557 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
-- Phase 4C9 focused case/audit: passed; exact HTML case plus a clean 1,645-case inventory
+- Phase 4C10 focused cases/audit: passed; two exact HTML cases plus a clean 1,645-case inventory
 DOCS_IMPACT: official structured-assertion workflow docs wait for Phase 4 closure; progress matrix and `index.md` unchanged
 BLOCKERS_OR_OPEN_DECISIONS: Ollama wrapper still requires removed `docs/codebase-style-guide.md`; 19 justified diagnostic-contains blocks record duplicate module compilation that the queued canonical-module plan must remove
 DELEGATION_DECISION: codex-cli fallback — the user-selected Ollama default is cleanly blocked before edits by its stale required-document path
 NEXT_WORKER_ORDER: codex-cli, parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit Phase 4C9, refresh its hash, then add representative declaration and borrow-conflict secondary-label owners
+NEXT_RESUME_ACTION: commit Phase 4C10, refresh its hash, then close Phase 4 workflow/progress documentation without absorbing concurrent docs churn
 
 ---
 
@@ -168,7 +168,8 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 4C7 invalid fallible-handling reasons | `5d72c1b75` | Accepted | All 36 `BST-RULE-0051` fixtures distinguish 17 compiler-owned reasons; 12 redundant rendered wording fragments removed; 1,778/1,778 executions |
 | Phase 4C8a backend feature reason identity | `a9661ada0` | Accepted | Nine reachable backend-feature reasons replace interned feature prose; unreachable runtime-fragment rejection identity removed; 3,557 Rust tests and 1,778 integration executions |
 | Phase 4C8b backend feature reason assertions | `d71dfa6a5` | Accepted | All 29 `BST-RULE-0064` fixtures distinguish seven exercised reasons; 24 redundant rendered wording fragments removed; 1,778/1,778 executions |
-| Phase 4C9 generated generic remapping | pending acceptance commit | Accepted | Recursive generic instantiation keeps the call site primary while body, declaration, and substitution labels remap to a helper source; rendered label prose removed; 1,778/1,778 executions |
+| Phase 4C9 generated generic remapping | `a72876029` | Accepted | Recursive generic instantiation keeps the call site primary while body, declaration, and substitution labels remap to a helper source; rendered label prose removed; 1,778/1,778 executions |
+| Phase 4C10 declaration/conflict secondary labels | pending acceptance commit | Accepted | Duplicate declarations and duplicate exclusive accesses assert primary and earlier-site secondary paths/lines through rule and borrow diagnostic lanes; 1,778/1,778 executions |
 
 ---
 
