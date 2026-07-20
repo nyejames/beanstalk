@@ -390,7 +390,7 @@ fn validate_fixture_contract(
                     return Err(format!(
                         "Fixture '{}' backend '{}' uses mode = \"success\" and must author at least one accepted success contract: \
                          success_contract = \"acceptance_only\", artifact assertions, a non-empty '{}' directory, \
-                         rendered-output assertions, artifact-absence assertions, or warnings = \"exact\" with warning_count/warning_codes.",
+                         rendered-output assertions, artifact-absence assertions, or warnings = \"exact\" with warning_codes.",
                         fixture_root.display(),
                         backend_expectation.backend_id.as_str(),
                         golden_dir_for_backend(fixture_root, backend_expectation.backend_id)

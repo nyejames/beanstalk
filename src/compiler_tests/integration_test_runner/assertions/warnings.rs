@@ -1,6 +1,6 @@
 //! Warning identity checks for integration results.
 //!
-//! WHAT: applies ignore, forbid and exact warning-code/count expectation contracts.
+//! WHAT: applies ignore, forbid and exact warning-code expectation contracts.
 //! WHY: warning diagnostics remain structured through both success and failure result lanes, so
 //!      identity matching never needs to parse rendered warning prose.
 
@@ -19,21 +19,11 @@ pub(super) fn validate_warning_expectation<'diagnostic>(
         WarningExpectation::Forbid => (!actual_warnings.is_empty())
             .then(|| format!("Expected no warnings, but found {}.", actual_warnings.len())),
         WarningExpectation::Exact(exact) => {
-            let Some(expected_codes) = &exact.expected_codes else {
-                return (actual_warnings.len() != exact.expected_count).then(|| {
-                    format!(
-                        "Expected exactly {} warnings, but found {}.",
-                        exact.expected_count,
-                        actual_warnings.len()
-                    )
-                });
-            };
-
             let actual_codes = actual_warnings
                 .iter()
                 .map(|warning| warning.kind.code())
                 .collect::<Vec<_>>();
-            compare_warning_code_multisets(expected_codes, &actual_codes)
+            compare_warning_code_multisets(&exact.expected_codes, &actual_codes)
         }
     }
 }

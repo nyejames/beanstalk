@@ -496,7 +496,7 @@ fn accepts_success_fixture_with_exact_warning_contract() {
     fs::write(input_root.join("#page.bst"), "#[:ok]\n").expect("should write source");
     fs::write(
         case_root.join(EXPECT_FILE_NAME),
-        "[backends.html]\nmode = \"success\"\nwarnings = \"exact\"\nwarning_count = 0\n",
+        "[backends.html]\nmode = \"success\"\nwarnings = \"exact\"\nwarning_codes = []\n",
     )
     .expect("should write expect file");
 
@@ -549,7 +549,7 @@ fn default_forbidden_warnings_do_not_satisfy_success_completeness() {
         panic!("default warnings = forbid should not satisfy completeness");
     };
     assert!(
-        error.contains("warnings = \"exact\" with warning_count"),
+        error.contains("warnings = \"exact\" with warning_codes"),
         "unexpected error: {error}"
     );
 

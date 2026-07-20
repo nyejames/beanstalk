@@ -114,8 +114,7 @@ impl DiagnosticMatchMode {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct ExactWarningExpectation {
-    pub expected_codes: Option<Vec<String>>,
-    pub expected_count: usize,
+    pub expected_codes: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

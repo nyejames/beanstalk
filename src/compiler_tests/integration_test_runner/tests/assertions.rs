@@ -267,8 +267,7 @@ fn contains_matching_requires_every_expected_occurrence() {
 
 fn exact_warning_expectation(codes: &[&str]) -> WarningExpectation {
     WarningExpectation::Exact(ExactWarningExpectation {
-        expected_codes: Some(codes.iter().map(|code| (*code).to_owned()).collect()),
-        expected_count: codes.len(),
+        expected_codes: codes.iter().map(|code| (*code).to_owned()).collect(),
     })
 }
 
@@ -371,30 +370,6 @@ fn exact_warning_codes_report_duplicate_count_mismatch() {
     );
     assert!(reason.contains("expected 2, actual 1"), "{reason}");
     assert!(!reason.contains("Unexpected warning codes"), "{reason}");
-}
-
-#[test]
-fn count_only_exact_warning_transition_compares_the_expected_count() {
-    let expectation = SuccessExpectation {
-        warnings: WarningExpectation::Exact(ExactWarningExpectation {
-            expected_codes: None,
-            expected_count: 1,
-        }),
-        success_contract: None,
-        artifact_assertions: Vec::new(),
-        golden: GoldenExpectation::default(),
-        rendered_output_contains: Vec::new(),
-        rendered_output_not_contains: Vec::new(),
-        artifacts_must_not_exist: Vec::new(),
-    };
-    let case = success_test_case(BackendId::Html, expectation.clone());
-    let result = validate_success_result(
-        &case,
-        warning_build_result(&["BST-RULE-0022"]),
-        &expectation,
-    );
-
-    assert!(result.passed, "{:?}", result.failure_reason);
 }
 
 #[test]

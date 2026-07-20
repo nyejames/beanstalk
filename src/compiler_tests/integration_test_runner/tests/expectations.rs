@@ -77,8 +77,7 @@ fn exact_warning_codes_are_retained_as_a_typed_multiset_contract() {
     assert_eq!(
         expectation.warnings,
         WarningExpectation::Exact(ExactWarningExpectation {
-            expected_codes: Some(vec!["BST-RULE-0022".to_owned(), "BST-RULE-0010".to_owned(),]),
-            expected_count: 2,
+            expected_codes: vec!["BST-RULE-0022".to_owned(), "BST-RULE-0010".to_owned(),],
         })
     );
 
@@ -100,8 +99,7 @@ fn exact_warning_codes_accept_an_authored_empty_multiset() {
     assert_eq!(
         expectation.warnings,
         WarningExpectation::Exact(ExactWarningExpectation {
-            expected_codes: Some(Vec::new()),
-            expected_count: 0,
+            expected_codes: Vec::new(),
         })
     );
 
@@ -109,37 +107,48 @@ fn exact_warning_codes_accept_an_authored_empty_multiset() {
 }
 
 #[test]
-fn exact_warning_codes_require_count_consistency_when_both_fields_are_authored() {
-    let (root, case_root) = write_fixture(
-        "exact_warning_codes_count_mismatch",
-        "[backends.html]\nmode = \"failure\"\nwarnings = \"exact\"\nwarning_count = 1\nwarning_codes = [\"BST-RULE-0022\", \"BST-RULE-0010\"]\ndiagnostic_codes = [\"BST-RULE-0001\"]\n",
-    );
+fn removed_warning_count_spelling_is_rejected() {
+    let cases = [
+        (
+            "backend",
+            "[backends.html]\nmode = \"failure\"\nwarnings = \"exact\"\nwarning_count = 1\nwarning_codes = [\"BST-RULE-0022\", \"BST-RULE-0010\"]\ndiagnostic_codes = [\"BST-RULE-0001\"]\n",
+        ),
+        (
+            "top_level",
+            "warning_count = 1\n[backends.html]\nmode = \"failure\"\nwarnings = \"exact\"\nwarning_codes = [\"BST-RULE-0022\", \"BST-RULE-0010\"]\ndiagnostic_codes = [\"BST-RULE-0001\"]\n",
+        ),
+    ];
 
-    let Err(error) = load_canonical_case_specs(&case_root, None) else {
-        panic!("inconsistent warning count and code list should be rejected");
-    };
-    assert!(
-        error.contains("warning_count")
-            && error.contains("warning_codes")
-            && error.contains("list length"),
-        "unexpected error: {error}"
-    );
+    for (shape, expectation_source) in cases {
+        let (root, case_root) = write_fixture(
+            &format!("removed_warning_count_spelling_{shape}"),
+            expectation_source,
+        );
 
-    fs::remove_dir_all(&root).expect("should clean up");
+        let Err(error) = load_canonical_case_specs(&case_root, None) else {
+            panic!("the removed warning_count spelling should be rejected");
+        };
+        assert!(
+            error.contains("warning_count") && error.contains("unknown field"),
+            "unexpected error: {error}"
+        );
+
+        fs::remove_dir_all(&root).expect("should clean up");
+    }
 }
 
 #[test]
-fn exact_warning_expectations_require_a_count_or_code_list() {
+fn exact_warning_expectations_require_warning_codes() {
     let (root, case_root) = write_fixture(
         "exact_warning_missing_identity",
         "[backends.html]\nmode = \"success\"\nwarnings = \"exact\"\nrendered_output_contains = [\"ok\"]\n",
     );
 
     let Err(error) = load_canonical_case_specs(&case_root, None) else {
-        panic!("exact warnings without a count or code list should be rejected");
+        panic!("exact warnings without a code list should be rejected");
     };
     assert!(
-        error.contains("warning_count") && error.contains("warning_codes"),
+        error.contains("warning_codes") && error.contains("warnings = \"exact\""),
         "unexpected error: {error}"
     );
 
@@ -152,7 +161,7 @@ fn ignore_and_forbid_reject_warning_identity_fields() {
         let (root, case_root) = write_fixture(
             &format!("{mode}_warning_identity_fields"),
             &format!(
-                "[backends.html]\nmode = \"success\"\nwarnings = \"{mode}\"\nwarning_count = 0\nwarning_codes = []\nsuccess_contract = \"acceptance_only\"\n"
+                "[backends.html]\nmode = \"success\"\nwarnings = \"{mode}\"\nwarning_codes = []\nsuccess_contract = \"acceptance_only\"\n"
             ),
         );
 
@@ -160,7 +169,7 @@ fn ignore_and_forbid_reject_warning_identity_fields() {
             panic!("{mode} warnings with identity fields should be rejected");
         };
         assert!(
-            error.contains("warning_count") && error.contains("warning_codes"),
+            error.contains("warning_codes") && error.contains("warnings != \"exact\""),
             "unexpected error for {mode}: {error}"
         );
 
@@ -348,7 +357,7 @@ fn rejects_removed_success_contract_spelling() {
 fn rejects_acceptance_only_with_authored_expected_warning() {
     let (root, case_root) = write_fixture(
         "acceptance_only_expected_warning",
-        "[backends.html]\nmode = \"success\"\nwarnings = \"exact\"\nwarning_count = 1\nsuccess_contract = \"acceptance_only\"\n",
+        "[backends.html]\nmode = \"success\"\nwarnings = \"exact\"\nwarning_codes = [\"BST-RULE-0022\"]\nsuccess_contract = \"acceptance_only\"\n",
     );
 
     let Err(error) = load_canonical_case_specs(&case_root, None) else {

@@ -25,7 +25,6 @@ struct ExpectationToml {
     flags: Vec<String>,
     builder: Option<String>,
     warnings: Option<String>,
-    warning_count: Option<usize>,
     warning_codes: Option<Vec<String>>,
     #[serde(default)]
     message_contains: Vec<String>,
@@ -43,7 +42,6 @@ struct BackendExpectationToml {
     flags: Vec<String>,
     success_contract: Option<String>,
     warnings: Option<String>,
-    warning_count: Option<usize>,
     warning_codes: Option<Vec<String>>,
     #[serde(default)]
     message_contains: Vec<String>,
@@ -130,7 +128,6 @@ fn parse_matrix_expectation_file(
     if parsed.mode.is_some()
         || !parsed.flags.is_empty()
         || parsed.warnings.is_some()
-        || parsed.warning_count.is_some()
         || parsed.warning_codes.is_some()
         || !parsed.message_contains.is_empty()
         || !parsed.artifact_assertions.is_empty()
@@ -153,7 +150,6 @@ fn parse_matrix_expectation_file(
         let context = format!("[backends.{}]", backend_id.as_str());
         let warnings = parse_warning_expectation(
             backend_expectation.warnings.as_deref(),
-            backend_expectation.warning_count,
             backend_expectation.warning_codes,
             path,
             &context,
@@ -568,7 +564,6 @@ fn parse_artifact_kind(
 
 pub(crate) fn parse_warning_expectation(
     warnings_mode: Option<&str>,
-    warning_count: Option<usize>,
     warning_codes: Option<Vec<String>>,
     path: &Path,
     context: &str,
@@ -589,9 +584,9 @@ pub(crate) fn parse_warning_expectation(
 
     match mode {
         "ignore" => {
-            if warning_count.is_some() || warning_codes.is_some() {
+            if warning_codes.is_some() {
                 return Err(format!(
-                    "Expectation file '{}' {}sets 'warning_count' or 'warning_codes' but warnings != \"exact\".",
+                    "Expectation file '{}' {}sets 'warning_codes' but warnings != \"exact\".",
                     path.display(),
                     context_prefix
                 ));
@@ -599,9 +594,9 @@ pub(crate) fn parse_warning_expectation(
             Ok(WarningExpectation::Ignore)
         }
         "forbid" => {
-            if warning_count.is_some() || warning_codes.is_some() {
+            if warning_codes.is_some() {
                 return Err(format!(
-                    "Expectation file '{}' {}sets 'warning_count' or 'warning_codes' but warnings != \"exact\".",
+                    "Expectation file '{}' {}sets 'warning_codes' but warnings != \"exact\".",
                     path.display(),
                     context_prefix
                 ));
@@ -609,31 +604,16 @@ pub(crate) fn parse_warning_expectation(
             Ok(WarningExpectation::Forbid)
         }
         "exact" => {
-            let expected_count = match (&warning_count, &warning_codes) {
-                (None, None) => {
-                    return Err(format!(
-                        "Expectation file '{}' {}uses warnings = \"exact\" but must author 'warning_count' or 'warning_codes'.",
-                        path.display(),
-                        context_prefix
-                    ));
-                }
-                (Some(expected_count), Some(expected_codes))
-                    if *expected_count != expected_codes.len() =>
-                {
-                    return Err(format!(
-                        "Expectation file '{}' {}requires 'warning_count' to equal the length of 'warning_codes' in exact warning mode (expected {expected_count}, list length {}).",
-                        path.display(),
-                        context_prefix,
-                        expected_codes.len()
-                    ));
-                }
-                (Some(expected_count), _) => *expected_count,
-                (None, Some(expected_codes)) => expected_codes.len(),
+            let Some(expected_codes) = warning_codes else {
+                return Err(format!(
+                    "Expectation file '{}' {}uses warnings = \"exact\" but must author 'warning_codes'.",
+                    path.display(),
+                    context_prefix
+                ));
             };
 
             Ok(WarningExpectation::Exact(ExactWarningExpectation {
-                expected_codes: warning_codes,
-                expected_count,
+                expected_codes,
             }))
         }
         other => Err(format!(

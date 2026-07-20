@@ -23,7 +23,7 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
-const SUITE_INVENTORY_SCHEMA_VERSION: u32 = 4;
+const SUITE_INVENTORY_SCHEMA_VERSION: u32 = 5;
 
 pub(crate) fn format_case_listing(cases: &[TestCaseSpec]) -> String {
     if cases.is_empty() {
@@ -121,7 +121,6 @@ pub(crate) struct InventoryBackend {
     pub acceptance_only: bool,
     pub warning_mode: &'static str,
     pub warning_codes: Option<Vec<String>>,
-    pub warning_count: Option<usize>,
     pub diagnostic_match: Option<DiagnosticMatchMode>,
     pub diagnostic_match_reason: Option<String>,
     pub structured_diagnostic_assertions: bool,
@@ -220,7 +219,6 @@ fn build_backend_inventory(case: &TestCaseSpec) -> InventoryBackend {
             acceptance_only: expectation.success_contract == Some(SuccessContract::AcceptanceOnly),
             warning_mode: warning_mode_label(&expectation.warnings),
             warning_codes: warning_codes(&expectation.warnings),
-            warning_count: warning_count(&expectation.warnings),
             diagnostic_match: None,
             diagnostic_match_reason: None,
             structured_diagnostic_assertions: false,
@@ -239,7 +237,6 @@ fn build_backend_inventory(case: &TestCaseSpec) -> InventoryBackend {
             acceptance_only: false,
             warning_mode: warning_mode_label(&expectation.warnings),
             warning_codes: warning_codes(&expectation.warnings),
-            warning_count: warning_count(&expectation.warnings),
             diagnostic_match: Some(expectation.diagnostic_match),
             diagnostic_match_reason: expectation.diagnostic_match_reason.clone(),
             structured_diagnostic_assertions: false,
@@ -310,14 +307,7 @@ fn warning_mode_label(expectation: &WarningExpectation) -> &'static str {
 
 fn warning_codes(expectation: &WarningExpectation) -> Option<Vec<String>> {
     match expectation {
-        WarningExpectation::Exact(exact) => exact.expected_codes.clone(),
-        WarningExpectation::Ignore | WarningExpectation::Forbid => None,
-    }
-}
-
-fn warning_count(expectation: &WarningExpectation) -> Option<usize> {
-    match expectation {
-        WarningExpectation::Exact(exact) => Some(exact.expected_count),
+        WarningExpectation::Exact(exact) => Some(exact.expected_codes.clone()),
         WarningExpectation::Ignore | WarningExpectation::Forbid => None,
     }
 }
