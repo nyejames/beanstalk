@@ -30,26 +30,26 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 6 removed-value ownership and borrowed lookup-key integration owners
-LAST_ACCEPTED_COMMIT: `d002a80cf` (Phase 6 alias final-use and explicit-copy independence)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; Phase 6 positive alias/copy slice is committed; unrelated compiler-design docs source and generated work remains unstaged
+CURRENT_SLICE: Phase 6 inserted non-copy key/value consumption and explicit-copy integration ownership
+LAST_ACCEPTED_COMMIT: `d9e4d7fa3` (Phase 6 removed-value ownership and borrowed lookup-key integration owners)
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; removed-value/key-borrow slice is committed; unrelated compiler-design docs source and generated work remains unstaged
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: access-and-aliasing and borrow-validation leaves own hashmap alias legality; testing standards require exact diagnostic identity and source locations
-- code: final-use and explicit-copy contracts are integration-owned; removed values and borrowed lookup keys remain unit-only
+- code: removed values and lookup-key borrowing are integration-owned; inserted non-copy key/value consumption remains unit-only or unclassified
 ACCEPTANCE_CRITERIA:
-- add one positive case proving a removed non-copy value remains usable after later map mutation and clear
-- add one positive case proving `get`, `contains`, and `remove` borrow a non-copy lookup key without consuming it
-- use exact HTML output and structured HTML-Wasm rejection; keep ownership contracts distinct and do not prune units
+- add primary negative integration owners for the current inserted non-copy key and value consumption rules where distinct
+- add a positive explicit-copy insertion owner when independence requires it, without duplicating the existing lookup-copy contract
+- use exact compiler-owned diagnostics or runtime values with structured HTML-Wasm rejection; do not prune units
 VALIDATION_STATE:
-- `just validate`: passed; cross-target Clippy, 3,576 Rust tests, 1,784 integration executions, docs check, and 28 benchmark cases
-- focused positive cases: passed; four backend blocks and zero audit hard findings across 1,648 cases
+- `just validate`: passed; cross-target Clippy, 3,576 Rust tests, 1,788 integration executions, docs check, and 28 benchmark cases
+- focused removed-value/key cases: passed; four backend blocks and zero audit hard findings across 1,650 cases
 DOCS_IMPACT: progress matrix reviewed; existing broad hashmap borrow/diagnostic and final-use wording remains accurate; index unchanged
 BLOCKERS_OR_OPEN_DECISIONS: none for the next slice; Ollama remains required with no provider substitution
-DELEGATION_DECISION: Ollama — two bounded removed-value/key positive cases with distinct contracts
+DELEGATION_DECISION: Ollama — bounded inserted-key/value consumption and explicit-copy ownership slice
 NEXT_WORKER_ORDER: Ollama only; no provider substitution
 STOP_REASON: none
-NEXT_RESUME_ACTION: launch the removed-value ownership and borrowed lookup-key integration slice through Ollama
+NEXT_RESUME_ACTION: launch the inserted non-copy key/value consumption and explicit-copy integration slice through Ollama
 
 ---
 
@@ -182,6 +182,7 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 5 documentation and acceptance closure | `fc3b25eaa` | Accepted | Schema 6 chronology, exact/order/exact-once runtime workflow, line-ending-only normalization, and zero-golden policy documented; release docs build passed |
 | Phase 6 live hashmap lookup alias conflict | `3e27e8d95` | Accepted | Fallible-success aliases survive catch joins; final-use semantics are restored; live `get` alias blocks `set` with exact reason and primary/secondary locations; 1,646 cases and 1,780 executions |
 | Phase 6 alias final-use and explicit-copy independence | `d002a80cf` | Accepted | Two primary HTML runtime owners prove final-use mutation and non-copy explicit-copy independence with HTML-Wasm structured rejection; 1,648 cases and 1,784 executions |
+| Phase 6 removed-value ownership and borrowed lookup keys | `d9e4d7fa3` | Accepted | Two primary HTML runtime owners prove removed non-copy values outlive later mutation/clear and lookup keys remain usable after contains/get/remove; 1,650 cases and 1,788 executions |
 
 ---
 
@@ -927,8 +928,8 @@ Add end-to-end owners before pruning source-shaped borrow/map units.
 
 ### Removed-value ownership and key behavior
 
-- [ ] Removed value remains usable after later map mutation/clear.
-- [ ] Lookup keys are borrowed, not consumed.
+- [x] Removed value remains usable after later map mutation/clear.
+- [x] Lookup keys are borrowed, not consumed.
 - [ ] Inserted non-copy keys/values follow current consumption rules.
 - [ ] Explicit-copy success exists where independence is required.
 - [ ] Reuse the existing runtime map ordering case rather than duplicate it.
