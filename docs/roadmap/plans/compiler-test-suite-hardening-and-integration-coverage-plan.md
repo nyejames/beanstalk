@@ -30,26 +30,26 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 13B2 JS numeric/reactive/runtime-helper ownership
-LAST_ACCEPTED_COMMIT: `7350c0825` (Phase 13B1 JS control/value ABI)
+CURRENT_SLICE: Phase 13B3 JS runtime-helper ownership
+LAST_ACCEPTED_COMMIT: `ecbce5fc6` (Phase 13B2 JS numeric/reactive mappings)
 WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; accepted code is committed; unrelated concurrent docs source and generated-release edits remain unstaged
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: backend lowering, ABI, artifact, and semantic-substitute ownership rules govern the next slice
-- code: JS numeric statements, reactivity, and runtime-helper tests are the next ownership inventory
+- code: the 65 JS runtime-helper tests are the next ownership inventory
 ACCEPTANCE_CRITERIA:
 - classify backend tests as ABI, helper, mapping, planning, malformed HIR, artifact, or semantic substitute
 - remove only semantic substitutes with verified integration owners
 - retain deliberate target representation and malformed-HIR contracts without broadening backend support
 VALIDATION_STATE:
 - `just validate`: passed; cross-target Clippy, 3,541 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
-- focused Phase 13B1 coverage: passed; all 199 JS backend tests pass; 32 assigned control-flow, binding, and value-use tests classified as CFG mapping, place/helper selection, or value/reference ABI owners
+- focused Phase 13B2 coverage: passed; all 199 JS backend tests pass; 37 assigned numeric/reactive tests classified as operation mapping, helper selection/contract, runtime ABI, or malformed-HIR owners
 DOCS_IMPACT: progress matrix reviewed; support and backend coverage are unchanged by fixture consolidation; index unchanged
 BLOCKERS_OR_OPEN_DECISIONS: none for the next slice; Ollama remains required with no provider substitution
 DELEGATION_DECISION: Ollama — bounded Phase 13 backend ownership slices
 NEXT_WORKER_ORDER: Ollama only; no provider substitution
 STOP_REASON: none
-NEXT_RESUME_ACTION: launch the JS numeric/reactive/runtime-helper classification slice through Ollama
+NEXT_RESUME_ACTION: launch the JS runtime-helper classification slice through Ollama
 
 ---
 
@@ -198,6 +198,7 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 12D ordered collection runtime | `7c4e33a99` | Accepted | Literal/set/method semantic positives consolidated into one exact ordered push/set/remove/readback primary owner; map ordering, empty/fixed/control-flow, and backend artifact owners remain separate; 3,541 Rust tests, 1,647 cases, and 1,793 integration executions |
 | Phase 13A JS value/call mappings | `c728e315f` | Accepted | All 24 choice, expression, map-statement, receiver-call, and fallible-result tests are deliberate operation mapping, ABI, helper, or carrier owners; no semantic substitute was deleted; one stale option-carrier banner corrected; 3,541 Rust tests and 1,793 integration executions |
 | Phase 13B1 JS control/value ABI | `7350c0825` | Accepted | All 32 control-flow, binding, and value-use tests are deliberate CFG/jump, place/helper, alias-write, or load/copy/call/return ABI owners; three match-temp assertions no longer pin incidental numeric suffixes; 3,541 Rust tests and 1,793 integration executions |
+| Phase 13B2 JS numeric/reactive mappings | `ecbce5fc6` | Accepted | All 37 numeric and reactive tests are deliberate failure-mode mapping, helper selection/contract, runtime ABI, invalidation/scheduler, or malformed-HIR owners; no substitute deleted; stale Phase 7 mounting wording removed; 3,541 Rust tests and 1,793 integration executions |
 
 ---
 
