@@ -30,20 +30,20 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 14C5 AST fallible-handling unit ownership review
-LAST_ACCEPTED_COMMIT: `4fa61e817` (Phase 14C4 AST declaration unit ownership)
+CURRENT_SLICE: Phase 14C6 AST loop-parsing unit ownership review
+LAST_ACCEPTED_COMMIT: `d96a5f1c3` (Phase 14C5 AST fallible-handling unit ownership)
 WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; accepted code is committed; concurrent example-name work remains separately committed
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: unit-test ownership, pruning, compiler-stage boundaries, and final governance rules govern the next slice
-- code: AST fallible-handling source-shaped units are the next bounded family; later AST, HIR, build-system, backend, and final TIR owners still require review
+- code: AST loop-parsing source-shaped units are the next bounded family; four small AST statement modules and later HIR, build-system, backend, and final TIR owners still require review
 ACCEPTANCE_CRITERIA:
 - every remaining full-source unit has a distinct hidden invariant, parser fact, stage boundary, or policy owner
 - units superseded by a stronger canonical integration primary are deleted with replacement evidence
 - stale test-only helpers or production APIs are removed with their final caller
 - HIR, build-system, backend, and final TIR units keep only their owning semantic relationships and hidden facts
 VALIDATION_STATE:
-- `just validate`: passed; cross-target Clippy, 3,511 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
+- `just validate`: passed; cross-target Clippy, 3,503 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
 - Phase 14B audit: passed; zero hard findings; 66 backend-only and 15 adversarial-only primary-less contract advisories
 - Priya expectation alignment: accepted at `6efac7012`; 13 stale Rust and integration expectation files now match renamed inputs
 DOCS_IMPACT: testing, validation, and contributor workflow aligned with final suite policy; progress matrix and index unchanged
@@ -51,7 +51,7 @@ BLOCKERS_OR_OPEN_DECISIONS: none; 81 contract families without a primary are int
 DELEGATION_DECISION: Ollama — bounded Phase 14 implementation slices
 NEXT_WORKER_ORDER: Ollama only; no provider substitution
 STOP_REASON: none
-NEXT_RESUME_ACTION: launch the AST fallible-handling unit ownership review through Ollama
+NEXT_RESUME_ACTION: launch the AST loop-parsing unit ownership review through Ollama
 
 ---
 
@@ -223,6 +223,7 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 14C2 AST branching units | `329cf59f5` | Accepted | Two match-arm diagnostic units removed in favor of canonical cases asserting the same code plus reason-specific rendered text; 38 AST shape, precedence, parser-boundary, exhaustiveness, keyword-boundary, and unmirrored payload owners retained; 3,519 Rust tests and 1,793 integration executions |
 | Phase 14C3 AST function-parsing units | `5962d65b3` | Accepted | Four receiver, catch-fallthrough, and multi-return trailing-comma units removed in favor of reason-specific or exact-source canonical owners; 43 signature-shape, return-slot, generic-instance, call-node, fallible-shape, and broad-code payload owners retained; 3,515 Rust tests and 1,793 integration executions |
 | Phase 14C4 AST declaration units | `4fa61e817` | Accepted | Four regular-division and fixed-collection diagnostic units removed in favor of exact-source or structured-reason canonical owners; 19 declaration-shape, named-type, reserved-name, multiline-token, and fixed/growable identity owners retained; 3,511 Rust tests and 1,793 integration executions |
+| Phase 14C5 AST fallible-handling units | `d96a5f1c3` | Accepted | Eight reason-only catch/fallback diagnostics removed in favor of Phase 4C7 structured-reason primaries; 37 AST-shape, scope, terminality, assignment-target, EOF/delimiter, arity/type, and catch-placement owners retained; 3,503 Rust tests and 1,793 integration executions |
 
 ---
 
@@ -1391,6 +1392,7 @@ Do not present lower counts or faster time as proof of correctness.
 | `branching_tests::{rejects_same_line_second_match_arm,rejects_missing_match_arm_header}` | Match-arm newline and missing-header diagnostics | `diagnostic_match_arm_must_start_new_line` and `diagnostic_match_expected_arm_header` with exact code plus reason-specific rendered text | 38 AST units retain shape, precedence, parser-boundary, exhaustiveness, keyword-boundary, and unmirrored payload facts | `329cf59f5` |
 | Four function-parsing diagnostic units | Mutable receiver missing-marker/temporary rejection, catch fallthrough, and multi-return trailing comma | `struct_mutable_receiver_requires_explicit_receiver_tilde`, `struct_mutable_receiver_temporary_receiver_rejected`, `result_handler_without_fallback_fallthrough_rejected`, and `function_trailing_comma_returns` | 43 AST units retain signature/return-slot shape, generic identity, call/fallible node form, and broad-code payload context | `5962d65b3` |
 | Four declaration diagnostic units | Regular division in an Int declaration plus shorthand-empty, shorthand-nonliteral, and immutable-empty fixed collection rejection | `int_declaration_regular_division_rejected`, `fixed_collection_shorthand_empty_literal_rejected`, `fixed_collection_shorthand_non_literal_rhs_rejected`, and `fixed_collection_immutable_empty_binding_rejected` | 19 units retain declaration/value mode, named type, reserved-name, TypeMismatch context, multiline-token, and fixed/growable identity facts | `4fa61e817` |
+| Eight fallible-handling diagnostic units | Dynamic-assert fallthrough, handler conflict/binding shape, `then` misuse, nested raw fallible fallback, and inline handler chaining | Eight Phase 4C7 canonical cases with exact `invalid_fallible_handling.*` reason assertions | 37 units retain AST/value-block shape, scope, terminality, assignment-target, parser-boundary, arity/type, and catch-placement facts | `d96a5f1c3` |
 
 ### Coverage gap and handoff ledger
 
