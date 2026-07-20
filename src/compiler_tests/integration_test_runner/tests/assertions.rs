@@ -8,7 +8,7 @@ use super::super::assertions::{
     validate_failure_result, validate_golden_outputs, validate_rendered_output_fragments,
     validate_success_result,
 };
-use super::super::types::{GoldenExpectation, SuccessContract};
+use super::super::types::{ExactWarningExpectation, GoldenExpectation, SuccessContract};
 use super::super::{
     BackendId, DiagnosticMatchMode, ExpectedOutcome, FailureExpectation, FailureKind, GoldenMode,
     SuccessExpectation, TestCaseSpec, WarningExpectation,
@@ -263,6 +263,196 @@ fn contains_matching_requires_every_expected_occurrence() {
     assert!(reason.contains("Count-mismatched codes"), "{reason}");
     assert!(reason.contains("expected 2, actual 1"), "{reason}");
     assert!(!reason.contains("Unexpected codes"), "{reason}");
+}
+
+fn exact_warning_expectation(codes: &[&str]) -> WarningExpectation {
+    WarningExpectation::Exact(ExactWarningExpectation {
+        expected_codes: Some(codes.iter().map(|code| (*code).to_owned()).collect()),
+        expected_count: codes.len(),
+    })
+}
+
+fn warning_build_result(codes: &[&str]) -> BuildResult {
+    let mut result = build_result_with_index_html(VALID_HTML);
+    let mut string_table = StringTable::new();
+    let alias = string_table.intern("Alias");
+    let symbol = string_table.intern("symbol");
+    let warnings = codes
+        .iter()
+        .map(|code| match *code {
+            "BST-RULE-0022" => CompilerDiagnostic::unreachable_match_arm(SourceLocation::default()),
+            "BST-IMPORT-0003" => CompilerDiagnostic::import_alias_case_mismatch(
+                alias,
+                symbol,
+                SourceLocation::default(),
+            ),
+            other => panic!("test warning code is not constructed: {other}"),
+        })
+        .collect();
+    result.string_table = string_table;
+    result.warnings = warnings;
+    result
+}
+
+#[test]
+fn exact_warning_codes_match_success_warnings_independent_of_order() {
+    let expectation = SuccessExpectation {
+        warnings: exact_warning_expectation(&["BST-IMPORT-0003", "BST-RULE-0022"]),
+        success_contract: None,
+        artifact_assertions: Vec::new(),
+        golden: GoldenExpectation::default(),
+        rendered_output_contains: Vec::new(),
+        rendered_output_not_contains: Vec::new(),
+        artifacts_must_not_exist: Vec::new(),
+    };
+    let case = success_test_case(BackendId::Html, expectation.clone());
+    let result = validate_success_result(
+        &case,
+        warning_build_result(&["BST-RULE-0022", "BST-IMPORT-0003"]),
+        &expectation,
+    );
+
+    assert!(result.passed, "{:?}", result.failure_reason);
+}
+
+#[test]
+fn exact_warning_codes_report_missing_and_unexpected_codes() {
+    let expectation = SuccessExpectation {
+        warnings: exact_warning_expectation(&["BST-RULE-0022"]),
+        success_contract: None,
+        artifact_assertions: Vec::new(),
+        golden: GoldenExpectation::default(),
+        rendered_output_contains: Vec::new(),
+        rendered_output_not_contains: Vec::new(),
+        artifacts_must_not_exist: Vec::new(),
+    };
+    let case = success_test_case(BackendId::Html, expectation.clone());
+    let result = validate_success_result(
+        &case,
+        warning_build_result(&["BST-IMPORT-0003"]),
+        &expectation,
+    );
+    let reason = result
+        .failure_reason
+        .expect("different warning code should fail matching");
+
+    assert!(reason.contains("Missing warning codes"), "{reason}");
+    assert!(reason.contains("Unexpected warning codes"), "{reason}");
+    assert!(
+        !reason.contains("Count-mismatched warning codes"),
+        "{reason}"
+    );
+}
+
+#[test]
+fn exact_warning_codes_report_duplicate_count_mismatch() {
+    let expectation = SuccessExpectation {
+        warnings: exact_warning_expectation(&["BST-RULE-0022", "BST-RULE-0022"]),
+        success_contract: None,
+        artifact_assertions: Vec::new(),
+        golden: GoldenExpectation::default(),
+        rendered_output_contains: Vec::new(),
+        rendered_output_not_contains: Vec::new(),
+        artifacts_must_not_exist: Vec::new(),
+    };
+    let case = success_test_case(BackendId::Html, expectation.clone());
+    let result = validate_success_result(
+        &case,
+        warning_build_result(&["BST-RULE-0022"]),
+        &expectation,
+    );
+    let reason = result
+        .failure_reason
+        .expect("duplicate warning count should fail matching");
+
+    assert!(
+        reason.contains("Count-mismatched warning codes"),
+        "{reason}"
+    );
+    assert!(reason.contains("expected 2, actual 1"), "{reason}");
+    assert!(!reason.contains("Unexpected warning codes"), "{reason}");
+}
+
+#[test]
+fn count_only_exact_warning_transition_compares_the_expected_count() {
+    let expectation = SuccessExpectation {
+        warnings: WarningExpectation::Exact(ExactWarningExpectation {
+            expected_codes: None,
+            expected_count: 1,
+        }),
+        success_contract: None,
+        artifact_assertions: Vec::new(),
+        golden: GoldenExpectation::default(),
+        rendered_output_contains: Vec::new(),
+        rendered_output_not_contains: Vec::new(),
+        artifacts_must_not_exist: Vec::new(),
+    };
+    let case = success_test_case(BackendId::Html, expectation.clone());
+    let result = validate_success_result(
+        &case,
+        warning_build_result(&["BST-RULE-0022"]),
+        &expectation,
+    );
+
+    assert!(result.passed, "{:?}", result.failure_reason);
+}
+
+#[test]
+fn ignore_and_forbid_keep_their_structured_warning_behaviour() {
+    let ignored = SuccessExpectation {
+        warnings: WarningExpectation::Ignore,
+        success_contract: None,
+        artifact_assertions: Vec::new(),
+        golden: GoldenExpectation::default(),
+        rendered_output_contains: Vec::new(),
+        rendered_output_not_contains: Vec::new(),
+        artifacts_must_not_exist: Vec::new(),
+    };
+    let ignored_case = success_test_case(BackendId::Html, ignored.clone());
+    let ignored_result = validate_success_result(
+        &ignored_case,
+        warning_build_result(&["BST-RULE-0022"]),
+        &ignored,
+    );
+    assert!(ignored_result.passed, "{:?}", ignored_result.failure_reason);
+
+    let forbidden = SuccessExpectation {
+        warnings: WarningExpectation::Forbid,
+        ..ignored
+    };
+    let forbidden_case = success_test_case(BackendId::Html, forbidden.clone());
+    let forbidden_result = validate_success_result(
+        &forbidden_case,
+        warning_build_result(&["BST-RULE-0022"]),
+        &forbidden,
+    );
+    assert!(!forbidden_result.passed);
+    assert!(
+        forbidden_result
+            .failure_reason
+            .as_deref()
+            .is_some_and(|reason| reason.contains("Expected no warnings"))
+    );
+}
+
+#[test]
+fn exact_warning_codes_match_warnings_retained_in_failed_compilation_messages() {
+    let mut string_table = StringTable::new();
+    let source_path = InternedPath::from_single_str("main.bst", &mut string_table);
+    let warning = CompilerDiagnostic::unreachable_match_arm(test_location(source_path.clone()));
+    let error = CompilerDiagnostic::unexpected_trailing_comma(test_location(source_path));
+    let messages = CompilerMessages::from_diagnostics(vec![error, warning], string_table);
+    let expectation = FailureExpectation {
+        warnings: exact_warning_expectation(&["BST-RULE-0022"]),
+        message_contains: Vec::new(),
+        diagnostic_codes: vec!["BST-SYNTAX-0003".to_owned(), "BST-RULE-0022".to_owned()],
+        diagnostic_match: DiagnosticMatchMode::Exact,
+        diagnostic_match_reason: None,
+    };
+
+    let result = validate_failure_result(messages, &expectation);
+
+    assert!(result.passed, "{:?}", result.failure_reason);
 }
 
 // ─── Normalization unit tests ───────────────────────────────────────────────

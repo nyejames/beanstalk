@@ -5,7 +5,7 @@
 
 use super::super::policy::evaluate_suite;
 use super::super::reporting::{build_suite_inventory_report, format_case_listing};
-use super::super::types::{GoldenExpectation, SuccessContract};
+use super::super::types::{ExactWarningExpectation, GoldenExpectation, SuccessContract};
 use super::super::{
     BackendId, CaseRole, DiagnosticMatchMode, ExpectedOutcome, FailureExpectation,
     SuccessExpectation, TestCaseSpec, TestSuiteSpec, WarningExpectation,
@@ -136,7 +136,7 @@ fn inventory_json_groups_backend_metadata_under_one_canonical_case() {
     let report = report_for_cases(&[html_case, wasm_case], Some("0123456789abcdef".to_owned()));
     let json = serde_json::to_value(&report).expect("inventory should serialize");
 
-    assert_eq!(json["schema_version"], 3);
+    assert_eq!(json["schema_version"], 4);
     assert_eq!(json["repository_commit"], "0123456789abcdef");
     assert_eq!(json["manifest_case_count"], 1);
     assert_eq!(json["expanded_backend_execution_count"], 2);
@@ -213,7 +213,10 @@ fn inventory_counts_authored_expected_warning_as_a_contract() {
             None,
             Some(CaseRole::Smoke),
             ExpectedOutcome::Success(SuccessExpectation {
-                warnings: WarningExpectation::Exact(1),
+                warnings: WarningExpectation::Exact(ExactWarningExpectation {
+                    expected_codes: Some(vec!["BST-RULE-0022".to_owned()]),
+                    expected_count: 1,
+                }),
                 success_contract: None,
                 artifact_assertions: Vec::new(),
                 golden: GoldenExpectation::default(),
@@ -227,11 +230,49 @@ fn inventory_counts_authored_expected_warning_as_a_contract() {
     let json = serde_json::to_value(&report).expect("inventory should serialize");
 
     assert_eq!(json["summary"]["expected_warning_backend_blocks"], 1);
+    assert_eq!(
+        json["cases"][0]["backends"][0]["warning_codes"],
+        serde_json::json!(["BST-RULE-0022"])
+    );
+    assert_eq!(json["cases"][0]["backends"][0]["warning_count"], 1);
     assert_eq!(json["summary"]["baseline_only_backend_blocks"], 0);
     assert_eq!(
         json["cases"][0]["backends"][0]["assertion_kinds"],
         serde_json::json!(["backend_baseline", "expected_warning"])
     );
+}
+
+#[test]
+fn inventory_retains_transitional_count_only_warning_contract() {
+    let report = report_for_cases(
+        &[case(
+            "count_only_warning",
+            BackendId::Html,
+            &["integration"],
+            None,
+            Some(CaseRole::Smoke),
+            ExpectedOutcome::Success(SuccessExpectation {
+                warnings: WarningExpectation::Exact(ExactWarningExpectation {
+                    expected_codes: None,
+                    expected_count: 3,
+                }),
+                success_contract: None,
+                artifact_assertions: Vec::new(),
+                golden: GoldenExpectation::default(),
+                rendered_output_contains: Vec::new(),
+                rendered_output_not_contains: Vec::new(),
+                artifacts_must_not_exist: Vec::new(),
+            }),
+        )],
+        None,
+    );
+    let json = serde_json::to_value(&report).expect("inventory should serialize");
+
+    assert_eq!(
+        json["cases"][0]["backends"][0]["warning_codes"],
+        serde_json::Value::Null
+    );
+    assert_eq!(json["cases"][0]["backends"][0]["warning_count"], 3);
 }
 
 #[test]

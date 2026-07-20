@@ -112,11 +112,17 @@ impl DiagnosticMatchMode {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ExactWarningExpectation {
+    pub expected_codes: Option<Vec<String>>,
+    pub expected_count: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum WarningExpectation {
     Ignore,
     Forbid,
-    Exact(usize),
+    Exact(ExactWarningExpectation),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -4,7 +4,7 @@
 //! WHY: isolating TOML parsing here keeps fixture loading free of deserialization details and
 //!      makes expectation format changes easy to find and update.
 
-use super::types::{DiagnosticMatchMode, SuccessContract};
+use super::types::{DiagnosticMatchMode, ExactWarningExpectation, SuccessContract};
 use super::{
     ArtifactAssertion, ArtifactKind, BackendId, ExpectationMode, GoldenMode,
     ParsedBackendExpectation, ParsedExpectationFile, WarningExpectation,
@@ -26,6 +26,7 @@ struct ExpectationToml {
     builder: Option<String>,
     warnings: Option<String>,
     warning_count: Option<usize>,
+    warning_codes: Option<Vec<String>>,
     #[serde(default)]
     message_contains: Vec<String>,
     #[serde(default)]
@@ -43,6 +44,7 @@ struct BackendExpectationToml {
     success_contract: Option<String>,
     warnings: Option<String>,
     warning_count: Option<usize>,
+    warning_codes: Option<Vec<String>>,
     #[serde(default)]
     message_contains: Vec<String>,
     #[serde(default)]
@@ -129,6 +131,7 @@ fn parse_matrix_expectation_file(
         || !parsed.flags.is_empty()
         || parsed.warnings.is_some()
         || parsed.warning_count.is_some()
+        || parsed.warning_codes.is_some()
         || !parsed.message_contains.is_empty()
         || !parsed.artifact_assertions.is_empty()
     {
@@ -151,6 +154,7 @@ fn parse_matrix_expectation_file(
         let warnings = parse_warning_expectation(
             backend_expectation.warnings.as_deref(),
             backend_expectation.warning_count,
+            backend_expectation.warning_codes,
             path,
             &context,
         )?;
@@ -187,7 +191,7 @@ fn parse_matrix_expectation_file(
         let golden_mode =
             parse_golden_mode(path, &context, backend_expectation.golden_mode.as_deref())?;
 
-        let has_authored_expected_warning = matches!(warnings, WarningExpectation::Exact(_));
+        let has_authored_expected_warning = matches!(&warnings, WarningExpectation::Exact(_));
         if success_contract.is_some()
             && (!artifact_assertions.is_empty()
                 || backend_expectation.golden_mode.is_some()
@@ -565,6 +569,7 @@ fn parse_artifact_kind(
 pub(crate) fn parse_warning_expectation(
     warnings_mode: Option<&str>,
     warning_count: Option<usize>,
+    warning_codes: Option<Vec<String>>,
     path: &Path,
     context: &str,
 ) -> Result<WarningExpectation, String> {
@@ -584,9 +589,9 @@ pub(crate) fn parse_warning_expectation(
 
     match mode {
         "ignore" => {
-            if warning_count.is_some() {
+            if warning_count.is_some() || warning_codes.is_some() {
                 return Err(format!(
-                    "Expectation file '{}' {}sets 'warning_count' but warnings != \"exact\".",
+                    "Expectation file '{}' {}sets 'warning_count' or 'warning_codes' but warnings != \"exact\".",
                     path.display(),
                     context_prefix
                 ));
@@ -594,9 +599,9 @@ pub(crate) fn parse_warning_expectation(
             Ok(WarningExpectation::Ignore)
         }
         "forbid" => {
-            if warning_count.is_some() {
+            if warning_count.is_some() || warning_codes.is_some() {
                 return Err(format!(
-                    "Expectation file '{}' {}sets 'warning_count' but warnings != \"exact\".",
+                    "Expectation file '{}' {}sets 'warning_count' or 'warning_codes' but warnings != \"exact\".",
                     path.display(),
                     context_prefix
                 ));
@@ -604,14 +609,32 @@ pub(crate) fn parse_warning_expectation(
             Ok(WarningExpectation::Forbid)
         }
         "exact" => {
-            let expected_count = warning_count.ok_or_else(|| {
-                format!(
-                    "Expectation file '{}' {}uses warnings = \"exact\" but is missing 'warning_count'.",
-                    path.display(),
-                    context_prefix
-                )
-            })?;
-            Ok(WarningExpectation::Exact(expected_count))
+            let expected_count = match (&warning_count, &warning_codes) {
+                (None, None) => {
+                    return Err(format!(
+                        "Expectation file '{}' {}uses warnings = \"exact\" but must author 'warning_count' or 'warning_codes'.",
+                        path.display(),
+                        context_prefix
+                    ));
+                }
+                (Some(expected_count), Some(expected_codes))
+                    if *expected_count != expected_codes.len() =>
+                {
+                    return Err(format!(
+                        "Expectation file '{}' {}requires 'warning_count' to equal the length of 'warning_codes' in exact warning mode (expected {expected_count}, list length {}).",
+                        path.display(),
+                        context_prefix,
+                        expected_codes.len()
+                    ));
+                }
+                (Some(expected_count), _) => *expected_count,
+                (None, Some(expected_codes)) => expected_codes.len(),
+            };
+
+            Ok(WarningExpectation::Exact(ExactWarningExpectation {
+                expected_codes: warning_codes,
+                expected_count,
+            }))
         }
         other => Err(format!(
             "Expectation file '{}' {}has unsupported warnings mode '{other}'.",

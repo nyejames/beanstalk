@@ -65,65 +65,74 @@ fn compare_diagnostic_code_multisets(
     actual_codes: &[&str],
     match_mode: DiagnosticMatchMode,
 ) -> Option<String> {
-    let expected_counts = count_codes(expected_codes.iter().map(String::as_str));
-    let actual_counts = count_codes(actual_codes.iter().copied());
-
-    let mut missing_codes = BTreeMap::new();
-    let mut unexpected_codes = BTreeMap::new();
-    let mut count_mismatches = BTreeMap::new();
-
-    for (code, expected_count) in &expected_counts {
-        match actual_counts.get(code) {
-            None => {
-                missing_codes.insert(*code, (*expected_count, 0));
-            }
-            Some(actual_count) => {
-                let count_is_invalid = match match_mode {
-                    DiagnosticMatchMode::Exact => actual_count != expected_count,
-                    DiagnosticMatchMode::Contains => actual_count < expected_count,
-                };
-
-                if count_is_invalid {
-                    count_mismatches.insert(*code, (*expected_count, *actual_count));
-                }
-            }
+    let difference = match match_mode {
+        DiagnosticMatchMode::Exact => super::compare_exact_code_multisets(
+            expected_codes.iter().map(String::as_str),
+            actual_codes.iter().copied(),
+        ),
+        DiagnosticMatchMode::Contains => {
+            compare_contained_code_multisets(expected_codes, actual_codes)
         }
-    }
-
-    if match_mode == DiagnosticMatchMode::Exact {
-        for (code, actual_count) in &actual_counts {
-            if !expected_counts.contains_key(code) {
-                unexpected_codes.insert(*code, (0, *actual_count));
-            }
-        }
-    }
-
-    if missing_codes.is_empty() && unexpected_codes.is_empty() && count_mismatches.is_empty() {
-        return None;
-    }
+    }?;
 
     let mut mismatch = format!(
         "Diagnostic code multiset mismatch in {} mode.",
         match_mode.as_str()
     );
-    append_code_category(&mut mismatch, "Missing codes", &missing_codes);
-    append_code_category(&mut mismatch, "Unexpected codes", &unexpected_codes);
-    append_code_category(&mut mismatch, "Count-mismatched codes", &count_mismatches);
+    append_code_category(&mut mismatch, "Missing codes", &difference.missing);
+    append_code_category(&mut mismatch, "Unexpected codes", &difference.unexpected);
+    append_code_category(
+        &mut mismatch,
+        "Count-mismatched codes",
+        &difference.count_mismatches,
+    );
     Some(mismatch)
 }
 
-fn count_codes<'code>(codes: impl IntoIterator<Item = &'code str>) -> BTreeMap<&'code str, usize> {
-    let mut counts = BTreeMap::new();
-    for code in codes {
-        *counts.entry(code).or_insert(0) += 1;
+fn compare_contained_code_multisets(
+    expected_codes: &[String],
+    actual_codes: &[&str],
+) -> Option<super::CodeMultisetDifference> {
+    let mut expected_counts = BTreeMap::new();
+    for code in expected_codes {
+        *expected_counts.entry(code.as_str()).or_insert(0) += 1;
     }
-    counts
+
+    let mut actual_counts = BTreeMap::new();
+    for code in actual_codes {
+        *actual_counts.entry(*code).or_insert(0) += 1;
+    }
+
+    let mut missing = BTreeMap::new();
+    let mut count_mismatches = BTreeMap::new();
+
+    for (code, expected_count) in expected_counts {
+        match actual_counts.get(code) {
+            None => {
+                missing.insert(code.to_owned(), (expected_count, 0));
+            }
+            Some(actual_count) if *actual_count < expected_count => {
+                count_mismatches.insert(code.to_owned(), (expected_count, *actual_count));
+            }
+            Some(_) => {}
+        }
+    }
+
+    if missing.is_empty() && count_mismatches.is_empty() {
+        return None;
+    }
+
+    Some(super::CodeMultisetDifference {
+        missing,
+        unexpected: BTreeMap::new(),
+        count_mismatches,
+    })
 }
 
 fn append_code_category(
     mismatch: &mut String,
     category: &str,
-    codes: &BTreeMap<&str, (usize, usize)>,
+    codes: &BTreeMap<String, (usize, usize)>,
 ) {
     if codes.is_empty() {
         return;

@@ -390,7 +390,7 @@ fn validate_fixture_contract(
                     return Err(format!(
                         "Fixture '{}' backend '{}' uses mode = \"success\" and must author at least one accepted success contract: \
                          success_contract = \"acceptance_only\", artifact assertions, a non-empty '{}' directory, \
-                         rendered-output assertions, artifact-absence assertions, or warnings = \"exact\" with warning_count.",
+                         rendered-output assertions, artifact-absence assertions, or warnings = \"exact\" with warning_count/warning_codes.",
                         fixture_root.display(),
                         backend_expectation.backend_id.as_str(),
                         golden_dir_for_backend(fixture_root, backend_expectation.backend_id)
@@ -425,7 +425,7 @@ fn has_authored_success_contract(
         || !backend_expectation.rendered_output_contains.is_empty()
         || !backend_expectation.rendered_output_not_contains.is_empty()
         || !backend_expectation.artifacts_must_not_exist.is_empty()
-        || matches!(backend_expectation.warnings, WarningExpectation::Exact(_))
+        || matches!(&backend_expectation.warnings, WarningExpectation::Exact(_))
 }
 
 fn resolve_case_entry_path(

@@ -23,7 +23,7 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
-const SUITE_INVENTORY_SCHEMA_VERSION: u32 = 3;
+const SUITE_INVENTORY_SCHEMA_VERSION: u32 = 4;
 
 pub(crate) fn format_case_listing(cases: &[TestCaseSpec]) -> String {
     if cases.is_empty() {
@@ -120,6 +120,8 @@ pub(crate) struct InventoryBackend {
     pub baseline_applied: bool,
     pub acceptance_only: bool,
     pub warning_mode: &'static str,
+    pub warning_codes: Option<Vec<String>>,
+    pub warning_count: Option<usize>,
     pub diagnostic_match: Option<DiagnosticMatchMode>,
     pub diagnostic_match_reason: Option<String>,
     pub structured_diagnostic_assertions: bool,
@@ -216,7 +218,9 @@ fn build_backend_inventory(case: &TestCaseSpec) -> InventoryBackend {
             mode: "success",
             baseline_applied: case.backend_id.has_universal_baseline(),
             acceptance_only: expectation.success_contract == Some(SuccessContract::AcceptanceOnly),
-            warning_mode: warning_mode_label(expectation.warnings),
+            warning_mode: warning_mode_label(&expectation.warnings),
+            warning_codes: warning_codes(&expectation.warnings),
+            warning_count: warning_count(&expectation.warnings),
             diagnostic_match: None,
             diagnostic_match_reason: None,
             structured_diagnostic_assertions: false,
@@ -233,7 +237,9 @@ fn build_backend_inventory(case: &TestCaseSpec) -> InventoryBackend {
             mode: "failure",
             baseline_applied: false,
             acceptance_only: false,
-            warning_mode: warning_mode_label(expectation.warnings),
+            warning_mode: warning_mode_label(&expectation.warnings),
+            warning_codes: warning_codes(&expectation.warnings),
+            warning_count: warning_count(&expectation.warnings),
             diagnostic_match: Some(expectation.diagnostic_match),
             diagnostic_match_reason: expectation.diagnostic_match_reason.clone(),
             structured_diagnostic_assertions: false,
@@ -274,7 +280,7 @@ fn success_assertion_kinds(
     if !expectation.artifacts_must_not_exist.is_empty() {
         kinds.push("artifact_absence");
     }
-    if matches!(expectation.warnings, WarningExpectation::Exact(_)) {
+    if matches!(&expectation.warnings, WarningExpectation::Exact(_)) {
         kinds.push("expected_warning");
     }
     kinds
@@ -288,17 +294,31 @@ fn failure_assertion_kinds(expectation: &FailureExpectation) -> Vec<&'static str
     if !expectation.message_contains.is_empty() {
         kinds.push("message_contains");
     }
-    if matches!(expectation.warnings, WarningExpectation::Exact(_)) {
+    if matches!(&expectation.warnings, WarningExpectation::Exact(_)) {
         kinds.push("expected_warning");
     }
     kinds
 }
 
-fn warning_mode_label(expectation: WarningExpectation) -> &'static str {
+fn warning_mode_label(expectation: &WarningExpectation) -> &'static str {
     match expectation {
         WarningExpectation::Ignore => "ignore",
         WarningExpectation::Forbid => "forbid",
         WarningExpectation::Exact(_) => "exact",
+    }
+}
+
+fn warning_codes(expectation: &WarningExpectation) -> Option<Vec<String>> {
+    match expectation {
+        WarningExpectation::Exact(exact) => exact.expected_codes.clone(),
+        WarningExpectation::Ignore | WarningExpectation::Forbid => None,
+    }
+}
+
+fn warning_count(expectation: &WarningExpectation) -> Option<usize> {
+    match expectation {
+        WarningExpectation::Exact(exact) => Some(exact.expected_count),
+        WarningExpectation::Ignore | WarningExpectation::Forbid => None,
     }
 }
 

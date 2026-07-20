@@ -23,6 +23,65 @@ use super::{
 };
 use crate::build_system::build::BuildResult;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerMessages;
+use std::collections::BTreeMap;
+
+/// Unordered-code difference shared by diagnostic and warning assertions.
+pub(super) struct CodeMultisetDifference {
+    pub missing: BTreeMap<String, (usize, usize)>,
+    pub unexpected: BTreeMap<String, (usize, usize)>,
+    pub count_mismatches: BTreeMap<String, (usize, usize)>,
+}
+
+/// Compares stable codes without assigning diagnostic- or warning-specific policy or wording.
+pub(super) fn compare_exact_code_multisets<'code>(
+    expected_codes: impl IntoIterator<Item = &'code str>,
+    actual_codes: impl IntoIterator<Item = &'code str>,
+) -> Option<CodeMultisetDifference> {
+    let expected_counts = count_code_multiset(expected_codes);
+    let actual_counts = count_code_multiset(actual_codes);
+
+    let mut missing = BTreeMap::new();
+    let mut unexpected = BTreeMap::new();
+    let mut count_mismatches = BTreeMap::new();
+
+    for (code, expected_count) in &expected_counts {
+        match actual_counts.get(code) {
+            None => {
+                missing.insert((*code).to_owned(), (*expected_count, 0));
+            }
+            Some(actual_count) if actual_count != expected_count => {
+                count_mismatches.insert((*code).to_owned(), (*expected_count, *actual_count));
+            }
+            Some(_) => {}
+        }
+    }
+
+    for (code, actual_count) in &actual_counts {
+        if !expected_counts.contains_key(code) {
+            unexpected.insert((*code).to_owned(), (0, *actual_count));
+        }
+    }
+
+    if missing.is_empty() && unexpected.is_empty() && count_mismatches.is_empty() {
+        return None;
+    }
+
+    Some(CodeMultisetDifference {
+        missing,
+        unexpected,
+        count_mismatches,
+    })
+}
+
+fn count_code_multiset<'code>(
+    codes: impl IntoIterator<Item = &'code str>,
+) -> BTreeMap<&'code str, usize> {
+    let mut counts = BTreeMap::new();
+    for code in codes {
+        *counts.entry(code).or_insert(0) += 1;
+    }
+    counts
+}
 
 #[cfg(test)]
 pub(crate) fn normalize_text_for_comparison(text: &str) -> String {
@@ -61,7 +120,7 @@ pub(crate) fn validate_success_result(
     expectation: &SuccessExpectation,
 ) -> CaseExecutionResult {
     if let Some(reason) =
-        warnings::validate_warning_expectation(build_result.warnings.len(), expectation.warnings)
+        warnings::validate_warning_expectation(build_result.warnings.iter(), &expectation.warnings)
     {
         return fail(build_result, reason, FailureKind::ExpectationViolation);
     }
@@ -134,7 +193,7 @@ pub(crate) fn validate_failure_result(
     expectation: &FailureExpectation,
 ) -> CaseExecutionResult {
     if let Some(reason) =
-        warnings::validate_warning_expectation(messages.warnings().count(), expectation.warnings)
+        warnings::validate_warning_expectation(messages.warnings(), &expectation.warnings)
     {
         return failure_messages(messages, reason);
     }

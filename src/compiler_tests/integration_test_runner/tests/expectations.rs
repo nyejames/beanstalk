@@ -5,7 +5,9 @@
 
 use super::super::expectations::parse_expectation_file;
 use super::super::fixture::load_canonical_case_specs;
-use super::super::types::{DiagnosticMatchMode, SuccessContract};
+use super::super::types::{
+    DiagnosticMatchMode, ExactWarningExpectation, SuccessContract, WarningExpectation,
+};
 use super::super::{EXPECT_FILE_NAME, ExpectedOutcome, GOLDEN_DIR_NAME, INPUT_DIR_NAME};
 use crate::compiler_tests::test_support::temp_dir;
 use std::fs;
@@ -58,6 +60,112 @@ fn failure_diagnostic_match_defaults_to_exact_and_is_retained() {
     assert_eq!(expectation.diagnostic_match_reason, None);
 
     fs::remove_dir_all(&root).expect("should clean up");
+}
+
+#[test]
+fn exact_warning_codes_are_retained_as_a_typed_multiset_contract() {
+    let (root, case_root) = write_fixture(
+        "exact_warning_codes",
+        "[backends.html]\nmode = \"success\"\nwarnings = \"exact\"\nwarning_codes = [\"BST-RULE-0022\", \"BST-RULE-0010\"]\n",
+    );
+
+    let cases = load_canonical_case_specs(&case_root, None)
+        .expect("exact warning-code fixture should be accepted");
+    let super::super::types::ExpectedOutcome::Success(expectation) = &cases[0].expected else {
+        panic!("case should have a success expectation");
+    };
+    assert_eq!(
+        expectation.warnings,
+        WarningExpectation::Exact(ExactWarningExpectation {
+            expected_codes: Some(vec!["BST-RULE-0022".to_owned(), "BST-RULE-0010".to_owned(),]),
+            expected_count: 2,
+        })
+    );
+
+    fs::remove_dir_all(&root).expect("should clean up");
+}
+
+#[test]
+fn exact_warning_codes_accept_an_authored_empty_multiset() {
+    let (root, case_root) = write_fixture(
+        "exact_warning_codes_empty",
+        "[backends.html]\nmode = \"success\"\nwarnings = \"exact\"\nwarning_codes = []\n",
+    );
+
+    let cases = load_canonical_case_specs(&case_root, None)
+        .expect("an authored empty warning-code list should be accepted");
+    let super::super::types::ExpectedOutcome::Success(expectation) = &cases[0].expected else {
+        panic!("case should have a success expectation");
+    };
+    assert_eq!(
+        expectation.warnings,
+        WarningExpectation::Exact(ExactWarningExpectation {
+            expected_codes: Some(Vec::new()),
+            expected_count: 0,
+        })
+    );
+
+    fs::remove_dir_all(&root).expect("should clean up");
+}
+
+#[test]
+fn exact_warning_codes_require_count_consistency_when_both_fields_are_authored() {
+    let (root, case_root) = write_fixture(
+        "exact_warning_codes_count_mismatch",
+        "[backends.html]\nmode = \"failure\"\nwarnings = \"exact\"\nwarning_count = 1\nwarning_codes = [\"BST-RULE-0022\", \"BST-RULE-0010\"]\ndiagnostic_codes = [\"BST-RULE-0001\"]\n",
+    );
+
+    let Err(error) = load_canonical_case_specs(&case_root, None) else {
+        panic!("inconsistent warning count and code list should be rejected");
+    };
+    assert!(
+        error.contains("warning_count")
+            && error.contains("warning_codes")
+            && error.contains("list length"),
+        "unexpected error: {error}"
+    );
+
+    fs::remove_dir_all(&root).expect("should clean up");
+}
+
+#[test]
+fn exact_warning_expectations_require_a_count_or_code_list() {
+    let (root, case_root) = write_fixture(
+        "exact_warning_missing_identity",
+        "[backends.html]\nmode = \"success\"\nwarnings = \"exact\"\nrendered_output_contains = [\"ok\"]\n",
+    );
+
+    let Err(error) = load_canonical_case_specs(&case_root, None) else {
+        panic!("exact warnings without a count or code list should be rejected");
+    };
+    assert!(
+        error.contains("warning_count") && error.contains("warning_codes"),
+        "unexpected error: {error}"
+    );
+
+    fs::remove_dir_all(&root).expect("should clean up");
+}
+
+#[test]
+fn ignore_and_forbid_reject_warning_identity_fields() {
+    for mode in ["ignore", "forbid"] {
+        let (root, case_root) = write_fixture(
+            &format!("{mode}_warning_identity_fields"),
+            &format!(
+                "[backends.html]\nmode = \"success\"\nwarnings = \"{mode}\"\nwarning_count = 0\nwarning_codes = []\nsuccess_contract = \"acceptance_only\"\n"
+            ),
+        );
+
+        let Err(error) = load_canonical_case_specs(&case_root, None) else {
+            panic!("{mode} warnings with identity fields should be rejected");
+        };
+        assert!(
+            error.contains("warning_count") && error.contains("warning_codes"),
+            "unexpected error for {mode}: {error}"
+        );
+
+        fs::remove_dir_all(&root).expect("should clean up");
+    }
 }
 
 #[test]

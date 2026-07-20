@@ -30,27 +30,26 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 3C — warning identity
-LAST_ACCEPTED_COMMIT: pending Phase 3B checkpoint
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 3B exact diagnostic slice is ready to commit; no unrelated changes currently visible
+CURRENT_SLICE: Phase 3D — canonical warning migration
+LAST_ACCEPTED_COMMIT: pending Phase 3C1 checkpoint
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 3C1 warning-code identity slice is ready to commit; no unrelated changes currently visible
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: testing guidance remains current through Phase 2 and needs diagnostic/warning exact-mode wording at Phase 3 closure
-- code: `assertions/warnings.rs`, `WarningExpectation`, expectation parsing, fixture threading, and reporting own current forbid/ignore/count-only exact warning behavior
+- code: typed exact warning-code multisets and schema-4 inventory are implemented; 21 canonical exact-warning fixtures still use the explicit count-only transition
 ACCEPTANCE_CRITERIA:
-- preserve warning forbid/ignore behavior while replacing count-only exact warnings with exact warning-code multisets
-- keep transitional count consistency explicit until canonical warning expectations are migrated, then delete the obsolete count-only schema in the planned migration
-- report missing and unexpected warning codes and cover successful and failed compilation result lanes
-- pass focused harness tests, audit, integration execution, and the full gate
+- inventory actual warning multisets before editing expectations and migrate one semantic family per slice
+- preserve exact duplicate counts and remove `warning_count` from each migrated fixture rather than weakening its contract
+- keep all current backend outcomes and run exact cases, audit, integration execution, and the full gate
 VALIDATION_STATE:
-- `just validate`: passed for Phase 3B; cross-target Clippy, 3,523 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
-- `cargo run --quiet -- tests --audit`: passed for Phase 3B; 1,645 cases, 1,778 executions, and zero hard findings
+- `just validate`: passed for Phase 3C1; cross-target Clippy, 3,535 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
+- `cargo run --quiet -- tests --audit`: passed for Phase 3C1; 1,645 cases, 1,778 executions, and zero hard findings
 DOCS_IMPACT: `index.md` updated for the moved assertion module tree; progress matrix unchanged
 BLOCKERS_OR_OPEN_DECISIONS: Ollama wrapper still requires removed `docs/codebase-style-guide.md`; 19 justified diagnostic-contains blocks record duplicate module compilation that the queued canonical-module plan must remove
-DELEGATION_DECISION: undecided — inspect current warning schema and canonical exact-warning inventory after committing Phase 3B
+DELEGATION_DECISION: codex-cli fallback — canonical warning migration is fixture-bounded and Ollama remains cleanly blocked
 NEXT_WORKER_ORDER: codex-cli, then parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit accepted Phase 3B, refresh its hash, then inspect and launch bounded Phase 3C
+NEXT_RESUME_ACTION: commit Phase 3C1, refresh its hash, inventory warning families, and launch the smallest Phase 3D migration slice
 
 ---
 
@@ -150,7 +149,8 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 2D3e final baseline contracts | `5ae591167` | Accepted | 13 acceptance-only; zero baseline-only; 548 rendered-output; 267 artifact; zero hard findings |
 | Phase 2E authored completeness enforcement | `1b97b360b` | Accepted | 3,511 Rust tests; 1,645 cases and 1,778 executions; 13 acceptance-only; zero baseline-only; zero hard findings |
 | Phase 3A assertion ownership split | `e86a5d660` | Accepted | Seven assertion-family modules; 27 focused assertion tests; 3,511 Rust tests; 1,778 integration executions |
-| Phase 3B exact diagnostic multisets | pending acceptance commit | Accepted | Exact default with duplicate counts; 19 justified contains backend blocks; 3,523 Rust tests; 1,778 integration executions |
+| Phase 3B exact diagnostic multisets | `69a0f38dc` | Accepted | Exact default with duplicate counts; 19 justified contains backend blocks; 3,523 Rust tests; 1,778 integration executions |
+| Phase 3C1 warning code identity | pending acceptance commit | Accepted | Schema 4 exact warning-code multisets; 130 focused runner tests; 3,535 Rust tests; 21 count-only fixtures remain |
 
 ---
 
@@ -714,11 +714,11 @@ assertions/
 
 ## 3C — Warning identity
 
-- [ ] Preserve `forbid` and `ignore`.
+- [x] Preserve `forbid` and `ignore`.
 - [ ] Replace count-only exact warnings with exact warning-code multisets.
-- [ ] Require count consistency when a transitional count field still exists.
-- [ ] Report missing and unexpected warning codes.
-- [ ] Cover successful and failed compilation results.
+- [x] Require count consistency when a transitional count field still exists.
+- [x] Report missing and unexpected warning codes.
+- [x] Cover successful and failed compilation results.
 - [ ] Delete obsolete count-only schema after canonical migration.
 
 ## 3D — Canonical migration
