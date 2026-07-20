@@ -3,7 +3,7 @@ entry = "."
 [backends.html]
 mode = "success"
 warnings = "forbid"
-rendered_output_exact = "borrowed_lookup_key key=Ada value=ten present=true removed=ten length_after=1 label=Ada"
+rendered_output_exact = "borrowed_lookup_key key=Priya value=ten present=true removed=ten length_after=1 label=Priya"
 
 [backends.html_wasm]
 mode = "failure"

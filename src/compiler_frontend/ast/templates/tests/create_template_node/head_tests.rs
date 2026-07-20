@@ -2068,7 +2068,7 @@ fn const_required_template_option_capture_present_folds_then_branch() {
 
     let folded = fold_template_in_context(&template, &context, &mut string_table);
 
-    assert_eq!(string_table.resolve(folded), "Hello Ada");
+    assert_eq!(string_table.resolve(folded), "Hello Priya");
 }
 
 #[test]
@@ -2143,7 +2143,7 @@ fn const_required_template_option_capture_inlines_present_source_const() {
     .template;
     let folded = fold_template_in_context(&template, &context, &mut string_table);
 
-    assert_eq!(string_table.resolve(folded), "Hello Ada");
+    assert_eq!(string_table.resolve(folded), "Hello Priya");
 }
 
 #[test]

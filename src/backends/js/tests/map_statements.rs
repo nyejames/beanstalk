@@ -78,7 +78,7 @@ fn map_get_statement_lowers_to_helper() {
     assert!(
         output
             .source
-            .contains("__bs_map_get(__bs_read(bst_map_l0), \"Ada\")"),
+            .contains("__bs_map_get(__bs_read(bst_map_l0), \"Priya\")"),
         "map get must lower to __bs_map_get helper"
     );
     assert!(
@@ -153,7 +153,7 @@ fn map_set_statement_without_result_emits_plain_call() {
     assert!(
         output
             .source
-            .contains("__bs_map_set(__bs_read(bst_map_l0), \"Ada\", 42);"),
+            .contains("__bs_map_set(__bs_read(bst_map_l0), \"Priya\", 42);"),
         "map set without result must emit plain helper call"
     );
 }
@@ -251,7 +251,7 @@ fn map_infallible_ops_lower_to_plain_helpers() {
     assert!(
         output
             .source
-            .contains("__bs_map_contains(__bs_read(bst_map_l0), \"Ada\")"),
+            .contains("__bs_map_contains(__bs_read(bst_map_l0), \"Priya\")"),
         "map contains must lower to __bs_map_contains"
     );
     assert!(
@@ -334,7 +334,7 @@ fn map_remove_statement_lowers_to_helper() {
     assert!(
         output
             .source
-            .contains("__bs_map_remove(__bs_read(bst_map_l0), \"Ada\")"),
+            .contains("__bs_map_remove(__bs_read(bst_map_l0), \"Priya\")"),
         "map remove must lower to __bs_map_remove helper"
     );
     assert!(

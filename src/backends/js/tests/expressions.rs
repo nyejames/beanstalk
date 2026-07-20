@@ -490,7 +490,7 @@ fn map_literal_with_entries_lowers_to_map_new() {
     assert!(
         output
             .source
-            .contains("__bs_map_new([[\"Ada\", 10], [\"Grace\", 12]])"),
+            .contains("__bs_map_new([[\"Priya\", 10], [\"Grace\", 12]])"),
         "map literal must lower to __bs_map_new with ordered key-value pairs"
     );
 }

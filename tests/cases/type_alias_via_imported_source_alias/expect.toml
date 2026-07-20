@@ -1,4 +1,4 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
-rendered_output_contains = ["type_alias_via_imported_source_alias name=Ada"]
+rendered_output_contains = ["type_alias_via_imported_source_alias name=Priya"]

@@ -3,7 +3,7 @@ mode = "success"
 warnings = "forbid"
 rendered_output_contains = [
   "<h1>",
-  "Hello Ada",
+  "Hello Priya",
   "Body runtime body",
   "<aside>",
   "</aside>",

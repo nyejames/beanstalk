@@ -3,7 +3,7 @@ entry = "."
 [backends.html]
 mode = "success"
 warnings = "forbid"
-rendered_output_exact = "map_explicit_copy_insertion_independent key=Ada value=ten stored=ten length=1"
+rendered_output_exact = "map_explicit_copy_insertion_independent key=Priya value=ten stored=ten length=1"
 
 [backends.html_wasm]
 mode = "failure"

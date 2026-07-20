@@ -2,4 +2,4 @@
 mode = "success"
 warnings = "forbid"
 
-rendered_output_contains = ["option_value_if_inline_unwrap", "present Ada", "missing guest"]
+rendered_output_contains = ["option_value_if_inline_unwrap", "present Priya", "missing guest"]
