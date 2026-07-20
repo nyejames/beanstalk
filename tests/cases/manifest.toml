@@ -8338,3 +8338,24 @@ tags = ["integration", "diagnostics", "control-flow"]
 id = "signature_member_missing_default_value"
 path = "signature_member_missing_default_value"
 tags = ["integration", "diagnostics", "signatures"]
+
+[[case]]
+id = "facade_reexport_effect_summary_success"
+path = "facade_reexport_effect_summary_success"
+tags = ["integration", "imports", "facade", "borrows", "functions"]
+contract = "language.modules.facade_reexport_effect_summary"
+role = "primary"
+
+[[case]]
+id = "facade_reexport_return_alias_live_blocks_mutation"
+path = "facade_reexport_return_alias_live_blocks_mutation"
+tags = ["integration", "imports", "facade", "borrows", "diagnostics"]
+contract = "language.modules.facade_return_alias_blocks_live_mutation"
+role = "primary"
+
+[[case]]
+id = "facade_reexport_mutable_param_missing_tilde"
+path = "facade_reexport_mutable_param_missing_tilde"
+tags = ["integration", "imports", "facade", "functions", "diagnostics"]
+contract = "language.modules.facade_mutable_parameter_requires_explicit_tilde"
+role = "primary"

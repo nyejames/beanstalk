@@ -1,0 +1,6 @@
+entry = "."
+
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_exact = "facade_reexport_effect_summary_success alias-step=5 after-mutate=9 fresh-step=7 bumped=10"
