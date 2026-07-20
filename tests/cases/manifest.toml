@@ -2281,9 +2281,11 @@ path = "function_call_arg_user_error_kind_struct"
 tags = ["integration", "functions", "type-checking", "compatibility"]
 
 [[case]]
-id = "function_call_named_args_success"
-path = "function_call_named_args_success"
-tags = ["integration", "functions"]
+id = "function_call_named_and_default_args_success"
+path = "function_call_named_and_default_args_success"
+tags = ["integration", "functions", "named-args"]
+contract = "language.functions.named_and_default_arguments"
+role = "primary"
 
 [[case]]
 id = "function_call_named_args_host_rejected"
@@ -2294,16 +2296,6 @@ tags = ["integration", "functions", "diagnostics"]
 id = "function_call_named_args_builtin_rejected"
 path = "function_call_named_args_builtin_rejected"
 tags = ["integration", "functions", "diagnostics"]
-
-[[case]]
-id = "function_call_named_args_all_named"
-path = "function_call_named_args_all_named"
-tags = ["integration", "functions", "named-args"]
-
-[[case]]
-id = "function_call_named_args_default_skip"
-path = "function_call_named_args_default_skip"
-tags = ["integration", "functions", "named-args"]
 
 [[case]]
 id = "function_call_named_args_positional_after_named"

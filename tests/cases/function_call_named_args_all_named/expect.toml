@@ -1,4 +1,0 @@
-[backends.html]
-mode = "success"
-warnings = "forbid"
-rendered_output_exact = "function_call_named_args_all_named result=hello world"
