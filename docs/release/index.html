@@ -176,12 +176,53 @@ body {
   vertical-align: inherit;
 }
     </style>
-    <style>body {
-        background-color: light-dark(hsl(125, 67%, 97%), hsl(203, 68%, 8%));
+    <style>@font-face {
+        font-family: "Computer Modern Sans";
+        src: url("/beanstalk/fonts/cmunss.woff2") format("woff2");
+        font-style: normal;
+        letter-spacing: 10em;
+        font-weight: 400;
+        font-display: swap;
+    }body {
+        font-family:
+            "Computer Modern Sans",
+            var(--bst-font-family-sans-serif);
+
+        min-height: 100vh;
+
+        background-color:
+            light-dark(
+                hsl(125 67% 97%),
+                #080d0c
+            );
+    }
+
+    @media (prefers-color-scheme: dark) {
+        body {
+            background-image:
+                radial-gradient(
+                    80rem 55rem at 8% -10%,
+                    rgb(48 92 61 / 20%),
+                    transparent 60%
+                ),
+                radial-gradient(
+                    65rem 45rem at 100% 18%,
+                    rgb(25 67 46 / 10%),
+                    transparent 65%
+                ),
+                linear-gradient(
+                    145deg,
+                    #07100d 0%,
+                    #0a1010 48%,
+                    #0b0f13 100%
+                );
+
+            background-repeat: no-repeat;
+        }
     }
 
     a {
-        color: light-dark(hsl(111, 96%, 26%), hsl(235, 87%, 67%));
+        color: light-dark(hsl(111, 96%, 26%), hsl(110, 62%, 66%));
     }
 
     .container {
@@ -319,7 +360,7 @@ body {
             </a>
         </div>
     </nav>
-    <section class="container"><h1>What is Beanstalk?</h1><p>Beanstalk is a new programming language and toolchain.</p><br><span style="color: light-dark(hsl(44, 82%, 29%), hsl(65, 80%, 62%));"> This website was created using Beanstalk.</span><br><br><p>Everything you see on this page, including the layout, styles, and even the text content  was written in Beanstalk files and generated using the compiler&#39;s built-in HTML project builder.</p><p>The source code for this website can be found on <a href="https://github.com/nyejames/beanstalk/tree/main/docs/src">Github</a>.</p><h2>Documentation</h2><p>The <a href="./docs">Alpha language docs</a> cover the current supported compiler surface.</p></section>
+    <section class="container"><h1>What is Beanstalk?</h1><p>Beanstalk is a new programming language and toolchain.</p><br><span style="color: light-dark(hsl(44, 82%, 29%), hsl(110, 62%, 66%));"> This website was created using Beanstalk.</span><br><br><p>Everything you see on this page, including the layout, styles, and even the text content  was written in Beanstalk files and generated using the compiler&#39;s built-in HTML project builder.</p><p>The source code for this website can be found on <a href="https://github.com/nyejames/beanstalk/tree/main/docs/src">Github</a>.</p><h2>Documentation</h2><p>The <a href="./docs">Alpha language docs</a> cover the current supported compiler surface.</p></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;

@@ -1,15 +1,58 @@
 import @html {table}
 -- Some basic testing styles for the documentation website
 
-theme_css #= [$css:
+docs_font #= [:
+    @font-face {
+        font-family: "Computer Modern Sans";
+        src: url("[@fonts/cmunss.woff2]") format("woff2");
+        font-style: normal;
+        letter-spacing: 10em;
+        font-weight: 400;
+        font-display: swap;
+    }
+]
 
+theme_css #= [docs_font, $css:
     body {
-        background-color: light-dark(hsl(125, 67%, 97%), hsl(203, 68%, 8%));
-        font-family: "/fonts/cmunss.woff2"
+        font-family:
+            "Computer Modern Sans",
+            var(--bst-font-family-sans-serif);
+
+        min-height: 100vh;
+
+        background-color:
+            light-dark(
+                hsl(125 67% 97%),
+                #080d0c
+            );
+    }
+
+    @media (prefers-color-scheme: dark) {
+        body {
+            background-image:
+                radial-gradient(
+                    80rem 55rem at 8% -10%,
+                    rgb(48 92 61 / 20%),
+                    transparent 60%
+                ),
+                radial-gradient(
+                    65rem 45rem at 100% 18%,
+                    rgb(25 67 46 / 10%),
+                    transparent 65%
+                ),
+                linear-gradient(
+                    145deg,
+                    #07100d 0%,
+                    #0a1010 48%,
+                    #0b0f13 100%
+                );
+
+            background-repeat: no-repeat;
+        }
     }
 
     a {
-        color: light-dark(hsl(111, 96%, 26%), hsl(235, 87%, 67%));
+        color: light-dark(hsl(111, 96%, 26%), hsl(110, 62%, 66%));
     }
     
     .container {
@@ -71,7 +114,7 @@ theme_css #= [$css:
 
 Palette = |
     red String = [$html:<span style="color: light-dark(hsl(0, 84%, 35%), hsl(0, 73%, 65%));">[$slot]</span>],
-    highlight String = [$html:<span style="color: light-dark(hsl(44, 82%, 29%), hsl(65, 80%, 62%));">[$slot]</span>],
+    highlight String = [$html:<span style="color: light-dark(hsl(44, 82%, 29%), hsl(110, 62%, 66%));">[$slot]</span>],
 |
 
 palette #= Palette()

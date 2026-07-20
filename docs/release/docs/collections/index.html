@@ -176,12 +176,53 @@ body {
   vertical-align: inherit;
 }
     </style>
-    <style>body {
-        background-color: light-dark(hsl(125, 67%, 97%), hsl(203, 68%, 8%));
+    <style>@font-face {
+        font-family: "Computer Modern Sans";
+        src: url("/beanstalk/fonts/cmunss.woff2") format("woff2");
+        font-style: normal;
+        letter-spacing: 10em;
+        font-weight: 400;
+        font-display: swap;
+    }body {
+        font-family:
+            "Computer Modern Sans",
+            var(--bst-font-family-sans-serif);
+
+        min-height: 100vh;
+
+        background-color:
+            light-dark(
+                hsl(125 67% 97%),
+                #080d0c
+            );
+    }
+
+    @media (prefers-color-scheme: dark) {
+        body {
+            background-image:
+                radial-gradient(
+                    80rem 55rem at 8% -10%,
+                    rgb(48 92 61 / 20%),
+                    transparent 60%
+                ),
+                radial-gradient(
+                    65rem 45rem at 100% 18%,
+                    rgb(25 67 46 / 10%),
+                    transparent 65%
+                ),
+                linear-gradient(
+                    145deg,
+                    #07100d 0%,
+                    #0a1010 48%,
+                    #0b0f13 100%
+                );
+
+            background-repeat: no-repeat;
+        }
     }
 
     a {
-        color: light-dark(hsl(111, 96%, 26%), hsl(235, 87%, 67%));
+        color: light-dark(hsl(111, 96%, 26%), hsl(110, 62%, 66%));
     }
 
     .container {
