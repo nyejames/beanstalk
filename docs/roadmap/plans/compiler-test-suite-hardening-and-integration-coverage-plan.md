@@ -30,26 +30,26 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 3D2 — import-alias warning migration
-LAST_ACCEPTED_COMMIT: `8fdf00022` (Phase 3C1)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 3D1 pattern/match warning migration is ready to commit; no unrelated changes currently visible
+CURRENT_SLICE: Phase 3D3 — path, asset, and naming warning migration
+LAST_ACCEPTED_COMMIT: `a01728438` (Phase 3D1)
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 3D2 import-alias warning migration is ready to commit; no unrelated changes currently visible
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: testing guidance remains current through Phase 2 and needs diagnostic/warning exact-mode wording at Phase 3 closure
-- code: typed exact warning-code multisets are implemented; 15 pattern/match fixtures author exact codes and six count-only fixtures remain
+- code: 18 fixtures author exact warning codes; the path-output, large-asset, and mixed-naming fixtures are the final count-only contracts
 ACCEPTANCE_CRITERIA:
-- inventory actual warning multisets for the three import-alias warning fixtures before finalizing expectations
+- inventory actual warning multisets for the three remaining fixtures before finalizing expectations
 - author exact duplicate-aware `warning_codes` and remove `warning_count` only from that bounded family
 - keep all current backend outcomes and run exact cases, audit, integration execution, and the full gate
 VALIDATION_STATE:
-- `just validate`: passed for Phase 3D1; cross-target Clippy, 3,535 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
-- `cargo run --quiet -- tests --audit`: passed for Phase 3D1; 1,645 cases, 1,778 executions, and zero hard findings
+- `just validate`: passed for Phase 3D2; cross-target Clippy, 3,535 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
+- `cargo run --quiet -- tests --audit`: passed for Phase 3D2; 1,645 cases, 1,778 executions, and zero hard findings
 DOCS_IMPACT: `index.md` updated for the moved assertion module tree; progress matrix unchanged
 BLOCKERS_OR_OPEN_DECISIONS: Ollama wrapper still requires removed `docs/codebase-style-guide.md`; 19 justified diagnostic-contains blocks record duplicate module compilation that the queued canonical-module plan must remove
-DELEGATION_DECISION: codex-cli fallback — Phase 3D2 owns only three import-alias expectation files and Ollama remains cleanly blocked
+DELEGATION_DECISION: codex-cli fallback — Phase 3D3 owns only the final three warning expectation files and Ollama remains cleanly blocked
 NEXT_WORKER_ORDER: codex-cli, then parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit Phase 3D1, refresh its hash, and launch bounded Phase 3D2 through `codex-cli-beanstalk`
+NEXT_RESUME_ACTION: commit Phase 3D2, refresh its hash, and launch bounded Phase 3D3 through `codex-cli-beanstalk`
 
 ---
 
@@ -151,7 +151,8 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 3A assertion ownership split | `e86a5d660` | Accepted | Seven assertion-family modules; 27 focused assertion tests; 3,511 Rust tests; 1,778 integration executions |
 | Phase 3B exact diagnostic multisets | `69a0f38dc` | Accepted | Exact default with duplicate counts; 19 justified contains backend blocks; 3,523 Rust tests; 1,778 integration executions |
 | Phase 3C1 warning code identity | `8fdf00022` | Accepted | Schema 4 exact warning-code multisets; 130 focused runner tests; 3,535 Rust tests; 21 count-only fixtures remain |
-| Phase 3D1 pattern/match warning migration | pending acceptance commit | Accepted | 15 exact-code fixtures; duplicate `BST-RULE-0022` counts preserved; six count-only fixtures remain |
+| Phase 3D1 pattern/match warning migration | `a01728438` | Accepted | 15 exact-code fixtures; duplicate `BST-RULE-0022` counts preserved; six count-only fixtures remain |
+| Phase 3D2 import-alias warning migration | pending acceptance commit | Accepted | `BST-IMPORT-0003` exact counts preserved across three fixtures; three count-only fixtures remain |
 
 ---
 
