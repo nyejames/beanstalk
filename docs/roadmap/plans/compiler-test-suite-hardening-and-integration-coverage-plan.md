@@ -30,26 +30,26 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 3E — hard-policy ownership for diagnostic contains mode
-LAST_ACCEPTED_COMMIT: `d1057bc5a` (Phase 3D3)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 3C2 count-only warning deletion is ready to commit; no unrelated changes currently visible
+CURRENT_SLICE: Phase 3F — diagnostic and warning assertion documentation closure
+LAST_ACCEPTED_COMMIT: `e3f820ec1` (Phase 3C2)
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 3E contains-policy slice is ready to commit; no unrelated changes currently visible
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: testing guidance remains current through Phase 2 and needs diagnostic/warning exact-mode wording at Phase 3 closure
-- code: warning identity migration is complete at schema 5; expectation parsing requires contains reasons, while the suite policy still needs an explicit hard finding owner
+- docs: `testing.bd` and contributor examples need schema-5 exact diagnostic/warning and justified contains wording; `index.md` needs review only
+- code: Phase 3 assertion ownership, exact diagnostic/warning identity, schema 5, and contains hard policy are complete
 ACCEPTANCE_CRITERIA:
-- make unjustified diagnostic contains mode an explicit hard suite-policy finding without duplicating parser shape validation
-- preserve the authored reason in typed expectations and schema-5 inventory reporting
-- add focused policy/reporting tests and pass audit, integration execution, and the full gate
+- document exact diagnostic and warning code multisets, duplicate counts, and justified contains mode without exposing implementation details
+- update canonical expectation examples and review `index.md` for moved-module accuracy
+- rebuild documentation from source, inspect the changed routes/diff, and close Phase 3 in the active plan
 VALIDATION_STATE:
-- `just validate`: passed for Phase 3C2; cross-target Clippy, 3,534 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
-- `cargo run --quiet -- tests --audit`: passed for Phase 3C2; schema 5, 1,645 cases, 1,778 executions, and zero hard findings
+- `just validate`: passed for Phase 3E; cross-target Clippy, 3,540 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
+- `cargo run --quiet -- tests --audit`: passed for Phase 3E; schema 5, 19 justified contains blocks, 1,645 cases, 1,778 executions, and zero hard findings
 DOCS_IMPACT: `index.md` updated for the moved assertion module tree; progress matrix unchanged
 BLOCKERS_OR_OPEN_DECISIONS: Ollama wrapper still requires removed `docs/codebase-style-guide.md`; 19 justified diagnostic-contains blocks record duplicate module compilation that the queued canonical-module plan must remove
-DELEGATION_DECISION: codex-cli fallback — Phase 3E is a bounded suite-policy/reporting correction and Ollama remains cleanly blocked
-NEXT_WORKER_ORDER: codex-cli, then parent-direct
+DELEGATION_DECISION: parent-direct — only the parent may edit authorized workflow documentation
+NEXT_WORKER_ORDER: none
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit Phase 3C2, refresh its hash, inspect the policy owner, and launch bounded Phase 3E
+NEXT_RESUME_ACTION: commit Phase 3E, refresh its hash, update Phase 3 documentation/examples, and run the documentation release-build gate
 
 ---
 
@@ -154,7 +154,8 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 3D1 pattern/match warning migration | `a01728438` | Accepted | 15 exact-code fixtures; duplicate `BST-RULE-0022` counts preserved; six count-only fixtures remain |
 | Phase 3D2 import-alias warning migration | `c566da516` | Accepted | `BST-IMPORT-0003` exact counts preserved across three fixtures; three count-only fixtures remain |
 | Phase 3D3 final warning migration | `d1057bc5a` | Accepted | All 21 exact-warning fixtures author stable code multisets; zero canonical `warning_count` occurrences |
-| Phase 3C2 warning compatibility deletion | pending acceptance commit | Accepted | Schema 5 exact-code-only warnings; 129 focused runner tests; 3,534 Rust tests; no active count path |
+| Phase 3C2 warning compatibility deletion | `e3f820ec1` | Accepted | Schema 5 exact-code-only warnings; 129 focused runner tests; 3,534 Rust tests; no active count path |
+| Phase 3E contains-mode hard policy | pending acceptance commit | Accepted | One hard-policy owner; 135 focused runner tests; 19 justified canonical contains blocks; zero hard findings |
 
 ---
 
@@ -740,7 +741,7 @@ Migrate one semantic family per slice:
 
 - [x] Inventory actual diagnostic and warning multisets before editing expectations.
 - [x] Use contains mode only for intentional independent cascades/recovery.
-- [ ] Update suite policy so unjustified contains mode is hard-failing.
+- [x] Update suite policy so unjustified contains mode is hard-failing.
 
 ## Phase 3 acceptance
 

@@ -168,7 +168,7 @@ fn parse_matrix_expectation_file(
             backend_expectation.diagnostic_match.as_deref(),
         )?;
         if backend_expectation.mode == ExpectationMode::Failure {
-            validate_diagnostic_match_reason(
+            validate_exact_diagnostic_match_reason(
                 path,
                 &context,
                 diagnostic_match.unwrap_or(DiagnosticMatchMode::Exact),
@@ -503,26 +503,21 @@ fn parse_diagnostic_match_mode(
     }
 }
 
-fn validate_diagnostic_match_reason(
+fn validate_exact_diagnostic_match_reason(
     path: &Path,
     context: &str,
     mode: DiagnosticMatchMode,
     reason: Option<&str>,
 ) -> Result<(), String> {
-    match (mode, reason) {
-        (DiagnosticMatchMode::Contains, Some(reason)) if !reason.trim().is_empty() => Ok(()),
-        (DiagnosticMatchMode::Contains, _) => Err(format!(
-            "Expectation file '{}' {} uses diagnostic_match = \"contains\" and requires a non-empty 'diagnostic_match_reason'.",
-            path.display(),
-            context
-        )),
-        (DiagnosticMatchMode::Exact, Some(_)) => Err(format!(
+    if mode == DiagnosticMatchMode::Exact && reason.is_some() {
+        return Err(format!(
             "Expectation file '{}' {} uses diagnostic_match = \"exact\" and must not set 'diagnostic_match_reason'.",
             path.display(),
             context
-        )),
-        (DiagnosticMatchMode::Exact, None) => Ok(()),
+        ));
     }
+
+    Ok(())
 }
 
 fn validate_rendered_output_strings(

@@ -335,3 +335,48 @@ fn report_serializes_supplied_policy_evaluation() {
         "duplicate_primary_contract"
     );
 }
+
+#[test]
+fn report_serializes_contains_policy_finding_once_with_typed_reason_fact() {
+    let case = case(
+        "contains_policy_case",
+        BackendId::Html,
+        &["integration"],
+        Some("diagnostics.contains_reason"),
+        Some(CaseRole::Boundary),
+        ExpectedOutcome::Failure(FailureExpectation {
+            warnings: WarningExpectation::Forbid,
+            message_contains: Vec::new(),
+            diagnostic_codes: vec!["BST-RULE-0001".to_owned()],
+            diagnostic_match: DiagnosticMatchMode::Contains,
+            diagnostic_match_reason: Some("  ".to_owned()),
+        }),
+    );
+
+    let report = report_for_cases(&[case], None);
+    let json = serde_json::to_value(&report).expect("inventory should serialize");
+
+    assert_eq!(
+        json["hard_policy_violations"].as_array().map(Vec::len),
+        Some(1)
+    );
+    assert_eq!(
+        json["hard_policy_violations"][0]["code"],
+        "diagnostic_contains_requires_reason"
+    );
+    assert!(
+        json["hard_policy_violations"][0]["message"]
+            .as_str()
+            .is_some_and(|message| {
+                message.contains("contains_policy_case") && message.contains("backend 'html'")
+            })
+    );
+    assert_eq!(
+        json["cases"][0]["backends"][0]["diagnostic_match"],
+        "contains"
+    );
+    assert_eq!(
+        json["cases"][0]["backends"][0]["diagnostic_match_reason"],
+        "  "
+    );
+}

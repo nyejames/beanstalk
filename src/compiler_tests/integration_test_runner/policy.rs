@@ -3,7 +3,7 @@
 //! WHAT: evaluates ownership and assertion-strength rules after typed fixture loading.
 //! WHY: cross-case policy must be decided once before reporting, selection or execution.
 
-use super::{CaseRole, ExpectedOutcome, SuccessContract, TestSuiteSpec};
+use super::{CaseRole, DiagnosticMatchMode, ExpectedOutcome, SuccessContract, TestSuiteSpec};
 use serde::Serialize;
 use std::collections::BTreeMap;
 
@@ -117,6 +117,37 @@ pub(crate) fn evaluate_suite(suite: &TestSuiteSpec) -> PolicyEvaluation {
                     case_order: group.first_case_order,
                     backend_order: usize::MAX,
                     rule_order: 30,
+                },
+            ));
+        }
+
+        for (backend_order, case_order) in group.case_orders.iter().copied().enumerate() {
+            let case = &suite.cases[case_order];
+            let ExpectedOutcome::Failure(expectation) = &case.expected else {
+                continue;
+            };
+
+            if expectation.diagnostic_match != DiagnosticMatchMode::Contains
+                || expectation
+                    .diagnostic_match_reason
+                    .as_deref()
+                    .is_some_and(|reason| !reason.trim().is_empty())
+            {
+                continue;
+            }
+
+            evaluation.hard_findings.push(PolicyFinding::new(
+                "diagnostic_contains_requires_reason",
+                Some(case.case_id.clone()),
+                format!(
+                    "Case '{}' backend '{}' uses diagnostic_match = \"contains\" without a non-blank authored diagnostic_match_reason.",
+                    case.case_id,
+                    case.backend_id.as_str()
+                ),
+                FindingSortKey {
+                    case_order: group.first_case_order,
+                    backend_order,
+                    rule_order: 40,
                 },
             ));
         }

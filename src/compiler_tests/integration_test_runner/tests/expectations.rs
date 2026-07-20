@@ -199,7 +199,7 @@ fn justified_contains_diagnostic_match_is_retained() {
 }
 
 #[test]
-fn contains_diagnostic_match_requires_non_blank_reason() {
+fn contains_diagnostic_match_retains_missing_and_blank_reasons_for_policy() {
     for (name, reason) in [("missing", None), ("blank", Some("   "))] {
         let reason_line = reason.map_or_else(String::new, |value| {
             format!("diagnostic_match_reason = \"{value}\"\n")
@@ -211,13 +211,16 @@ fn contains_diagnostic_match_requires_non_blank_reason() {
             ),
         );
 
-        let Err(error) = load_canonical_case_specs(&case_root, None) else {
-            panic!("contains matching without a non-blank reason should be rejected");
+        let cases = load_canonical_case_specs(&case_root, None)
+            .expect("contains matching without a non-blank reason should reach policy evaluation");
+        let super::super::types::ExpectedOutcome::Failure(expectation) = &cases[0].expected else {
+            panic!("case should have a failure expectation");
         };
         assert!(
-            error.contains("diagnostic_match_reason") && error.contains("contains"),
-            "unexpected error: {error}"
+            expectation.diagnostic_match == DiagnosticMatchMode::Contains,
+            "contains mode should be retained"
         );
+        assert_eq!(expectation.diagnostic_match_reason.as_deref(), reason);
 
         fs::remove_dir_all(&root).expect("should clean up");
     }
