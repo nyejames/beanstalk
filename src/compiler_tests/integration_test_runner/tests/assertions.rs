@@ -32,19 +32,23 @@ use std::path::{Path, PathBuf};
 const DIAGNOSTICS_SOURCE: &str = include_str!("../assertions/diagnostics.rs");
 
 fn test_location(path: InternedPath) -> SourceLocation {
-    test_location_at(path, 1, 1)
+    test_location_at(path, 0, 0)
 }
 
-fn test_location_at(path: InternedPath, line_number: i32, char_column: i32) -> SourceLocation {
+fn test_location_at(
+    path: InternedPath,
+    raw_line_number: i32,
+    raw_char_column: i32,
+) -> SourceLocation {
     SourceLocation::new(
         path,
         CharPosition {
-            line_number,
-            char_column,
+            line_number: raw_line_number,
+            char_column: raw_char_column,
         },
         CharPosition {
-            line_number,
-            char_column: char_column + 1,
+            line_number: raw_line_number,
+            char_column: raw_char_column + 1,
         },
     )
 }
@@ -291,8 +295,8 @@ fn structured_diagnostic_messages(fixture_root: &Path) -> CompilerMessages {
         None,
         None,
         None,
-        Some(test_location_at(secondary_path, 4, 5)),
-        test_location_at(primary_path, 3, 2),
+        Some(test_location_at(secondary_path, 3, 4)),
+        test_location_at(primary_path, 2, 1),
     );
 
     CompilerMessages::from_diagnostic(diagnostic, string_table)
@@ -345,8 +349,76 @@ fn structured_diagnostic_assertions_consume_compiler_identity_and_locations() {
     fs::remove_dir_all(&fixture_root).expect("should clean up temporary fixture root");
 }
 
+fn relative_structured_diagnostic_messages(scope: &str) -> CompilerMessages {
+    let mut string_table = StringTable::new();
+    let source_path = InternedPath::from_single_str(scope, &mut string_table);
+    let diagnostic = CompilerDiagnostic::invalid_assignment_target(
+        InvalidAssignmentTargetReason::ImmutableBinding,
+        None,
+        None,
+        None,
+        None,
+        None,
+        test_location_at(source_path, 2, 1),
+    );
+
+    CompilerMessages::from_diagnostic(diagnostic, string_table)
+}
+
+#[test]
+fn structured_diagnostic_assertions_resolve_relative_scopes_under_input_root() {
+    let fixture_root = temp_dir("structured_relative_diagnostic_paths");
+    let input_root = fixture_root.join("input");
+    fs::create_dir_all(input_root.join("nested"))
+        .expect("should create temporary fixture input directory");
+    fs::write(input_root.join("#page.bst"), "page").expect("should write source");
+    fs::write(input_root.join("nested/helper.bst"), "helper").expect("should write nested source");
+    let fixture_root = fs::canonicalize(&fixture_root).expect("fixture root should canonicalize");
+
+    for (scope, expected_path) in [
+        ("#page.bst", "input/#page.bst"),
+        ("input/#page.bst", "input/#page.bst"),
+        ("nested/helper.bst", "input/nested/helper.bst"),
+        ("input/nested/helper.bst", "input/nested/helper.bst"),
+        (
+            "nested/helper.bst/declaration.header",
+            "input/nested/helper.bst",
+        ),
+        (
+            "input/nested/helper.bst/declaration.header",
+            "input/nested/helper.bst",
+        ),
+    ] {
+        let expectation = structured_diagnostic_expectation(DiagnosticAssertion {
+            code: "BST-RULE-0044".to_owned(),
+            occurrence: 1,
+            reason: Some("invalid_assignment_target.immutable_binding".to_owned()),
+            path: Some(expected_path.to_owned()),
+            line: Some(3),
+            column: Some(2),
+            count: Some(1),
+            secondary_labels: Vec::new(),
+        });
+
+        let result = validate_failure_result(
+            relative_structured_diagnostic_messages(scope),
+            &expectation,
+            &fixture_root,
+        );
+
+        assert!(
+            result.passed,
+            "scope {scope:?}: {:?}",
+            result.failure_reason
+        );
+    }
+
+    fs::remove_dir_all(&fixture_root).expect("should clean up temporary fixture root");
+}
+
 #[test]
 fn structured_diagnostic_mismatches_report_code_occurrence_field_expected_and_actual() {
+    let fixture_root = std::env::current_dir().expect("test should have a current directory");
     let expectation = structured_diagnostic_expectation(DiagnosticAssertion {
         code: "BST-RULE-0044".to_owned(),
         occurrence: 1,
@@ -364,9 +436,9 @@ fn structured_diagnostic_mismatches_report_code_occurrence_field_expected_and_ac
     });
 
     let result = validate_failure_result(
-        structured_diagnostic_messages(Path::new(".")),
+        structured_diagnostic_messages(&fixture_root),
         &expectation,
-        Path::new("."),
+        &fixture_root,
     );
     let reason = result
         .failure_reason

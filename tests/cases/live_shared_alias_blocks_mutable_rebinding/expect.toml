@@ -2,3 +2,9 @@
 mode = "failure"
 warnings = "forbid"
 diagnostic_codes = ["BST-BORROW-0007"]
+
+[[backends.html.diagnostic_assertions]]
+code = "BST-BORROW-0007"
+reason = "invalid_mutable_access.aliased_value_requires_exclusive_access"
+path = "input/#page.bst"
+line = 6

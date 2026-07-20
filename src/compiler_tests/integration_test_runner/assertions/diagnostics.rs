@@ -8,12 +8,13 @@
 use super::super::{DiagnosticAssertion, DiagnosticMatchMode, FailureExpectation};
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_messages::render::{
-    relative_display_path_from_root, resolve_source_file_path, terminal, terse,
+    display_column_number, display_line_number, relative_display_path_from_root,
+    resolve_source_file_path, terminal, terse,
 };
 use crate::compiler_frontend::compiler_messages::source_location::SourceLocation;
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, DiagnosticLabelStyle};
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 pub(super) fn validate_diagnostics(
     messages: &CompilerMessages,
@@ -141,7 +142,8 @@ fn validate_structured_diagnostic_assertions(
         }
 
         if let Some(expected_line) = assertion.line {
-            let actual_line = diagnostic.primary_location.start_pos.line_number;
+            let actual_line =
+                display_line_number(diagnostic.primary_location.start_pos.line_number);
             if !position_matches(expected_line, actual_line) {
                 append_structured_mismatch(
                     &mut mismatches,
@@ -154,7 +156,8 @@ fn validate_structured_diagnostic_assertions(
         }
 
         if let Some(expected_column) = assertion.column {
-            let actual_column = diagnostic.primary_location.start_pos.char_column;
+            let actual_column =
+                display_column_number(diagnostic.primary_location.start_pos.char_column);
             if !position_matches(expected_column, actual_column) {
                 append_structured_mismatch(
                     &mut mismatches,
@@ -227,7 +230,7 @@ fn validate_secondary_label_assertions(
         }
 
         if let Some(expected_line) = secondary_assertion.line {
-            let actual_line = label.location.start_pos.line_number;
+            let actual_line = display_line_number(label.location.start_pos.line_number);
             if !position_matches(expected_line, actual_line) {
                 append_secondary_mismatch(
                     mismatches,
@@ -241,7 +244,7 @@ fn validate_secondary_label_assertions(
         }
 
         if let Some(expected_column) = secondary_assertion.column {
-            let actual_column = label.location.start_pos.char_column;
+            let actual_column = display_column_number(label.location.start_pos.char_column);
             if !position_matches(expected_column, actual_column) {
                 append_secondary_mismatch(
                     mismatches,
@@ -300,9 +303,25 @@ fn diagnostic_path_from_location(
     messages: &CompilerMessages,
     fixture_root: &Path,
 ) -> String {
-    let source_file = resolve_source_file_path(&location.scope, &messages.string_table);
+    let resolved_source_file = resolve_source_file_path(&location.scope, &messages.string_table);
+    let source_file = resolve_fixture_source_path(&resolved_source_file, fixture_root);
     let relative_path = relative_display_path_from_root(&source_file, fixture_root);
     super::super::normalize_relative_path_text(&relative_path)
+}
+
+fn resolve_fixture_source_path(source_file: &Path, fixture_root: &Path) -> PathBuf {
+    if source_file.is_absolute() {
+        return source_file.to_owned();
+    }
+
+    // Canonical integration scopes may stay relative to the case input root after resolution.
+    let input_root = fixture_root.join(super::super::INPUT_DIR_NAME);
+    let input_prefix = Path::new(super::super::INPUT_DIR_NAME);
+    let source_relative_to_input = source_file
+        .strip_prefix(input_prefix)
+        .unwrap_or(source_file);
+
+    input_root.join(source_relative_to_input)
 }
 
 fn compare_diagnostic_code_multisets(
