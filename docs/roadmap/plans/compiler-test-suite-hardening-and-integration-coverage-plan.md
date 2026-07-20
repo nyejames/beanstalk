@@ -30,27 +30,26 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 6 live hashmap lookup alias conflicts
-LAST_ACCEPTED_COMMIT: `fc3b25eaa` (Phase 5 documentation and acceptance closure)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; Phase 5 is complete; unrelated docs style, generated release output, and generated font work remains unstaged
+CURRENT_SLICE: Phase 6 alias-final-use and explicit-copy independence integration owners
+LAST_ACCEPTED_COMMIT: `3e27e8d95` (Phase 6 live hashmap lookup alias conflict)
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; live lookup conflict slice is committed; unrelated compiler-design docs work remains unstaged
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: access-and-aliasing and borrow-validation leaves own hashmap alias legality; testing standards require exact diagnostic identity and source locations
-- code: existing hashmap integration cases and focused borrow-map units are the evidence base for adding a primary live-lookup conflict owner without pruning units
+- code: map `get` aliases now flow through fallible catch; final-use and explicit-copy positive behavior needs distinct canonical runtime owners
 ACCEPTANCE_CRITERIA:
-- add one primary integration case proving a live `get` alias blocks `set`
-- assert the exact diagnostic code, compiler-owned reason, mutation location, and earlier shared-access label
-- preserve current HTML/HTML-Wasm behavior and do not delete units or broaden map semantics
+- add one positive case where the lookup alias is observed before mutation and exact output proves the later mutation succeeds
+- add a distinct positive case where an explicit copy remains usable after mutation and exact output proves both the copy and final map state
+- use HTML success with structured HTML-Wasm map rejection in each backend matrix; do not delete units or broaden map semantics
 VALIDATION_STATE:
-- `cargo run --quiet -- build docs --release`: passed; 63 files built and the style-guide route contains the schema-6 runtime workflow
-- prior Phase 5 `just validate`: passed; cross-target Clippy, 3,575 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
-- Phase 6 focused validation: not run
-DOCS_IMPACT: Phase 5 testing and contributor documentation is current; Phase 6 progress wording is reviewed after coverage lands
-BLOCKERS_OR_OPEN_DECISIONS: the user requires Ollama for every delegated implementation slice after Phase 5C2, with no provider substitution; 19 justified diagnostic-contains blocks separately record duplicate module compilation that the queued canonical-module plan must remove
-DELEGATION_DECISION: Ollama — user-required provider for the bounded Phase 6 implementation slice
+- `just validate`: passed; cross-target Clippy, 3,576 Rust tests, 1,780 integration executions, docs check, and 28 benchmark cases
+- focused map/diagnostic tests: passed; 15 map units, 95 compiler-message tests, both canonical backend blocks, and zero audit hard findings
+DOCS_IMPACT: progress matrix reviewed; existing broad hashmap borrow/diagnostic and final-use wording remains accurate; index unchanged
+BLOCKERS_OR_OPEN_DECISIONS: none for the next slice; Ollama remains required with no provider substitution
+DELEGATION_DECISION: Ollama — two bounded positive canonical cases with distinct contracts
 NEXT_WORKER_ORDER: Ollama only; no provider substitution
 STOP_REASON: none
-NEXT_RESUME_ACTION: read the hashmap access and borrow-validation leaves, inspect existing owners, then launch the live-lookup conflict slice through Ollama
+NEXT_RESUME_ACTION: launch the alias-final-use and explicit-copy positive integration slice through Ollama
 
 ---
 
@@ -181,6 +180,7 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 5D4 template/import golden conversion | `71f75c220` | Accepted | Nine whole-page goldens replaced by runtime and narrow static owners; order-sensitive console markers are exact-once; five golden backend blocks remain; 1,778/1,778 executions |
 | Phase 5D5 static golden conversion | `952bd3134` | Accepted | Final five whole-page goldens replaced by narrow static content/order/exact-once and absence contracts; zero golden backend blocks; 1,778/1,778 executions |
 | Phase 5 documentation and acceptance closure | `fc3b25eaa` | Accepted | Schema 6 chronology, exact/order/exact-once runtime workflow, line-ending-only normalization, and zero-golden policy documented; release docs build passed |
+| Phase 6 live hashmap lookup alias conflict | `3e27e8d95` | Accepted | Fallible-success aliases survive catch joins; final-use semantics are restored; live `get` alias blocks `set` with exact reason and primary/secondary locations; 1,646 cases and 1,780 executions |
 
 ---
 
@@ -914,9 +914,9 @@ Add end-to-end owners before pruning source-shaped borrow/map units.
 
 ### Live lookup alias conflicts
 
-- [ ] `get` result live across `set` fails.
-- [ ] Add separate `remove` and `clear` failures only when transfer path or reason differs.
-- [ ] Assert exact code, reason, mutation location, and earlier shared-access label.
+- [x] `get` result live across `set` fails.
+- [x] Add separate `remove` and `clear` failures only when transfer path or reason differs.
+- [x] Assert exact code, reason, mutation location, and earlier shared-access label.
 
 ### Alias final use and copy independence
 
