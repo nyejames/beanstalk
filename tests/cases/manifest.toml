@@ -7699,1001 +7699,1401 @@ role = "backend"
 id = "dispatcher_branch_heavy_cyclic"
 path = "dispatcher_branch_heavy_cyclic"
 tags = ["integration", "control-flow", "js-backend", "dispatcher"]
+contract = "backend.html.js_dispatcher_branch_heavy_cyclic_lowering"
+role = "backend"
 
 [[case]]
 id = "structured_nested_if_chain"
 path = "structured_nested_if_chain"
 tags = ["integration", "control-flow", "js-backend", "structured"]
+contract = "backend.html.js_structured_if_chain_lowering"
+role = "backend"
 
 [[case]]
 id = "structured_match_converge"
 path = "structured_match_converge"
 tags = ["integration", "control-flow", "js-backend", "structured"]
+contract = "backend.html.js_structured_match_converge_lowering"
+role = "backend"
 
 [[case]]
 id = "diagnostic_expression_adjacent_operands"
 path = "diagnostic_expression_adjacent_operands"
 tags = ["integration", "diagnostics"]
+contract = "language.syntax.adjacent_operands_rejected"
+role = "primary"
 
 [[case]]
 id = "diagnostic_expression_and_and"
 path = "diagnostic_expression_and_and"
 tags = ["integration", "diagnostics"]
+contract = "language.syntax.c_style_operator_rejected"
+role = "primary"
 
 [[case]]
 id = "diagnostic_expression_bang_equal"
 path = "diagnostic_expression_bang_equal"
 tags = ["integration", "diagnostics"]
+contract = "language.syntax.c_style_operator_rejected"
+role = "boundary"
 
 [[case]]
 id = "diagnostic_expression_bang_negation"
 path = "diagnostic_expression_bang_negation"
 tags = ["integration", "diagnostics"]
+contract = "language.syntax.c_style_operator_rejected"
+role = "boundary"
 
 [[case]]
 id = "diagnostic_expression_double_equal"
 path = "diagnostic_expression_double_equal"
 tags = ["integration", "diagnostics"]
+contract = "language.syntax.c_style_operator_rejected"
+role = "boundary"
 
 [[case]]
 id = "diagnostic_expression_or_or"
 path = "diagnostic_expression_or_or"
 tags = ["integration", "diagnostics"]
+contract = "language.syntax.c_style_operator_rejected"
+role = "boundary"
 
 [[case]]
 id = "diagnostic_expression_add_assign_rejected"
 path = "diagnostic_expression_add_assign_rejected"
 tags = ["integration", "diagnostics"]
+contract = "language.syntax.unexpected_token_in_expression_rejected"
+role = "boundary"
 
 [[case]]
 id = "diagnostic_expression_stray_hash_rejected"
 path = "diagnostic_expression_stray_hash_rejected"
 tags = ["integration", "diagnostics"]
+contract = "language.syntax.unexpected_token_in_expression_rejected"
+role = "primary"
 
 [[case]]
 id = "diagnostic_expression_stray_pipe_rejected"
 path = "diagnostic_expression_stray_pipe_rejected"
 tags = ["integration", "diagnostics"]
+contract = "language.syntax.unexpected_token_in_expression_rejected"
+role = "boundary"
 
 [[case]]
 id = "diagnostic_expression_wildcard_rejected"
 path = "diagnostic_expression_wildcard_rejected"
 tags = ["integration", "diagnostics"]
+contract = "language.syntax.unexpected_token_in_expression_rejected"
+role = "boundary"
 
 [[case]]
 id = "diagnostic_signature_paren_parameters"
 path = "diagnostic_signature_paren_parameters"
 tags = ["integration", "diagnostics"]
+contract = "language.syntax.paren_parameter_list_rejected"
+role = "primary"
 
 [[case]]
 id = "diagnostic_statement_comment_slash_slash"
 path = "diagnostic_statement_comment_slash_slash"
 tags = ["integration", "diagnostics"]
+contract = "language.syntax.foreign_statement_syntax_rejected"
+role = "boundary"
 
 [[case]]
 id = "diagnostic_statement_keyword_fn"
 path = "diagnostic_statement_keyword_fn"
 tags = ["integration", "diagnostics"]
+contract = "language.syntax.foreign_statement_syntax_rejected"
+role = "primary"
 
 [[case]]
 id = "diagnostic_statement_keyword_let"
 path = "diagnostic_statement_keyword_let"
 tags = ["integration", "diagnostics"]
+contract = "language.syntax.foreign_statement_syntax_rejected"
+role = "boundary"
 
 [[case]]
 id = "diagnostic_statement_keyword_match"
 path = "diagnostic_statement_keyword_match"
 tags = ["integration", "diagnostics"]
+contract = "language.syntax.foreign_statement_syntax_rejected"
+role = "boundary"
 
 [[case]]
 id = "constant_same_file_forward_reference_rejected"
 path = "constant_same_file_forward_reference_rejected"
 tags = ["integration", "constants", "dependency-resolution", "diagnostics"]
+contract = "language.constants.forward_reference_rejected"
+role = "primary"
 
 [[case]]
 id = "constant_compile_time_inferred"
 path = "constant_compile_time_inferred"
 tags = ["integration", "constants", "language"]
+contract = "language.constants.compile_time_inferred_acceptance"
+role = "primary"
 
 [[case]]
 id = "constant_compile_time_explicit_type"
 path = "constant_compile_time_explicit_type"
 tags = ["integration", "constants", "language"]
+contract = "language.constants.compile_time_explicit_type_acceptance"
+role = "primary"
 
 [[case]]
 id = "constant_compile_time_collection"
 path = "constant_compile_time_collection"
 tags = ["integration", "constants", "language", "collections"]
+contract = "language.constants.compile_time_collection_acceptance"
+role = "primary"
 
 [[case]]
 id = "constant_compile_time_optional"
 path = "constant_compile_time_optional"
 tags = ["integration", "constants", "language", "options"]
+contract = "language.constants.compile_time_optional_acceptance"
+role = "primary"
 
 [[case]]
 id = "constant_compile_time_spacing_error"
 path = "constant_compile_time_spacing_error"
 tags = ["integration", "constants", "diagnostics", "language"]
+contract = "language.constants.declaration_spacing_rejected"
+role = "primary"
 
 [[case]]
 id = "mutable_binding_internal_spacing_rejected"
 path = "mutable_binding_internal_spacing_rejected"
 tags = ["integration", "diagnostics", "language"]
+contract = "language.syntax.mutable_binding_spacing_rejected"
+role = "primary"
 
 [[case]]
 id = "constant_compile_time_body_local"
 path = "constant_compile_time_body_local"
 tags = ["integration", "constants", "language"]
+contract = "language.constants.compile_time_body_local_acceptance"
+role = "primary"
 
 [[case]]
 id = "constant_compile_time_runtime_dependency_rejected"
 path = "constant_compile_time_runtime_dependency_rejected"
 tags = ["integration", "constants", "diagnostics", "language"]
+contract = "language.constants.runtime_dependency_rejected"
+role = "primary"
 
 [[case]]
 id = "constant_compile_time_parameter_deferred"
 path = "constant_compile_time_parameter_deferred"
 tags = ["integration", "constants", "diagnostics", "language", "functions"]
+contract = "language.constants.parameter_deferred_rejected"
+role = "primary"
 
 [[case]]
 id = "constant_cross_file_dependency_chain"
 path = "constant_cross_file_dependency_chain"
 tags = ["integration", "constants", "dependency-resolution", "imports"]
+contract = "language.constants.cross_file_dependency_chain_acceptance"
+role = "primary"
 
 [[case]]
 id = "function_body_reference_does_not_order_headers_success"
 path = "function_body_reference_does_not_order_headers_success"
 tags = ["integration", "functions", "dependency-resolution"]
+contract = "language.functions.body_reference_does_not_order_headers_acceptance"
+role = "primary"
 
 [[case]]
 id = "constant_imported_non_constant_rejected"
 path = "constant_imported_non_constant_rejected"
 tags = ["integration", "constants", "dependency-resolution", "imports", "diagnostics"]
+contract = "language.constants.non_constant_reference_rejected"
+role = "boundary"
 
 [[case]]
 id = "constant_unknown_reference_rejected"
 path = "constant_unknown_reference_rejected"
 tags = ["integration", "constants", "dependency-resolution", "diagnostics"]
+contract = "language.constants.unknown_reference_rejected"
+role = "primary"
 
 [[case]]
 id = "constant_not_imported_reference_rejected"
 path = "constant_not_imported_reference_rejected"
 tags = ["integration", "constants", "dependency-resolution", "imports", "diagnostics"]
+contract = "language.constants.not_imported_reference_rejected"
+role = "primary"
 
 [[case]]
 id = "constant_cycle_rejected"
 path = "constant_cycle_rejected"
 tags = ["integration", "constants", "dependency-resolution", "imports", "diagnostics"]
+contract = "language.constants.cycle_rejected"
+role = "primary"
 
 [[case]]
 id = "const_template_uses_constants"
 path = "const_template_uses_constants"
 tags = ["integration", "constants", "dependency-resolution", "templates"]
+contract = "language.constants.template_uses_constants_acceptance"
+role = "primary"
 
 [[case]]
 id = "const_template_if_source_const_bool"
 path = "const_template_if_source_const_bool"
 tags = ["integration", "constants", "dependency-resolution", "templates"]
+contract = "language.constants.template_if_source_const_bool_acceptance"
+role = "primary"
 
 [[case]]
 id = "const_template_if_imported_source_const_bool"
 path = "const_template_if_imported_source_const_bool"
 tags = ["integration", "constants", "dependency-resolution", "templates", "imports"]
+contract = "language.constants.template_if_imported_const_bool_acceptance"
+role = "primary"
 
 [[case]]
 id = "const_template_if_forward_source_const_rejected"
 path = "const_template_if_forward_source_const_rejected"
 tags = ["integration", "constants", "dependency-resolution", "templates", "diagnostics"]
+contract = "language.constants.template_if_forward_reference_rejected"
+role = "primary"
 
 [[case]]
 id = "struct_placeholder_visible_before_resolution"
 path = "struct_placeholder_visible_before_resolution"
 tags = ["integration", "structs", "dependency-resolution"]
+contract = "language.structs.placeholder_visible_before_resolution_acceptance"
+role = "primary"
 
 [[case]]
 id = "exhaustive_choice_match_returns"
 path = "exhaustive_choice_match_returns"
 tags = ["integration", "control-flow", "language", "choices"]
+contract = "language.choices.match_exhaustive_tag_level"
+role = "boundary"
 
 [[case]]
 id = "exhaustive_choice_match_partial_return_failure"
 path = "exhaustive_choice_match_partial_return_failure"
 tags = ["integration", "control-flow", "diagnostics", "choices"]
+contract = "language.choices.exhaustive_match_partial_return_rejected"
+role = "primary"
 
 [[case]]
 id = "external_package_prelude_works"
 path = "external_package_prelude_works"
 tags = ["integration", "language", "external-packages"]
+contract = "language.imports.external_package_prelude_acceptance"
+role = "primary"
 
 [[case]]
 id = "external_package_explicit_import"
 path = "external_package_explicit_import"
 tags = ["integration", "language", "external-packages"]
+contract = "language.imports.external_package_explicit_import_acceptance"
+role = "primary"
 
 [[case]]
 id = "external_package_unknown_package"
 path = "external_package_unknown_package"
 tags = ["integration", "language", "external-packages"]
+contract = "language.imports.unknown_external_package_rejected"
+role = "primary"
 
 [[case]]
 id = "external_package_unknown_symbol"
 path = "external_package_unknown_symbol"
 tags = ["integration", "language", "external-packages"]
+contract = "language.imports.unknown_external_symbol_rejected"
+role = "primary"
 
 [[case]]
 id = "external_package_bare_name_rejected"
 path = "external_package_bare_name_rejected"
 tags = ["integration", "language", "external-packages"]
+contract = "language.imports.external_bare_name_rejected"
+role = "primary"
 
 [[case]]
 id = "external_package_import_selects_correct_package"
 path = "external_package_import_selects_correct_package"
 tags = ["integration", "language", "external-packages"]
+contract = "language.imports.external_package_selection_acceptance"
+role = "primary"
 
 [[case]]
 id = "external_fallible_catch_success"
 path = "external_fallible_catch_success"
 tags = ["integration", "language", "external-packages", "results"]
+contract = "language.results.external_fallible_catch_acceptance"
+role = "primary"
 
 [[case]]
 id = "external_fallible_catch_error_fallback"
 path = "external_fallible_catch_error_fallback"
 tags = ["integration", "language", "external-packages", "results"]
+contract = "language.results.external_fallible_error_fallback_acceptance"
+role = "primary"
 
 [[case]]
 id = "external_fallible_postfix_propagates"
 path = "external_fallible_postfix_propagates"
 tags = ["integration", "language", "external-packages", "results"]
+contract = "language.results.external_postfix_propagation_acceptance"
+role = "primary"
 
 [[case]]
 id = "external_fallible_custom_error_catch"
 path = "external_fallible_custom_error_catch"
 tags = ["integration", "language", "external-packages", "results"]
+contract = "language.results.external_custom_error_catch_acceptance"
+role = "primary"
 
 [[case]]
 id = "external_fallible_custom_error_optional_postfix"
 path = "external_fallible_custom_error_optional_postfix"
 tags = ["integration", "results", "external-packages", "options"]
+contract = "language.results.external_custom_error_optional_postfix_acceptance"
+role = "primary"
 
 [[case]]
 id = "external_fallible_unhandled_rejected"
 path = "external_fallible_unhandled_rejected"
 tags = ["integration", "language", "external-packages", "results", "diagnostics"]
+contract = "language.results.unhandled_fallible_expression_rejected"
+role = "boundary"
 
 [[case]]
 id = "external_fallible_error_type_mismatch_rejected"
 path = "external_fallible_error_type_mismatch_rejected"
 tags = ["integration", "language", "external-packages", "results", "diagnostics"]
+contract = "language.results.external_error_type_mismatch_rejected"
+role = "primary"
 
 [[case]]
 id = "external_package_duplicate_visible_names_conflict"
 path = "external_package_duplicate_visible_names_conflict"
 tags = ["integration", "language", "external-packages", "diagnostics"]
+contract = "language.imports.import_alias_collision_rejected"
+role = "boundary"
 
 [[case]]
 id = "external_type_construction_rejected"
 path = "external_type_construction_rejected"
 tags = ["integration", "language", "external-packages"]
+contract = "language.imports.external_type_construction_rejected"
+role = "primary"
 
 [[case]]
 id = "external_type_field_access_rejected"
 path = "external_type_field_access_rejected"
 tags = ["integration", "language", "external-packages", "diagnostics"]
+contract = "language.imports.external_type_field_access_rejected"
+role = "primary"
 
 [[case]]
 id = "external_package_import_alias"
 path = "external_package_import_alias"
 tags = ["integration", "language", "external-packages", "aliases"]
+contract = "language.imports.external_package_alias_acceptance"
+role = "primary"
 
 [[case]]
 id = "const_template_import_alias_dependency"
 path = "const_template_import_alias_dependency"
 tags = ["integration", "language", "aliases", "constants"]
+contract = "language.imports.const_template_alias_dependency_acceptance"
+role = "primary"
 
 [[case]]
 id = "import_alias_collision_rejected"
 path = "import_alias_collision_rejected"
 tags = ["integration", "language", "external-packages", "aliases", "diagnostics"]
+contract = "language.imports.import_alias_collision_rejected"
+role = "primary"
 
 [[case]]
 id = "source_import_alias"
 path = "source_import_alias"
 tags = ["integration", "language", "aliases"]
+contract = "language.imports.source_alias_acceptance"
+role = "primary"
 
 [[case]]
 id = "source_import_alias_collision_with_local_rejected"
 path = "source_import_alias_collision_with_local_rejected"
 tags = ["integration", "language", "aliases", "diagnostics"]
+contract = "language.imports.import_name_collision_rejected"
+role = "primary"
 
 [[case]]
 id = "source_import_alias_duplicate_rejected"
 path = "source_import_alias_duplicate_rejected"
 tags = ["integration", "language", "aliases", "diagnostics"]
+contract = "language.imports.import_alias_collision_rejected"
+role = "boundary"
 
 [[case]]
 id = "source_import_alias_visible_only_in_file_rejected"
 path = "source_import_alias_visible_only_in_file_rejected"
 tags = ["integration", "language", "aliases", "diagnostics"]
+contract = "language.imports.alias_file_visibility_rejected"
+role = "primary"
 
 [[case]]
 id = "source_import_alias_case_warning"
 path = "source_import_alias_case_warning"
 tags = ["integration", "language", "aliases", "diagnostics"]
+contract = "language.imports.alias_case_warning_acceptance"
+role = "primary"
 
 [[case]]
 id = "source_import_constant_alias_success"
 path = "source_import_constant_alias_success"
 tags = ["integration", "language", "aliases"]
+contract = "language.imports.constant_alias_acceptance"
+role = "primary"
 
 [[case]]
 id = "source_import_type_alias_success"
 path = "source_import_type_alias_success"
 tags = ["integration", "language", "aliases"]
+contract = "language.imports.type_alias_acceptance"
+role = "primary"
 
 [[case]]
 id = "external_import_constant_alias_success"
 path = "external_import_constant_alias_success"
 tags = ["integration", "language", "aliases", "external"]
+contract = "language.imports.external_constant_alias_acceptance"
+role = "primary"
 
 [[case]]
 id = "external_non_scalar_constant_rejected"
 path = "external_non_scalar_constant_rejected"
 tags = ["integration", "diagnostics", "external", "constants"]
+contract = "language.imports.external_non_scalar_constant_rejected"
+role = "primary"
 
 [[case]]
 id = "external_import_alias_collision_with_source_rejected"
 path = "external_import_alias_collision_with_source_rejected"
 tags = ["integration", "language", "aliases", "external", "diagnostics"]
+contract = "language.imports.import_name_collision_rejected"
+role = "boundary"
 
 [[case]]
 id = "external_import_alias_collision_with_prelude_rejected"
 path = "external_import_alias_collision_with_prelude_rejected"
 tags = ["integration", "language", "aliases", "external", "diagnostics"]
+contract = "language.imports.import_name_collision_rejected"
+role = "boundary"
 
 [[case]]
 id = "external_import_alias_case_warning"
 path = "external_import_alias_case_warning"
 tags = ["integration", "language", "aliases", "external", "diagnostics"]
+contract = "language.imports.alias_case_warning_acceptance"
+role = "boundary"
 
 [[case]]
 id = "grouped_source_import_alias_success"
 path = "grouped_source_import_alias_success"
 tags = ["integration", "language", "aliases", "grouped", "source"]
+contract = "language.imports.grouped_source_alias_acceptance"
+role = "primary"
 
 [[case]]
 id = "grouped_nested_source_import_alias_success"
 path = "grouped_nested_source_import_alias_success"
 tags = ["integration", "language", "aliases", "grouped", "source"]
+contract = "language.imports.grouped_source_alias_acceptance"
+role = "boundary"
 
 [[case]]
 id = "grouped_external_import_alias_success"
 path = "grouped_external_import_alias_success"
 tags = ["integration", "language", "aliases", "grouped", "external"]
+contract = "language.imports.grouped_external_alias_acceptance"
+role = "primary"
 
 [[case]]
 id = "grouped_import_alias_collision_rejected"
 path = "grouped_import_alias_collision_rejected"
 tags = ["integration", "language", "aliases", "grouped", "diagnostics"]
+contract = "language.imports.import_alias_collision_rejected"
+role = "boundary"
 
 [[case]]
 id = "grouped_import_alias_case_warning"
 path = "grouped_import_alias_case_warning"
 tags = ["integration", "language", "aliases", "grouped", "diagnostics"]
+contract = "language.imports.alias_case_warning_acceptance"
+role = "boundary"
 
 [[case]]
 id = "grouped_import_single_entry_trailing_alias_rejected"
 path = "grouped_import_single_entry_trailing_alias_rejected"
 tags = ["integration", "diagnostics", "aliases", "grouped", "imports"]
+contract = "language.imports.alias_clause_trailing_alias_rejected"
+role = "primary"
 
 [[case]]
 id = "grouped_import_multi_entry_trailing_alias_rejected"
 path = "grouped_import_multi_entry_trailing_alias_rejected"
 tags = ["integration", "diagnostics", "aliases", "grouped", "imports"]
+contract = "language.imports.alias_clause_trailing_alias_rejected"
+role = "boundary"
 
 [[case]]
 id = "grouped_import_alias_invalid_dash_rejected"
 path = "grouped_import_alias_invalid_dash_rejected"
 tags = ["integration", "diagnostics", "aliases", "grouped", "imports"]
+contract = "language.imports.alias_clause_invalid_alias_name_rejected"
+role = "primary"
 
 [[case]]
 id = "grouped_import_alias_invalid_leading_digit_rejected"
 path = "grouped_import_alias_invalid_leading_digit_rejected"
 tags = ["integration", "diagnostics", "aliases", "grouped", "imports"]
+contract = "language.imports.alias_clause_invalid_alias_name_rejected"
+role = "boundary"
 
 [[case]]
 id = "grouped_import_alias_missing_name_rejected"
 path = "grouped_import_alias_missing_name_rejected"
 tags = ["integration", "diagnostics", "aliases", "grouped", "imports"]
+contract = "language.imports.alias_clause_invalid_alias_name_rejected"
+role = "boundary"
 
 [[case]]
 id = "grouped_import_alias_keyword_rejected"
 path = "grouped_import_alias_keyword_rejected"
 tags = ["integration", "diagnostics", "aliases", "grouped", "imports"]
+contract = "language.imports.alias_clause_invalid_alias_name_rejected"
+role = "boundary"
 
 [[case]]
 id = "single_import_double_alias_rejected"
 path = "single_import_double_alias_rejected"
 tags = ["integration", "diagnostics", "aliases", "imports"]
+contract = "language.imports.alias_clause_trailing_alias_rejected"
+role = "boundary"
 
 [[case]]
 id = "grouped_import_entry_double_alias_rejected"
 path = "grouped_import_entry_double_alias_rejected"
 tags = ["integration", "diagnostics", "aliases", "grouped", "imports"]
+contract = "language.imports.alias_clause_trailing_alias_rejected"
+role = "boundary"
 
 [[case]]
 id = "grouped_import_per_entry_and_trailing_alias_rejected"
 path = "grouped_import_per_entry_and_trailing_alias_rejected"
 tags = ["integration", "diagnostics", "aliases", "grouped", "imports"]
+contract = "language.imports.alias_clause_trailing_alias_rejected"
+role = "boundary"
 
 [[case]]
 id = "import_alias_collision_with_builtin_rejected"
 path = "import_alias_collision_with_builtin_rejected"
 tags = ["integration", "language", "aliases", "diagnostics", "builtins"]
+contract = "language.imports.import_name_collision_rejected"
+role = "boundary"
 
 [[case]]
 id = "type_alias_basic"
 path = "type_alias_basic"
 tags = ["integration", "language", "aliases"]
+contract = "language.aliases.type_alias_basic_acceptance"
+role = "primary"
 
 [[case]]
 id = "type_alias_collection"
 path = "type_alias_collection"
 tags = ["integration", "language", "aliases"]
+contract = "language.aliases.type_alias_collection_acceptance"
+role = "primary"
 
 [[case]]
 id = "nested_option_alias_rejected"
 path = "nested_option_alias_rejected"
 tags = ["integration", "language", "aliases", "diagnostics"]
+contract = "language.aliases.nested_option_rejected"
+role = "primary"
 
 [[case]]
 id = "type_alias_export_import"
 path = "type_alias_export_import"
 tags = ["integration", "language", "aliases"]
+contract = "language.aliases.type_alias_export_import_acceptance"
+role = "primary"
 
 [[case]]
 id = "type_alias_cycle_rejected"
 path = "type_alias_cycle_rejected"
 tags = ["integration", "language", "aliases", "diagnostics"]
+contract = "language.aliases.type_alias_cycle_rejected"
+role = "primary"
 
 [[case]]
 id = "import_missing_alias_rejected"
 path = "import_missing_alias_rejected"
 tags = ["integration", "language", "aliases", "diagnostics"]
+contract = "language.imports.alias_clause_expected_alias_name_rejected"
+role = "primary"
 
 [[case]]
 id = "type_alias_used_as_value_rejected"
 path = "type_alias_used_as_value_rejected"
 tags = ["integration", "language", "aliases", "diagnostics"]
+contract = "language.aliases.type_alias_not_value_rejected"
+role = "primary"
 
 [[case]]
 id = "external_type_alias"
 path = "external_type_alias"
 tags = ["integration", "language", "aliases"]
+contract = "language.aliases.external_type_alias_rejected"
+role = "primary"
 
 [[case]]
 id = "import_alias_of_type_alias"
 path = "import_alias_of_type_alias"
 tags = ["integration", "language", "aliases"]
+contract = "language.aliases.import_alias_of_type_alias_acceptance"
+role = "primary"
 
 [[case]]
 id = "duplicate_type_alias_rejected"
 path = "duplicate_type_alias_rejected"
 tags = ["integration", "language", "aliases", "diagnostics"]
+contract = "language.aliases.duplicate_type_alias_rejected"
+role = "primary"
 
 [[case]]
 id = "type_alias_same_name_different_files"
 path = "type_alias_same_name_different_files"
 tags = ["integration", "language", "aliases"]
+contract = "language.aliases.same_name_different_files_acceptance"
+role = "primary"
 
 [[case]]
 id = "type_alias_target_uses_import_alias"
 path = "type_alias_target_uses_import_alias"
 tags = ["integration", "language", "aliases"]
+contract = "language.aliases.target_uses_import_alias_acceptance"
+role = "primary"
 
 [[case]]
 id = "source_type_import_alias_in_signature"
 path = "source_type_import_alias_in_signature"
 tags = ["integration", "language", "aliases"]
+contract = "language.aliases.imported_type_alias_in_annotation_acceptance"
+role = "primary"
 
 [[case]]
 id = "source_type_import_alias_in_struct_field"
 path = "source_type_import_alias_in_struct_field"
 tags = ["integration", "language", "aliases"]
+contract = "language.aliases.imported_type_alias_in_annotation_acceptance"
+role = "boundary"
 
 [[case]]
 id = "type_alias_is_not_constructor"
 path = "type_alias_is_not_constructor"
 tags = ["integration", "language", "aliases", "diagnostics"]
+contract = "language.aliases.type_alias_not_value_rejected"
+role = "boundary"
 
 [[case]]
 id = "private_type_alias_import_rejected"
 path = "private_type_alias_import_rejected"
 tags = ["integration", "language", "aliases", "diagnostics"]
+contract = "language.aliases.imported_type_alias_acceptance"
+role = "primary"
 
 [[case]]
 id = "prelude_does_not_override_alias"
 path = "prelude_does_not_override_alias"
 tags = ["integration", "language", "aliases"]
+contract = "language.aliases.prelude_does_not_override_acceptance"
+role = "primary"
 
 [[case]]
 id = "method_receiver_this_success"
 path = "method_receiver_this_success"
 tags = ["integration", "language", "receiver-methods"]
+contract = "language.structs.receiver_this_acceptance"
+role = "primary"
 
 [[case]]
 id = "this_outside_method_body_error"
 path = "this_outside_method_body_error"
 tags = ["integration", "diagnostics", "receiver-methods"]
+contract = "language.structs.this_reserved_identifier_rejected"
+role = "primary"
 
 [[case]]
 id = "this_local_declaration_error"
 path = "this_local_declaration_error"
 tags = ["integration", "diagnostics", "receiver-methods"]
+contract = "language.structs.this_reserved_identifier_rejected"
+role = "boundary"
 
 [[case]]
 id = "this_struct_field_error"
 path = "this_struct_field_error"
 tags = ["integration", "diagnostics", "receiver-methods"]
+contract = "language.structs.this_reserved_identifier_rejected"
+role = "boundary"
 
 [[case]]
 id = "this_second_parameter_error"
 path = "this_second_parameter_error"
 tags = ["integration", "diagnostics", "receiver-methods"]
+contract = "language.structs.receiver_this_not_first_parameter_rejected"
+role = "boundary"
 
 [[case]]
 id = "this_duplicate_receiver_error"
 path = "this_duplicate_receiver_error"
 tags = ["integration", "diagnostics", "receiver-methods"]
+contract = "language.structs.this_reserved_identifier_rejected"
+role = "boundary"
 
 [[case]]
 id = "this_unsupported_receiver_type_error"
 path = "this_unsupported_receiver_type_error"
 tags = ["integration", "diagnostics", "receiver-methods"]
+contract = "language.structs.receiver_unsupported_type_rejected"
+role = "boundary"
 
 [[case]]
 id = "this_free_function_name_error"
 path = "this_free_function_name_error"
 tags = ["integration", "diagnostics", "receiver-methods"]
+contract = "language.structs.this_reserved_identifier_rejected"
+role = "boundary"
 
 [[case]]
 id = "source_alias_hides_original"
 path = "source_alias_hides_original"
 tags = ["integration", "imports", "aliases", "diagnostics"]
+contract = "language.imports.alias_hides_original_rejected"
+role = "primary"
 
 [[case]]
 id = "external_alias_hides_original"
 path = "external_alias_hides_original"
 tags = ["integration", "imports", "aliases", "diagnostics"]
+contract = "language.imports.alias_hides_original_rejected"
+role = "boundary"
 
 [[case]]
 id = "two_package_symbols_same_name_aliases"
 path = "two_package_symbols_same_name_aliases"
 tags = ["integration", "imports", "aliases"]
+contract = "language.imports.same_name_symbols_different_packages_acceptance"
+role = "primary"
 
 [[case]]
 id = "type_alias_via_imported_source_alias"
 path = "type_alias_via_imported_source_alias"
 tags = ["integration", "type-aliases", "imports"]
+contract = "language.aliases.via_imported_source_alias_acceptance"
+role = "primary"
 
 [[case]]
 id = "type_alias_via_imported_external_type_alias"
 path = "type_alias_via_imported_external_type_alias"
 tags = ["integration", "type-aliases", "imports"]
+contract = "language.aliases.via_imported_external_type_alias_rejected"
+role = "primary"
 
 [[case]]
 id = "alias_to_struct_is_annotation_only"
 path = "alias_to_struct_is_annotation_only"
 tags = ["integration", "imports", "aliases", "diagnostics"]
+contract = "language.aliases.aggregate_alias_annotation_only_rejected"
+role = "primary"
 
 [[case]]
 id = "alias_to_choice_is_annotation_only"
 path = "alias_to_choice_is_annotation_only"
 tags = ["integration", "imports", "aliases", "diagnostics", "choices"]
+contract = "language.aliases.aggregate_alias_annotation_only_rejected"
+role = "boundary"
 
 [[case]]
 id = "core_math_basic_functions"
 path = "core_math_basic_functions"
 tags = ["integration", "math", "js-backend"]
+contract = "language.imports.core_math_basic_functions_acceptance"
+role = "primary"
 
 [[case]]
 id = "core_inline_expression_lowering"
 path = "core_inline_expression_lowering"
 tags = ["integration", "math", "js-backend", "external-packages"]
+contract = "backend.html.core_inline_expression_lowering"
+role = "backend"
 
 [[case]]
 id = "core_math_constants"
 path = "core_math_constants"
 tags = ["integration", "math", "constants"]
+contract = "language.imports.core_math_constants_acceptance"
+role = "primary"
 
 [[case]]
 id = "core_math_grouped_import"
 path = "core_math_grouped_import"
 tags = ["integration", "math", "imports"]
+contract = "language.imports.core_math_grouped_import_acceptance"
+role = "primary"
 
 [[case]]
 id = "core_math_alias_import"
 path = "core_math_alias_import"
 tags = ["integration", "math", "imports", "aliases"]
+contract = "language.imports.core_math_alias_import_acceptance"
+role = "primary"
 
 [[case]]
 id = "core_math_requires_import"
 path = "core_math_requires_import"
 tags = ["integration", "math", "imports", "diagnostics"]
+contract = "language.imports.core_math_requires_import_rejected"
+role = "primary"
 
 [[case]]
 id = "core_math_missing_symbol"
 path = "core_math_missing_symbol"
 tags = ["integration", "math", "imports", "diagnostics"]
+contract = "language.imports.unknown_external_symbol_rejected"
+role = "boundary"
 
 [[case]]
 id = "core_math_type_errors"
 path = "core_math_type_errors"
 tags = ["integration", "math", "diagnostics", "type-checking"]
+contract = "language.imports.core_package_type_error_rejected"
+role = "primary"
 
 [[case]]
 id = "core_math_arity_error"
 path = "core_math_arity_error"
 tags = ["integration", "math", "diagnostics"]
+contract = "language.imports.core_package_arity_missing_argument_rejected"
+role = "primary"
 
 [[case]]
 id = "core_math_external_constants_const_context"
 path = "core_math_external_constants_const_context"
 tags = ["integration", "math", "constants"]
+contract = "language.imports.core_math_external_constants_acceptance"
+role = "primary"
 
 [[case]]
 id = "core_math_old_std_namespace_rejected"
 path = "core_math_old_std_namespace_rejected"
 tags = ["integration", "math", "imports", "diagnostics"]
+contract = "language.imports.old_std_namespace_rejected"
+role = "primary"
 
 [[case]]
 id = "source_package_project_local"
 path = "source_package_project_local"
 tags = ["integration", "source-packages", "imports"]
+contract = "language.imports.source_package_project_local_acceptance"
+role = "primary"
 
 [[case]]
 id = "config_package_folder_default_lib_success"
 path = "config_package_folder_default_lib_success"
 tags = ["integration", "config", "packages", "imports"]
+contract = "language.config.package_folder_default_lib_acceptance"
+role = "primary"
 
 [[case]]
 id = "config_custom_package_folder_success"
 path = "config_custom_package_folder_success"
 tags = ["integration", "config", "packages", "imports"]
+contract = "language.config.custom_package_folder_acceptance"
+role = "primary"
 
 [[case]]
 id = "config_multiple_package_folders_success"
 path = "config_multiple_package_folders_success"
 tags = ["integration", "config", "packages", "imports"]
+contract = "language.config.multiple_package_folders_acceptance"
+role = "primary"
 
 [[case]]
 id = "config_package_folder_missing_rejected"
 path = "config_package_folder_missing_rejected"
 tags = ["integration", "config", "packages", "diagnostics"]
+contract = "language.config.package_folder_missing_rejected"
+role = "primary"
 
 [[case]]
 id = "config_package_folder_absolute_path_rejected"
 path = "config_package_folder_absolute_path_rejected"
 tags = ["integration", "config", "packages", "diagnostics"]
+contract = "language.config.package_folder_absolute_path_rejected"
+role = "primary"
 
 [[case]]
 id = "config_package_folder_dotdot_rejected"
 path = "config_package_folder_dotdot_rejected"
 tags = ["integration", "config", "packages", "diagnostics"]
+contract = "language.config.package_folder_parent_path_rejected"
+role = "primary"
 
 [[case]]
 id = "config_package_folder_duplicate_rejected"
 path = "config_package_folder_duplicate_rejected"
 tags = ["integration", "config", "packages", "diagnostics"]
+contract = "language.config.package_folder_duplicate_rejected"
+role = "primary"
 
 [[case]]
 id = "config_package_folder_builder_collision_rejected"
 path = "config_package_folder_builder_collision_rejected"
 tags = ["integration", "config", "packages", "builder-packages", "diagnostics"]
+contract = "language.config.package_folder_builder_collision_rejected"
+role = "primary"
 
 [[case]]
 id = "config_package_folder_missing_default_ignored"
 path = "config_package_folder_missing_default_ignored"
 tags = ["integration", "config", "packages"]
+contract = "language.config.package_folder_missing_default_ignored_acceptance"
+role = "primary"
 
 [[case]]
 id = "config_package_folder_nested_path_rejected"
 path = "config_package_folder_nested_path_rejected"
 tags = ["integration", "config", "packages", "diagnostics"]
+contract = "language.config.package_folder_nested_path_rejected"
+role = "primary"
 
 [[case]]
 id = "custom_package_import_resolves_through_mod"
 path = "custom_package_import_resolves_through_mod"
 tags = ["integration", "config", "packages", "imports", "facades"]
+contract = "language.imports.custom_package_resolves_through_mod_acceptance"
+role = "primary"
 
 [[case]]
 id = "source_package_and_external_package"
 path = "source_package_and_external_package"
 tags = ["integration", "source-packages", "imports", "external-packages"]
+contract = "language.imports.source_and_external_package_acceptance"
+role = "primary"
 
 [[case]]
 id = "source_package_import_dotdot_rejected"
 path = "source_package_import_dotdot_rejected"
 tags = ["integration", "source-packages", "imports", "paths", "diagnostics"]
+contract = "language.imports.source_package_dotdot_rejected"
+role = "primary"
 
 [[case]]
 id = "source_package_facade"
 path = "source_package_facade"
 tags = ["integration", "source-packages", "facades", "imports"]
+contract = "language.imports.source_package_facade_acceptance"
+role = "primary"
 
 [[case]]
 id = "source_package_facade_grouped"
 path = "source_package_facade_grouped"
 tags = ["integration", "source-packages", "facades", "imports"]
+contract = "language.imports.source_package_facade_acceptance"
+role = "boundary"
 
 [[case]]
 id = "source_package_facade_rejected_internal"
 path = "source_package_facade_rejected_internal"
 tags = ["integration", "source-packages", "facades", "imports", "diagnostics"]
+contract = "language.imports.source_package_facade_private_symbol_rejected"
+role = "primary"
 
 [[case]]
 id = "source_package_facade_private"
 path = "source_package_facade_private"
 tags = ["integration", "source-packages", "facades", "imports", "diagnostics"]
+contract = "language.imports.source_package_facade_private_symbol_rejected"
+role = "boundary"
 
 [[case]]
 id = "source_package_facade_sibling"
 path = "source_package_facade_sibling"
 tags = ["integration", "source-packages", "facades", "imports"]
+contract = "language.imports.source_package_facade_sibling_acceptance"
+role = "primary"
 
 [[case]]
 id = "source_package_facade_runtime_stmt"
 path = "source_package_facade_runtime_stmt"
 tags = ["integration", "source-packages", "facades", "diagnostics"]
+contract = "language.imports.source_package_facade_runtime_stmt_acceptance"
+role = "primary"
 
 [[case]]
 id = "source_package_facade_runtime_template"
 path = "source_package_facade_runtime_template"
 tags = ["integration", "source-packages", "facades", "diagnostics"]
+contract = "language.imports.source_package_facade_runtime_stmt_acceptance"
+role = "boundary"
 
 [[case]]
 id = "source_package_facade_missing"
 path = "source_package_facade_missing"
 tags = ["integration", "source-packages", "facades", "diagnostics"]
+contract = "language.imports.source_package_facade_missing_rejected"
+role = "primary"
 
 [[case]]
 id = "source_package_facade_compile_time_constant_export"
 path = "source_package_facade_compile_time_constant_export"
 tags = ["integration", "source-packages", "facades"]
+contract = "language.imports.source_package_facade_compile_time_constant_export_acceptance"
+role = "primary"
 
 [[case]]
 id = "source_package_facade_unprefixed_function_export"
 path = "source_package_facade_unprefixed_function_export"
 tags = ["integration", "source-packages", "facades"]
+contract = "language.imports.source_package_facade_unprefixed_function_export_acceptance"
+role = "primary"
 
 [[case]]
 id = "same_module_import_compile_time_constant"
 path = "same_module_import_compile_time_constant"
 tags = ["integration", "language", "imports", "constants"]
+contract = "language.imports.same_module_compile_time_constant_acceptance"
+role = "primary"
 
 [[case]]
 id = "module_facade_wrapper_import"
 path = "module_facade_wrapper_import"
 tags = ["integration", "language", "imports", "facades"]
+contract = "language.imports.module_facade_wrapper_acceptance"
+role = "primary"
 
 [[case]]
 id = "module_facade_export_constant_dependency_success"
 path = "module_facade_export_constant_dependency_success"
 tags = ["integration", "constants", "dependency-resolution", "imports", "facades"]
+contract = "language.imports.module_facade_constant_dependency_acceptance"
+role = "primary"
 
 [[case]]
 id = "module_facade_import_not_auto_exported"
 path = "module_facade_import_not_auto_exported"
 tags = ["integration", "language", "imports", "facades", "diagnostics"]
+contract = "language.imports.module_facade_import_not_auto_exported_rejected"
+role = "primary"
 
 [[case]]
 id = "source_package_reexport_single"
 path = "source_package_reexport_single"
 tags = ["integration", "language", "imports", "facade"]
+contract = "language.imports.source_package_reexport_single_acceptance"
+role = "primary"
 
 [[case]]
 id = "source_package_reexport_alias"
 path = "source_package_reexport_alias"
 tags = ["integration", "language", "imports", "facade"]
+contract = "language.imports.source_package_reexport_alias_acceptance"
+role = "primary"
 
 [[case]]
 id = "source_package_reexport_namespace_success"
 path = "source_package_reexport_namespace_success"
 tags = ["integration", "language", "imports", "facade", "namespace-imports"]
+contract = "language.imports.source_package_reexport_namespace_acceptance"
+role = "primary"
 
 [[case]]
 id = "source_package_facade_private_path_rejected"
 path = "source_package_facade_private_path_rejected"
 tags = ["integration", "language", "imports", "facade", "diagnostics"]
+contract = "language.imports.source_package_facade_private_path_rejected"
+role = "primary"
 
 [[case]]
 id = "source_package_facade_alias_private_path_rejected"
 path = "source_package_facade_alias_private_path_rejected"
 tags = ["integration", "language", "imports", "facade", "diagnostics"]
+contract = "language.imports.source_package_facade_private_path_rejected"
+role = "boundary"
 
 [[case]]
 id = "source_package_reexport_grouped"
 path = "source_package_reexport_grouped"
 tags = ["integration", "language", "imports", "facade"]
+contract = "language.imports.source_package_reexport_grouped_acceptance"
+role = "primary"
 
 [[case]]
 id = "source_package_reexport_grouped_nested"
 path = "source_package_reexport_grouped_nested"
 tags = ["integration", "language", "imports", "facade"]
+contract = "language.imports.source_package_reexport_grouped_acceptance"
+role = "boundary"
 
 [[case]]
 id = "source_package_reexport_external"
 path = "source_package_reexport_external"
 tags = ["integration", "language", "imports", "facade"]
+contract = "language.imports.source_package_reexport_external_acceptance"
+role = "primary"
 
 [[case]]
 id = "source_package_reexport_external_alias"
 path = "source_package_reexport_external_alias"
 tags = ["integration", "language", "imports", "facade"]
+contract = "language.imports.source_package_reexport_external_acceptance"
+role = "boundary"
 
 [[case]]
 id = "source_package_reexport_cross_package_single"
 path = "source_package_reexport_cross_package_single"
 tags = ["integration", "language", "imports", "facade", "source-packages"]
+contract = "language.imports.source_package_reexport_single_acceptance"
+role = "boundary"
 
 [[case]]
 id = "source_package_reexport_cross_package_alias"
 path = "source_package_reexport_cross_package_alias"
 tags = ["integration", "language", "imports", "facade", "source-packages"]
+contract = "language.imports.source_package_reexport_alias_acceptance"
+role = "boundary"
 
 [[case]]
 id = "source_package_reexport_grouped_alias"
 path = "source_package_reexport_grouped_alias"
 tags = ["integration", "language", "imports", "facade"]
+contract = "language.imports.source_package_reexport_grouped_acceptance"
+role = "boundary"
 
 [[case]]
 id = "source_package_facade_direct_mod_external_rejected"
 path = "source_package_facade_direct_mod_external_rejected"
 tags = ["integration", "source-packages", "facades", "imports", "diagnostics"]
+contract = "language.imports.source_package_direct_mod_rejected"
+role = "primary"
 
 [[case]]
 id = "source_package_facade_direct_mod_internal_rejected"
 path = "source_package_facade_direct_mod_internal_rejected"
 tags = ["integration", "source-packages", "facades", "imports", "diagnostics"]
+contract = "language.imports.source_package_direct_mod_rejected"
+role = "boundary"
 
 [[case]]
 id = "source_package_builder_html"
 path = "source_package_builder_html"
 tags = ["integration", "source-packages", "builder-packages", "html"]
+contract = "language.imports.source_package_builder_html_acceptance"
+role = "primary"
 
 [[case]]
 id = "source_package_builder_html_collision"
 path = "source_package_builder_html_collision"
 tags = ["integration", "source-packages", "builder-packages", "diagnostics"]
+contract = "language.imports.source_package_builder_collision_rejected"
+role = "primary"
 
 [[case]]
 id = "source_package_builder_html_direct_internal_rejected"
 path = "source_package_builder_html_direct_internal_rejected"
 tags = ["integration", "source-packages", "builder-packages", "facades", "diagnostics"]
+contract = "language.imports.builder_package_private_path_rejected"
+role = "primary"
 
 [[case]]
 id = "core_text_functions"
 path = "core_text_functions"
 tags = ["integration", "language", "external-packages", "core-packages", "js", "wasm", "diagnostics"]
+contract = "language.imports.core_text_functions_acceptance"
+role = "primary"
 
 [[case]]
 id = "core_text_type_error"
 path = "core_text_type_error"
 tags = ["integration", "language", "external-packages", "core-packages", "diagnostics"]
+contract = "language.imports.core_package_type_error_rejected"
+role = "boundary"
 
 [[case]]
 id = "core_text_arity_error"
 path = "core_text_arity_error"
 tags = ["integration", "language", "external-packages", "core-packages", "diagnostics"]
+contract = "language.imports.core_package_arity_missing_argument_rejected"
+role = "boundary"
 
 [[case]]
 id = "core_text_edge_cases"
 path = "core_text_edge_cases"
 tags = ["integration", "language", "external-packages", "core-packages", "js", "wasm"]
+contract = "language.imports.core_text_edge_cases_acceptance"
+role = "primary"
 
 [[case]]
 id = "prelude_name_declaration_rejected"
 path = "prelude_name_declaration_rejected"
 tags = ["integration", "language", "diagnostics"]
+contract = "language.imports.import_name_collision_rejected"
+role = "boundary"
 
 [[case]]
 id = "prelude_name_body_declaration_rejected"
 path = "prelude_name_body_declaration_rejected"
 tags = ["integration", "language", "diagnostics"]
+contract = "language.imports.prelude_body_declaration_rejected"
+role = "primary"
 
 [[case]]
 id = "core_random_functions"
 path = "core_random_functions"
 tags = ["integration", "language", "external-packages", "core-packages", "js", "wasm", "diagnostics"]
+contract = "language.imports.core_random_functions_acceptance"
+role = "primary"
 
 [[case]]
 id = "core_random_int_edge_cases"
 path = "core_random_int_edge_cases"
 tags = ["integration", "language", "external-packages", "core-packages", "js", "wasm"]
+contract = "language.imports.core_random_int_edge_cases_acceptance"
+role = "primary"
 
 [[case]]
 id = "core_random_type_error"
 path = "core_random_type_error"
 tags = ["integration", "language", "external-packages", "core-packages", "diagnostics"]
+contract = "language.imports.core_package_type_error_rejected"
+role = "boundary"
 
 [[case]]
 id = "core_random_arity_error"
 path = "core_random_arity_error"
 tags = ["integration", "language", "external-packages", "core-packages", "diagnostics"]
+contract = "language.imports.core_package_arity_extra_argument_rejected"
+role = "primary"
 
 [[case]]
 id = "core_time_functions"
 path = "core_time_functions"
 tags = ["integration", "language", "external-packages", "core-packages", "time", "js", "wasm", "diagnostics"]
+contract = "language.imports.core_time_functions_acceptance"
+role = "primary"
 
 [[case]]
 id = "core_time_arity_error"
 path = "core_time_arity_error"
 tags = ["integration", "language", "external-packages", "core-packages", "time", "diagnostics"]
+contract = "language.imports.core_package_arity_missing_argument_rejected"
+role = "boundary"
 
 [[case]]
 id = "core_time_duration_conversions_success"
 path = "core_time_duration_conversions_success"
 tags = ["integration", "language", "external-packages", "core-packages", "time", "js"]
+contract = "language.imports.core_time_duration_conversions_acceptance"
+role = "primary"
 
 [[case]]
 id = "core_time_mark_delta_success"
 path = "core_time_mark_delta_success"
 tags = ["integration", "language", "external-packages", "core-packages", "time", "js"]
+contract = "language.imports.core_time_mark_delta_acceptance"
+role = "primary"
 
 [[case]]
 id = "core_time_timestamp_conversions_success"
 path = "core_time_timestamp_conversions_success"
 tags = ["integration", "language", "external-packages", "core-packages", "time", "js"]
+contract = "language.imports.core_time_timestamp_conversions_acceptance"
+role = "primary"
 
 [[case]]
 id = "core_time_timestamp_parse_success"
 path = "core_time_timestamp_parse_success"
 tags = ["integration", "language", "external-packages", "core-packages", "time", "js", "results"]
+contract = "language.imports.core_time_timestamp_parse_acceptance"
+role = "primary"
 
 [[case]]
 id = "core_time_timestamp_parse_invalid_catch_success"
 path = "core_time_timestamp_parse_invalid_catch_success"
 tags = ["integration", "language", "external-packages", "core-packages", "time", "js", "results"]
+contract = "language.imports.core_time_timestamp_parse_acceptance"
+role = "boundary"
 
 [[case]]
 id = "core_time_namespace_import_success"
 path = "core_time_namespace_import_success"
 tags = ["integration", "language", "external-packages", "core-packages", "time", "imports", "namespace-imports"]
+contract = "language.imports.core_time_namespace_import_acceptance"
+role = "primary"
 
 [[case]]
 id = "core_time_grouped_alias_success"
 path = "core_time_grouped_alias_success"
 tags = ["integration", "language", "external-packages", "core-packages", "time", "imports", "aliases"]
+contract = "language.imports.core_time_grouped_alias_acceptance"
+role = "primary"
 
 [[case]]
 id = "core_time_duration_free_functions_success"
 path = "core_time_duration_free_functions_success"
 tags = ["integration", "language", "external-packages", "core-packages", "time", "receiver-methods", "imports"]
+contract = "language.imports.core_time_duration_free_functions_acceptance"
+role = "primary"
 
 [[case]]
 id = "core_time_old_api_rejected"
 path = "core_time_old_api_rejected"
 tags = ["integration", "language", "external-packages", "core-packages", "time", "diagnostics", "imports"]
+contract = "language.imports.core_time_old_api_rejected"
+role = "primary"
 
 [[case]]
 id = "core_time_wrong_argument_type_rejected"
 path = "core_time_wrong_argument_type_rejected"
 tags = ["integration", "language", "external-packages", "core-packages", "time", "diagnostics", "type-checking"]
+contract = "language.imports.core_package_type_error_rejected"
+role = "boundary"
 
 [[case]]
 id = "core_time_opaque_field_access_rejected"
 path = "core_time_opaque_field_access_rejected"
 tags = ["integration", "language", "external-packages", "core-packages", "time", "diagnostics", "opaque-types"]
+contract = "language.imports.core_time_opaque_access_rejected"
+role = "primary"
 
 [[case]]
 id = "core_time_raw_method_call_rejected"
 path = "core_time_raw_method_call_rejected"
 tags = ["integration", "language", "external-packages", "core-packages", "time", "diagnostics", "receiver-methods", "imports"]
+contract = "language.imports.core_time_opaque_access_rejected"
+role = "boundary"
 
 [[case]]
 id = "core_time_namespace_raw_method_call_rejected"
 path = "core_time_namespace_raw_method_call_rejected"
 tags = ["integration", "language", "external-packages", "core-packages", "time", "diagnostics", "receiver-methods", "imports", "namespace-imports"]
+contract = "language.imports.core_time_opaque_access_rejected"
+role = "boundary"
 
 [[case]]
 id = "core_time_unused_wasm_wrapper_success"
