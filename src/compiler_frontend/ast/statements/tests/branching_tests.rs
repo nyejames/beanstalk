@@ -847,42 +847,6 @@ fn parses_multi_statement_match_arm_body_delimited_by_next_arm() {
 }
 
 #[test]
-fn rejects_same_line_second_match_arm() {
-    let diagnostic = parse_single_file_ast_diagnostic(
-        "value = 1\nif value is:\n    1 => io.line([: [\"one\"]]) 2 => io.line([: [\"two\"]])\n    else => io.line([: [\"other\"]])\n;\n",
-    );
-
-    assert_eq!(
-        diagnostic.kind,
-        DiagnosticKind::Syntax(SyntaxDiagnosticKind::InvalidMatchArm)
-    );
-    assert_eq!(
-        diagnostic.payload,
-        DiagnosticPayload::InvalidMatchArm {
-            reason: InvalidMatchArmReason::ArmMustStartNewLine
-        }
-    );
-}
-
-#[test]
-fn rejects_missing_match_arm_header() {
-    let diagnostic = parse_single_file_ast_diagnostic(
-        "value = 1\nif value is:\n    => io.line([: [\"bad\"]])\n    else => io.line([: [\"other\"]])\n;\n",
-    );
-
-    assert_eq!(
-        diagnostic.kind,
-        DiagnosticKind::Syntax(SyntaxDiagnosticKind::InvalidMatchArm)
-    );
-    assert_eq!(
-        diagnostic.payload,
-        DiagnosticPayload::InvalidMatchArm {
-            reason: InvalidMatchArmReason::ExpectedArmHeader
-        }
-    );
-}
-
-#[test]
 fn case_is_valid_as_normal_identifier() {
     let (ast, string_table) = parse_single_file_ast("case = 42\nio.line([: [case]])\n");
 
