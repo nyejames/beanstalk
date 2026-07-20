@@ -148,15 +148,13 @@ role = "primary"
 [[case]]
 id = "borrow_checker_basic_variables"
 path = "borrow_checker_basic_variables"
-tags = ["integration","borrows"]
-contract = "language.bindings.basic_variable_aliasing_acceptance"
+tags = ["integration", "borrows"]
 role = "smoke"
 
 [[case]]
 id = "borrow_checker_function_calls"
 path = "borrow_checker_function_calls"
-tags = ["integration","borrows"]
-contract = "language.functions.borrow_checked_call_acceptance"
+tags = ["integration", "borrows"]
 role = "smoke"
 
 [[case]]
@@ -260,8 +258,7 @@ role = "primary"
 [[case]]
 id = "borrow_checker_string_memory"
 path = "borrow_checker_string_memory"
-tags = ["integration","borrows"]
-contract = "language.bindings.string_aliasing_acceptance"
+tags = ["integration", "borrows"]
 role = "smoke"
 
 [[case]]
@@ -316,8 +313,7 @@ role = "primary"
 [[case]]
 id = "choice_basic_declaration_and_use"
 path = "choice_basic_declaration_and_use"
-tags = ["integration","language","choices"]
-contract = "language.choices.basic_declaration_acceptance"
+tags = ["integration", "language", "choices"]
 role = "smoke"
 
 [[case]]
@@ -1877,8 +1873,7 @@ role = "primary"
 [[case]]
 id = "choice_import_visibility_exported"
 path = "choice_import_visibility_exported"
-tags = ["integration","language","choices"]
-contract = "language.choices.imported_public_visibility_acceptance"
+tags = ["integration", "language", "choices"]
 role = "smoke"
 
 [[case]]
@@ -2466,7 +2461,6 @@ role = "boundary"
 id = "commas"
 path = "commas"
 tags = ["integration", "language"]
-contract = "language.syntax.comma_separated_lists_acceptance"
 role = "smoke"
 
 [[case]]
@@ -2487,7 +2481,6 @@ role = "boundary"
 id = "complex_borrowing_scenarios"
 path = "complex_borrowing_scenarios"
 tags = ["integration", "borrows"]
-contract = "language.bindings.nested_alias_chain_acceptance"
 role = "smoke"
 
 [[case]]
@@ -3481,7 +3474,6 @@ role = "primary"
 id = "immutable_alias_while_borrowed"
 path = "immutable_alias_while_borrowed"
 tags = ["integration", "borrows"]
-contract = "language.bindings.immutable_alias_while_borrowed_acceptance"
 role = "smoke"
 
 [[case]]
