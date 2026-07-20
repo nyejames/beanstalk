@@ -30,26 +30,26 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 4C5 — invalid import-clause reasons and reachability correction
-LAST_ACCEPTED_COMMIT: `5d4a6c84c` (Phase 4C4)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 4C5 reason migration and precision correction are ready to commit; unrelated generated font/style rebuild churn from `a83e9587f` remains unstaged
+CURRENT_SLICE: Phase 4C6 — invalid import-path reasons and nested source locations
+LAST_ACCEPTED_COMMIT: `e33d1f6e9` (Phase 4C5)
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 4C6 import-path assertions are ready to commit; unrelated generated font/style rebuild churn from `a83e9587f` remains unstaged
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: `testing.bd` owns structured assertion workflow wording after Phase 4 migration; progress matrix remains current for this harness-only slice
-- code: ten `BST-SYNTAX-0019` fixtures now distinguish eight `invalid_import_clause.*` reasons; the parser selects per-entry-plus-trailing before generic grouped-trailing and has no dead follow-up check
+- code: two canonical `BST-IMPORT-0016` fixtures exercise `InvalidImportPathReason::ParentDirectorySegment`; one diagnostic originates from nested `input/src/pages/#page.bst`
 ACCEPTANCE_CRITERIA:
-- distinguish per-entry-plus-trailing aliases before the generic grouped-trailing rejection in the existing parser owner
-- remove the unreachable later check and make focused unit/integration owners assert `invalid_import_clause.per_entry_and_trailing_alias`
-- preserve source rejection, exact code, location, diagnostics lane, and every other import-clause reason
+- confirm the complete canonical `BST-IMPORT-0016` inventory and emitted compiler-owned reason
+- assert fixture-relative path and one-based line for root and nested source scopes
+- preserve exact codes, source inputs, backend outcomes, and import-path ownership
 VALIDATION_STATE:
 - `just validate`: passed; cross-target Clippy, 3,556 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
-- Phase 4C5 focused parser/cases/audit: passed; 62 parser tests, ten exact cases, and clean 1,645-case inventory
+- Phase 4C6 focused cases/audit: passed; two exact cases and clean 1,645-case inventory
 DOCS_IMPACT: official structured-assertion workflow docs wait for Phase 4 closure; progress matrix and `index.md` unchanged
 BLOCKERS_OR_OPEN_DECISIONS: Ollama wrapper still requires removed `docs/codebase-style-guide.md`; 19 justified diagnostic-contains blocks record duplicate module compilation that the queued canonical-module plan must remove
 DELEGATION_DECISION: codex-cli fallback — the user-selected Ollama default is cleanly blocked before edits by its stale required-document path
 NEXT_WORKER_ORDER: codex-cli, parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit the reviewed Phase 4C5 source, tests, expectations, and plan paths; refresh its hash; then migrate invalid import-path reasons
+NEXT_RESUME_ACTION: commit the reviewed Phase 4C6 expectation and plan paths, refresh its hash, then inventory fallible-handling reason clusters
 
 ---
 
@@ -163,7 +163,8 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 4C2 call-shape reasons | `a4f20eedc` | Accepted | All 27 `BST-RULE-0054` fixtures distinguish eleven `invalid_call_shape.*` reasons; 1,778/1,778 integration executions; zero hard findings |
 | Phase 4B location correction / Phase 4C3 mutable access | `c5af4f2a2` | Accepted | One-based display coordinates and fixture-input-relative scopes; primary borrow fixture asserts reason/path/line; 146 focused runner tests; 3,556 Rust tests |
 | Phase 4C4 trait-name misuse locations | `5d4a6c84c` | Accepted | Eight `BST-RULE-0075` fixtures and nine backend blocks assert fixture-relative path/line without inventing a reason taxonomy; 1,778/1,778 executions |
-| Phase 4C5 invalid import-clause reasons | pending acceptance commit | Accepted | Ten `BST-SYNTAX-0019` fixtures distinguish eight reasons; dedicated per-entry-plus-trailing reason is reachable; dead parser check removed; 3,556 Rust tests |
+| Phase 4C5 invalid import-clause reasons | `e33d1f6e9` | Accepted | Ten `BST-SYNTAX-0019` fixtures distinguish eight reasons; dedicated per-entry-plus-trailing reason is reachable; dead parser check removed; 3,556 Rust tests |
+| Phase 4C6 invalid import-path locations | pending acceptance commit | Accepted | Both `BST-IMPORT-0016` fixtures assert `parent_directory_segment` with root/nested fixture-relative paths and one-based lines; 1,778/1,778 executions |
 
 ---
 

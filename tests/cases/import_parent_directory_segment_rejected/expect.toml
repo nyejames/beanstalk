@@ -2,3 +2,9 @@
 mode = "failure"
 warnings = "forbid"
 diagnostic_codes = ["BST-IMPORT-0016"]
+
+[[backends.html.diagnostic_assertions]]
+code = "BST-IMPORT-0016"
+reason = "invalid_import_path.parent_directory_segment"
+path = "input/#page.bst"
+line = 1
