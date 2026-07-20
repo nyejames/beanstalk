@@ -3,4 +3,4 @@ entry = "."
 [backends.html]
 mode = "success"
 warnings = "forbid"
-rendered_output_contains = ["export_block_active_root_success"]
+rendered_output_contains_exactly_once = ["export_block_active_root_success"]

@@ -30,26 +30,26 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 5B — exact, ordered, and exact-once runtime assertion schema accepted and ready to commit
-LAST_ACCEPTED_COMMIT: `786171dd3` (Phase 5A)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 5B runner files and this plan are ready to commit; unrelated generated font/style rebuild churn from `a83e9587f` remains unstaged
+CURRENT_SLICE: Phase 5C1 — active/imported root and fragment-order expectations accepted and ready to commit
+LAST_ACCEPTED_COMMIT: `323d54aae` (Phase 5B)
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 5C1 expectations and this plan are ready to commit; unrelated generated font/style rebuild churn from `a83e9587f` remains unstaged
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: testing standards require one Node harness and external behaviour assertions; Phase 5 owns exact/order/exact-once runtime semantics without adding another executor
-- code: `types.rs`, `expectations.rs`, suite completeness/policy, reporting, `assertions/rendered_output.rs`, and runner self-tests own the runtime assertion surface from TOML through audit and execution
+- code: four existing canonical expectations already expose active/imported root markers, runtime fragment markers, and static slot ordering without requiring source changes
 ACCEPTANCE_CRITERIA:
-- add optional exact output, ordered-fragment, and exact-once-fragment fields over the chronological combined event payload while retaining contains/not-contains
-- normalize line endings only for exact comparison; exact is exclusive with other rendered fields; ordered requires meaningful sequence input; exact-once rejects empty/duplicate authored fragments
-- give exact, order, and multiplicity mismatches distinct failure kinds and thread all new fields through completeness, acceptance-only exclusion, Node gating, audit schema/reporting, and focused self-tests
+- `export_block_active_root_success` and the main facade marker execute exactly once while imported-root runtime remains forbidden
+- `top_level_fragment_mixed_const_runtime_order` protects one runtime fragment alongside its existing compile-time/slot artifact order
+- `template_control_flow_top_level_runtime_fragment_order` protects runtime if/loop sequence and exact-once markers alongside its existing static slot order
 VALIDATION_STATE:
 - `just validate`: passed; cross-target Clippy, 3,575 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
-- Phase 5B focused runner tests: passed; 164 integration-runner tests, schema-6 audit, and representative HTML execution
+- Phase 5C1 exact case executions: passed; all four selected HTML cases
 DOCS_IMPACT: `testing.bd` still names schema 5 and must be updated with the complete runtime assertion workflow during Phase 5 documentation/closure; progress matrix and `index.md` unchanged
 BLOCKERS_OR_OPEN_DECISIONS: Ollama wrapper still requires removed `docs/codebase-style-guide.md`; 19 justified diagnostic-contains blocks record duplicate module compilation that the queued canonical-module plan must remove
-DELEGATION_DECISION: codex-cli fallback — the user-selected Ollama default remains cleanly blocked before edits by its stale required-document path
+DELEGATION_DECISION: codex-cli fallback accepted — the user-selected Ollama default remains cleanly blocked before edits by its stale required-document path
 NEXT_WORKER_ORDER: none for this accepted slice
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit Phase 5B, refresh its hash, then delegate the first Phase 5C order-sensitive expectation migration
+NEXT_RESUME_ACTION: commit Phase 5C1, refresh its hash, then delegate Phase 5C2 runtime sequence and exact-output migrations
 
 ---
 
@@ -172,7 +172,8 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 4C10 declaration/conflict secondary labels | `83aecdad2` | Accepted | Duplicate declarations and duplicate exclusive accesses assert primary and earlier-site secondary paths/lines through rule and borrow diagnostic lanes; 1,778/1,778 executions |
 | Phase 4D structured assertion documentation | `14bd9178b` | Accepted | Testing/contributor workflow and progress coverage now describe compiler-owned reasons plus primary/secondary remapping; release docs rebuilt and owned routes inspected |
 | Phase 5A chronological runtime-event model | `786171dd3` | Accepted | One typed event array preserves console/fragment chronology; strict decoding and chronological/channel views have focused coverage; 3,562 Rust tests and 1,778 integration executions |
-| Phase 5B stronger runtime assertion schema | pending acceptance commit | Accepted | Typed exact/order/exact-once contracts use one Node harness; schema 6 reports all five runtime forms; 3,575 Rust tests and 1,778 integration executions |
+| Phase 5B stronger runtime assertion schema | `323d54aae` | Accepted | Typed exact/order/exact-once contracts use one Node harness; schema 6 reports all five runtime forms; 3,575 Rust tests and 1,778 integration executions |
+| Phase 5C1 root and fragment runtime order | pending acceptance commit | Accepted | Active and facade root markers execute once; imported root remains suppressed; runtime fragment exact-once/order complements static slot order; 1,778/1,778 executions |
 
 ---
 
