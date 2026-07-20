@@ -30,13 +30,13 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 14C7 remaining small AST statement unit ownership review
-LAST_ACCEPTED_COMMIT: `d96a5f1c3` (Phase 14C5 code; Phase 14C6 required no code change)
+CURRENT_SLICE: Phase 14C8 HIR expression-lowering unit ownership review
+LAST_ACCEPTED_COMMIT: `d96a5f1c3` (Phase 14C5 code; Phases 14C6-C7 required no code change)
 WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; accepted code is committed; concurrent example-name work remains separately committed
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: unit-test ownership, pruning, compiler-stage boundaries, and final governance rules govern the next slice
-- code: scoped-block, struct-parsing, terminality, and value-production tests form the final small AST statement group; later HIR, build-system, backend, and final TIR owners still require review
+- code: AST statement ownership is exhausted; HIR expression-lowering is the next bounded owner before grouped HIR, borrow, build-system, backend, and final TIR reviews
 ACCEPTANCE_CRITERIA:
 - every remaining full-source unit has a distinct hidden invariant, parser fact, stage boundary, or policy owner
 - units superseded by a stronger canonical integration primary are deleted with replacement evidence
@@ -51,7 +51,7 @@ BLOCKERS_OR_OPEN_DECISIONS: none; 81 contract families without a primary are int
 DELEGATION_DECISION: Ollama — bounded Phase 14 implementation slices
 NEXT_WORKER_ORDER: Ollama only; no provider substitution
 STOP_REASON: none
-NEXT_RESUME_ACTION: launch the remaining small AST statement unit ownership review through Ollama
+NEXT_RESUME_ACTION: launch the HIR expression-lowering unit ownership review through Ollama
 
 ---
 
@@ -225,6 +225,7 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 14C4 AST declaration units | `4fa61e817` | Accepted | Four regular-division and fixed-collection diagnostic units removed in favor of exact-source or structured-reason canonical owners; 19 declaration-shape, named-type, reserved-name, multiline-token, and fixed/growable identity owners retained; 3,511 Rust tests and 1,793 integration executions |
 | Phase 14C5 AST fallible-handling units | `d96a5f1c3` | Accepted | Eight reason-only catch/fallback diagnostics removed in favor of Phase 4C7 structured-reason primaries; 37 AST-shape, scope, terminality, assignment-target, EOF/delimiter, arity/type, and catch-placement owners retained; 3,503 Rust tests and 1,793 integration executions |
 | Phase 14C6 AST loop-parsing units | no code change after `d96a5f1c3` | Accepted | All 35 units retained as AST/range shape, binding/type identity, source-location, scope, delimiter, structured-reason, and access-sensitive owners; canonical loop failures assert only broad codes; latest full gate remains 3,503 Rust tests and 1,793 integration executions |
+| Phase 14C7 small AST statement units | no code change after `d96a5f1c3` | Accepted | All 29 scoped-block, struct-parsing, terminality, and value-production units retained as AST shape, source-evidence, terminality-policy, `BranchFlow`, parser-routing, or deferred-reason owners; latest full gate remains 3,503 Rust tests and 1,793 integration executions |
 
 ---
 
