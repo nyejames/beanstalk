@@ -30,26 +30,26 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 8 function-call unit ownership reassignment
-LAST_ACCEPTED_COMMIT: `f6c514180` (Phase 7 hashmap borrow fact narrowing)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; Phase 7 is committed and the worktree is clean
+CURRENT_SLICE: Phase 8 type-resolution unit ownership reassignment
+LAST_ACCEPTED_COMMIT: `720c23e9a` (Phase 8 function-call ownership)
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; accepted code is committed; unrelated concurrent edits remain in `docs/src/#page.bst` and `docs/src/styles/docs.bst`
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: access-and-aliasing and borrow-validation leaves own hashmap alias legality; testing standards require exact diagnostic identity and source locations
-- code: `function_call_tests.rs` mixes raw parser/location facts with whole-source success/failure behavior already covered by canonical integration cases
+- docs: compiler type-identity contracts and testing standards require canonical `TypeId` facts to remain unit-owned while user-visible capacity behavior is integration-owned
+- code: `src/compiler_frontend/ast/tests/type_resolution_tests.rs` and adjacent datatype tests are the next ownership inventory
 ACCEPTANCE_CRITERIA:
-- retain raw argument shape, authored-marker/value/target locations, and narrow access classification facts
-- remove whole-source call acceptance/rejection units only where exact integration owners exist
-- delete stale helpers/imports without changing production call parsing or diagnostics
+- retain canonical `TypeId`, collection/map shape, alias transparency, imported canonical type, field/variant registration, and impossible parsed-type facts
+- remove whole-source type acceptance/rejection units only where exact integration owners exist
+- ensure fixed-capacity behavior remains covered across signatures, fields, aliases, returns, cross-file resolution, and current backend rejection
 VALIDATION_STATE:
-- `just validate`: passed; cross-target Clippy, 3,566 Rust tests, 1,796 integration executions, docs check, and 28 benchmark cases
-- focused borrow-checker tests: passed; 50 tests and zero audit hard findings across 1,654 cases
-DOCS_IMPACT: progress matrix reviewed; existing broad hashmap borrow/diagnostic and final-use wording remains accurate; index unchanged
+- `just validate`: passed; cross-target Clippy, 3,548 Rust tests, 1,797 integration executions, docs check, and 28 benchmark cases
+- focused call tests: passed; 11 tests; suite audit has zero hard findings across 1,655 cases
+DOCS_IMPACT: progress matrix reviewed; broad function-call and call-site mutability coverage wording remains accurate; index unchanged
 BLOCKERS_OR_OPEN_DECISIONS: none for the next slice; Ollama remains required with no provider substitution
-DELEGATION_DECISION: Ollama — bounded function-call test ownership/pruning slice
+DELEGATION_DECISION: Ollama — bounded type-resolution test ownership/pruning slice
 NEXT_WORKER_ORDER: Ollama only; no provider substitution
 STOP_REASON: none
-NEXT_RESUME_ACTION: launch Phase 8 function-call ownership reassignment through Ollama
+NEXT_RESUME_ACTION: inventory and launch Phase 8 type-resolution ownership reassignment through Ollama
 
 ---
 
@@ -185,6 +185,7 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 6 removed-value ownership and borrowed lookup keys | `d9e4d7fa3` | Accepted | Two primary HTML runtime owners prove removed non-copy values outlive later mutation/clear and lookup keys remain usable after contains/get/remove; 1,650 cases and 1,788 executions |
 | Phase 6 inserted ownership and explicit-copy insertion | `4c323a4f4` | Accepted | Three primary negatives distinguish immutable `set` later-use access from literal key/value ownership transfer; one exact runtime owner proves copied insertion independence; 1,654 cases and 1,796 executions |
 | Phase 7 hashmap unit pruning | `f6c514180` | Accepted | Fifteen source-shaped units removed; five hidden get/remove/set/nested-literal state facts retained in the fact owner; 3,566 Rust tests and 1,796 integration executions |
+| Phase 8 function-call ownership | `720c23e9a` | Accepted | Eighteen whole-source units removed; eleven parser/access/location facts retained; computed mutable-rvalue behavior gained one exact-output primary integration owner; 3,548 Rust tests and 1,797 integration executions |
 
 ---
 
@@ -1326,6 +1327,12 @@ Do not present lower counts or faster time as proof of correctness.
 | `borrow_checker_map_tests::map_literal_allows_copy_values` | Copyable values remain usable after literal construction | `map_explicit_copy_insertion_independent` plus scalar map runtime coverage | none | `f6c514180` |
 | `borrow_checker_map_tests::{map_get_key_is_not_consumed,map_contains_key_is_not_consumed,map_remove_key_is_not_consumed}` | Lookup keys are borrowed | `map_borrowed_lookup_key` | none | `f6c514180` |
 | `borrow_checker_map_tests::map_set_after_nothing_passes` | Baseline map mutation success | `hashmap_js_runtime_contract` | none | `f6c514180` |
+| `function_call_tests::{rejects_positional_after_named,rejects_duplicate_named_target,rejects_unknown_named_parameter,rejects_missing_required_parameter}` | User-visible named/positional call routing failures | `function_call_named_args_{positional_after_named,duplicate,unknown,missing_required}` | Raw positional/named parser-shape units remain | `720c23e9a` |
+| `function_call_tests::{rejects_missing_tilde_for_mutable_positional_parameter,rejects_missing_tilde_for_mutable_named_parameter}` | Existing mutable places require authored `~` | `function_call_mutable_param_requires_explicit_tilde` and `function_call_named_args_mutable_missing_tilde` | Authored-marker/value-location units remain | `720c23e9a` |
+| `function_call_tests::{accepts_fresh_rvalue_for_mutable_positional_parameter,accepts_fresh_rvalue_for_mutable_named_parameter}` | Fresh computed values satisfy mutable parameters without `~` | `function_call_mutable_param_fresh_computed_arg` | Named parser routing remains; no duplicate named-computed fixture | `720c23e9a` |
+| `function_call_tests::{accepts_fresh_template_for_mutable_parameter,accepts_fresh_collection_for_mutable_parameter,accepts_fresh_struct_constructor_for_mutable_parameter,accepts_explicit_copy_as_fresh_mutable_argument}` | Fresh template, collection, struct, and explicit-copy values satisfy mutable parameters | `function_call_mutable_param_{fresh_template_arg,fresh_collection_arg,fresh_struct_arg,copy_arg}` | none | `720c23e9a` |
+| `function_call_tests::{rejects_tilde_on_immutable_place_argument,rejects_tilde_on_non_place_argument_literal,rejects_immutable_place_without_tilde_for_mutable_parameter,rejects_tilde_on_explicit_copy_argument}` | Invalid mutable call-site access forms | `function_call_tilde_on_immutable_place`, `function_call_tilde_on_non_place_expression`, and `function_call_immutable_place_missing_tilde` | Three source-location units retain marker/value precision | `720c23e9a` |
+| `function_call_tests::{duplicate_named_parameter_uses_canonical_diagnostic_text,unknown_named_parameter_lists_known_parameter_hint}` | Claimed call-diagnostic wording/hint coverage but asserted only reason identity | `function_call_named_args_duplicate` and `function_call_named_args_unknown` | none | `720c23e9a` |
 | Phase 5D2 15 normalized HTML whole-page goldens | Runtime values for calls, collections, logical expressions, chars, structs, and short-circuit behavior | The same 15 canonical cases through `rendered_output_exact` | none | `d5256868b` |
 | Phase 5D3 nine normalized receiver HTML whole-page goldens | Immutable, mutable, nested, chained, exported, alias-return, and post-mutation receiver behavior | The same nine canonical cases through exact context-rich runtime output | none | `914c1c131` |
 | Phase 5D4 nine normalized template/import HTML whole-page goldens | Import execution/suppression, runtime templates, const slots, CSS, Markdown, and positional slot behavior | Runtime exact/order/exact-once plus narrow static `index.html` assertions in the same nine cases | none | `71f75c220` |
