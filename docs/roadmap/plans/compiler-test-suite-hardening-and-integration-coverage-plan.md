@@ -30,26 +30,26 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 4C8b — canonical backend unsupported-feature reason assertions
-LAST_ACCEPTED_COMMIT: `a9661ada0` (Phase 4C8a)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 4C8b expectation migration is ready to commit; unrelated generated font/style rebuild churn from `a83e9587f` remains unstaged
+CURRENT_SLICE: Phase 4C9 — generated generic diagnostic remapping across source files
+LAST_ACCEPTED_COMMIT: `d71dfa6a5` (Phase 4C8b)
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 4C9 fixture and plan update are ready to commit; unrelated generated font/style rebuild churn from `a83e9587f` remains unstaged
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: compiler and build-system authorities assign target-contract validation to the compiler over build-selected roots; the progress matrix records HTML-Wasm as experimental with clean structured rejection
-- code: 29 canonical fixtures exercise seven of the nine reachable `UnsupportedBackendFeatureReason` variants through broad `BST-RULE-0064`; most still parse rendered backend/feature wording
+- docs: compiler architecture requires diagnostic paths and labels to survive deterministic source remapping; generic instances are materialized before HIR with call-site diagnostics and declaration-owned templates
+- code: `generic_function_recursive_instantiation_rejected` already emits a call-site primary plus body, declaration, and substitution secondary labels, but remains single-file and asserts rendered label prose
 ACCEPTANCE_CRITERIA:
-- assert the exact qualified compiler-owned reason for every canonical `BST-RULE-0064` occurrence
-- remove rendered wording fragments whose only contract is backend-feature identity
-- preserve exact codes, backend matrices, source inputs, locations, and target semantics
+- move the recursive generic declaration into a case-owned helper source without changing the rejected program contract
+- assert the exact recursive-instantiation reason, call-site path/line, and all helper-file secondary label paths/lines
+- remove rendered label wording whose contract is now structured while preserving the exact code and backend outcome
 VALIDATION_STATE:
 - `just validate`: passed; cross-target Clippy, 3,557 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
-- Phase 4C8b focused cases/audit: passed; 29 exact cases through focused and all-authored backends plus a clean 1,645-case inventory
+- Phase 4C9 focused case/audit: passed; exact HTML case plus a clean 1,645-case inventory
 DOCS_IMPACT: official structured-assertion workflow docs wait for Phase 4 closure; progress matrix and `index.md` unchanged
 BLOCKERS_OR_OPEN_DECISIONS: Ollama wrapper still requires removed `docs/codebase-style-guide.md`; 19 justified diagnostic-contains blocks record duplicate module compilation that the queued canonical-module plan must remove
 DELEGATION_DECISION: codex-cli fallback — the user-selected Ollama default is cleanly blocked before edits by its stale required-document path
 NEXT_WORKER_ORDER: codex-cli, parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit the reviewed Phase 4C8b expectations and plan paths, refresh its hash, then inventory imported/generated remapping and secondary-label owners
+NEXT_RESUME_ACTION: commit Phase 4C9, refresh its hash, then add representative declaration and borrow-conflict secondary-label owners
 
 ---
 
@@ -167,7 +167,8 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 4C6 invalid import-path locations | `b2992ef92` | Accepted | Both `BST-IMPORT-0016` fixtures assert `parent_directory_segment` with root/nested fixture-relative paths and one-based lines; 1,778/1,778 executions |
 | Phase 4C7 invalid fallible-handling reasons | `5d72c1b75` | Accepted | All 36 `BST-RULE-0051` fixtures distinguish 17 compiler-owned reasons; 12 redundant rendered wording fragments removed; 1,778/1,778 executions |
 | Phase 4C8a backend feature reason identity | `a9661ada0` | Accepted | Nine reachable backend-feature reasons replace interned feature prose; unreachable runtime-fragment rejection identity removed; 3,557 Rust tests and 1,778 integration executions |
-| Phase 4C8b backend feature reason assertions | pending acceptance commit | Accepted | All 29 `BST-RULE-0064` fixtures distinguish seven exercised reasons; 24 redundant rendered wording fragments removed; 1,778/1,778 executions |
+| Phase 4C8b backend feature reason assertions | `d71dfa6a5` | Accepted | All 29 `BST-RULE-0064` fixtures distinguish seven exercised reasons; 24 redundant rendered wording fragments removed; 1,778/1,778 executions |
+| Phase 4C9 generated generic remapping | pending acceptance commit | Accepted | Recursive generic instantiation keeps the call site primary while body, declaration, and substitution labels remap to a helper source; rendered label prose removed; 1,778/1,778 executions |
 
 ---
 

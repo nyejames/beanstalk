@@ -2,4 +2,25 @@
 mode = "failure"
 warnings = "forbid"
 diagnostic_codes = ["BST-RULE-0057"]
-message_contains = ["while instantiating this generic call"]
+
+[[backends.html.diagnostic_assertions]]
+code = "BST-RULE-0057"
+reason = "invalid_generic_instantiation.recursive_function_instantiation"
+path = "input/#page.bst"
+line = 3
+count = 1
+
+[[backends.html.diagnostic_assertions.secondary_labels]]
+occurrence = 1
+path = "input/helpers.bst"
+line = 2
+
+[[backends.html.diagnostic_assertions.secondary_labels]]
+occurrence = 2
+path = "input/helpers.bst"
+line = 1
+
+[[backends.html.diagnostic_assertions.secondary_labels]]
+occurrence = 3
+path = "input/helpers.bst"
+line = 1
