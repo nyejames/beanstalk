@@ -702,501 +702,701 @@ role = "boundary"
 id = "choice_equality_imported_constructor_success"
 path = "choice_equality_imported_constructor_success"
 tags = ["integration","language","choices","equality","imports","js-backend"]
+contract = "language.choices.structural_equality_truth_table"
+role = "boundary"
 
 [[case]]
 id = "choice_equality_aliased_constructor_success"
 path = "choice_equality_aliased_constructor_success"
 tags = ["integration","language","choices","equality","imports","js-backend"]
+contract = "language.choices.structural_equality_truth_table"
+role = "boundary"
 
 [[case]]
 id = "choice_unit_equality_aliased_import_success"
 path = "choice_unit_equality_aliased_import_success"
 tags = ["integration","language","choices","equality","imports"]
+contract = "language.choices.structural_equality_truth_table"
+role = "boundary"
 
 [[case]]
 id = "choice_unit_equality_in_function_return"
 path = "choice_unit_equality_in_function_return"
 tags = ["integration","language","choices","equality"]
+contract = "language.choices.structural_equality_truth_table"
+role = "boundary"
 
 [[case]]
 id = "choice_payload_equality_side_effects_evaluated_once"
 path = "choice_payload_equality_side_effects_evaluated_once"
 tags = ["integration","language","choices","equality","js-backend"]
+contract = "language.choices.equality_evaluates_each_operand_once"
+role = "primary"
 
 [[case]]
 id = "choice_equality_different_choice_types_rejected"
 path = "choice_equality_different_choice_types_rejected"
 tags = ["integration","diagnostics","choices","equality"]
+contract = "language.choices.equality_incompatible_operand_types_rejected"
+role = "primary"
 
 [[case]]
 id = "choice_diagnostic_choice_vs_non_choice_rejected"
 path = "choice_diagnostic_choice_vs_non_choice_rejected"
 tags = ["integration","diagnostics","choices","equality"]
+contract = "language.choices.equality_incompatible_operand_types_rejected"
+role = "boundary"
 
 [[case]]
 id = "choice_equality_payload_unsupported_struct_rejected"
 path = "choice_equality_payload_unsupported_struct_rejected"
 tags = ["integration","diagnostics","choices","equality"]
+contract = "language.choices.equality_unsupported_payload_type_rejected"
+role = "primary"
 
 [[case]]
 id = "choice_equality_payload_unsupported_collection_rejected"
 path = "choice_equality_payload_unsupported_collection_rejected"
 tags = ["integration","diagnostics","choices","equality"]
+contract = "language.choices.equality_unsupported_payload_type_rejected"
+role = "boundary"
 
 [[case]]
 id = "choice_equality_payload_unsupported_external_rejected"
 path = "choice_equality_payload_unsupported_external_rejected"
 tags = ["integration","diagnostics","choices","equality"]
+contract = "language.choices.equality_unsupported_payload_type_rejected"
+role = "boundary"
 
 [[case]]
 id = "choice_payload_direct_field_access_deferred"
 path = "choice_payload_direct_field_access_deferred"
 tags = ["integration","diagnostics","choices"]
+contract = "language.choices.direct_field_access_rejected"
+role = "primary"
 
 [[case]]
 id = "choice_payload_field_mutation_rejected"
 path = "choice_payload_field_mutation_rejected"
 tags = ["integration","diagnostics","choices"]
+contract = "language.choices.payload_field_mutation_rejected"
+role = "primary"
 
 [[case]]
 id = "choice_direct_field_access_imported_deferred"
 path = "choice_direct_field_access_imported_deferred"
 tags = ["integration","diagnostics","choices","pattern-matching"]
+contract = "language.choices.direct_field_access_rejected"
+role = "boundary"
 
 [[case]]
 id = "choice_recursive_direct_declaration_deferred"
 path = "choice_recursive_direct_declaration_deferred"
 tags = ["integration","diagnostics","choices"]
+contract = "language.choices.recursive_declaration_rejected"
+role = "primary"
 
 [[case]]
 id = "generic_choice_declaration_parse_success"
 path = "generic_choice_declaration_parse_success"
 tags = ["integration","generics","choices"]
+contract = "language.generics.choice_declaration_parse"
+role = "primary"
 
 [[case]]
 id = "generic_function_declaration_parse_success"
 path = "generic_function_declaration_parse_success"
 tags = ["integration","generics","functions"]
+contract = "language.generics.function_declaration_parse"
+role = "primary"
 
 [[case]]
 id = "generic_function_identity_success"
 path = "generic_function_identity_success"
 tags = ["integration","generics","functions"]
+contract = "language.generics.function_argument_inference"
+role = "primary"
 
 [[case]]
 id = "generic_function_wrapper_success"
 path = "generic_function_wrapper_success"
 tags = ["integration","generics","functions"]
+contract = "language.generics.function_returns_generic_struct"
+role = "primary"
 
 [[case]]
 id = "generic_function_expected_context_success"
 path = "generic_function_expected_context_success"
 tags = ["integration","generics","functions"]
+contract = "language.generics.expected_type_context_inference"
+role = "primary"
 
 [[case]]
 id = "generic_fn_nested_expected_parameter_intermediate_success"
 path = "generic_fn_nested_expected_parameter_intermediate_success"
 tags = ["integration","generics","functions"]
+contract = "language.generics.expected_type_context_inference"
+role = "boundary"
 
 [[case]]
 id = "generic_constructed_types_success"
 path = "generic_constructed_types_success"
 tags = ["integration","generics","functions","collections","options"]
+contract = "language.generics.constructed_type_inference"
+role = "primary"
 
 [[case]]
 id = "generic_function_optional_return_success"
 path = "generic_function_optional_return_success"
 tags = ["integration","generics","functions","options"]
+contract = "language.generics.optional_return_inference"
+role = "primary"
 
 [[case]]
 id = "generic_optional_none_inference_rejected"
 path = "generic_optional_none_inference_rejected"
 tags = ["integration","generics","functions","options","diagnostics"]
+contract = "language.generics.ambiguous_inference_rejected"
+role = "boundary"
 
 [[case]]
 id = "generic_function_ambiguous_inference_rejected"
 path = "generic_function_ambiguous_inference_rejected"
 tags = ["integration","generics","functions","diagnostics"]
+contract = "language.generics.ambiguous_inference_rejected"
+role = "primary"
 
 [[case]]
 id = "generic_fn_nested_expected_parameter_rejected"
 path = "generic_fn_nested_expected_parameter_rejected"
 tags = ["integration","generics","functions","diagnostics"]
+contract = "language.generics.nested_expected_parameter_uninferable_rejected"
+role = "primary"
 
 [[case]]
 id = "generic_function_conflicting_inference_rejected"
 path = "generic_function_conflicting_inference_rejected"
 tags = ["integration","generics","functions","diagnostics"]
+contract = "language.generics.conflicting_inference_rejected"
+role = "primary"
 
 [[case]]
 id = "generic_function_recursive_instantiation_rejected"
 path = "generic_function_recursive_instantiation_rejected"
 tags = ["integration","generics","functions","diagnostics"]
+contract = "language.generics.recursive_instantiation_rejected"
+role = "primary"
 
 [[case]]
 id = "generic_fn_cross_file_grouped_success"
 path = "generic_fn_cross_file_grouped_success"
 tags = ["integration","generics","functions","imports"]
+contract = "language.generics.function_argument_inference"
+role = "boundary"
 
 [[case]]
 id = "generic_fn_cross_file_grouped_alias_success"
 path = "generic_fn_cross_file_grouped_alias_success"
 tags = ["integration","generics","functions","imports"]
+contract = "language.generics.function_argument_inference"
+role = "boundary"
 
 [[case]]
 id = "generic_fn_alias_collision_behavior_unchanged"
 path = "generic_fn_alias_collision_behavior_unchanged"
 tags = ["integration","generics","functions","imports","diagnostics"]
+contract = "language.generics.import_alias_collision_rejected"
+role = "primary"
 
 [[case]]
 id = "generic_fn_cross_file_conflicting_inference_rejected"
 path = "generic_fn_cross_file_conflicting_inference_rejected"
 tags = ["integration","generics","functions","imports","diagnostics"]
+contract = "language.generics.conflicting_inference_rejected"
+role = "boundary"
 
 [[case]]
 id = "generic_fn_cross_file_namespace_success"
 path = "generic_fn_cross_file_namespace_success"
 tags = ["integration","generics","functions","imports"]
+contract = "language.generics.function_argument_inference"
+role = "boundary"
 
 [[case]]
 id = "generic_fn_cross_file_namespace_expected_result_success"
 path = "generic_fn_cross_file_namespace_expected_result_success"
 tags = ["integration","generics","functions","imports"]
+contract = "language.generics.expected_type_context_inference"
+role = "boundary"
 
 [[case]]
 id = "generic_fn_value_use_namespace_rejected"
 path = "generic_fn_value_use_namespace_rejected"
 tags = ["integration","generics","functions","imports","diagnostics"]
+contract = "language.generics.function_value_use_rejected"
+role = "primary"
 
 [[case]]
 id = "generic_fn_value_use_grouped_rejected"
 path = "generic_fn_value_use_grouped_rejected"
 tags = ["integration","generics","functions","imports","diagnostics"]
+contract = "language.generics.function_value_use_rejected"
+role = "boundary"
 
 [[case]]
 id = "generic_fn_value_use_collection_rejected"
 path = "generic_fn_value_use_collection_rejected"
 tags = ["integration","generics","functions","imports","diagnostics"]
+contract = "language.generics.function_value_use_rejected"
+role = "boundary"
 
 [[case]]
 id = "generic_fn_value_use_argument_rejected"
 path = "generic_fn_value_use_argument_rejected"
 tags = ["integration","generics","functions","imports","diagnostics"]
+contract = "language.generics.function_value_use_rejected"
+role = "boundary"
 
 [[case]]
 id = "generic_fn_value_use_return_rejected"
 path = "generic_fn_value_use_return_rejected"
 tags = ["integration","generics","functions","imports","diagnostics"]
+contract = "language.generics.function_value_use_rejected"
+role = "boundary"
 
 [[case]]
 id = "generic_fn_value_use_facade_rejected"
 path = "generic_fn_value_use_facade_rejected"
 tags = ["integration","generics","functions","facades","diagnostics"]
+contract = "language.generics.function_value_use_rejected"
+role = "boundary"
 
 [[case]]
 id = "generic_fn_namespace_synthetic_instance_inaccessible_rejected"
 path = "generic_fn_namespace_synthetic_instance_inaccessible_rejected"
 tags = ["integration","generics","functions","imports","diagnostics"]
+contract = "language.generics.synthetic_instance_namespace_access_rejected"
+role = "primary"
 
 [[case]]
 id = "generic_fn_synthetic_grouped_import_rejected"
 path = "generic_fn_synthetic_grouped_import_rejected"
 tags = ["integration","generics","functions","imports","diagnostics"]
+contract = "language.generics.synthetic_instance_import_rejected"
+role = "primary"
 
 [[case]]
 id = "generic_fn_synthetic_direct_symbol_path_import_rejected"
 path = "generic_fn_synthetic_direct_symbol_path_import_rejected"
 tags = ["integration","generics","functions","imports","diagnostics"]
+contract = "language.generics.synthetic_instance_import_rejected"
+role = "boundary"
 
 [[case]]
 id = "generic_fn_synthetic_facade_export_rejected"
 path = "generic_fn_synthetic_facade_export_rejected"
 tags = ["integration","generics","functions","imports","facade","diagnostics"]
+contract = "language.generics.synthetic_instance_facade_export_rejected"
+role = "primary"
 
 [[case]]
 id = "generic_fn_cross_file_expected_result_collection_success"
 path = "generic_fn_cross_file_expected_result_collection_success"
 tags = ["integration","generics","functions","imports"]
+contract = "language.generics.expected_type_context_inference"
+role = "boundary"
 
 [[case]]
 id = "generic_fn_facade_expected_result_collection_success"
 path = "generic_fn_facade_expected_result_collection_success"
 tags = ["integration","generics","functions","imports"]
+contract = "language.generics.expected_type_context_inference"
+role = "boundary"
 
 [[case]]
 id = "generic_fn_cross_file_optional_return_success"
 path = "generic_fn_cross_file_optional_return_success"
 tags = ["integration","generics","functions","imports","options"]
+contract = "language.generics.optional_return_inference"
+role = "boundary"
 
 [[case]]
 id = "generic_fn_facade_optional_return_success"
 path = "generic_fn_facade_optional_return_success"
 tags = ["integration","generics","functions","imports","options"]
+contract = "language.generics.optional_return_inference"
+role = "boundary"
 
 [[case]]
 id = "generic_fn_cross_file_fallible_error_slot_success"
 path = "generic_fn_cross_file_fallible_error_slot_success"
 tags = ["integration","generics","functions","imports","results"]
+contract = "language.generics.fallible_error_slot_inference"
+role = "primary"
 
 [[case]]
 id = "generic_fn_facade_fallible_error_slot_success"
 path = "generic_fn_facade_fallible_error_slot_success"
 tags = ["integration","generics","functions","imports","results"]
+contract = "language.generics.fallible_error_slot_inference"
+role = "boundary"
 
 [[case]]
 id = "generic_fn_uninferable_parameter_rejected"
 path = "generic_fn_uninferable_parameter_rejected"
 tags = ["integration","generics","functions","imports","diagnostics"]
+contract = "language.generics.ambiguous_inference_rejected"
+role = "boundary"
 
 [[case]]
 id = "generic_fn_later_use_inference_rejected"
 path = "generic_fn_later_use_inference_rejected"
 tags = ["integration","generics","functions","imports","diagnostics"]
+contract = "language.generics.ambiguous_inference_rejected"
+role = "boundary"
 
 [[case]]
 id = "generic_fn_multiple_substitutions_same_module_success"
 path = "generic_fn_multiple_substitutions_same_module_success"
 tags = ["integration","generics","functions","imports"]
+contract = "language.generics.function_argument_inference"
+role = "boundary"
 
 [[case]]
 id = "generic_fn_instance_body_type_error_rejected"
 path = "generic_fn_instance_body_type_error_rejected"
 tags = ["integration","generics","functions","diagnostics"]
+contract = "language.generics.body_operator_on_parameter_rejected"
+role = "primary"
 
 [[case]]
 id = "generic_function_body_validation_success"
 path = "generic_function_body_validation_success"
 tags = ["integration","generics","functions"]
+contract = "language.generics.function_body_validation"
+role = "primary"
 
 [[case]]
 id = "generic_fn_nested_generic_body_call_success"
 path = "generic_fn_nested_generic_body_call_success"
 tags = ["integration","generics","functions","imports"]
+contract = "language.generics.function_body_validation"
+role = "boundary"
 
 [[case]]
 id = "generic_function_local_annotations_success"
 path = "generic_function_local_annotations_success"
 tags = ["integration","generics","functions","collections","choices"]
+contract = "language.generics.body_local_annotations"
+role = "primary"
 
 [[case]]
 id = "generic_parameter_name_outside_scope_rejected"
 path = "generic_parameter_name_outside_scope_rejected"
 tags = ["integration","generics","functions","diagnostics"]
+contract = "language.generics.unknown_type_annotation_rejected"
+role = "primary"
 
 [[case]]
 id = "generic_function_local_unknown_annotation_rejected"
 path = "generic_function_local_unknown_annotation_rejected"
 tags = ["integration","generics","functions","diagnostics"]
+contract = "language.generics.unknown_type_annotation_rejected"
+role = "boundary"
 
 [[case]]
 id = "generic_function_forward_reordered_success"
 path = "generic_function_forward_reordered_success"
 tags = ["integration","generics","functions"]
+contract = "language.generics.forward_call_parameter_reordering"
+role = "primary"
 
 [[case]]
 id = "generic_function_forward_conflict_rejected"
 path = "generic_function_forward_conflict_rejected"
 tags = ["integration","generics","functions","diagnostics"]
+contract = "language.generics.conflicting_inference_rejected"
+role = "boundary"
 
 [[case]]
 id = "generic_function_body_arithmetic_rejected"
 path = "generic_function_body_arithmetic_rejected"
 tags = ["integration","generics","functions","diagnostics"]
+contract = "language.generics.body_operator_on_parameter_rejected"
+role = "boundary"
 
 [[case]]
 id = "trait_bound_function_success"
 path = "trait_bound_function_success"
 tags = ["integration","generics","traits","functions"]
+contract = "language.generics.trait_bound_function"
+role = "primary"
 
 [[case]]
 id = "trait_bound_multiple_and_success"
 path = "trait_bound_multiple_and_success"
 tags = ["integration","generics","traits","functions"]
+contract = "language.generics.trait_bound_multiple_and"
+role = "primary"
 
 [[case]]
 id = "trait_bound_multiple_params_success"
 path = "trait_bound_multiple_params_success"
 tags = ["integration","generics","traits","functions"]
+contract = "language.generics.trait_bound_per_parameter"
+role = "primary"
 
 [[case]]
 id = "generic_bound_receiver_call_success"
 path = "generic_bound_receiver_call_success"
 tags = ["integration","generics","traits","functions","receivers"]
+contract = "language.generics.trait_bound_receiver_call"
+role = "boundary"
 
 [[case]]
 id = "trait_bound_generic_struct_success"
 path = "trait_bound_generic_struct_success"
 tags = ["integration","generics","traits","structs"]
+contract = "language.generics.trait_bound_generic_struct"
+role = "primary"
 
 [[case]]
 id = "trait_bound_generic_choice_success"
 path = "trait_bound_generic_choice_success"
 tags = ["integration","generics","traits","choices"]
+contract = "language.generics.trait_bound_generic_choice"
+role = "primary"
 
 [[case]]
 id = "trait_bound_generic_struct_annotation_missing_evidence_rejected"
 path = "trait_bound_generic_struct_annotation_missing_evidence_rejected"
 tags = ["integration","generics","traits","structs","diagnostics"]
+contract = "language.generics.trait_bound_missing_evidence_rejected"
+role = "boundary"
 
 [[case]]
 id = "trait_bound_generic_struct_constructor_missing_evidence_rejected"
 path = "trait_bound_generic_struct_constructor_missing_evidence_rejected"
 tags = ["integration","generics","traits","structs","constructors","diagnostics"]
+contract = "language.generics.trait_bound_missing_evidence_rejected"
+role = "boundary"
 
 [[case]]
 id = "trait_bound_generic_alias_missing_evidence_rejected"
 path = "trait_bound_generic_alias_missing_evidence_rejected"
 tags = ["integration","generics","traits","aliases","diagnostics"]
+contract = "language.generics.trait_bound_missing_evidence_rejected"
+role = "boundary"
 
 [[case]]
 id = "trait_bound_generic_matching_method_without_conformance_rejected"
 path = "trait_bound_generic_matching_method_without_conformance_rejected"
 tags = ["integration","generics","traits","structs","diagnostics"]
+contract = "language.generics.trait_bound_missing_evidence_rejected"
+role = "boundary"
 
 [[case]]
 id = "generic_bound_builtin_conformance_target_rejected"
 path = "generic_bound_builtin_conformance_target_rejected"
 tags = ["integration","generics","traits","structs","diagnostics"]
+contract = "language.traits.builtin_conformance_target_rejected"
+role = "boundary"
 
 [[case]]
 id = "trait_bound_trait_name_generic_argument_rejected"
 path = "trait_bound_trait_name_generic_argument_rejected"
 tags = ["integration","generics","traits","diagnostics"]
+contract = "language.generics.trait_name_as_type_rejected"
+role = "boundary"
 
 [[case]]
 id = "trait_name_parameter_type_rejected"
 path = "trait_name_parameter_type_rejected"
 tags = ["integration","traits","diagnostics"]
+contract = "language.generics.trait_name_as_type_rejected"
+role = "primary"
 
 [[case]]
 id = "trait_name_return_type_rejected"
 path = "trait_name_return_type_rejected"
 tags = ["integration","traits","diagnostics"]
+contract = "language.generics.trait_name_as_type_rejected"
+role = "boundary"
 
 [[case]]
 id = "trait_name_struct_field_rejected"
 path = "trait_name_struct_field_rejected"
 tags = ["integration","traits","structs","diagnostics"]
+contract = "language.generics.trait_name_as_type_rejected"
+role = "boundary"
 
 [[case]]
 id = "trait_name_choice_payload_rejected"
 path = "trait_name_choice_payload_rejected"
 tags = ["integration","traits","choices","diagnostics"]
+contract = "language.generics.trait_name_as_type_rejected"
+role = "boundary"
 
 [[case]]
 id = "trait_name_collection_element_rejected"
 path = "trait_name_collection_element_rejected"
 tags = ["integration","traits","collections","diagnostics"]
+contract = "language.generics.trait_name_as_type_rejected"
+role = "boundary"
 
 [[case]]
 id = "trait_name_alias_target_rejected"
 path = "trait_name_alias_target_rejected"
 tags = ["integration","traits","aliases","diagnostics"]
+contract = "language.generics.trait_name_as_type_rejected"
+role = "boundary"
 
 [[case]]
 id = "choice_runtime_heterogeneity_success"
 path = "choice_runtime_heterogeneity_success"
 tags = ["integration","language","choices","traits"]
+contract = "language.choices.runtime_heterogeneity_dispatch"
+role = "primary"
 
 [[case]]
 id = "trait_bound_cross_file_grouped_success"
 path = "trait_bound_cross_file_grouped_success"
 tags = ["integration","generics","traits","functions","imports","receivers"]
+contract = "language.generics.trait_bound_function"
+role = "boundary"
 
 [[case]]
 id = "trait_bound_cross_file_namespace_success"
 path = "trait_bound_cross_file_namespace_success"
 tags = ["integration","generics","traits","functions","imports","receivers"]
+contract = "language.generics.trait_bound_function"
+role = "boundary"
 
 [[case]]
 id = "trait_bound_cross_file_grouped_alias_success"
 path = "trait_bound_cross_file_grouped_alias_success"
 tags = ["integration","generics","traits","functions","imports","receivers"]
+contract = "language.generics.trait_bound_function"
+role = "boundary"
 
 [[case]]
 id = "trait_bound_facade_grouped_wrapper_success"
 path = "trait_bound_facade_grouped_wrapper_success"
 tags = ["integration","generics","traits","functions","imports","facade","receivers"]
+contract = "language.generics.trait_bound_function"
+role = "boundary"
 
 [[case]]
 id = "generic_bound_receiver_multiple_params_success"
 path = "generic_bound_receiver_multiple_params_success"
 tags = ["integration","generics","traits","functions","receivers"]
+contract = "language.generics.trait_bound_receiver_call"
+role = "primary"
 
 [[case]]
 id = "generic_bound_receiver_same_concrete_params_success"
 path = "generic_bound_receiver_same_concrete_params_success"
 tags = ["integration","generics","traits","functions","receivers"]
+contract = "language.generics.trait_bound_receiver_call"
+role = "boundary"
 
 [[case]]
 id = "trait_bound_missing_evidence_rejected"
 path = "trait_bound_missing_evidence_rejected"
 tags = ["integration","generics","traits","functions","diagnostics"]
+contract = "language.generics.trait_bound_missing_evidence_rejected"
+role = "primary"
 
 [[case]]
 id = "generic_bound_receiver_ambiguous_rejected"
 path = "generic_bound_receiver_ambiguous_rejected"
 tags = ["integration","generics","traits","functions","receivers","diagnostics"]
+contract = "language.generics.trait_bound_ambiguous_receiver_method_rejected"
+role = "primary"
 
 [[case]]
 id = "generic_bound_nonlocal_receiver_method_rejected"
 path = "generic_bound_nonlocal_receiver_method_rejected"
 tags = ["integration","generics","traits","functions","receivers","diagnostics"]
+contract = "language.generics.nonlocal_receiver_method_rejected"
+role = "primary"
 
 [[case]]
 id = "public_generic_bound_private_trait_rejected"
 path = "public_generic_bound_private_trait_rejected"
 tags = ["integration","generics","traits","functions","imports","facade","diagnostics"]
+contract = "language.generics.public_bound_private_trait_rejected"
+role = "primary"
 
 [[case]]
 id = "public_generic_bound_public_trait_success"
 path = "public_generic_bound_public_trait_success"
 tags = ["integration","generics","traits","functions","imports","facade"]
+contract = "language.generics.public_bound_public_trait"
+role = "primary"
 
 [[case]]
 id = "public_generic_bound_reexported_trait_success"
 path = "public_generic_bound_reexported_trait_success"
 tags = ["integration","generics","traits","functions","imports","facade"]
+contract = "language.generics.public_bound_public_trait"
+role = "boundary"
 
 [[case]]
 id = "trait_evidence_builtin_receiver_rejected"
 path = "trait_evidence_builtin_receiver_rejected"
 tags = ["integration","traits","receivers","scalars"]
+contract = "language.traits.builtin_conformance_target_rejected"
+role = "primary"
 
 [[case]]
 id = "trait_evidence_concrete_fallback_not_imported_rejected"
 path = "trait_evidence_concrete_fallback_not_imported_rejected"
 tags = ["integration","traits","receivers","imports","facade","diagnostics"]
+contract = "language.traits.concrete_fallback_not_imported_rejected"
+role = "primary"
 
 [[case]]
 id = "trait_bound_imported_private_trait_rejected"
 path = "trait_bound_imported_private_trait_rejected"
 tags = ["integration","generics","traits","functions","imports","diagnostics"]
+contract = "language.generics.trait_bound_missing_evidence_rejected"
+role = "boundary"
 
 [[case]]
 id = "trait_bound_must_syntax_rejected"
 path = "trait_bound_must_syntax_rejected"
 tags = ["integration","generics","traits","functions","diagnostics"]
+contract = "language.generics.bound_must_syntax_rejected"
+role = "primary"
 
 [[case]]
 id = "trait_bound_invalid_trait_name_rejected"
 path = "trait_bound_invalid_trait_name_rejected"
 tags = ["integration","generics","traits","functions","diagnostics"]
+contract = "language.generics.bound_invalid_trait_name_rejected"
+role = "primary"
 
 [[case]]
 id = "generic_where_constraint_syntax_rejected"
 path = "generic_where_constraint_syntax_rejected"
 tags = ["integration","generics","functions","diagnostics"]
+contract = "language.generics.where_constraint_syntax_rejected"
+role = "primary"
 
 [[case]]
 id = "generic_canonical_parameter_diagnostic_name"
 path = "generic_canonical_parameter_diagnostic_name"
 tags = ["integration","generics","functions","diagnostics"]
+contract = "language.generics.parameter_diagnostic_canonical_name"
+role = "primary"
 
 [[case]]
 id = "generic_function_body_io_rejected"
 path = "generic_function_body_io_rejected"
 tags = ["integration","generics","functions","diagnostics"]
+contract = "language.generics.body_io_on_parameter_rejected"
+role = "primary"
 
 [[case]]
 id = "generic_function_body_template_rejected"
