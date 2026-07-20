@@ -30,26 +30,26 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 5C1 — active/imported root and fragment-order expectations accepted and ready to commit
-LAST_ACCEPTED_COMMIT: `323d54aae` (Phase 5B)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 5C1 expectations and this plan are ready to commit; unrelated generated font/style rebuild churn from `a83e9587f` remains unstaged
+CURRENT_SLICE: Phase 5C2 — loop-control, map-state, and reactive exact-output expectations accepted and ready to commit
+LAST_ACCEPTED_COMMIT: `2871e776d` (Phase 5C1)
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 5C2 expectations and this plan are ready to commit; unrelated generated font/style rebuild churn from `a83e9587f` remains unstaged
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: testing standards require one Node harness and external behaviour assertions; Phase 5 owns exact/order/exact-once runtime semantics without adding another executor
-- code: four existing canonical expectations already expose active/imported root markers, runtime fragment markers, and static slot ordering without requiring source changes
+- code: six existing canonical expectations expose loop-control sequences, a complete map-state trace, and two-event reactive rerenders without requiring source changes
 ACCEPTANCE_CRITERIA:
-- `export_block_active_root_success` and the main facade marker execute exactly once while imported-root runtime remains forbidden
-- `top_level_fragment_mixed_const_runtime_order` protects one runtime fragment alongside its existing compile-time/slot artifact order
-- `template_control_flow_top_level_runtime_fragment_order` protects runtime if/loop sequence and exact-once markers alongside its existing static slot order
+- break/continue template cases preserve ordered before-output, exact-once markers, and forbidden after-output
+- loop arithmetic and hashmap runtime cases assert their complete exact output while retaining backend artifact contracts
+- both reactive cases assert the exact two-event output, replacing weaker contains/not-contains checks without broad whitespace normalization
 VALIDATION_STATE:
 - `just validate`: passed; cross-target Clippy, 3,575 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
-- Phase 5C1 exact case executions: passed; all four selected HTML cases
+- Phase 5C2 exact case executions: passed; all six selected HTML cases
 DOCS_IMPACT: `testing.bd` still names schema 5 and must be updated with the complete runtime assertion workflow during Phase 5 documentation/closure; progress matrix and `index.md` unchanged
-BLOCKERS_OR_OPEN_DECISIONS: Ollama wrapper still requires removed `docs/codebase-style-guide.md`; 19 justified diagnostic-contains blocks record duplicate module compilation that the queued canonical-module plan must remove
-DELEGATION_DECISION: codex-cli fallback accepted — the user-selected Ollama default remains cleanly blocked before edits by its stale required-document path
-NEXT_WORKER_ORDER: none for this accepted slice
+BLOCKERS_OR_OPEN_DECISIONS: the user requires Ollama for every delegated implementation slice after Phase 5C2; its wrapper still requires removed `docs/codebase-style-guide.md`, so a repeated clean preflight failure must stop delegation without provider substitution; 19 justified diagnostic-contains blocks record duplicate module compilation that the queued canonical-module plan must remove
+DELEGATION_DECISION: codex-cli accepted — this was the last Codex worker slice; Ollama-only delegation starts with the next implementation slice
+NEXT_WORKER_ORDER: none for this accepted slice; Ollama only afterward
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit Phase 5C1, refresh its hash, then delegate Phase 5C2 runtime sequence and exact-output migrations
+NEXT_RESUME_ACTION: commit Phase 5C2, refresh its hash, then begin the Phase 5D golden-owner audit before Ollama implementation batches
 
 ---
 
@@ -173,7 +173,8 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 4D structured assertion documentation | `14bd9178b` | Accepted | Testing/contributor workflow and progress coverage now describe compiler-owned reasons plus primary/secondary remapping; release docs rebuilt and owned routes inspected |
 | Phase 5A chronological runtime-event model | `786171dd3` | Accepted | One typed event array preserves console/fragment chronology; strict decoding and chronological/channel views have focused coverage; 3,562 Rust tests and 1,778 integration executions |
 | Phase 5B stronger runtime assertion schema | `323d54aae` | Accepted | Typed exact/order/exact-once contracts use one Node harness; schema 6 reports all five runtime forms; 3,575 Rust tests and 1,778 integration executions |
-| Phase 5C1 root and fragment runtime order | pending acceptance commit | Accepted | Active and facade root markers execute once; imported root remains suppressed; runtime fragment exact-once/order complements static slot order; 1,778/1,778 executions |
+| Phase 5C1 root and fragment runtime order | `2871e776d` | Accepted | Active and facade root markers execute once; imported root remains suppressed; runtime fragment exact-once/order complements static slot order; 1,778/1,778 executions |
+| Phase 5C2 exact runtime behavior | pending acceptance commit | Accepted | Loop-control output is ordered and single-use; loop/map/reactive cases assert complete exact output; 1,778/1,778 executions |
 
 ---
 

@@ -1,7 +1,7 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
-rendered_output_contains = ["reactive_mount_multiple_sources_success 5-8\nreactive_mount_multiple_sources_success 5-8"]
+rendered_output_exact = "reactive_mount_multiple_sources_success 5-8\nreactive_mount_multiple_sources_success 5-8"
 
 [[backends.html.artifact_assertions]]
 path = "index.html"
