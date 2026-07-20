@@ -1,9 +1,11 @@
-//! Function call argument parsing regression tests.
+//! Function call argument parser and source-location regression tests.
 //!
-//! WHAT: validates positional and named argument parsing, call-access mode classification, and
-//!       argument validation against signatures.
-//! WHY: call parsing spans syntax, dispatch, and access-mode intent; focused tests prevent
-//!      subtle regressions in how arguments are bound and passed.
+//! WHAT: protects raw parsed argument shape, call-access mode classification, and the distinct
+//!       named-target, value-expression and authored-marker source locations produced by the
+//!       call argument parser.
+//! WHY: these are parser-local facts that end-to-end integration output cannot inspect. Whole-
+//!      source call acceptance and rejection behavior is owned by canonical integration cases
+//!      under `tests/cases/function_call_*`; the tests here stop at parser shape and locations.
 
 use crate::compiler_frontend::ast::expressions::call_argument::{CallAccessMode, CallArgument};
 use crate::compiler_frontend::ast::expressions::error::ExpressionParseError;
@@ -17,9 +19,7 @@ use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::compiler_frontend::tests::parse_support::{
-    parse_single_file_ast, parse_single_file_ast_diagnostic,
-};
+use crate::compiler_frontend::tests::parse_support::parse_single_file_ast_diagnostic;
 use crate::compiler_frontend::tokenizer::lexer::tokenize;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind, TokenizerEntryMode};
 use crate::compiler_frontend::type_coercion::compatibility::TypeCompatibilityCache;
@@ -120,22 +120,6 @@ fn parse_args_diagnostic(source: &str) -> CompilerDiagnostic {
     CompilerDiagnostic::from(error)
 }
 
-fn assert_invalid_call_shape(
-    source: &str,
-    reason_matches: impl FnOnce(&InvalidCallShapeReason) -> bool,
-) {
-    let diagnostic = parse_single_file_ast_diagnostic(source);
-
-    let DiagnosticPayload::InvalidCallShape { reason, .. } = &diagnostic.payload else {
-        panic!(
-            "expected InvalidCallShape diagnostic, got {:?}",
-            diagnostic.payload
-        );
-    };
-
-    assert!(reason_matches(reason));
-}
-
 // ── Parser-level tests (syntax-only call arguments) ──────────────────────────
 
 #[test]
@@ -233,64 +217,8 @@ take(~value = value)
 }
 
 #[test]
-fn rejects_positional_after_named() {
-    assert_invalid_call_shape(
-        r#"
-sum |a Int, b Int| -> Int:
-    return a + b
-;
-
-sum(a = 1, 2)
-"#,
-        |reason| matches!(reason, InvalidCallShapeReason::PositionalAfterNamed),
-    );
-}
-
-#[test]
-fn rejects_duplicate_named_target() {
-    assert_invalid_call_shape(
-        r#"
-sum |a Int, b Int| -> Int:
-    return a + b
-;
-
-sum(a = 1, a = 2)
-"#,
-        |reason| matches!(reason, InvalidCallShapeReason::DuplicateArgument { .. }),
-    );
-}
-
-#[test]
-fn rejects_unknown_named_parameter() {
-    assert_invalid_call_shape(
-        r#"
-sum |a Int, b Int| -> Int:
-    return a + b
-;
-
-sum(a = 1, unknown = 2)
-"#,
-        |reason| matches!(reason, InvalidCallShapeReason::NamedArgumentNotFound { .. }),
-    );
-}
-
-#[test]
-fn rejects_missing_required_parameter() {
-    assert_invalid_call_shape(
-        r#"
-sum |a Int, b Int| -> Int:
-    return a + b
-;
-
-sum(a = 1)
-"#,
-        |reason| matches!(reason, InvalidCallShapeReason::MissingArgument { .. }),
-    );
-}
-
-#[test]
 fn rejects_tilde_on_left_side_of_named_arg() {
-    // ~name = value is explicitly rejected at the parse level
+    // ~name = value is explicitly rejected at the parse level before signature binding.
     let diagnostic = parse_args_diagnostic("take(~value = 1)");
 
     assert_eq!(
@@ -306,227 +234,7 @@ fn rejects_tilde_on_left_side_of_named_arg() {
     ));
 }
 
-#[test]
-fn rejects_missing_tilde_for_mutable_positional_parameter() {
-    assert_invalid_call_shape(
-        r#"
-mutate |value ~Int|:
-    value = 5
-;
-
-x ~= 1
-mutate(x)
-"#,
-        |reason| matches!(reason, InvalidCallShapeReason::MutableAccessRequired { .. }),
-    );
-}
-
-#[test]
-fn accepts_fresh_rvalue_for_mutable_positional_parameter() {
-    let _ = parse_single_file_ast(
-        r#"
-mutate |value ~Int|:
-    value = value + 1
-;
-
-mutate(1 + 2)
-"#,
-    );
-}
-
-#[test]
-fn accepts_fresh_rvalue_for_mutable_named_parameter() {
-    let _ = parse_single_file_ast(
-        r#"
-mutate |value ~Int|:
-    value = value + 1
-;
-
-mutate(value = 1 + 2)
-"#,
-    );
-}
-
-#[test]
-fn accepts_fresh_template_for_mutable_parameter() {
-    let _ = parse_single_file_ast(
-        r#"
-mutate |value ~String|:
-    value = [:updated]
-;
-
-mutate([:content])
-"#,
-    );
-}
-
-#[test]
-fn accepts_fresh_collection_for_mutable_parameter() {
-    let _ = parse_single_file_ast(
-        r#"
-mutate |values ~{Int}|:
-    ~values.push(4) catch:
-    ;
-;
-
-mutate({1, 2, 3})
-"#,
-    );
-}
-
-#[test]
-fn accepts_fresh_struct_constructor_for_mutable_parameter() {
-    let _ = parse_single_file_ast(
-        r#"
-Item = |
-    label String,
-|
-
-mutate |value ~Item|:
-;
-
-mutate(Item("x"))
-"#,
-    );
-}
-
-#[test]
-fn rejects_tilde_on_immutable_place_argument() {
-    assert_invalid_call_shape(
-        r#"
-mutate |value ~Int|:
-    value = 5
-;
-
-x = 1
-mutate(~x)
-"#,
-        |reason| {
-            matches!(
-                reason,
-                InvalidCallShapeReason::MutableAccessOnImmutablePlace { .. }
-            )
-        },
-    );
-}
-
-#[test]
-fn rejects_tilde_on_non_place_argument_literal() {
-    assert_invalid_call_shape(
-        r#"
-mutate |value ~Int|:
-    value = 5
-;
-
-mutate(~12)
-"#,
-        |reason| {
-            matches!(
-                reason,
-                InvalidCallShapeReason::MutableAccessOnNonPlace { .. }
-            )
-        },
-    );
-}
-
-#[test]
-fn rejects_immutable_place_without_tilde_for_mutable_parameter() {
-    assert_invalid_call_shape(
-        r#"
-mutate |value ~Int|:
-    value = 5
-;
-
-x = 1
-mutate(x)
-"#,
-        |reason| {
-            matches!(
-                reason,
-                InvalidCallShapeReason::ImmutablePlaceMutableAccessRequired { .. }
-            )
-        },
-    );
-}
-
-#[test]
-fn accepts_explicit_copy_as_fresh_mutable_argument() {
-    let _ = parse_single_file_ast(
-        r#"
-mutate |value ~Int|:
-    value = value + 1
-;
-
-source = 5
-mutate(copy source)
-"#,
-    );
-}
-
-#[test]
-fn rejects_tilde_on_explicit_copy_argument() {
-    assert_invalid_call_shape(
-        r#"
-mutate |value ~Int|:
-    value = 5
-;
-
-source = 5
-mutate(~copy source)
-"#,
-        |reason| {
-            matches!(
-                reason,
-                InvalidCallShapeReason::MutableAccessOnNonPlace { .. }
-            )
-        },
-    );
-}
-
-#[test]
-fn rejects_missing_tilde_for_mutable_named_parameter() {
-    assert_invalid_call_shape(
-        r#"
-increment |value ~Int| -> Int:
-    value = value + 1
-    return value
-;
-
-x ~= 10
-result = increment(value = x)
-io.line([: [result]])
-"#,
-        |reason| matches!(reason, InvalidCallShapeReason::MutableAccessRequired { .. }),
-    );
-}
-
-#[test]
-fn duplicate_named_parameter_uses_canonical_diagnostic_text() {
-    assert_invalid_call_shape(
-        r#"
-sum |a Int, b Int| -> Int:
-    return a + b
-;
-
-sum(a = 1, a = 2)
-"#,
-        |reason| matches!(reason, InvalidCallShapeReason::DuplicateArgument { .. }),
-    );
-}
-
-#[test]
-fn unknown_named_parameter_lists_known_parameter_hint() {
-    assert_invalid_call_shape(
-        r#"
-sum |a Int, b Int| -> Int:
-    return a + b
-;
-
-sum(a = 1, typo = 2)
-"#,
-        |reason| matches!(reason, InvalidCallShapeReason::NamedArgumentNotFound { .. }),
-    );
-}
+// ── Source-location diagnostics for mutable-access call shape ────────────────
 
 #[test]
 fn mutable_marker_on_immutable_argument_uses_authored_marker_location() {
@@ -548,7 +256,7 @@ mutate(~x)
         panic!(
             "expected InvalidCallShape diagnostic, got {:?}",
             diagnostic.payload
-        );
+        )
     };
     assert!(
         matches!(
@@ -592,7 +300,7 @@ mutate(~12)
         panic!(
             "expected InvalidCallShape diagnostic, got {:?}",
             diagnostic.payload
-        );
+        )
     };
     assert!(
         matches!(
@@ -636,7 +344,7 @@ mutate(x)
         panic!(
             "expected InvalidCallShape diagnostic, got {:?}",
             diagnostic.payload
-        );
+        )
     };
     assert!(
         matches!(

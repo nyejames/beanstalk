@@ -1,0 +1,4 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_exact = "function_call_mutable_param_fresh_computed_arg out=4"

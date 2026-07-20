@@ -163,6 +163,13 @@ path = "function_call_mutable_param_fresh_collection_arg"
 tags = ["integration","functions","collections"]
 
 [[case]]
+id = "function_call_mutable_param_fresh_computed_arg"
+path = "function_call_mutable_param_fresh_computed_arg"
+tags = ["integration","functions"]
+contract = "language.functions.mutable_parameter_accepts_fresh_computed_value"
+role = "primary"
+
+[[case]]
 id = "function_call_mutable_param_copy_arg"
 path = "function_call_mutable_param_copy_arg"
 tags = ["integration","functions"]
