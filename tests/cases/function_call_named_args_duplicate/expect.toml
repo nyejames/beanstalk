@@ -2,4 +2,9 @@
 mode = "failure"
 warnings = "forbid"
 diagnostic_codes = ["BST-RULE-0054"]
+
 message_contains = ["parameter 'a' more than once"]
+
+[[backends.html.diagnostic_assertions]]
+code = "BST-RULE-0054"
+reason = "invalid_call_shape.duplicate_argument"

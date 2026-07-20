@@ -2,4 +2,9 @@
 mode = "failure"
 warnings = "forbid"
 diagnostic_codes = ["BST-RULE-0054"]
+
 message_contains = ["missing an argument for parameter 'b'"]
+
+[[backends.html.diagnostic_assertions]]
+code = "BST-RULE-0054"
+reason = "invalid_call_shape.missing_argument"

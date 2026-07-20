@@ -30,26 +30,26 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 4C — call-shape and mutable-access reason migration
-LAST_ACCEPTED_COMMIT: `3dab97639` (Phase 4B)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 4C fixed-collection reason migration is ready to commit; unrelated generated font/style rebuild churn from `a83e9587f` must remain unstaged
+CURRENT_SLICE: Phase 4C — mutable-access reason and source-location owner
+LAST_ACCEPTED_COMMIT: `124bee9f6` (Phase 4C1)
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 4C call-shape reason migration is ready to commit; unrelated generated font/style rebuild churn from `a83e9587f` must remain unstaged
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: `testing.bd` owns structured assertion workflow wording after Phase 4 migration; progress matrix remains current for this harness-only slice
-- code: typed `diagnostic_assertions` are active; 22 fixed-collection `BST-SYNTAX-0016` fixtures now distinguish nine compiler-owned `invalid_collection_type.*` reasons
+- code: typed `diagnostic_assertions` are active; 22 fixed-collection fixtures and all 27 `BST-RULE-0054` call-shape fixtures now assert compiler-owned reasons
 ACCEPTANCE_CRITERIA:
-- identify broad-code call-shape and mutable-access clusters with distinct compiler-owned reasons
-- migrate one coherent family without changing codes, messages, source behavior, or fixture ownership
-- keep selectors exact and add only reason/location facts that are genuinely contractual
+- make `live_shared_alias_blocks_mutable_rebinding` the real negative diagnostic path/line owner deferred from the removed lifetime-named case
+- assert the compiler-owned mutable-access reason without adding prose parsing or a duplicate fixture
+- preserve exact code, source-semantic naming, and primary ownership
 VALIDATION_STATE:
-- `just validate`: passed for Phase 4C fixed-collection reasons; cross-target Clippy, 3,555 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
-- focused fixed-collection diagnostics: passed; 27/27 HTML executions; audit clean at 1,645 cases and 1,778 backend executions
+- `just validate`: passed for Phase 4C call-shape reasons; cross-target Clippy, 3,555 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
+- full integration/audit: passed; 1,778/1,778 executions; audit clean at 1,645 cases and 1,778 backend executions
 DOCS_IMPACT: official structured-assertion workflow docs wait for Phase 4 closure; progress matrix and `index.md` unchanged
 BLOCKERS_OR_OPEN_DECISIONS: Ollama wrapper still requires removed `docs/codebase-style-guide.md`; 19 justified diagnostic-contains blocks record duplicate module compilation that the queued canonical-module plan must remove
 DELEGATION_DECISION: codex-cli fallback — the user-selected Ollama default is cleanly blocked before edits by its stale required-document path
 NEXT_WORKER_ORDER: codex-cli, parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit the fixed-collection reason migration with exact fixture/plan paths, refresh its hash, then inventory call-shape and mutable-access clusters
+NEXT_RESUME_ACTION: commit the call-shape reason migration with exact fixture/plan paths, refresh its hash, then add the mutable-access reason and fixture-relative path/line contract to its existing primary case
 
 ---
 
@@ -159,7 +159,8 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 3F assertion workflow documentation | `9cc05cf61` | Accepted | Schema 5 exact multiset and justified-contains workflow documented; release docs build passed; `index.md` current |
 | Phase 4A compiler-owned reason identity | `afd00ca04` | Accepted | 50 reason-bearing payload families; 580 unique qualified keys; 68 focused model tests; 3,544 Rust tests |
 | Phase 4B structured diagnostic assertions | `3dab97639` | Accepted | Code-plus-occurrence selectors; compiler-owned reasons; fixture-relative primary/secondary locations; 145 focused runner tests; 3,555 Rust tests |
-| Phase 4C1 fixed-collection reasons | pending acceptance commit | Accepted | 22 `BST-SYNTAX-0016` fixtures distinguish nine `invalid_collection_type.*` reasons; 27/27 focused executions; zero hard findings |
+| Phase 4C1 fixed-collection reasons | `124bee9f6` | Accepted | 22 `BST-SYNTAX-0016` fixtures distinguish nine `invalid_collection_type.*` reasons; 27/27 focused executions; zero hard findings |
+| Phase 4C2 call-shape reasons | pending acceptance commit | Accepted | All 27 `BST-RULE-0054` fixtures distinguish ten `invalid_call_shape.*` reasons; 1,778/1,778 integration executions; zero hard findings |
 
 ---
 
