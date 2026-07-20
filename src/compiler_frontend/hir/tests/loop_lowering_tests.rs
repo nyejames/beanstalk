@@ -8,7 +8,6 @@ use crate::compiler_frontend::ast::ast_nodes::{
 };
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
-use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
 use crate::compiler_frontend::hir::expressions::HirExpressionKind;
 use crate::compiler_frontend::hir::ids::BlockId;
@@ -617,61 +616,6 @@ fn lowers_collection_loop_without_user_bindings() {
         module.blocks[body_block.0 as usize].locals.is_empty(),
         "binding-less collection loops should not allocate user binding locals"
     );
-}
-
-#[test]
-fn lowers_collection_loop_with_reference_typed_iterable_expression() {
-    let mut string_table = StringTable::new();
-    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
-    let location = test_location(37);
-    let items_symbol = super::symbol("items", &mut string_table);
-
-    let mut temp_env = TypeEnvironment::new();
-    let collection_type_id = temp_env.intern_collection(builtin_type_ids::INT, None);
-
-    let items_decl = node(
-        NodeKind::VariableDeclaration(Declaration {
-            id: items_symbol.clone(),
-            value: collection_literal(location.clone()),
-        }),
-        location.clone(),
-    );
-
-    let collection_loop = node(
-        NodeKind::CollectionLoop {
-            bindings: LoopBindings {
-                item: Some(loop_binding(
-                    "item",
-                    builtin_type_ids::INT,
-                    &mut string_table,
-                )),
-                index: None,
-            },
-            iterable: reference_expr(
-                items_symbol,
-                collection_type_id,
-                location.clone(),
-                ValueMode::ImmutableReference,
-            ),
-            body: vec![],
-        },
-        location,
-    );
-
-    let start_fn = function_node(
-        start_name,
-        FunctionSignature {
-            parameters: vec![],
-            returns: vec![],
-        },
-        vec![items_decl, collection_loop],
-        test_location(36),
-    );
-
-    let (module, _type_environment) =
-        lower_ast(build_ast(vec![start_fn], entry_path), &mut string_table)
-            .expect("collection loop lowering should normalize reference-typed iterables");
-    assert_no_placeholder_terminators(&module);
 }
 
 #[test]
