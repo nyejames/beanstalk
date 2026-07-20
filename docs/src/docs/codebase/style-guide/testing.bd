@@ -264,6 +264,33 @@ complete JSON report, then returns failure. Advisory classification findings rem
     diagnostic_codes = ["BST-RULE-0033", "BST-RULE-0033"]
 ]
 
+Use `diagnostic_assertions` when a broad code needs a compiler-owned reason or when source
+remapping is part of the contract. Each table selects one diagnostic by stable code and one-based
+occurrence. A unique code may omit `occurrence`. Repeat the code in `diagnostic_codes` to preserve
+its exact multiplicity.
+
+[codeblock, $code("text"):
+    [[backends.html.diagnostic_assertions]]
+    code = "BST-RULE-0057"
+    reason = "invalid_generic_instantiation.recursive_function_instantiation"
+    path = "input/#page.bst"
+    line = 3
+    count = 1
+
+    [[backends.html.diagnostic_assertions.secondary_labels]]
+    occurrence = 1
+    path = "input/helpers.bst"
+    line = 2
+]
+
+- Reason keys come from the compiler payload identity. The runner must not invent a parallel
+  reason taxonomy or derive identity from rendered text.
+- Paths are normalized relative to the owning fixture and lines are one-based display lines.
+- Assert columns only when exact token-span precision is the contract.
+- A secondary-label occurrence is one-based among that diagnostic's secondary labels in emitted
+  order. Assert only the labels whose location or ordering is the behaviour owner.
+- Keep `message_contains` only when rendered wording or label prose is itself contractual.
+
 Use `diagnostic_match = "contains"` only when intentional independent recovery or cascades make
 additional diagnostics part of the accepted current behaviour. Every contains-mode block needs a
 substantive `diagnostic_match_reason`. The suite audit reports the reason and treats a missing or

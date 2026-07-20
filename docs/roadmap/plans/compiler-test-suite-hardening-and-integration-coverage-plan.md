@@ -30,26 +30,26 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 4C10 — declaration and borrow-conflict secondary-label owners
-LAST_ACCEPTED_COMMIT: `a72876029` (Phase 4C9)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 4C10 expectations and plan update are ready to commit; unrelated generated font/style rebuild churn from `a83e9587f` remains unstaged
+CURRENT_SLICE: Phase 4D — structured diagnostic workflow documentation and Phase 4 closure
+LAST_ACCEPTED_COMMIT: `83aecdad2` (Phase 4C10)
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 4D source docs, plan update, and owned generated hunks are ready to commit; unrelated generated font/style rebuild churn from `a83e9587f` remains unstaged
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: testing standards preserve source locations where they are contractual; compiler diagnostics retain structured secondary labels instead of requiring rendered prose
-- code: `duplicate_function_names` and `borrow_checker_duplicate_mutable_args` emit real previous-declaration and earlier-conflicting-access secondary labels but currently assert codes only
+- docs: `testing.bd` and `CONTRIBUTING.md` now document compiler-owned reason keys, code-plus-occurrence selectors, fixture-relative locations, secondary-label occurrences, and the no-runner-taxonomy rule
+- code: Phase 4 now has one compiler reason owner, a taxonomy-free runner schema, broad-code reason migrations, cross-file generated remapping, and representative declaration/borrow secondary-label owners
 ACCEPTANCE_CRITERIA:
-- add representative structured primary and secondary-label path/line assertions in the rule and borrow diagnostic lanes
-- preserve exact codes, source fixtures, backend outcomes, and compiler-owned payload identity without inventing runner reasons
-- keep one owner per distinct declaration/conflict label contract
+- document when and how to author structured diagnostic assertions without creating a runner taxonomy or pinning prose
+- update concise progress coverage for stable reasons plus primary/secondary source remapping
+- rebuild documentation, inspect only owned generated content, close every Phase 4 acceptance item, and preserve concurrent docs churn separately
 VALIDATION_STATE:
 - `just validate`: passed; cross-target Clippy, 3,557 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
-- Phase 4C10 focused cases/audit: passed; two exact HTML cases plus a clean 1,645-case inventory
-DOCS_IMPACT: official structured-assertion workflow docs wait for Phase 4 closure; progress matrix and `index.md` unchanged
+- Phase 4D documentation release build: passed; 62 routes rebuilt and the owned style-guide/progress route content inspected
+DOCS_IMPACT: `testing.bd`, `CONTRIBUTING.md`, the progress matrix, and owned generated style-guide/progress hunks are current; `index.md` unchanged because no module owner moved
 BLOCKERS_OR_OPEN_DECISIONS: Ollama wrapper still requires removed `docs/codebase-style-guide.md`; 19 justified diagnostic-contains blocks record duplicate module compilation that the queued canonical-module plan must remove
-DELEGATION_DECISION: codex-cli fallback — the user-selected Ollama default is cleanly blocked before edits by its stale required-document path
-NEXT_WORKER_ORDER: codex-cli, parent-direct
+DELEGATION_DECISION: parent-direct — the orchestrator owns official docs, plan closure, generated-route review, and commit integration
+NEXT_WORKER_ORDER: none for this documentation slice
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit Phase 4C10, refresh its hash, then close Phase 4 workflow/progress documentation without absorbing concurrent docs churn
+NEXT_RESUME_ACTION: commit Phase 4D, refresh its hash, then launch the Phase 5A chronological runtime-event model
 
 ---
 
@@ -169,7 +169,8 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 4C8a backend feature reason identity | `a9661ada0` | Accepted | Nine reachable backend-feature reasons replace interned feature prose; unreachable runtime-fragment rejection identity removed; 3,557 Rust tests and 1,778 integration executions |
 | Phase 4C8b backend feature reason assertions | `d71dfa6a5` | Accepted | All 29 `BST-RULE-0064` fixtures distinguish seven exercised reasons; 24 redundant rendered wording fragments removed; 1,778/1,778 executions |
 | Phase 4C9 generated generic remapping | `a72876029` | Accepted | Recursive generic instantiation keeps the call site primary while body, declaration, and substitution labels remap to a helper source; rendered label prose removed; 1,778/1,778 executions |
-| Phase 4C10 declaration/conflict secondary labels | pending acceptance commit | Accepted | Duplicate declarations and duplicate exclusive accesses assert primary and earlier-site secondary paths/lines through rule and borrow diagnostic lanes; 1,778/1,778 executions |
+| Phase 4C10 declaration/conflict secondary labels | `83aecdad2` | Accepted | Duplicate declarations and duplicate exclusive accesses assert primary and earlier-site secondary paths/lines through rule and borrow diagnostic lanes; 1,778/1,778 executions |
+| Phase 4D structured assertion documentation | pending acceptance commit | Accepted | Testing/contributor workflow and progress coverage now describe compiler-owned reasons plus primary/secondary remapping; release docs rebuilt and owned routes inspected |
 
 ---
 
@@ -809,13 +810,13 @@ Add the real diagnostic-location owner deferred from `lifetime_inference_error_p
 
 ## Phase 4 acceptance
 
-- [ ] Reason identity has one compiler owner.
-- [ ] Runner contains no diagnostic payload taxonomy.
-- [ ] Broad-code clusters assert reasons where needed.
-- [ ] Paths and lines are assertable across file boundaries.
-- [ ] Message fragments remain rare and purposeful.
-- [ ] Documentation and progress coverage are current.
-- [ ] Full validation passes.
+- [x] Reason identity has one compiler owner.
+- [x] Runner contains no diagnostic payload taxonomy.
+- [x] Broad-code clusters assert reasons where needed.
+- [x] Paths and lines are assertable across file boundaries.
+- [x] Message fragments remain rare and purposeful.
+- [x] Documentation and progress coverage are current.
+- [x] Full validation passes.
 
 ---
 

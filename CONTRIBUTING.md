@@ -116,6 +116,27 @@ warnings = "forbid"
 diagnostic_codes = ["BST-RULE-0033", "BST-RULE-0033"]
 ```
 
+When a broad code needs a stable reason or source remapping is contractual, add a structured
+`diagnostic_assertions` table. Select the diagnostic by code plus one-based occurrence, use only a
+compiler-owned qualified reason key, and write normalized paths relative to the fixture:
+
+```toml
+[[backends.html.diagnostic_assertions]]
+code = "BST-RULE-0057"
+reason = "invalid_generic_instantiation.recursive_function_instantiation"
+path = "input/#page.bst"
+line = 3
+
+[[backends.html.diagnostic_assertions.secondary_labels]]
+occurrence = 1
+path = "input/helpers.bst"
+line = 2
+```
+
+Lines are one-based. Assert columns only for a real token-span contract. Secondary occurrences
+select that diagnostic's secondary labels in emitted order. Do not create runner-owned reason
+names or use rendered message text as identity.
+
 Use `diagnostic_match = "contains"` only for an intentional independent cascade or recovery path,
 and always add a substantive `diagnostic_match_reason`. The suite audit treats an unjustified
 contains block as a hard finding. Expected warnings use `warnings = "exact"` with an exact

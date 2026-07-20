@@ -132,9 +132,9 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
         [data:
             [: Structured diagnostics]
             [: Supported]
-            [: Broad import, config, project-structure, syntax, type, rule, borrow, backend-feature, and warning coverage.]
+            [: Broad import, config, project-structure, syntax, type, rule, borrow, backend-feature, and warning coverage plus targeted compiler-owned reason and primary/secondary source-remapping assertions.]
             [: Frontend]
-            [: User-facing failures use typed [$html:<code>CompilerDiagnostic</code>] payloads with stable codes. Infrastructure and invariant failures use [$html:<code>CompilerError</code>]. Type diagnostics are [$html:<code>TypeId</code>]-first at semantic boundaries.]
+            [: User-facing failures use typed [$html:<code>CompilerDiagnostic</code>] payloads with stable codes and optional qualified reason keys. Integration expectations consume that identity and fixture-relative source locations without reconstructing payload taxonomy. Infrastructure and invariant failures use [$html:<code>CompilerError</code>]. Type diagnostics are [$html:<code>TypeId</code>]-first at semantic boundaries.]
         ]
 
         [data:
