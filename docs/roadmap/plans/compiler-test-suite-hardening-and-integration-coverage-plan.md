@@ -30,13 +30,13 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 14C14c Stage 0 source-loading and provider-orchestration unit ownership review
-LAST_ACCEPTED_COMMIT: `0828bb7ea` (Phase 14C14b code)
+CURRENT_SLICE: Phase 14C14d frontend-preparation and filesystem-identity unit ownership review
+LAST_ACCEPTED_COMMIT: `afa944551` (Phase 14C14c code)
 WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; accepted code is committed; concurrent example-name work remains separately committed
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: unit-test ownership, pruning, compiler-stage boundaries, and final governance rules govern the next slice
-- code: HIR and borrow-checker ownership plus Stage 0 source-index, config, discovery, topology, collision, and source-kind groups are complete; source-loading/provider orchestration is the final Stage 0 group before wider build policy
+- code: all 91 Stage 0 source-index, config, discovery, topology, collision, source-kind, loading, and provider-orchestration units now have owners; deterministic frontend preparation and filesystem identity are next
 ACCEPTANCE_CRITERIA:
 - every remaining full-source unit has a distinct hidden invariant, parser fact, stage boundary, or policy owner
 - units superseded by a stronger canonical integration primary are deleted with replacement evidence
@@ -51,7 +51,7 @@ BLOCKERS_OR_OPEN_DECISIONS: none; 81 contract families without a primary are int
 DELEGATION_DECISION: Ollama — bounded Phase 14 implementation slices
 NEXT_WORKER_ORDER: Ollama only; no provider substitution
 STOP_REASON: none
-NEXT_RESUME_ACTION: launch the Stage 0 source-loading and provider-orchestration unit group through Ollama
+NEXT_RESUME_ACTION: launch the frontend-preparation and filesystem-identity unit group through Ollama
 
 ---
 
@@ -233,7 +233,8 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 14C12 HIR display and validation units | `fcb30e1ac` | Accepted | Three collection-type display tests removed in favor of exact datatype display owners; the final-caller helper and obsolete test-only `with_type_environment` exposure were removed; six HIR-only display vocabulary owners and all 40 malformed/positive validator owners retained; 3,496 Rust tests and 1,793 integration executions |
 | Phase 14C13 borrow-checker units | `dac197185` | Accepted | All 50 call-summary, fact, loop, pipeline, reactivity, scope, and advisory drop-site units retained as transfer, side-table, fixed-point, join, origin, invalidation, boundary, and malformed-HIR owners; one duplicate drop-site HIR fixture lowerer was consolidated onto the shared owner; 3,496 Rust tests and 1,793 integration executions |
 | Phase 14C14a Stage 0 source-index and config units | `6783f9822` | Accepted | Four config rejection units removed in favor of canonical primary/boundary cases while focused units retain their typed config or constant-evaluation reasons; configured-skip coverage moved solely to its canonical primary while the unit retains fixed-skip index policy; plain and mutable config binding modes share one typed-reason owner; 34 assigned source-index/config units remain; 3,492 Rust tests and 1,793 integration executions |
-| Phase 14C14b Stage 0 discovery and topology units | `0828bb7ea` | Accepted | Eight duplicate, cosmetic config-shape, and generic mixed-collection units removed in favor of identical focused owners or canonical cases; entry-root fallback now proves the same-stem package file is excluded; retained string and bool shape units assert the exact expected-shape payload; 47 assigned graph, config, topology, collision, and source-kind policy owners remain; 3,484 Rust tests and 1,793 integration executions |
+| Phase 14C14b Stage 0 discovery and topology units | `0828bb7ea` | Accepted | Eight duplicate, cosmetic config-shape, and generic mixed-collection units removed in favor of identical focused owners or canonical cases; entry-root fallback now proves the same-stem package file is excluded; retained string and bool shape units assert the exact expected-shape payload; 46 assigned graph, config, topology, collision, and source-kind policy owners remain; 3,484 Rust tests and 1,793 integration executions |
+| Phase 14C14c Stage 0 source loading and provider orchestration | `afa944551` | Accepted | All 11 source-kind diagnostic, one-read cache, deterministic ordering, infrastructure error, provider separation/call-count, parallel/serial strategy, and cross-module-root queuing units retained as hidden Stage 0 owners; Markdown explicit-extension and unsupported-kind units now assert exact typed path and extension payloads; 3,484 Rust tests and 1,793 integration executions |
 
 ---
 
