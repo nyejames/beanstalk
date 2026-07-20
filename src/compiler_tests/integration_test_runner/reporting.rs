@@ -4,7 +4,7 @@
 //!       stable output shapes.
 //! WHY: keeping reporting here means the runner only coordinates loading, selection and execution.
 
-use super::types::SuccessContract;
+use super::types::{DiagnosticMatchMode, SuccessContract};
 use super::{
     BackendId, CaseExecutionResult, CaseRole, ExpectedOutcome, FailureExpectation, FailureKind,
     FailureTriageEntry, FailureTriageReport, SEPARATOR_LINE_LENGTH, SuccessExpectation,
@@ -23,7 +23,7 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
-const SUITE_INVENTORY_SCHEMA_VERSION: u32 = 2;
+const SUITE_INVENTORY_SCHEMA_VERSION: u32 = 3;
 
 pub(crate) fn format_case_listing(cases: &[TestCaseSpec]) -> String {
     if cases.is_empty() {
@@ -120,7 +120,8 @@ pub(crate) struct InventoryBackend {
     pub baseline_applied: bool,
     pub acceptance_only: bool,
     pub warning_mode: &'static str,
-    pub diagnostic_match: Option<&'static str>,
+    pub diagnostic_match: Option<DiagnosticMatchMode>,
+    pub diagnostic_match_reason: Option<String>,
     pub structured_diagnostic_assertions: bool,
     pub assertion_kinds: Vec<&'static str>,
     pub golden_mode: Option<&'static str>,
@@ -217,6 +218,7 @@ fn build_backend_inventory(case: &TestCaseSpec) -> InventoryBackend {
             acceptance_only: expectation.success_contract == Some(SuccessContract::AcceptanceOnly),
             warning_mode: warning_mode_label(expectation.warnings),
             diagnostic_match: None,
+            diagnostic_match_reason: None,
             structured_diagnostic_assertions: false,
             assertion_kinds: success_assertion_kinds(case, expectation),
             golden_mode: expectation.golden.mode.map(golden_mode_label),
@@ -232,7 +234,8 @@ fn build_backend_inventory(case: &TestCaseSpec) -> InventoryBackend {
             baseline_applied: false,
             acceptance_only: false,
             warning_mode: warning_mode_label(expectation.warnings),
-            diagnostic_match: Some("contains"),
+            diagnostic_match: Some(expectation.diagnostic_match),
+            diagnostic_match_reason: expectation.diagnostic_match_reason.clone(),
             structured_diagnostic_assertions: false,
             assertion_kinds: failure_assertion_kinds(expectation),
             golden_mode: None,

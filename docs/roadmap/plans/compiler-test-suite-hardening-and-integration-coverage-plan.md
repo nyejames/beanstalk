@@ -30,27 +30,27 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 3B — exact diagnostic code multisets
-LAST_ACCEPTED_COMMIT: `1b97b360b` (Phase 2E)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 3A module split ready to commit; no unrelated worktree changes currently visible
+CURRENT_SLICE: Phase 3C — warning identity
+LAST_ACCEPTED_COMMIT: pending Phase 3B checkpoint
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 3B exact diagnostic slice is ready to commit; no unrelated changes currently visible
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: `index.md` points to the new assertion-family owner tree; testing guidance remains current through Phase 2 and needs Phase 3 exact-mode wording at phase closure
-- code: `assertions/diagnostics.rs` now solely owns current diagnostic containment/rendered-message checks; Phase 3B adds typed exact/contains multiset semantics without duplicating compiler diagnostic identity
+- docs: testing guidance remains current through Phase 2 and needs diagnostic/warning exact-mode wording at Phase 3 closure
+- code: `assertions/warnings.rs`, `WarningExpectation`, expectation parsing, fixture threading, and reporting own current forbid/ignore/count-only exact warning behavior
 ACCEPTANCE_CRITERIA:
-- add `DiagnosticMatchMode::{Exact, Contains}` with exact as the canonical default
-- compare unordered code multisets with duplicate counts and distinct missing, unexpected, and count-mismatch reports
-- require a non-empty authored reason for contains mode, reject a reason in exact mode, and keep `message_contains` additive
-- cover exact success, unexpected extras, duplicate mismatches, and justified contains before audit and the full gate
+- preserve warning forbid/ignore behavior while replacing count-only exact warnings with exact warning-code multisets
+- keep transitional count consistency explicit until canonical warning expectations are migrated, then delete the obsolete count-only schema in the planned migration
+- report missing and unexpected warning codes and cover successful and failed compilation result lanes
+- pass focused harness tests, audit, integration execution, and the full gate
 VALIDATION_STATE:
-- `just validate`: passed for Phase 3A; cross-target Clippy, 3,511 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
-- `cargo run --quiet -- tests --audit`: passed; 1,645 cases, 1,778 executions, 13 acceptance-only, zero baseline-only, 548 rendered-output, 267 artifact, and zero hard findings
+- `just validate`: passed for Phase 3B; cross-target Clippy, 3,523 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
+- `cargo run --quiet -- tests --audit`: passed for Phase 3B; 1,645 cases, 1,778 executions, and zero hard findings
 DOCS_IMPACT: `index.md` updated for the moved assertion module tree; progress matrix unchanged
-BLOCKERS_OR_OPEN_DECISIONS: reviewed Ollama wrapper cleanly blocked before edits because it still requires removed `docs/codebase-style-guide.md`; Phase 3B can use the configured fallback
-DELEGATION_DECISION: codex-cli fallback — Ollama remains preferred but its wrapper preflight is stale
+BLOCKERS_OR_OPEN_DECISIONS: Ollama wrapper still requires removed `docs/codebase-style-guide.md`; 19 justified diagnostic-contains blocks record duplicate module compilation that the queued canonical-module plan must remove
+DELEGATION_DECISION: undecided — inspect current warning schema and canonical exact-warning inventory after committing Phase 3B
 NEXT_WORKER_ORDER: codex-cli, then parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit accepted Phase 3A, refresh its hash, then inspect and launch bounded Phase 3B through `codex-cli-beanstalk`
+NEXT_RESUME_ACTION: commit accepted Phase 3B, refresh its hash, then inspect and launch bounded Phase 3C
 
 ---
 
@@ -149,7 +149,8 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 2D3d const-record contracts | `b7a60487d` | Accepted | 13 acceptance-only; 3 baseline-only; 545 rendered-output; 267 artifact; zero hard findings |
 | Phase 2D3e final baseline contracts | `5ae591167` | Accepted | 13 acceptance-only; zero baseline-only; 548 rendered-output; 267 artifact; zero hard findings |
 | Phase 2E authored completeness enforcement | `1b97b360b` | Accepted | 3,511 Rust tests; 1,645 cases and 1,778 executions; 13 acceptance-only; zero baseline-only; zero hard findings |
-| Phase 3A assertion ownership split | pending acceptance commit | Accepted | Seven assertion-family modules; 27 focused assertion tests; 3,511 Rust tests; 1,778 integration executions |
+| Phase 3A assertion ownership split | `e86a5d660` | Accepted | Seven assertion-family modules; 27 focused assertion tests; 3,511 Rust tests; 1,778 integration executions |
+| Phase 3B exact diagnostic multisets | pending acceptance commit | Accepted | Exact default with duplicate counts; 19 justified contains backend blocks; 3,523 Rust tests; 1,778 integration executions |
 
 ---
 
@@ -702,14 +703,14 @@ assertions/
 
 ## 3B — Exact diagnostic code multisets
 
-- [ ] Add typed `DiagnosticMatchMode::{Exact, Contains}`.
-- [ ] Make exact the canonical default.
-- [ ] Compare unordered code multisets including duplicate counts.
-- [ ] Report missing, unexpected, and count-mismatched codes separately.
-- [ ] Require an authored reason for contains mode.
-- [ ] Reject a contains reason in exact mode.
-- [ ] Preserve `message_contains` only as an additional rendering contract.
-- [ ] Add self-tests for exact success, unexpected extra, duplicate mismatch, and justified contains.
+- [x] Add typed `DiagnosticMatchMode::{Exact, Contains}`.
+- [x] Make exact the canonical default.
+- [x] Compare unordered code multisets including duplicate counts.
+- [x] Report missing, unexpected, and count-mismatched codes separately.
+- [x] Require an authored reason for contains mode.
+- [x] Reject a contains reason in exact mode.
+- [x] Preserve `message_contains` only as an additional rendering contract.
+- [x] Add self-tests for exact success, unexpected extra, duplicate mismatch, and justified contains.
 
 ## 3C — Warning identity
 

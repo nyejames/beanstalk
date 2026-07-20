@@ -5,7 +5,7 @@
 
 use super::super::expectations::parse_expectation_file;
 use super::super::fixture::load_canonical_case_specs;
-use super::super::types::SuccessContract;
+use super::super::types::{DiagnosticMatchMode, SuccessContract};
 use super::super::{EXPECT_FILE_NAME, ExpectedOutcome, GOLDEN_DIR_NAME, INPUT_DIR_NAME};
 use crate::compiler_tests::test_support::temp_dir;
 use std::fs;
@@ -37,6 +37,106 @@ fn accepts_explicit_acceptance_only_and_retains_typed_intent() {
     assert_eq!(
         expectation.success_contract,
         Some(SuccessContract::AcceptanceOnly)
+    );
+
+    fs::remove_dir_all(&root).expect("should clean up");
+}
+
+#[test]
+fn failure_diagnostic_match_defaults_to_exact_and_is_retained() {
+    let (root, case_root) = write_fixture(
+        "default_diagnostic_match",
+        "[backends.html]\nmode = \"failure\"\nwarnings = \"forbid\"\ndiagnostic_codes = [\"BST-RULE-0001\"]\n",
+    );
+
+    let cases = load_canonical_case_specs(&case_root, None)
+        .expect("failure fixture should use exact diagnostic matching by default");
+    let super::super::types::ExpectedOutcome::Failure(expectation) = &cases[0].expected else {
+        panic!("case should have a failure expectation");
+    };
+    assert_eq!(expectation.diagnostic_match, DiagnosticMatchMode::Exact);
+    assert_eq!(expectation.diagnostic_match_reason, None);
+
+    fs::remove_dir_all(&root).expect("should clean up");
+}
+
+#[test]
+fn justified_contains_diagnostic_match_is_retained() {
+    let (root, case_root) = write_fixture(
+        "contains_diagnostic_match",
+        "[backends.html]\nmode = \"failure\"\nwarnings = \"forbid\"\ndiagnostic_codes = [\"BST-RULE-0001\"]\ndiagnostic_match = \"contains\"\ndiagnostic_match_reason = \"independent recovery\"\n",
+    );
+
+    let cases = load_canonical_case_specs(&case_root, None)
+        .expect("justified contains matching should be accepted");
+    let super::super::types::ExpectedOutcome::Failure(expectation) = &cases[0].expected else {
+        panic!("case should have a failure expectation");
+    };
+    assert_eq!(expectation.diagnostic_match, DiagnosticMatchMode::Contains);
+    assert_eq!(
+        expectation.diagnostic_match_reason.as_deref(),
+        Some("independent recovery")
+    );
+
+    fs::remove_dir_all(&root).expect("should clean up");
+}
+
+#[test]
+fn contains_diagnostic_match_requires_non_blank_reason() {
+    for (name, reason) in [("missing", None), ("blank", Some("   "))] {
+        let reason_line = reason.map_or_else(String::new, |value| {
+            format!("diagnostic_match_reason = \"{value}\"\n")
+        });
+        let (root, case_root) = write_fixture(
+            &format!("contains_without_reason_{name}"),
+            &format!(
+                "[backends.html]\nmode = \"failure\"\nwarnings = \"forbid\"\ndiagnostic_codes = [\"BST-RULE-0001\"]\ndiagnostic_match = \"contains\"\n{reason_line}"
+            ),
+        );
+
+        let Err(error) = load_canonical_case_specs(&case_root, None) else {
+            panic!("contains matching without a non-blank reason should be rejected");
+        };
+        assert!(
+            error.contains("diagnostic_match_reason") && error.contains("contains"),
+            "unexpected error: {error}"
+        );
+
+        fs::remove_dir_all(&root).expect("should clean up");
+    }
+}
+
+#[test]
+fn exact_diagnostic_match_rejects_authored_reason() {
+    let (root, case_root) = write_fixture(
+        "exact_diagnostic_match_reason",
+        "[backends.html]\nmode = \"failure\"\nwarnings = \"forbid\"\ndiagnostic_codes = [\"BST-RULE-0001\"]\ndiagnostic_match = \"exact\"\ndiagnostic_match_reason = \"not allowed\"\n",
+    );
+
+    let Err(error) = load_canonical_case_specs(&case_root, None) else {
+        panic!("exact matching with a reason should be rejected");
+    };
+    assert!(
+        error.contains("diagnostic_match_reason") && error.contains("exact"),
+        "unexpected error: {error}"
+    );
+
+    fs::remove_dir_all(&root).expect("should clean up");
+}
+
+#[test]
+fn diagnostic_match_fields_are_failure_only() {
+    let (root, case_root) = write_fixture(
+        "success_diagnostic_match_field",
+        "[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\ndiagnostic_match = \"exact\"\nrendered_output_contains = [\"ok\"]\n",
+    );
+
+    let Err(error) = load_canonical_case_specs(&case_root, None) else {
+        panic!("diagnostic_match should be rejected on success expectations");
+    };
+    assert!(
+        error.contains("failure-only") && error.contains("diagnostic_match"),
+        "unexpected error: {error}"
     );
 
     fs::remove_dir_all(&root).expect("should clean up");

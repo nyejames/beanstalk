@@ -10,8 +10,8 @@ use super::super::assertions::{
 };
 use super::super::types::{GoldenExpectation, SuccessContract};
 use super::super::{
-    BackendId, ExpectedOutcome, FailureExpectation, FailureKind, GoldenMode, SuccessExpectation,
-    TestCaseSpec, WarningExpectation,
+    BackendId, DiagnosticMatchMode, ExpectedOutcome, FailureExpectation, FailureKind, GoldenMode,
+    SuccessExpectation, TestCaseSpec, WarningExpectation,
 };
 use crate::build_system::build::{BuildResult, CleanupPolicy, FileKind, OutputFile, Project};
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerMessages;
@@ -42,6 +42,48 @@ fn test_location(path: InternedPath) -> SourceLocation {
     )
 }
 
+fn diagnostic_messages(codes: &[&str]) -> CompilerMessages {
+    let mut string_table = StringTable::new();
+    let source_path = InternedPath::from_single_str("main.bst", &mut string_table);
+    let diagnostics = codes
+        .iter()
+        .map(|code| match *code {
+            "BST-RULE-0044" => CompilerDiagnostic::invalid_assignment_target(
+                InvalidAssignmentTargetReason::ImmutableBinding,
+                None,
+                None,
+                None,
+                None,
+                None,
+                test_location(source_path.clone()),
+            ),
+            "BST-SYNTAX-0003" => {
+                CompilerDiagnostic::unexpected_trailing_comma(test_location(source_path.clone()))
+            }
+            other => panic!("test diagnostic code is not constructed: {other}"),
+        })
+        .collect();
+
+    CompilerMessages::from_diagnostics(diagnostics, string_table)
+}
+
+fn diagnostic_expectation(
+    expected_codes: &[&str],
+    diagnostic_match: DiagnosticMatchMode,
+    diagnostic_match_reason: Option<&str>,
+) -> FailureExpectation {
+    FailureExpectation {
+        warnings: WarningExpectation::Ignore,
+        message_contains: Vec::new(),
+        diagnostic_codes: expected_codes
+            .iter()
+            .map(|code| (*code).to_owned())
+            .collect(),
+        diagnostic_match,
+        diagnostic_match_reason: diagnostic_match_reason.map(str::to_owned),
+    }
+}
+
 #[test]
 fn failure_message_contains_uses_structured_render_output() {
     let mut string_table = StringTable::new();
@@ -60,6 +102,8 @@ fn failure_message_contains_uses_structured_render_output() {
     let expectation = FailureExpectation {
         warnings: WarningExpectation::Ignore,
         diagnostic_codes: vec!["BST-RULE-0044".to_string()],
+        diagnostic_match: DiagnosticMatchMode::Exact,
+        diagnostic_match_reason: None,
         message_contains: vec!["Cannot reassign `value`".to_string()],
     };
 
@@ -90,6 +134,8 @@ fn failure_message_contains_includes_rendered_label_text() {
     let expectation = FailureExpectation {
         warnings: WarningExpectation::Ignore,
         diagnostic_codes: vec!["BST-RULE-0044".to_string()],
+        diagnostic_match: DiagnosticMatchMode::Exact,
+        diagnostic_match_reason: None,
         message_contains: vec!["secondary context lives here".to_string()],
     };
 
@@ -106,6 +152,117 @@ fn failure_message_contains_stays_on_typed_render_output() {
         !DIAGNOSTICS_SOURCE.contains(&removed_conversion_name),
         "failure message assertions must stay on typed render-boundary output",
     );
+}
+
+#[test]
+fn exact_diagnostic_matching_ignores_order() {
+    let messages = diagnostic_messages(&["BST-SYNTAX-0003", "BST-RULE-0044"]);
+    let expectation = diagnostic_expectation(
+        &["BST-RULE-0044", "BST-SYNTAX-0003"],
+        DiagnosticMatchMode::Exact,
+        None,
+    );
+
+    let result = validate_failure_result(messages, &expectation);
+
+    assert!(result.passed, "{:?}", result.failure_reason);
+}
+
+#[test]
+fn exact_diagnostic_matching_reports_unexpected_extra() {
+    let messages = diagnostic_messages(&["BST-RULE-0044", "BST-SYNTAX-0003"]);
+    let expectation = diagnostic_expectation(&["BST-RULE-0044"], DiagnosticMatchMode::Exact, None);
+
+    let result = validate_failure_result(messages, &expectation);
+    let reason = result
+        .failure_reason
+        .expect("unexpected diagnostic should fail matching");
+
+    assert!(
+        reason.contains("Unexpected codes: BST-SYNTAX-0003"),
+        "{reason}"
+    );
+    assert!(!reason.contains("Missing codes"), "{reason}");
+}
+
+#[test]
+fn exact_diagnostic_matching_reports_duplicate_count_mismatch() {
+    let messages = diagnostic_messages(&["BST-RULE-0044", "BST-RULE-0044"]);
+    let expectation = diagnostic_expectation(&["BST-RULE-0044"], DiagnosticMatchMode::Exact, None);
+
+    let result = validate_failure_result(messages, &expectation);
+    let reason = result
+        .failure_reason
+        .expect("duplicate diagnostic should fail matching");
+
+    assert!(reason.contains("Count-mismatched codes"), "{reason}");
+    assert!(reason.contains("expected 1, actual 2"), "{reason}");
+    assert!(!reason.contains("Unexpected codes"), "{reason}");
+}
+
+#[test]
+fn exact_diagnostic_matching_keeps_missing_and_unexpected_categories_distinct() {
+    let messages = diagnostic_messages(&["BST-SYNTAX-0003"]);
+    let expectation = diagnostic_expectation(&["BST-RULE-0044"], DiagnosticMatchMode::Exact, None);
+
+    let result = validate_failure_result(messages, &expectation);
+    let reason = result
+        .failure_reason
+        .expect("different diagnostic should fail matching");
+
+    assert!(reason.contains("Missing codes: BST-RULE-0044"), "{reason}");
+    assert!(
+        reason.contains("Unexpected codes: BST-SYNTAX-0003"),
+        "{reason}"
+    );
+    assert!(!reason.contains("Count-mismatched codes"), "{reason}");
+}
+
+#[test]
+fn justified_contains_matching_accepts_extra_diagnostics() {
+    let messages = diagnostic_messages(&["BST-RULE-0044", "BST-SYNTAX-0003"]);
+    let expectation = diagnostic_expectation(
+        &["BST-RULE-0044"],
+        DiagnosticMatchMode::Contains,
+        Some("independent parser recovery can emit a second diagnostic"),
+    );
+
+    let result = validate_failure_result(messages, &expectation);
+
+    assert!(result.passed, "{:?}", result.failure_reason);
+}
+
+#[test]
+fn justified_contains_matching_accepts_extra_expected_code_occurrences() {
+    let messages = diagnostic_messages(&["BST-RULE-0044", "BST-RULE-0044"]);
+    let expectation = diagnostic_expectation(
+        &["BST-RULE-0044"],
+        DiagnosticMatchMode::Contains,
+        Some("independent recovery may repeat this diagnostic"),
+    );
+
+    let result = validate_failure_result(messages, &expectation);
+
+    assert!(result.passed, "{:?}", result.failure_reason);
+}
+
+#[test]
+fn contains_matching_requires_every_expected_occurrence() {
+    let messages = diagnostic_messages(&["BST-RULE-0044"]);
+    let expectation = diagnostic_expectation(
+        &["BST-RULE-0044", "BST-RULE-0044"],
+        DiagnosticMatchMode::Contains,
+        Some("two independent sites must report the same diagnostic"),
+    );
+
+    let result = validate_failure_result(messages, &expectation);
+    let reason = result
+        .failure_reason
+        .expect("a missing expected occurrence should fail matching");
+
+    assert!(reason.contains("Count-mismatched codes"), "{reason}");
+    assert!(reason.contains("expected 2, actual 1"), "{reason}");
+    assert!(!reason.contains("Unexpected codes"), "{reason}");
 }
 
 // ─── Normalization unit tests ───────────────────────────────────────────────

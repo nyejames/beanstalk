@@ -4,7 +4,7 @@
 //! WHY: isolating TOML parsing here keeps fixture loading free of deserialization details and
 //!      makes expectation format changes easy to find and update.
 
-use super::types::SuccessContract;
+use super::types::{DiagnosticMatchMode, SuccessContract};
 use super::{
     ArtifactAssertion, ArtifactKind, BackendId, ExpectationMode, GoldenMode,
     ParsedBackendExpectation, ParsedExpectationFile, WarningExpectation,
@@ -47,6 +47,8 @@ struct BackendExpectationToml {
     message_contains: Vec<String>,
     #[serde(default)]
     diagnostic_codes: Vec<String>,
+    diagnostic_match: Option<String>,
+    diagnostic_match_reason: Option<String>,
     #[serde(default)]
     artifact_assertions: Vec<ArtifactAssertionToml>,
     golden_mode: Option<String>,
@@ -160,6 +162,19 @@ fn parse_matrix_expectation_file(
             &context,
             backend_expectation.success_contract.as_deref(),
         )?;
+        let diagnostic_match = parse_diagnostic_match_mode(
+            path,
+            &context,
+            backend_expectation.diagnostic_match.as_deref(),
+        )?;
+        if backend_expectation.mode == ExpectationMode::Failure {
+            validate_diagnostic_match_reason(
+                path,
+                &context,
+                diagnostic_match.unwrap_or(DiagnosticMatchMode::Exact),
+                backend_expectation.diagnostic_match_reason.as_deref(),
+            )?;
+        }
 
         if backend_expectation.mode == ExpectationMode::Failure && success_contract.is_some() {
             return Err(format!(
@@ -243,6 +258,8 @@ fn parse_matrix_expectation_file(
             success_contract,
             message_contains: backend_expectation.message_contains,
             diagnostic_codes: backend_expectation.diagnostic_codes,
+            diagnostic_match,
+            diagnostic_match_reason: backend_expectation.diagnostic_match_reason,
             artifact_assertions,
             golden_mode,
             rendered_output_contains: backend_expectation.rendered_output_contains,
@@ -465,6 +482,46 @@ fn parse_success_contract(
             path.display(),
             context
         )),
+    }
+}
+
+fn parse_diagnostic_match_mode(
+    path: &Path,
+    context: &str,
+    raw: Option<&str>,
+) -> Result<Option<DiagnosticMatchMode>, String> {
+    match raw {
+        None => Ok(None),
+        Some("exact") => Ok(Some(DiagnosticMatchMode::Exact)),
+        Some("contains") => Ok(Some(DiagnosticMatchMode::Contains)),
+        Some(other) => Err(format!(
+            "Expectation file '{}' {} has unsupported diagnostic_match '{}'. Supported values: \"exact\", \"contains\".",
+            path.display(),
+            context,
+            other
+        )),
+    }
+}
+
+fn validate_diagnostic_match_reason(
+    path: &Path,
+    context: &str,
+    mode: DiagnosticMatchMode,
+    reason: Option<&str>,
+) -> Result<(), String> {
+    match (mode, reason) {
+        (DiagnosticMatchMode::Contains, Some(reason)) if !reason.trim().is_empty() => Ok(()),
+        (DiagnosticMatchMode::Contains, _) => Err(format!(
+            "Expectation file '{}' {} uses diagnostic_match = \"contains\" and requires a non-empty 'diagnostic_match_reason'.",
+            path.display(),
+            context
+        )),
+        (DiagnosticMatchMode::Exact, Some(_)) => Err(format!(
+            "Expectation file '{}' {} uses diagnostic_match = \"exact\" and must not set 'diagnostic_match_reason'.",
+            path.display(),
+            context
+        )),
+        (DiagnosticMatchMode::Exact, None) => Ok(()),
     }
 }
 

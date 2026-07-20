@@ -9,9 +9,10 @@ use super::path_validation::{CurrentDirectoryRule, validate_relative_path};
 use super::types::GoldenExpectation;
 use super::types::SuccessContract;
 use super::{
-    BackendId, CANONICAL_TESTS_PATH, EXPECT_FILE_NAME, ExpectationMode, ExpectedOutcome,
-    FailureExpectation, GOLDEN_DIR_NAME, INPUT_DIR_NAME, MANIFEST_FILE_NAME, ManifestCaseSpec,
-    ParsedExpectationFile, SuccessExpectation, TestCaseSpec, TestSuiteSpec, WarningExpectation,
+    BackendId, CANONICAL_TESTS_PATH, DiagnosticMatchMode, EXPECT_FILE_NAME, ExpectationMode,
+    ExpectedOutcome, FailureExpectation, GOLDEN_DIR_NAME, INPUT_DIR_NAME, MANIFEST_FILE_NAME,
+    ManifestCaseSpec, ParsedExpectationFile, SuccessExpectation, TestCaseSpec, TestSuiteSpec,
+    WarningExpectation,
 };
 use crate::compiler_frontend::Flag;
 use std::collections::HashSet;
@@ -289,6 +290,10 @@ fn load_canonical_case_specs_at(
                 warnings: backend_expectation.warnings,
                 message_contains: backend_expectation.message_contains,
                 diagnostic_codes: backend_expectation.diagnostic_codes,
+                diagnostic_match: backend_expectation
+                    .diagnostic_match
+                    .unwrap_or(DiagnosticMatchMode::Exact),
+                diagnostic_match_reason: backend_expectation.diagnostic_match_reason,
             }),
         };
 
@@ -394,9 +399,11 @@ fn validate_fixture_contract(
                 }
                 if !backend_expectation.message_contains.is_empty()
                     || !backend_expectation.diagnostic_codes.is_empty()
+                    || backend_expectation.diagnostic_match.is_some()
+                    || backend_expectation.diagnostic_match_reason.is_some()
                 {
                     return Err(format!(
-                        "Fixture '{}' backend '{}' uses mode = \"success\" and must not set failure-only keys ('diagnostic_codes'/'message_contains').",
+                        "Fixture '{}' backend '{}' uses mode = \"success\" and must not set failure-only keys ('diagnostic_codes'/'message_contains'/'diagnostic_match'/'diagnostic_match_reason').",
                         fixture_root.display(),
                         backend_expectation.backend_id.as_str()
                     ));

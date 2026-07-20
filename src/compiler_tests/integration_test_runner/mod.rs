@@ -24,11 +24,11 @@ pub(crate) use runner::{normalize_relative_path, normalize_relative_path_text};
 pub use types::IntegrationRunSummary;
 
 pub(crate) use types::{
-    ArtifactAssertion, ArtifactKind, BackendId, CaseExecutionResult, CaseRole, ExpectationMode,
-    ExpectedOutcome, FailureExpectation, FailureKind, FailureTriageEntry, FailureTriageReport,
-    GoldenMode, ManifestCaseSpec, ParsedBackendExpectation, ParsedExpectationFile, SuccessContract,
-    SuccessExpectation, SummaryCounts, TestCaseSpec, TestRunnerOptions, TestSuiteSpec,
-    WarningExpectation,
+    ArtifactAssertion, ArtifactKind, BackendId, CaseExecutionResult, CaseRole, DiagnosticMatchMode,
+    ExpectationMode, ExpectedOutcome, FailureExpectation, FailureKind, FailureTriageEntry,
+    FailureTriageReport, GoldenMode, ManifestCaseSpec, ParsedBackendExpectation,
+    ParsedExpectationFile, SuccessContract, SuccessExpectation, SummaryCounts, TestCaseSpec,
+    TestRunnerOptions, TestSuiteSpec, WarningExpectation,
 };
 
 pub(crate) use policy::{PolicyEvaluation, PolicyFinding};

@@ -92,6 +92,24 @@ pub(crate) struct FailureExpectation {
     pub warnings: WarningExpectation,
     pub message_contains: Vec<String>,
     pub diagnostic_codes: Vec<String>,
+    pub diagnostic_match: DiagnosticMatchMode,
+    pub diagnostic_match_reason: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum DiagnosticMatchMode {
+    Exact,
+    Contains,
+}
+
+impl DiagnosticMatchMode {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Exact => "exact",
+            Self::Contains => "contains",
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -351,6 +369,8 @@ pub(crate) struct ParsedBackendExpectation {
     pub success_contract: Option<SuccessContract>,
     pub message_contains: Vec<String>,
     pub diagnostic_codes: Vec<String>,
+    pub diagnostic_match: Option<DiagnosticMatchMode>,
+    pub diagnostic_match_reason: Option<String>,
     pub artifact_assertions: Vec<ArtifactAssertion>,
     pub golden_mode: Option<GoldenMode>,
     pub rendered_output_contains: Vec<String>,

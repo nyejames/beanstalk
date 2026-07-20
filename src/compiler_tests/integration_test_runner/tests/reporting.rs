@@ -7,8 +7,8 @@ use super::super::policy::evaluate_suite;
 use super::super::reporting::{build_suite_inventory_report, format_case_listing};
 use super::super::types::{GoldenExpectation, SuccessContract};
 use super::super::{
-    BackendId, CaseRole, ExpectedOutcome, FailureExpectation, SuccessExpectation, TestCaseSpec,
-    TestSuiteSpec, WarningExpectation,
+    BackendId, CaseRole, DiagnosticMatchMode, ExpectedOutcome, FailureExpectation,
+    SuccessExpectation, TestCaseSpec, TestSuiteSpec, WarningExpectation,
 };
 use std::path::PathBuf;
 
@@ -58,6 +58,8 @@ fn listing_groups_selected_backends_and_retains_case_metadata() {
                 warnings: WarningExpectation::Forbid,
                 message_contains: Vec::new(),
                 diagnostic_codes: vec!["BST-RULE-0001".to_owned()],
+                diagnostic_match: DiagnosticMatchMode::Contains,
+                diagnostic_match_reason: Some("independent recovery".to_owned()),
             }),
         ),
         case(
@@ -70,6 +72,8 @@ fn listing_groups_selected_backends_and_retains_case_metadata() {
                 warnings: WarningExpectation::Forbid,
                 message_contains: Vec::new(),
                 diagnostic_codes: vec!["BST-RULE-0001".to_owned()],
+                diagnostic_match: DiagnosticMatchMode::Contains,
+                diagnostic_match_reason: Some("independent recovery".to_owned()),
             }),
         ),
     ]);
@@ -108,6 +112,8 @@ fn inventory_json_groups_backend_metadata_under_one_canonical_case() {
             warnings: WarningExpectation::Forbid,
             message_contains: Vec::new(),
             diagnostic_codes: vec!["BST-RULE-0001".to_owned()],
+            diagnostic_match: DiagnosticMatchMode::Contains,
+            diagnostic_match_reason: Some("independent recovery".to_owned()),
         }),
     );
     let wasm_case = case(
@@ -130,7 +136,7 @@ fn inventory_json_groups_backend_metadata_under_one_canonical_case() {
     let report = report_for_cases(&[html_case, wasm_case], Some("0123456789abcdef".to_owned()));
     let json = serde_json::to_value(&report).expect("inventory should serialize");
 
-    assert_eq!(json["schema_version"], 2);
+    assert_eq!(json["schema_version"], 3);
     assert_eq!(json["repository_commit"], "0123456789abcdef");
     assert_eq!(json["manifest_case_count"], 1);
     assert_eq!(json["expanded_backend_execution_count"], 2);
@@ -146,6 +152,10 @@ fn inventory_json_groups_backend_metadata_under_one_canonical_case() {
     assert_eq!(
         json["cases"][0]["backends"][0]["diagnostic_match"],
         "contains"
+    );
+    assert_eq!(
+        json["cases"][0]["backends"][0]["diagnostic_match_reason"],
+        "independent recovery"
     );
     assert_eq!(json["cases"][0]["backends"][1]["backend"], "html_wasm");
     assert_eq!(json["cases"][0]["backends"][1]["baseline_applied"], true);
