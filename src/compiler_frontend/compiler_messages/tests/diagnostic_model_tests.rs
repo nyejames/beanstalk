@@ -16,7 +16,7 @@ use super::{
     InvalidTypeAnnotationReason, MissingWhitespace, NameNamespace, NumberLiteralErrorReason,
     PathKind, ReceiverCallKind, RuleDiagnosticKind, SymbolicSpacingConstruct, SymbolicSpacingError,
     SyntaxDiagnosticKind, TypeAnnotationContext, TypeDiagnosticKind, TypeMismatchContext,
-    UnsupportedOperatorCategory,
+    UnsupportedOperatorCategory, is_well_formed_reason_key,
 };
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_messages::render::{
@@ -279,20 +279,36 @@ fn every_authored_stable_reason_key_is_unique_and_well_formed() {
     );
 
     for key in keys {
-        let segments: Vec<&str> = key.split('.').collect();
-
         assert!(
-            segments.len() >= 2,
-            "stable reason key '{key}' must be qualified",
+            is_well_formed_reason_key(key),
+            "stable reason key '{key}' must use the qualified lower-snake-case format",
         );
+    }
+}
+
+#[test]
+fn stable_reason_key_format_rejects_unqualified_or_noncanonical_keys() {
+    for key in [
+        "invalid_expression.expected_operator",
+        "invalid_expression.operand_2_missing",
+    ] {
+        assert!(is_well_formed_reason_key(key), "key should be valid: {key}");
+    }
+
+    for key in [
+        "unqualified",
+        "Invalid_expression.expected_operator",
+        "invalid_expression.Expected_operator",
+        "invalid_expression._expected_operator",
+        "invalid_expression.expected__operator",
+        "invalid_expression.expected_operator_",
+        "invalid-expression.expected_operator",
+        "invalid_expression.expected operator",
+        "invalid_expression.",
+    ] {
         assert!(
-            segments.iter().all(|segment| {
-                !segment.is_empty()
-                    && segment
-                        .chars()
-                        .all(|character| character.is_ascii_lowercase() || character == '_')
-            }),
-            "stable reason key '{key}' must use non-empty lowercase snake-case segments",
+            !is_well_formed_reason_key(key),
+            "key should be rejected: {key}"
         );
     }
 }

@@ -1864,7 +1864,6 @@ impl CompilerDiagnostic {
     ///
     /// The descriptor remains the sole code authority and `severity` is the actual severity on
     /// this diagnostic, including deliberate overrides. The payload owns the optional reason key.
-    #[allow(dead_code)]
     pub(crate) fn identity(&self) -> DiagnosticIdentity {
         DiagnosticIdentity::new(self.kind.descriptor().code, self.severity, &self.payload)
     }

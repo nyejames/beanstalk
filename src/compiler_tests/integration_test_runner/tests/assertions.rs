@@ -8,7 +8,10 @@ use super::super::assertions::{
     validate_failure_result, validate_golden_outputs, validate_rendered_output_fragments,
     validate_success_result,
 };
-use super::super::types::{ExactWarningExpectation, GoldenExpectation, SuccessContract};
+use super::super::types::{
+    DiagnosticAssertion, ExactWarningExpectation, GoldenExpectation, SecondaryLabelAssertion,
+    SuccessContract,
+};
 use super::super::{
     BackendId, DiagnosticMatchMode, ExpectedOutcome, FailureExpectation, FailureKind, GoldenMode,
     SuccessExpectation, TestCaseSpec, WarningExpectation,
@@ -24,20 +27,24 @@ use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_tests::test_support::temp_dir;
 use crate::projects::settings::Config;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 const DIAGNOSTICS_SOURCE: &str = include_str!("../assertions/diagnostics.rs");
 
 fn test_location(path: InternedPath) -> SourceLocation {
+    test_location_at(path, 1, 1)
+}
+
+fn test_location_at(path: InternedPath, line_number: i32, char_column: i32) -> SourceLocation {
     SourceLocation::new(
         path,
         CharPosition {
-            line_number: 1,
-            char_column: 1,
+            line_number,
+            char_column,
         },
         CharPosition {
-            line_number: 1,
-            char_column: 2,
+            line_number,
+            char_column: char_column + 1,
         },
     )
 }
@@ -79,6 +86,7 @@ fn diagnostic_expectation(
             .iter()
             .map(|code| (*code).to_owned())
             .collect(),
+        diagnostic_assertions: Vec::new(),
         diagnostic_match,
         diagnostic_match_reason: diagnostic_match_reason.map(str::to_owned),
     }
@@ -102,12 +110,13 @@ fn failure_message_contains_uses_structured_render_output() {
     let expectation = FailureExpectation {
         warnings: WarningExpectation::Ignore,
         diagnostic_codes: vec!["BST-RULE-0044".to_string()],
+        diagnostic_assertions: Vec::new(),
         diagnostic_match: DiagnosticMatchMode::Exact,
         diagnostic_match_reason: None,
         message_contains: vec!["Cannot reassign `value`".to_string()],
     };
 
-    let result = validate_failure_result(messages, &expectation);
+    let result = validate_failure_result(messages, &expectation, Path::new("."));
 
     assert!(result.passed, "{:?}", result.failure_reason);
 }
@@ -134,12 +143,13 @@ fn failure_message_contains_includes_rendered_label_text() {
     let expectation = FailureExpectation {
         warnings: WarningExpectation::Ignore,
         diagnostic_codes: vec!["BST-RULE-0044".to_string()],
+        diagnostic_assertions: Vec::new(),
         diagnostic_match: DiagnosticMatchMode::Exact,
         diagnostic_match_reason: None,
         message_contains: vec!["secondary context lives here".to_string()],
     };
 
-    let result = validate_failure_result(messages, &expectation);
+    let result = validate_failure_result(messages, &expectation, Path::new("."));
 
     assert!(result.passed, "{:?}", result.failure_reason);
 }
@@ -163,7 +173,7 @@ fn exact_diagnostic_matching_ignores_order() {
         None,
     );
 
-    let result = validate_failure_result(messages, &expectation);
+    let result = validate_failure_result(messages, &expectation, Path::new("."));
 
     assert!(result.passed, "{:?}", result.failure_reason);
 }
@@ -173,7 +183,7 @@ fn exact_diagnostic_matching_reports_unexpected_extra() {
     let messages = diagnostic_messages(&["BST-RULE-0044", "BST-SYNTAX-0003"]);
     let expectation = diagnostic_expectation(&["BST-RULE-0044"], DiagnosticMatchMode::Exact, None);
 
-    let result = validate_failure_result(messages, &expectation);
+    let result = validate_failure_result(messages, &expectation, Path::new("."));
     let reason = result
         .failure_reason
         .expect("unexpected diagnostic should fail matching");
@@ -190,7 +200,7 @@ fn exact_diagnostic_matching_reports_duplicate_count_mismatch() {
     let messages = diagnostic_messages(&["BST-RULE-0044", "BST-RULE-0044"]);
     let expectation = diagnostic_expectation(&["BST-RULE-0044"], DiagnosticMatchMode::Exact, None);
 
-    let result = validate_failure_result(messages, &expectation);
+    let result = validate_failure_result(messages, &expectation, Path::new("."));
     let reason = result
         .failure_reason
         .expect("duplicate diagnostic should fail matching");
@@ -205,7 +215,7 @@ fn exact_diagnostic_matching_keeps_missing_and_unexpected_categories_distinct() 
     let messages = diagnostic_messages(&["BST-SYNTAX-0003"]);
     let expectation = diagnostic_expectation(&["BST-RULE-0044"], DiagnosticMatchMode::Exact, None);
 
-    let result = validate_failure_result(messages, &expectation);
+    let result = validate_failure_result(messages, &expectation, Path::new("."));
     let reason = result
         .failure_reason
         .expect("different diagnostic should fail matching");
@@ -227,7 +237,7 @@ fn justified_contains_matching_accepts_extra_diagnostics() {
         Some("independent parser recovery can emit a second diagnostic"),
     );
 
-    let result = validate_failure_result(messages, &expectation);
+    let result = validate_failure_result(messages, &expectation, Path::new("."));
 
     assert!(result.passed, "{:?}", result.failure_reason);
 }
@@ -241,7 +251,7 @@ fn justified_contains_matching_accepts_extra_expected_code_occurrences() {
         Some("independent recovery may repeat this diagnostic"),
     );
 
-    let result = validate_failure_result(messages, &expectation);
+    let result = validate_failure_result(messages, &expectation, Path::new("."));
 
     assert!(result.passed, "{:?}", result.failure_reason);
 }
@@ -255,7 +265,7 @@ fn contains_matching_requires_every_expected_occurrence() {
         Some("two independent sites must report the same diagnostic"),
     );
 
-    let result = validate_failure_result(messages, &expectation);
+    let result = validate_failure_result(messages, &expectation, Path::new("."));
     let reason = result
         .failure_reason
         .expect("a missing expected occurrence should fail matching");
@@ -263,6 +273,152 @@ fn contains_matching_requires_every_expected_occurrence() {
     assert!(reason.contains("Count-mismatched codes"), "{reason}");
     assert!(reason.contains("expected 2, actual 1"), "{reason}");
     assert!(!reason.contains("Unexpected codes"), "{reason}");
+}
+
+fn structured_diagnostic_messages(fixture_root: &Path) -> CompilerMessages {
+    let mut string_table = StringTable::new();
+    let primary_path = InternedPath::from_single_str(
+        &fixture_root.join("input/main.bst").to_string_lossy(),
+        &mut string_table,
+    );
+    let secondary_path = InternedPath::from_single_str(
+        &fixture_root.join("input/helper.bst").to_string_lossy(),
+        &mut string_table,
+    );
+    let diagnostic = CompilerDiagnostic::invalid_assignment_target(
+        InvalidAssignmentTargetReason::ImmutableBinding,
+        None,
+        None,
+        None,
+        None,
+        Some(test_location_at(secondary_path, 4, 5)),
+        test_location_at(primary_path, 3, 2),
+    );
+
+    CompilerMessages::from_diagnostic(diagnostic, string_table)
+}
+
+fn structured_diagnostic_expectation(assertion: DiagnosticAssertion) -> FailureExpectation {
+    FailureExpectation {
+        warnings: WarningExpectation::Ignore,
+        message_contains: Vec::new(),
+        diagnostic_codes: vec!["BST-RULE-0044".to_owned()],
+        diagnostic_assertions: vec![assertion],
+        diagnostic_match: DiagnosticMatchMode::Exact,
+        diagnostic_match_reason: None,
+    }
+}
+
+#[test]
+fn structured_diagnostic_assertions_consume_compiler_identity_and_locations() {
+    let fixture_root = temp_dir("structured_diagnostic_paths");
+    let input_root = fixture_root.join("input");
+    fs::create_dir_all(&input_root).expect("should create temporary fixture input directory");
+    fs::write(input_root.join("main.bst"), "main").expect("should write primary source");
+    fs::write(input_root.join("helper.bst"), "helper").expect("should write secondary source");
+    let fixture_root = fs::canonicalize(&fixture_root).expect("fixture root should canonicalize");
+
+    let expectation = structured_diagnostic_expectation(DiagnosticAssertion {
+        code: "BST-RULE-0044".to_owned(),
+        occurrence: 1,
+        reason: Some("invalid_assignment_target.immutable_binding".to_owned()),
+        path: Some("input/main.bst".to_owned()),
+        line: Some(3),
+        column: Some(2),
+        count: Some(1),
+        secondary_labels: vec![SecondaryLabelAssertion {
+            occurrence: 1,
+            path: Some("input/helper.bst".to_owned()),
+            line: Some(4),
+            column: Some(5),
+        }],
+    });
+
+    let result = validate_failure_result(
+        structured_diagnostic_messages(&fixture_root),
+        &expectation,
+        &fixture_root,
+    );
+
+    assert!(result.passed, "{:?}", result.failure_reason);
+
+    fs::remove_dir_all(&fixture_root).expect("should clean up temporary fixture root");
+}
+
+#[test]
+fn structured_diagnostic_mismatches_report_code_occurrence_field_expected_and_actual() {
+    let expectation = structured_diagnostic_expectation(DiagnosticAssertion {
+        code: "BST-RULE-0044".to_owned(),
+        occurrence: 1,
+        reason: Some("invalid_assignment_target.temporary_not_assignable".to_owned()),
+        path: Some("wrong.bst".to_owned()),
+        line: Some(8),
+        column: Some(9),
+        count: Some(2),
+        secondary_labels: vec![SecondaryLabelAssertion {
+            occurrence: 1,
+            path: Some("wrong-helper.bst".to_owned()),
+            line: Some(10),
+            column: Some(11),
+        }],
+    });
+
+    let result = validate_failure_result(
+        structured_diagnostic_messages(Path::new(".")),
+        &expectation,
+        Path::new("."),
+    );
+    let reason = result
+        .failure_reason
+        .expect("structured mismatches should fail matching");
+
+    for field in ["count", "reason", "path", "line", "column"] {
+        assert!(reason.contains(&format!("field '{field}'")), "{reason}");
+    }
+    assert!(
+        reason.contains("secondary_labels occurrence 1 field 'path'"),
+        "{reason}"
+    );
+    assert!(
+        reason.contains("code 'BST-RULE-0044' occurrence 1"),
+        "{reason}"
+    );
+    assert!(reason.contains("expected 'wrong.bst'"), "{reason}");
+    assert!(reason.contains("actual 'input/main.bst'"), "{reason}");
+}
+
+#[test]
+fn structured_secondary_label_matching_ignores_primary_labels_and_reports_missing_occurrences() {
+    let expectation = structured_diagnostic_expectation(DiagnosticAssertion {
+        code: "BST-RULE-0044".to_owned(),
+        occurrence: 1,
+        reason: None,
+        path: None,
+        line: None,
+        column: None,
+        count: None,
+        secondary_labels: vec![SecondaryLabelAssertion {
+            occurrence: 2,
+            path: Some("helper.bst".to_owned()),
+            line: Some(4),
+            column: None,
+        }],
+    });
+
+    let result = validate_failure_result(
+        structured_diagnostic_messages(Path::new(".")),
+        &expectation,
+        Path::new("."),
+    );
+    let reason = result
+        .failure_reason
+        .expect("missing secondary label occurrence should fail matching");
+
+    assert!(reason.contains("secondary_labels occurrence 2"), "{reason}");
+    assert!(
+        reason.contains("only 1 secondary label occurrence(s) present"),
+        "{reason}"
+    );
 }
 
 fn exact_warning_expectation(codes: &[&str]) -> WarningExpectation {
@@ -421,11 +577,12 @@ fn exact_warning_codes_match_warnings_retained_in_failed_compilation_messages() 
         warnings: exact_warning_expectation(&["BST-RULE-0022"]),
         message_contains: Vec::new(),
         diagnostic_codes: vec!["BST-SYNTAX-0003".to_owned(), "BST-RULE-0022".to_owned()],
+        diagnostic_assertions: Vec::new(),
         diagnostic_match: DiagnosticMatchMode::Exact,
         diagnostic_match_reason: None,
     };
 
-    let result = validate_failure_result(messages, &expectation);
+    let result = validate_failure_result(messages, &expectation, Path::new("."));
 
     assert!(result.passed, "{:?}", result.failure_reason);
 }
@@ -590,6 +747,7 @@ fn absence_test_case(expectation: SuccessExpectation) -> TestCaseSpec {
         display_name: "absence-contract".to_string(),
         case_id: "absence-contract".to_string(),
         manifest_relative_path: "absence-contract".to_string(),
+        fixture_root: PathBuf::from("."),
         tags: Vec::new(),
         contract: None,
         role: None,
@@ -605,6 +763,7 @@ fn success_test_case(backend_id: BackendId, expectation: SuccessExpectation) -> 
         display_name: "success-contract".to_string(),
         case_id: "success-contract".to_string(),
         manifest_relative_path: "success-contract".to_string(),
+        fixture_root: PathBuf::from("."),
         tags: Vec::new(),
         contract: None,
         role: None,

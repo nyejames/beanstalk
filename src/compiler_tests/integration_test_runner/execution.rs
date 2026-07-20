@@ -50,7 +50,11 @@ pub(crate) fn execute_test_case(case: &TestCaseSpec) -> CaseExecutionResult {
                     ),
                     failure_kind: Some(FailureKind::ExpectationViolation),
                 },
-                Err(messages) => super::assertions::validate_failure_result(messages, expectation),
+                Err(messages) => super::assertions::validate_failure_result(
+                    messages,
+                    expectation,
+                    &case.fixture_root,
+                ),
             },
         },
         Err(payload) => panic_case_result(payload),

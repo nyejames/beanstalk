@@ -49,6 +49,7 @@ pub(crate) struct TestCaseSpec {
     pub display_name: String,
     pub case_id: String,
     pub manifest_relative_path: String,
+    pub fixture_root: PathBuf,
     pub tags: Vec<String>,
     pub contract: Option<String>,
     pub role: Option<CaseRole>,
@@ -92,8 +93,29 @@ pub(crate) struct FailureExpectation {
     pub warnings: WarningExpectation,
     pub message_contains: Vec<String>,
     pub diagnostic_codes: Vec<String>,
+    pub diagnostic_assertions: Vec<DiagnosticAssertion>,
     pub diagnostic_match: DiagnosticMatchMode,
     pub diagnostic_match_reason: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct DiagnosticAssertion {
+    pub code: String,
+    pub occurrence: usize,
+    pub reason: Option<String>,
+    pub path: Option<String>,
+    pub line: Option<usize>,
+    pub column: Option<usize>,
+    pub count: Option<usize>,
+    pub secondary_labels: Vec<SecondaryLabelAssertion>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct SecondaryLabelAssertion {
+    pub occurrence: usize,
+    pub path: Option<String>,
+    pub line: Option<usize>,
+    pub column: Option<usize>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -374,6 +396,7 @@ pub(crate) struct ParsedBackendExpectation {
     pub success_contract: Option<SuccessContract>,
     pub message_contains: Vec<String>,
     pub diagnostic_codes: Vec<String>,
+    pub diagnostic_assertions: Vec<DiagnosticAssertion>,
     pub diagnostic_match: Option<DiagnosticMatchMode>,
     pub diagnostic_match_reason: Option<String>,
     pub artifact_assertions: Vec<ArtifactAssertion>,

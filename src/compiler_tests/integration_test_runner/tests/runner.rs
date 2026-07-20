@@ -20,6 +20,7 @@ fn suite_with_case(role: Option<CaseRole>, contract: Option<&str>) -> TestSuiteS
             display_name: "policy_case [html]".to_owned(),
             case_id: "policy_case".to_owned(),
             manifest_relative_path: "policy_case".to_owned(),
+            fixture_root: PathBuf::from("."),
             tags: vec!["integration".to_owned()],
             contract: contract.map(str::to_owned),
             role,

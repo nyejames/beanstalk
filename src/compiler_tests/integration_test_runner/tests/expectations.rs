@@ -63,6 +63,255 @@ fn failure_diagnostic_match_defaults_to_exact_and_is_retained() {
 }
 
 #[test]
+fn structured_diagnostic_assertions_parse_and_normalize_locations() {
+    let (root, case_root) = write_fixture(
+        "structured_diagnostic_assertions",
+        concat!(
+            "[backends.html]\n",
+            "mode = \"failure\"\n",
+            "warnings = \"forbid\"\n",
+            "diagnostic_codes = [\"BST-RULE-0044\"]\n",
+            "\n",
+            "[[backends.html.diagnostic_assertions]]\n",
+            "code = \"BST-RULE-0044\"\n",
+            "reason = \"invalid_assignment_target.immutable_binding\"\n",
+            "path = \"input\\\\main.bst\"\n",
+            "line = 3\n",
+            "column = 2\n",
+            "count = 1\n",
+            "\n",
+            "[[backends.html.diagnostic_assertions.secondary_labels]]\n",
+            "occurrence = 1\n",
+            "path = \"input\\\\helper.bst\"\n",
+            "line = 4\n",
+            "column = 5\n",
+        ),
+    );
+
+    let cases = load_canonical_case_specs(&case_root, None)
+        .expect("structured diagnostic assertions should be accepted");
+    let ExpectedOutcome::Failure(expectation) = &cases[0].expected else {
+        panic!("case should have a failure expectation");
+    };
+    let assertion = &expectation.diagnostic_assertions[0];
+    assert_eq!(assertion.occurrence, 1);
+    assert_eq!(
+        assertion.reason.as_deref(),
+        Some("invalid_assignment_target.immutable_binding")
+    );
+    assert_eq!(assertion.path.as_deref(), Some("input/main.bst"));
+    assert_eq!(assertion.line, Some(3));
+    assert_eq!(assertion.column, Some(2));
+    assert_eq!(assertion.count, Some(1));
+    assert_eq!(assertion.secondary_labels[0].occurrence, 1);
+    assert_eq!(
+        assertion.secondary_labels[0].path.as_deref(),
+        Some("input/helper.bst")
+    );
+
+    fs::remove_dir_all(&root).expect("should clean up");
+}
+
+#[test]
+fn unique_structured_diagnostic_code_defaults_occurrence_to_one() {
+    let (root, case_root) = write_fixture(
+        "structured_unique_occurrence",
+        concat!(
+            "[backends.html]\n",
+            "mode = \"failure\"\n",
+            "warnings = \"forbid\"\n",
+            "diagnostic_codes = [\"BST-RULE-0044\"]\n",
+            "\n",
+            "[[backends.html.diagnostic_assertions]]\n",
+            "code = \"BST-RULE-0044\"\n",
+            "line = 1\n",
+        ),
+    );
+
+    let cases = load_canonical_case_specs(&case_root, None)
+        .expect("unique structured diagnostic code should default occurrence");
+    let ExpectedOutcome::Failure(expectation) = &cases[0].expected else {
+        panic!("case should have a failure expectation");
+    };
+    assert_eq!(expectation.diagnostic_assertions[0].occurrence, 1);
+
+    fs::remove_dir_all(&root).expect("should clean up");
+}
+
+#[test]
+fn repeated_structured_diagnostic_code_requires_explicit_valid_unique_occurrences() {
+    let cases = [
+        (
+            "ambiguous",
+            "[[backends.html.diagnostic_assertions]]\ncode = \"BST-RULE-0044\"\nline = 1\n",
+            "must author 'occurrence'",
+        ),
+        (
+            "zero",
+            "[[backends.html.diagnostic_assertions]]\ncode = \"BST-RULE-0044\"\noccurrence = 0\nline = 1\n",
+            "one-based",
+        ),
+        (
+            "beyond_multiplicity",
+            "[[backends.html.diagnostic_assertions]]\ncode = \"BST-RULE-0044\"\noccurrence = 3\nline = 1\n",
+            "contains it 2 time(s)",
+        ),
+    ];
+
+    for (name, assertion, expected_error) in cases {
+        let (root, case_root) = write_fixture(
+            &format!("structured_occurrence_{name}"),
+            &format!(
+                "[backends.html]\nmode = \"failure\"\nwarnings = \"forbid\"\ndiagnostic_codes = [\"BST-RULE-0044\", \"BST-RULE-0044\"]\n\n{assertion}"
+            ),
+        );
+
+        let Err(error) = load_canonical_case_specs(&case_root, None) else {
+            panic!("invalid occurrence selection should be rejected: {name}");
+        };
+        assert!(error.contains(expected_error), "unexpected error: {error}");
+
+        fs::remove_dir_all(&root).expect("should clean up");
+    }
+}
+
+#[test]
+fn structured_diagnostic_assertions_reject_absent_duplicate_and_empty_selectors() {
+    let cases = [
+        (
+            "absent",
+            "diagnostic_codes = [\"BST-RULE-0044\"]\n\n[[backends.html.diagnostic_assertions]]\ncode = \"BST-SYNTAX-0003\"\nline = 1\n",
+            "absent from 'diagnostic_codes'",
+        ),
+        (
+            "duplicate",
+            "diagnostic_codes = [\"BST-RULE-0044\"]\n\n[[backends.html.diagnostic_assertions]]\ncode = \"BST-RULE-0044\"\nline = 1\n\n[[backends.html.diagnostic_assertions]]\ncode = \"BST-RULE-0044\"\ncolumn = 2\n",
+            "duplicates diagnostic code 'BST-RULE-0044' occurrence 1",
+        ),
+        (
+            "empty",
+            "diagnostic_codes = [\"BST-RULE-0044\"]\n\n[[backends.html.diagnostic_assertions]]\ncode = \"BST-RULE-0044\"\n",
+            "at least one structured diagnostic fact",
+        ),
+    ];
+
+    for (name, fields, expected_error) in cases {
+        let (root, case_root) = write_fixture(
+            &format!("structured_selector_{name}"),
+            &format!("[backends.html]\nmode = \"failure\"\nwarnings = \"forbid\"\n{fields}"),
+        );
+
+        let Err(error) = load_canonical_case_specs(&case_root, None) else {
+            panic!("invalid structured selector should be rejected: {name}");
+        };
+        assert!(error.contains(expected_error), "unexpected error: {error}");
+
+        fs::remove_dir_all(&root).expect("should clean up");
+    }
+}
+
+#[test]
+fn structured_diagnostic_assertions_validate_reason_location_and_count_shape() {
+    let cases = [
+        (
+            "reason",
+            "reason = \"Invalid.Reason\"\nline = 1\n",
+            "lowercase snake-case",
+        ),
+        ("path", "path = \"   \"\n", "non-empty 'path'"),
+        (
+            "absolute_path",
+            "path = \"/tmp/main.bst\"\n",
+            "must be a relative path",
+        ),
+        (
+            "parent_path",
+            "path = \"../main.bst\"\n",
+            "authored parent component",
+        ),
+        ("line", "line = 0\n", "positive 'line'"),
+        ("column", "column = 0\n", "positive 'column'"),
+        ("count", "count = 2\nline = 1\n", "'count = 2'"),
+    ];
+
+    for (name, fields, expected_error) in cases {
+        let (root, case_root) = write_fixture(
+            &format!("structured_shape_{name}"),
+            &format!(
+                "[backends.html]\nmode = \"failure\"\nwarnings = \"forbid\"\ndiagnostic_codes = [\"BST-RULE-0044\"]\n\n[[backends.html.diagnostic_assertions]]\ncode = \"BST-RULE-0044\"\n{fields}"
+            ),
+        );
+
+        let Err(error) = load_canonical_case_specs(&case_root, None) else {
+            panic!("invalid structured assertion shape should be rejected: {name}");
+        };
+        assert!(error.contains(expected_error), "unexpected error: {error}");
+
+        fs::remove_dir_all(&root).expect("should clean up");
+    }
+}
+
+#[test]
+fn structured_secondary_labels_require_occurrence_and_location_fact() {
+    let cases = [
+        (
+            "missing_occurrence",
+            "path = \"helper.bst\"\nline = 2\n",
+            "requires a one-based 'occurrence'",
+        ),
+        (
+            "missing_location",
+            "occurrence = 1\n",
+            "at least one secondary-label location fact",
+        ),
+    ];
+
+    for (name, secondary_fields, expected_error) in cases {
+        let (root, case_root) = write_fixture(
+            &format!("structured_secondary_{name}"),
+            &format!(
+                "[backends.html]\nmode = \"failure\"\nwarnings = \"forbid\"\ndiagnostic_codes = [\"BST-RULE-0044\"]\n\n[[backends.html.diagnostic_assertions]]\ncode = \"BST-RULE-0044\"\nline = 1\n\n[[backends.html.diagnostic_assertions.secondary_labels]]\n{secondary_fields}"
+            ),
+        );
+
+        let Err(error) = load_canonical_case_specs(&case_root, None) else {
+            panic!("invalid secondary-label assertion should be rejected: {name}");
+        };
+        assert!(error.contains(expected_error), "unexpected error: {error}");
+
+        fs::remove_dir_all(&root).expect("should clean up");
+    }
+}
+
+#[test]
+fn structured_diagnostic_assertions_are_failure_only() {
+    let (root, case_root) = write_fixture(
+        "structured_success_rejection",
+        concat!(
+            "[backends.html]\n",
+            "mode = \"success\"\n",
+            "warnings = \"forbid\"\n",
+            "diagnostic_codes = [\"BST-RULE-0044\"]\n",
+            "rendered_output_contains = [\"ok\"]\n",
+            "\n",
+            "[[backends.html.diagnostic_assertions]]\n",
+            "code = \"BST-RULE-0044\"\n",
+            "line = 1\n",
+        ),
+    );
+
+    let Err(error) = load_canonical_case_specs(&case_root, None) else {
+        panic!("structured assertions on a success backend should be rejected");
+    };
+    assert!(
+        error.contains("failure-only") && error.contains("diagnostic_assertions"),
+        "unexpected error: {error}"
+    );
+
+    fs::remove_dir_all(&root).expect("should clean up");
+}
+
+#[test]
 fn exact_warning_codes_are_retained_as_a_typed_multiset_contract() {
     let (root, case_root) = write_fixture(
         "exact_warning_codes",

@@ -30,26 +30,26 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 4B — structured diagnostic expectation tables
-LAST_ACCEPTED_COMMIT: `9cc05cf61` (Phase 3F)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 4A reason-identity slice is ready to commit; unrelated generated font/style rebuild churn from `a83e9587f` must remain unstaged
+CURRENT_SLICE: Phase 4C — high-risk structured diagnostic migration
+LAST_ACCEPTED_COMMIT: `afd00ca04` (Phase 4A)
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 4B structured-assertion slice is ready to commit; unrelated generated font/style rebuild churn from `a83e9587f` must remain unstaged
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: `testing.bd` owns structured assertion workflow wording after Phase 4 implementation; no Phase 4A source-doc change is required
-- code: `CompilerDiagnostic::identity()` now exposes descriptor code, actual severity, and one of 580 compiler-owned stable reason keys; Phase 4B must consume it without reconstructing payload taxonomy
+- docs: `testing.bd` owns structured assertion workflow wording after Phase 4 migration; progress matrix remains current for this harness-only slice
+- code: typed `diagnostic_assertions` now select code plus occurrence and can assert compiler-owned reason identity, fixture-root-relative primary/secondary locations, optional column, and multiplicity
 ACCEPTANCE_CRITERIA:
-- add typed `diagnostic_assertions` matched by exact code plus deterministic occurrence
-- support optional compiler-owned reason key, normalized path, line, count, and narrow secondary-label assertions; column remains optional only where contractual
-- reject assertions absent from `diagnostic_codes` or with ambiguous occurrence selection and report actionable mismatches
+- migrate high-risk broad-code families without parsing prose or duplicating payload taxonomy
+- add the real negative path/line owner deferred from `lifetime_inference_error_precision`
+- protect imported/generated source remapping and declaration/conflict secondary labels where current support permits
 VALIDATION_STATE:
-- `just validate`: passed for Phase 4A; cross-target Clippy, 3,544 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
-- focused diagnostic model: passed; 68 tests and 580 globally unique qualified reason keys
-DOCS_IMPACT: Phase 4A source comments define stability; official workflow docs wait for Phase 4 closure; progress matrix unchanged
+- `just validate`: passed for Phase 4B; cross-target Clippy, 3,555 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
+- focused diagnostic model/runner: passed; 69 and 145 tests; audit clean at 1,645 cases and 1,778 backend executions
+DOCS_IMPACT: official structured-assertion workflow docs wait for Phase 4 closure; progress matrix and `index.md` unchanged
 BLOCKERS_OR_OPEN_DECISIONS: Ollama wrapper still requires removed `docs/codebase-style-guide.md`; 19 justified diagnostic-contains blocks record duplicate module compilation that the queued canonical-module plan must remove
 DELEGATION_DECISION: codex-cli fallback — the user-selected Ollama default is cleanly blocked before edits by its stale required-document path
 NEXT_WORKER_ORDER: codex-cli, parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit Phase 4A with exact code/test/plan paths, refresh its hash, inspect the runner expectation owner, and delegate bounded Phase 4B implementation through Codex CLI fallback
+NEXT_RESUME_ACTION: commit Phase 4B with exact code/test/plan paths, refresh its hash, then delegate the first Phase 4C high-risk migration family through Codex CLI fallback
 
 ---
 
@@ -157,7 +157,8 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 3C2 warning compatibility deletion | `e3f820ec1` | Accepted | Schema 5 exact-code-only warnings; 129 focused runner tests; 3,534 Rust tests; no active count path |
 | Phase 3E contains-mode hard policy | `ec6c828a1` | Accepted | One hard-policy owner; 135 focused runner tests; 19 justified canonical contains blocks; zero hard findings |
 | Phase 3F assertion workflow documentation | `9cc05cf61` | Accepted | Schema 5 exact multiset and justified-contains workflow documented; release docs build passed; `index.md` current |
-| Phase 4A compiler-owned reason identity | pending acceptance commit | Accepted | 50 reason-bearing payload families; 580 unique qualified keys; 68 focused model tests; 3,544 Rust tests |
+| Phase 4A compiler-owned reason identity | `afd00ca04` | Accepted | 50 reason-bearing payload families; 580 unique qualified keys; 68 focused model tests; 3,544 Rust tests |
+| Phase 4B structured diagnostic assertions | pending acceptance commit | Accepted | Code-plus-occurrence selectors; compiler-owned reasons; fixture-relative primary/secondary locations; 145 focused runner tests; 3,555 Rust tests |
 
 ---
 
@@ -773,12 +774,12 @@ Distinguish broad-code reasons and protect source remapping without parsing pros
 
 ## 4B — Structured expectation tables
 
-- [ ] Add `diagnostic_assertions` matched by code plus deterministic occurrence.
-- [ ] Support optional reason, normalized path, line, count, and narrow secondary-label assertions.
-- [ ] Support column only where token-span precision is the contract.
-- [ ] Reject assertions for codes absent from `diagnostic_codes`.
-- [ ] Reject ambiguous occurrence selection.
-- [ ] Produce actionable mismatch reports without full snapshots.
+- [x] Add `diagnostic_assertions` matched by code plus deterministic occurrence.
+- [x] Support optional reason, normalized path, line, count, and narrow secondary-label assertions.
+- [x] Support column only where token-span precision is the contract.
+- [x] Reject assertions for codes absent from `diagnostic_codes`.
+- [x] Reject ambiguous occurrence selection.
+- [x] Produce actionable mismatch reports without full snapshots.
 
 ## 4C — High-risk migration
 

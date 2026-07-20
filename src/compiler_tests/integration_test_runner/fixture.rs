@@ -290,6 +290,7 @@ fn load_canonical_case_specs_at(
                 warnings: backend_expectation.warnings,
                 message_contains: backend_expectation.message_contains,
                 diagnostic_codes: backend_expectation.diagnostic_codes,
+                diagnostic_assertions: backend_expectation.diagnostic_assertions,
                 diagnostic_match: backend_expectation
                     .diagnostic_match
                     .unwrap_or(DiagnosticMatchMode::Exact),
@@ -307,6 +308,7 @@ fn load_canonical_case_specs_at(
             display_name: format!("{case_id} [{backend_name}]"),
             case_id: case_id.clone(),
             manifest_relative_path: manifest_relative_path.clone(),
+            fixture_root: fixture_root.to_path_buf(),
             tags: tags.clone(),
             contract: contract.clone(),
             role,
@@ -399,11 +401,12 @@ fn validate_fixture_contract(
                 }
                 if !backend_expectation.message_contains.is_empty()
                     || !backend_expectation.diagnostic_codes.is_empty()
+                    || !backend_expectation.diagnostic_assertions.is_empty()
                     || backend_expectation.diagnostic_match.is_some()
                     || backend_expectation.diagnostic_match_reason.is_some()
                 {
                     return Err(format!(
-                        "Fixture '{}' backend '{}' uses mode = \"success\" and must not set failure-only keys ('diagnostic_codes'/'message_contains'/'diagnostic_match'/'diagnostic_match_reason').",
+                        "Fixture '{}' backend '{}' uses mode = \"success\" and must not set failure-only keys ('diagnostic_codes'/'diagnostic_assertions'/'message_contains'/'diagnostic_match'/'diagnostic_match_reason').",
                         fixture_root.display(),
                         backend_expectation.backend_id.as_str()
                     ));

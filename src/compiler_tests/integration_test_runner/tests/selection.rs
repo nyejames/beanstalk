@@ -21,6 +21,7 @@ fn case(
         display_name: display_name.to_owned(),
         case_id: case_id.to_owned(),
         manifest_relative_path: case_id.to_owned(),
+        fixture_root: PathBuf::from("."),
         tags: tags.iter().map(|tag| (*tag).to_owned()).collect(),
         contract: contract.map(str::to_owned),
         role: None,

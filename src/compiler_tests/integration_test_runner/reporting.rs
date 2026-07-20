@@ -239,7 +239,7 @@ fn build_backend_inventory(case: &TestCaseSpec) -> InventoryBackend {
             warning_codes: warning_codes(&expectation.warnings),
             diagnostic_match: Some(expectation.diagnostic_match),
             diagnostic_match_reason: expectation.diagnostic_match_reason.clone(),
-            structured_diagnostic_assertions: false,
+            structured_diagnostic_assertions: !expectation.diagnostic_assertions.is_empty(),
             assertion_kinds: failure_assertion_kinds(expectation),
             golden_mode: None,
             golden_present: false,
@@ -287,6 +287,9 @@ fn failure_assertion_kinds(expectation: &FailureExpectation) -> Vec<&'static str
     let mut kinds = Vec::new();
     if !expectation.diagnostic_codes.is_empty() {
         kinds.push("diagnostic_codes");
+    }
+    if !expectation.diagnostic_assertions.is_empty() {
+        kinds.push("diagnostic_assertions");
     }
     if !expectation.message_contains.is_empty() {
         kinds.push("message_contains");

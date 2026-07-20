@@ -30,7 +30,7 @@ pub(crate) mod trait_keyword_diagnostics;
 pub(crate) use compiler_diagnostic::CompilerDiagnostic;
 pub(crate) use diagnostic_bag::DiagnosticBag;
 pub(crate) use diagnostic_descriptor::DiagnosticDescriptor;
-pub(crate) use diagnostic_identity::DiagnosticIdentity;
+pub(crate) use diagnostic_identity::{DiagnosticIdentity, is_well_formed_reason_key};
 pub(crate) use diagnostic_kind::{
     BorrowDiagnosticKind, ConfigDiagnosticKind, DeferredFeatureDiagnosticKind, DiagnosticCategory,
     DiagnosticKind, ImportDiagnosticKind, InfrastructureDiagnosticKind, RuleDiagnosticKind,

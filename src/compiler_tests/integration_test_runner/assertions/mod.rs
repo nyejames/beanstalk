@@ -24,6 +24,7 @@ use super::{
 use crate::build_system::build::BuildResult;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerMessages;
 use std::collections::BTreeMap;
+use std::path::Path;
 
 /// Unordered-code difference shared by diagnostic and warning assertions.
 pub(super) struct CodeMultisetDifference {
@@ -191,6 +192,7 @@ fn fail(build_result: BuildResult, reason: String, kind: FailureKind) -> CaseExe
 pub(crate) fn validate_failure_result(
     messages: CompilerMessages,
     expectation: &FailureExpectation,
+    fixture_root: &Path,
 ) -> CaseExecutionResult {
     if let Some(reason) =
         warnings::validate_warning_expectation(messages.warnings(), &expectation.warnings)
@@ -198,7 +200,7 @@ pub(crate) fn validate_failure_result(
         return failure_messages(messages, reason);
     }
 
-    if let Some(reason) = diagnostics::validate_diagnostics(&messages, expectation) {
+    if let Some(reason) = diagnostics::validate_diagnostics(&messages, expectation, fixture_root) {
         return failure_messages(messages, reason);
     }
 

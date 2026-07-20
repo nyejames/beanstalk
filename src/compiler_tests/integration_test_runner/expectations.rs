@@ -4,15 +4,20 @@
 //! WHY: isolating TOML parsing here keeps fixture loading free of deserialization details and
 //!      makes expectation format changes easy to find and update.
 
-use super::types::{DiagnosticMatchMode, ExactWarningExpectation, SuccessContract};
+use super::path_validation::{CurrentDirectoryRule, validate_relative_path};
+use super::types::{
+    DiagnosticAssertion, DiagnosticMatchMode, ExactWarningExpectation, SecondaryLabelAssertion,
+    SuccessContract,
+};
 use super::{
     ArtifactAssertion, ArtifactKind, BackendId, ExpectationMode, GoldenMode,
     ParsedBackendExpectation, ParsedExpectationFile, WarningExpectation,
     normalize_relative_path_text,
 };
 use crate::compiler_frontend::Flag;
+use crate::compiler_frontend::compiler_messages::is_well_formed_reason_key;
 use serde::Deserialize;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
 
@@ -47,6 +52,8 @@ struct BackendExpectationToml {
     message_contains: Vec<String>,
     #[serde(default)]
     diagnostic_codes: Vec<String>,
+    #[serde(default)]
+    diagnostic_assertions: Vec<DiagnosticAssertionToml>,
     diagnostic_match: Option<String>,
     diagnostic_match_reason: Option<String>,
     #[serde(default)]
@@ -58,6 +65,29 @@ struct BackendExpectationToml {
     rendered_output_not_contains: Vec<String>,
     #[serde(default)]
     artifacts_must_not_exist: Vec<String>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DiagnosticAssertionToml {
+    code: String,
+    occurrence: Option<usize>,
+    reason: Option<String>,
+    path: Option<String>,
+    line: Option<usize>,
+    column: Option<usize>,
+    count: Option<usize>,
+    #[serde(default)]
+    secondary_labels: Vec<SecondaryLabelAssertionToml>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SecondaryLabelAssertionToml {
+    occurrence: Option<usize>,
+    path: Option<String>,
+    line: Option<usize>,
+    column: Option<usize>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -157,6 +187,12 @@ fn parse_matrix_expectation_file(
         let flags = parse_case_flags(&backend_expectation.flags, path, &context)?;
         let artifact_assertions =
             parse_artifact_assertions(path, &context, &backend_expectation.artifact_assertions)?;
+        let diagnostic_assertions = parse_diagnostic_assertions(
+            path,
+            &context,
+            &backend_expectation.diagnostic_codes,
+            &backend_expectation.diagnostic_assertions,
+        )?;
         let success_contract = parse_success_contract(
             path,
             &context,
@@ -194,6 +230,7 @@ fn parse_matrix_expectation_file(
                 || !backend_expectation.rendered_output_contains.is_empty()
                 || !backend_expectation.rendered_output_not_contains.is_empty()
                 || !backend_expectation.artifacts_must_not_exist.is_empty()
+                || !diagnostic_assertions.is_empty()
                 || has_authored_expected_warning)
         {
             return Err(format!(
@@ -258,6 +295,7 @@ fn parse_matrix_expectation_file(
             success_contract,
             message_contains: backend_expectation.message_contains,
             diagnostic_codes: backend_expectation.diagnostic_codes,
+            diagnostic_assertions,
             diagnostic_match,
             diagnostic_match_reason: backend_expectation.diagnostic_match_reason,
             artifact_assertions,
@@ -272,6 +310,264 @@ fn parse_matrix_expectation_file(
         entry: parsed.entry,
         backend_expectations,
     })
+}
+
+fn parse_diagnostic_assertions(
+    path: &Path,
+    context: &str,
+    authored_codes: &[String],
+    assertions: &[DiagnosticAssertionToml],
+) -> Result<Vec<DiagnosticAssertion>, String> {
+    let mut authored_code_counts = BTreeMap::new();
+    for code in authored_codes {
+        *authored_code_counts.entry(code.as_str()).or_insert(0) += 1;
+    }
+
+    let mut selectors = BTreeSet::new();
+    let mut parsed_assertions = Vec::with_capacity(assertions.len());
+
+    for (index, assertion) in assertions.iter().enumerate() {
+        let assertion_label = diagnostic_assertion_label(context, index);
+        if assertion.code.trim().is_empty() {
+            return Err(format!(
+                "Expectation file '{}' {} requires a non-empty 'code'.",
+                path.display(),
+                assertion_label
+            ));
+        }
+
+        let Some(&authored_count) = authored_code_counts.get(assertion.code.as_str()) else {
+            return Err(format!(
+                "Expectation file '{}' {} names diagnostic code '{}' which is absent from 'diagnostic_codes'.",
+                path.display(),
+                assertion_label,
+                assertion.code
+            ));
+        };
+
+        let occurrence = match assertion.occurrence {
+            Some(0) => {
+                return Err(format!(
+                    "Expectation file '{}' {} must use a one-based 'occurrence'.",
+                    path.display(),
+                    assertion_label
+                ));
+            }
+            Some(occurrence) => occurrence,
+            None if authored_count == 1 => 1,
+            None => {
+                return Err(format!(
+                    "Expectation file '{}' {} must author 'occurrence' because diagnostic code '{}' appears {} times in 'diagnostic_codes'.",
+                    path.display(),
+                    assertion_label,
+                    assertion.code,
+                    authored_count
+                ));
+            }
+        };
+
+        if occurrence > authored_count {
+            return Err(format!(
+                "Expectation file '{}' {} selects occurrence {} of diagnostic code '{}', but 'diagnostic_codes' contains it {} time(s).",
+                path.display(),
+                assertion_label,
+                occurrence,
+                assertion.code,
+                authored_count
+            ));
+        }
+
+        if !selectors.insert((assertion.code.clone(), occurrence)) {
+            return Err(format!(
+                "Expectation file '{}' {} duplicates diagnostic code '{}' occurrence {}.",
+                path.display(),
+                assertion_label,
+                assertion.code,
+                occurrence
+            ));
+        }
+
+        validate_diagnostic_assertion_fields(path, &assertion_label, assertion)?;
+        let secondary_labels =
+            parse_secondary_label_assertions(path, &assertion_label, &assertion.secondary_labels)?;
+
+        let has_structured_fact = assertion.reason.is_some()
+            || assertion.path.is_some()
+            || assertion.line.is_some()
+            || assertion.column.is_some()
+            || assertion.count.is_some()
+            || !secondary_labels.is_empty();
+        if !has_structured_fact {
+            return Err(format!(
+                "Expectation file '{}' {} must assert at least one structured diagnostic fact besides its selector.",
+                path.display(),
+                assertion_label
+            ));
+        }
+
+        if let Some(count) = assertion.count
+            && count != authored_count
+        {
+            return Err(format!(
+                "Expectation file '{}' {} sets 'count = {}' for diagnostic code '{}', but 'diagnostic_codes' contains it {} time(s).",
+                path.display(),
+                assertion_label,
+                count,
+                assertion.code,
+                authored_count
+            ));
+        }
+
+        parsed_assertions.push(DiagnosticAssertion {
+            code: assertion.code.clone(),
+            occurrence,
+            reason: assertion.reason.clone(),
+            path: assertion.path.as_deref().map(normalize_relative_path_text),
+            line: assertion.line,
+            column: assertion.column,
+            count: assertion.count,
+            secondary_labels,
+        });
+    }
+
+    Ok(parsed_assertions)
+}
+
+fn diagnostic_assertion_label(context: &str, index: usize) -> String {
+    if context.is_empty() {
+        format!("diagnostic_assertions[{index}]")
+    } else {
+        format!("{context}.diagnostic_assertions[{index}]")
+    }
+}
+
+fn validate_diagnostic_assertion_fields(
+    path: &Path,
+    assertion_label: &str,
+    assertion: &DiagnosticAssertionToml,
+) -> Result<(), String> {
+    if let Some(reason) = &assertion.reason {
+        if reason.trim().is_empty() {
+            return Err(format!(
+                "Expectation file '{}' {} requires a non-empty 'reason'.",
+                path.display(),
+                assertion_label
+            ));
+        }
+
+        if !is_well_formed_reason_key(reason) {
+            return Err(format!(
+                "Expectation file '{}' {} has invalid 'reason' '{}'; expected a qualified lowercase snake-case key.",
+                path.display(),
+                assertion_label,
+                reason
+            ));
+        }
+    }
+
+    validate_diagnostic_path(path, assertion_label, assertion.path.as_deref())?;
+
+    validate_positive_diagnostic_number(path, assertion_label, "line", assertion.line)?;
+    validate_positive_diagnostic_number(path, assertion_label, "column", assertion.column)?;
+
+    Ok(())
+}
+
+fn parse_secondary_label_assertions(
+    path: &Path,
+    diagnostic_assertion_label: &str,
+    assertions: &[SecondaryLabelAssertionToml],
+) -> Result<Vec<SecondaryLabelAssertion>, String> {
+    let mut parsed_assertions = Vec::with_capacity(assertions.len());
+
+    for (index, assertion) in assertions.iter().enumerate() {
+        let assertion_label = format!("{diagnostic_assertion_label}.secondary_labels[{index}]");
+        let occurrence = match assertion.occurrence {
+            None => {
+                return Err(format!(
+                    "Expectation file '{}' {} requires a one-based 'occurrence'.",
+                    path.display(),
+                    assertion_label
+                ));
+            }
+            Some(0) => {
+                return Err(format!(
+                    "Expectation file '{}' {} must use a one-based 'occurrence'.",
+                    path.display(),
+                    assertion_label
+                ));
+            }
+            Some(occurrence) => occurrence,
+        };
+
+        validate_diagnostic_path(path, &assertion_label, assertion.path.as_deref())?;
+
+        validate_positive_diagnostic_number(path, &assertion_label, "line", assertion.line)?;
+        validate_positive_diagnostic_number(path, &assertion_label, "column", assertion.column)?;
+
+        if assertion.path.is_none() && assertion.line.is_none() && assertion.column.is_none() {
+            return Err(format!(
+                "Expectation file '{}' {} must assert at least one secondary-label location fact ('path', 'line', or 'column').",
+                path.display(),
+                assertion_label
+            ));
+        }
+
+        parsed_assertions.push(SecondaryLabelAssertion {
+            occurrence,
+            path: assertion.path.as_deref().map(normalize_relative_path_text),
+            line: assertion.line,
+            column: assertion.column,
+        });
+    }
+
+    Ok(parsed_assertions)
+}
+
+fn validate_diagnostic_path(
+    expectation_path: &Path,
+    assertion_label: &str,
+    expected_path: Option<&str>,
+) -> Result<(), String> {
+    let Some(expected_path) = expected_path else {
+        return Ok(());
+    };
+
+    if expected_path.trim().is_empty() {
+        return Err(format!(
+            "Expectation file '{}' {} requires a non-empty 'path'.",
+            expectation_path.display(),
+            assertion_label
+        ));
+    }
+
+    let field_name = format!("{assertion_label} 'path'");
+    validate_relative_path(expected_path, &field_name, CurrentDirectoryRule::Forbid).map_err(
+        |error| {
+            format!(
+                "Expectation file '{}': {error}.",
+                expectation_path.display()
+            )
+        },
+    )
+}
+
+fn validate_positive_diagnostic_number(
+    path: &Path,
+    assertion_label: &str,
+    field_name: &str,
+    value: Option<usize>,
+) -> Result<(), String> {
+    if value == Some(0) {
+        return Err(format!(
+            "Expectation file '{}' {} requires a positive '{}' value.",
+            path.display(),
+            assertion_label,
+            field_name
+        ));
+    }
+
+    Ok(())
 }
 
 fn parse_artifact_assertions(

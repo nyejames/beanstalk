@@ -5,7 +5,9 @@
 
 use super::super::policy::evaluate_suite;
 use super::super::reporting::{build_suite_inventory_report, format_case_listing};
-use super::super::types::{ExactWarningExpectation, GoldenExpectation, SuccessContract};
+use super::super::types::{
+    DiagnosticAssertion, ExactWarningExpectation, GoldenExpectation, SuccessContract,
+};
 use super::super::{
     BackendId, CaseRole, DiagnosticMatchMode, ExpectedOutcome, FailureExpectation,
     SuccessExpectation, TestCaseSpec, TestSuiteSpec, WarningExpectation,
@@ -24,6 +26,7 @@ fn case(
         display_name: format!("{case_id} [{}]", backend_id.as_str()),
         case_id: case_id.to_owned(),
         manifest_relative_path: case_id.to_owned(),
+        fixture_root: PathBuf::from("."),
         tags: tags.iter().map(|tag| (*tag).to_owned()).collect(),
         contract: contract.map(str::to_owned),
         role,
@@ -58,6 +61,7 @@ fn listing_groups_selected_backends_and_retains_case_metadata() {
                 warnings: WarningExpectation::Forbid,
                 message_contains: Vec::new(),
                 diagnostic_codes: vec!["BST-RULE-0001".to_owned()],
+                diagnostic_assertions: Vec::new(),
                 diagnostic_match: DiagnosticMatchMode::Contains,
                 diagnostic_match_reason: Some("independent recovery".to_owned()),
             }),
@@ -72,6 +76,7 @@ fn listing_groups_selected_backends_and_retains_case_metadata() {
                 warnings: WarningExpectation::Forbid,
                 message_contains: Vec::new(),
                 diagnostic_codes: vec!["BST-RULE-0001".to_owned()],
+                diagnostic_assertions: Vec::new(),
                 diagnostic_match: DiagnosticMatchMode::Contains,
                 diagnostic_match_reason: Some("independent recovery".to_owned()),
             }),
@@ -112,6 +117,16 @@ fn inventory_json_groups_backend_metadata_under_one_canonical_case() {
             warnings: WarningExpectation::Forbid,
             message_contains: Vec::new(),
             diagnostic_codes: vec!["BST-RULE-0001".to_owned()],
+            diagnostic_assertions: vec![DiagnosticAssertion {
+                code: "BST-RULE-0001".to_owned(),
+                occurrence: 1,
+                reason: Some("invalid_expression.expected_operator".to_owned()),
+                path: Some("input/main.bst".to_owned()),
+                line: Some(1),
+                column: None,
+                count: Some(1),
+                secondary_labels: Vec::new(),
+            }],
             diagnostic_match: DiagnosticMatchMode::Contains,
             diagnostic_match_reason: Some("independent recovery".to_owned()),
         }),
@@ -156,6 +171,14 @@ fn inventory_json_groups_backend_metadata_under_one_canonical_case() {
     assert_eq!(
         json["cases"][0]["backends"][0]["diagnostic_match_reason"],
         "independent recovery"
+    );
+    assert_eq!(
+        json["cases"][0]["backends"][0]["structured_diagnostic_assertions"],
+        true
+    );
+    assert_eq!(
+        json["cases"][0]["backends"][0]["assertion_kinds"],
+        serde_json::json!(["diagnostic_codes", "diagnostic_assertions"])
     );
     assert_eq!(json["cases"][0]["backends"][1]["backend"], "html_wasm");
     assert_eq!(json["cases"][0]["backends"][1]["baseline_applied"], true);
@@ -348,6 +371,7 @@ fn report_serializes_contains_policy_finding_once_with_typed_reason_fact() {
             warnings: WarningExpectation::Forbid,
             message_contains: Vec::new(),
             diagnostic_codes: vec!["BST-RULE-0001".to_owned()],
+            diagnostic_assertions: Vec::new(),
             diagnostic_match: DiagnosticMatchMode::Contains,
             diagnostic_match_reason: Some("  ".to_owned()),
         }),
