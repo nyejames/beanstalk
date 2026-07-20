@@ -30,26 +30,26 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 13F external-JavaScript runtime/glue ownership
-LAST_ACCEPTED_COMMIT: `ca89c014e` (Phase 13E HTML assembly-policy ownership)
+CURRENT_SLICE: Phase 14A canonical contract and role backfill
+LAST_ACCEPTED_COMMIT: `461559f1e` (Phase 13E plan checkpoint; Phase 13F required no code change)
 WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; accepted code is committed; unrelated concurrent docs source and generated-release edits remain unstaged
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: backend lowering, ABI, artifact, and semantic-substitute ownership rules govern the next slice
-- code: external-JavaScript runtime-emission and glue tests are the next backend ownership inventory
+- docs: canonical case metadata, suite-policy, and final governance rules govern the next slice
+- code: tests/cases/manifest.toml and the schema-6 audit inventory own the contract/role backfill
 ACCEPTANCE_CRITERIA:
-- classify backend tests as ABI, helper, mapping, planning, malformed HIR, artifact, or semantic substitute
-- remove only semantic substitutes with verified integration owners
-- retain deliberate target representation and malformed-HIR contracts without broadening backend support
+- every canonical non-harness case receives an explicit role and every primary case receives a contract
+- duplicate primary contracts remain hard failures and secondary owners stay deliberate
+- tag spelling/order and obsolete tags are normalized without changing behavior
 VALIDATION_STATE:
 - `just validate`: passed; cross-target Clippy, 3,526 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
-- focused Phase 13E coverage: passed; all 55 assigned HTML assembly-policy tests classified; 14 weaker artifact substitutes removed with nine verified canonical integration owners; 41 hidden policy and algorithm owners retained
+- focused Phase 13F coverage: passed; all 23 external-JavaScript runtime-emission/glue tests classified as ABI, helper, mapping, planning, or malformed-input owners; no substitute justified deletion
 DOCS_IMPACT: progress matrix reviewed; support and backend coverage are unchanged by fixture consolidation; index unchanged
 BLOCKERS_OR_OPEN_DECISIONS: none for the next slice; Ollama remains required with no provider substitution
-DELEGATION_DECISION: Ollama — bounded Phase 13 backend ownership slices
+DELEGATION_DECISION: Ollama — bounded Phase 14 implementation slices
 NEXT_WORKER_ORDER: Ollama only; no provider substitution
 STOP_REASON: none
-NEXT_RESUME_ACTION: launch the external-JavaScript runtime-emission and glue classification slice through Ollama
+NEXT_RESUME_ACTION: run a fresh suite audit and launch the canonical contract/role backfill through Ollama
 
 ---
 
@@ -204,6 +204,7 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 13C Wasm backend ownership | `c1fab2a91` | Accepted | All 28 Wasm lowering, binary-emission, and shared feature-validation tests retained as LIR mapping, ABI, planning, malformed-input, artifact, or structured target-rejection owners; incidental LIR block/local ids replaced by semantic relationships; 3,540 Rust tests and 1,793 integration executions |
 | Phase 13D HTML project artifact ownership | no code change after `ccc692886` | Accepted | All 24 HTML builder and four HTML-Wasm artifact tests retained as capability, artifact, planning, mapping, config-reason, or ABI owners; single-file and deeper nested-route contracts lack stronger canonical integration owners; latest full gate remains 3,540 Rust tests and 1,793 integration executions |
 | Phase 13E HTML assembly-policy ownership | `ca89c014e` | Accepted | All 55 document, JS-path, output-plan, metadata, registry, and tracked-asset tests classified; 14 weaker artifact substitutes removed in favor of nine canonical integration owners; 41 hidden config, escaping, mapping, registry, and warning-policy owners retained; 3,526 Rust tests and 1,793 integration executions |
+| Phase 13F external-JS runtime ownership | no code change after `461559f1e` | Accepted | All 23 external-JavaScript runtime-emission and glue tests retained as ABI, helper, mapping, planning, or malformed-input owners; canonical integration owns reachable/unreachable page behavior; latest full gate remains 3,526 Rust tests and 1,793 integration executions |
 
 ---
 
@@ -1180,26 +1181,26 @@ When current implementation does not support the accepted canonical-module end s
 
 ## Checklist
 
-- [ ] Classify every backend test as ABI, helper, mapping, planning, malformed HIR, artifact, or semantic substitute.
-- [ ] Locate the integration runtime owner for every semantic substitute.
-- [ ] Keep stable JavaScript helper/ABI and deliberate carrier contracts.
-- [ ] Remove source-text assertions replaced by execution.
-- [ ] Replace incidental generated names/indexes with semantic fragments or structured facts.
-- [ ] Keep Wasm binary validation, imports/exports, LIR/emission invariants, and structured unsupported-feature validation.
-- [ ] Move project-assembly artifact contracts to integration.
-- [ ] Keep backend-local facts that final artifacts cannot expose.
-- [ ] Do not broaden Wasm support.
-- [ ] Record every deletion/replacement.
+- [x] Classify every backend test as ABI, helper, mapping, planning, malformed HIR, artifact, or semantic substitute.
+- [x] Locate the integration runtime owner for every semantic substitute.
+- [x] Keep stable JavaScript helper/ABI and deliberate carrier contracts.
+- [x] Remove source-text assertions replaced by execution.
+- [x] Replace incidental generated names/indexes with semantic fragments or structured facts.
+- [x] Keep Wasm binary validation, imports/exports, LIR/emission invariants, and structured unsupported-feature validation.
+- [x] Move project-assembly artifact contracts to integration.
+- [x] Keep backend-local facts that final artifacts cannot expose.
+- [x] Do not broaden Wasm support.
+- [x] Record every deletion/replacement.
 
 ## Phase 13 acceptance
 
-- [ ] Language semantics are integration-owned.
-- [ ] Target representation contracts remain.
-- [ ] No backend reparses source or reconstructs semantics.
-- [ ] Exact generated names remain only where ABI requires them.
-- [ ] Malformed-HIR coverage remains.
-- [ ] Backend documentation/indexes are current.
-- [ ] Full validation passes.
+- [x] Language semantics are integration-owned.
+- [x] Target representation contracts remain.
+- [x] No backend reparses source or reconstructs semantics.
+- [x] Exact generated names remain only where ABI requires them.
+- [x] Malformed-HIR coverage remains.
+- [x] Backend documentation/indexes are current.
+- [x] Full validation passes.
 
 ---
 
