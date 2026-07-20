@@ -203,8 +203,7 @@ fn explicit_copy_emits_clone_value_wrapped_read() {
 }
 
 // ---------------------------------------------------------------------------
-
-// Error handling test [error]
+// Option carrier construct tests [option]
 // ---------------------------------------------------------------------------
 
 /// Verifies that VariantConstruct with Option carrier lowers to tagged JS objects. [option]
