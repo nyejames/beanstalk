@@ -100,9 +100,15 @@ fn parse_path_clause_items(
         let path_uses_grouped_syntax = items.iter().any(|item| item.from_grouped);
 
         if path_uses_grouped_syntax {
+            let reason = if items.iter().any(|item| item.alias.is_some()) {
+                InvalidImportClauseReason::PerEntryAndTrailingAlias
+            } else {
+                InvalidImportClauseReason::GroupedWithTrailingAlias
+            };
+
             return Err(Box::new(CompilerDiagnostic::invalid_import_clause(
                 ImportClauseKind::Grouped,
-                InvalidImportClauseReason::GroupedWithTrailingAlias,
+                reason,
                 alias_token.location.clone(),
             )));
         }
@@ -121,15 +127,6 @@ fn parse_path_clause_items(
                 tokens[index].location.clone(),
             )));
         }
-    }
-
-    // Reject double alias: per-entry alias + trailing alias.
-    if trailing_alias.is_some() && items.iter().any(|item| item.alias.is_some()) {
-        return Err(Box::new(CompilerDiagnostic::invalid_import_clause(
-            ImportClauseKind::Grouped,
-            InvalidImportClauseReason::PerEntryAndTrailingAlias,
-            path_token.location.clone(),
-        )));
     }
 
     let parsed_items = items

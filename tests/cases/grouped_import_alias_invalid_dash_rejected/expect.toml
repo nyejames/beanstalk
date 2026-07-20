@@ -2,3 +2,7 @@
 mode = "failure"
 warnings = "forbid"
 diagnostic_codes = ["BST-SYNTAX-0019"]
+
+[[backends.html.diagnostic_assertions]]
+code = "BST-SYNTAX-0019"
+reason = "invalid_import_clause.alias_not_valid_identifier"

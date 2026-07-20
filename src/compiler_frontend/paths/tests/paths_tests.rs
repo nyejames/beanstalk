@@ -708,7 +708,7 @@ fn reject_group_level_alias() {
 }
 
 #[test]
-fn reject_double_alias() {
+fn reject_per_entry_and_trailing_alias() {
     let mut string_table = StringTable::new();
     let style_directives = StyleDirectiveRegistry::built_ins();
     let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
@@ -734,7 +734,7 @@ fn reject_double_alias() {
     assert_import_clause_error(
         *result.expect_err("expected import clause error"),
         ImportClauseKind::Grouped,
-        InvalidImportClauseReason::GroupedWithTrailingAlias,
+        InvalidImportClauseReason::PerEntryAndTrailingAlias,
     );
 }
 
