@@ -30,26 +30,26 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 13D HTML project-assembly artifact ownership
-LAST_ACCEPTED_COMMIT: `c1fab2a91` (Phase 13C Wasm backend ownership)
+CURRENT_SLICE: Phase 13E remaining HTML assembly-policy ownership
+LAST_ACCEPTED_COMMIT: `ccc692886` (Phase 13C plan checkpoint; Phase 13D required no code change)
 WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; accepted code is committed; unrelated concurrent docs source and generated-release edits remain unstaged
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: backend lowering, ABI, artifact, and semantic-substitute ownership rules govern the next slice
-- code: HTML project-builder tests are the next backend/project-assembly ownership inventory
+- code: remaining HTML document, JS path, output-plan, metadata, runtime-registry, and tracked-asset tests are the next ownership inventory
 ACCEPTANCE_CRITERIA:
 - classify backend tests as ABI, helper, mapping, planning, malformed HIR, artifact, or semantic substitute
 - remove only semantic substitutes with verified integration owners
 - retain deliberate target representation and malformed-HIR contracts without broadening backend support
 VALIDATION_STATE:
 - `just validate`: passed; cross-target Clippy, 3,540 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
-- focused Phase 13C coverage: passed; all 28 Wasm lowering, binary-emission, and shared backend feature-validation tests classified as backend-local owners; two assertions no longer pin incidental LIR block/local ids
+- focused Phase 13D coverage: passed; all 24 HTML builder and four HTML-Wasm artifact tests classified as capability, artifact, planning, mapping, config-reason, or ABI owners; no stronger canonical integration owner justified deletion
 DOCS_IMPACT: progress matrix reviewed; support and backend coverage are unchanged by fixture consolidation; index unchanged
 BLOCKERS_OR_OPEN_DECISIONS: none for the next slice; Ollama remains required with no provider substitution
 DELEGATION_DECISION: Ollama — bounded Phase 13 backend ownership slices
 NEXT_WORKER_ORDER: Ollama only; no provider substitution
 STOP_REASON: none
-NEXT_RESUME_ACTION: inventory and launch the HTML project-assembly artifact classification slice through Ollama
+NEXT_RESUME_ACTION: launch the remaining HTML assembly-policy classification slice through Ollama
 
 ---
 
@@ -202,6 +202,7 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 13B3 JS runtime-helper ownership | `b42e9ab6f` | Accepted | All 65 runtime-helper tests classified; one weaker collection-push success-carrier duplicate removed; 64 helper-selection, helper-contract, and ABI owners retained; 3,540 Rust tests and 1,793 integration executions |
 | Phase 13B4 JS policy and symbol ownership | `b87477d98` | Accepted | All 41 prelude, host, symbol, inline-expression, and emission-policy tests retained as helper selection/ordering, ABI, mapping, planning, or malformed-input owners; stale legacy wording corrected; 3,540 Rust tests and 1,793 integration executions |
 | Phase 13C Wasm backend ownership | `c1fab2a91` | Accepted | All 28 Wasm lowering, binary-emission, and shared feature-validation tests retained as LIR mapping, ABI, planning, malformed-input, artifact, or structured target-rejection owners; incidental LIR block/local ids replaced by semantic relationships; 3,540 Rust tests and 1,793 integration executions |
+| Phase 13D HTML project artifact ownership | no code change after `ccc692886` | Accepted | All 24 HTML builder and four HTML-Wasm artifact tests retained as capability, artifact, planning, mapping, config-reason, or ABI owners; single-file and deeper nested-route contracts lack stronger canonical integration owners; latest full gate remains 3,540 Rust tests and 1,793 integration executions |
 
 ---
 
