@@ -30,26 +30,26 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 9 cross-module effect-summary and diagnostic-remapping coverage
-LAST_ACCEPTED_COMMIT: `034f919ed` (Phase 8 generic ownership)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; accepted code is committed; unrelated concurrent edits remain in `docs/src/#page.bst`, `docs/src/docs/getting-started/#page.bst`, and `docs/src/styles/docs.bst`
+CURRENT_SLICE: Phase 10 `check`/build parity and root/fragment activation
+LAST_ACCEPTED_COMMIT: `6d92cbd1e` (Phase 9 facade effect-summary coverage)
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; accepted code is committed; unrelated concurrent docs source and generated-release edits remain unstaged
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: module visibility, access/effect summaries, aliasing, and diagnostic remapping contracts govern current supported cross-module behavior
-- code: exported function summaries, caller transfer, facade/re-export binding, and existing cross-file borrow fixtures are the next inventory
+- docs: command-overlay, root activation, fragment ordering, and output-ownership contracts govern the next slice
+- code: shared check/build frontend seams, no-artifact check behavior, entry activation, and existing exact runtime owners are the next inventory
 ACCEPTANCE_CRITERIA:
-- exported return aliases block caller mutation while live and permit it after final use; exported fresh returns remain independent
-- cross-module mutable parameters accept authored `~` and reject missing `~` at the consumer
-- supported facade/re-export paths preserve access/effect semantics and structured source remapping without bypassing visibility
+- direct check and build frontend seams preserve diagnostic and warning identity for one reusable fixture
+- check emits no backend artifacts and current target-planning behavior is covered without pulling deferred architecture forward
+- active/imported/API-only roots and compile-time/runtime fragments retain exact-once and source-order behavior
 VALIDATION_STATE:
-- `just validate`: passed; cross-target Clippy, 3,540 Rust tests, 1,799 integration executions, docs check, and 28 benchmark cases
-- focused generic tests: passed; 24 datatype facts and nine AST remapping facts; 11 strengthened cases; zero audit hard findings across 1,657 cases
-DOCS_IMPACT: progress matrix reviewed; broad generic declaration/inference/trait-bound coverage wording remains accurate; index unchanged
+- `just validate`: passed; cross-target Clippy, 3,540 Rust tests, 1,804 integration executions, docs check, and 28 benchmark cases
+- focused Phase 9 coverage: passed; three facade/borrow cases and 45 import/function executions; zero audit hard findings across 1,660 cases
+DOCS_IMPACT: progress matrix reviewed; broad module, function, borrow, and structured-remapping coverage wording remains accurate; index unchanged
 BLOCKERS_OR_OPEN_DECISIONS: none for the next slice; Ollama remains required with no provider substitution
-DELEGATION_DECISION: Ollama — bounded Phase 9 cross-module coverage slices
+DELEGATION_DECISION: Ollama — bounded Phase 10 parity and activation slices
 NEXT_WORKER_ORDER: Ollama only; no provider substitution
 STOP_REASON: none
-NEXT_RESUME_ACTION: inventory current cross-module effect-summary support and launch the first Phase 9 slice through Ollama
+NEXT_RESUME_ACTION: inventory current check/build parity and root/fragment activation owners, then launch the first Phase 10 slice through Ollama
 
 ---
 
@@ -188,6 +188,7 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 8 function-call ownership | `720c23e9a` | Accepted | Eighteen whole-source units removed; eleven parser/access/location facts retained; computed mutable-rvalue behavior gained one exact-output primary integration owner; 3,548 Rust tests and 1,797 integration executions |
 | Phase 8 type-resolution ownership | `53039a0e4` | Accepted | Four source-shaped capacity rejection units removed; eighteen hidden bridge/folding/TypeId/registration/map facts retained; struct-field and return-slot zero-capacity diagnostics gained primary integration owners; 3,544 Rust tests and 1,799 integration executions |
 | Phase 8 generic ownership | `034f919ed` | Accepted | Three user-behavior scope units and one datatype-renderer wording unit removed; 24 binding/identity/substitution/rollback facts and nine AST remapping facts retained; 11 canonical diagnostics strengthened; 3,540 Rust tests and 1,799 integration executions |
+| Phase 9 facade effect summaries | `6d92cbd1e` | Accepted | Three primary facade cases cover return-alias liveness/final use, fresh returns, and mutable-parameter access across re-exports; existing generated-generic remapping owns supported generated labels; 3,540 Rust tests and 1,804 integration executions |
 
 ---
 
@@ -1037,12 +1038,12 @@ Prove public access, mutation, consumption, return-alias, and source-remapping f
 
 ## Required coverage
 
-- [ ] Exported return alias blocks caller mutation while live; succeeds after final use.
-- [ ] Exported fresh return permits caller mutation.
-- [ ] Cross-module mutable parameter succeeds with `~` and rejects missing `~` at the consumer.
-- [ ] Facade/re-export preserves access/effect semantics and origin identity.
-- [ ] Generated generic instance coverage is added only where current support permits.
-- [ ] Provider, consumer call-site, facade, generated call-site, and cross-file borrow labels use normalized paths/lines.
+- [x] Exported return alias blocks caller mutation while live; succeeds after final use.
+- [x] Exported fresh return permits caller mutation.
+- [x] Cross-module mutable parameter succeeds with `~` and rejects missing `~` at the consumer.
+- [x] Facade/re-export preserves access/effect semantics and origin identity.
+- [x] Generated generic instance coverage is added only where current support permits.
+- [x] Provider, consumer call-site, facade, generated call-site, and cross-file borrow labels use normalized paths/lines.
 
 ## Deferred architecture policy
 
@@ -1055,12 +1056,12 @@ When current implementation does not support the accepted canonical-module end s
 
 ## Phase 9 acceptance
 
-- [ ] Current cross-module effect behavior has integration owners.
-- [ ] Unit summary facts remain.
-- [ ] Source remapping is structured.
-- [ ] Facades do not bypass visibility.
-- [ ] Deferred architecture remains deferred.
-- [ ] Full validation passes.
+- [x] Current cross-module effect behavior has integration owners.
+- [x] Unit summary facts remain.
+- [x] Source remapping is structured.
+- [x] Facades do not bypass visibility.
+- [x] Deferred architecture remains deferred.
+- [x] Full validation passes.
 
 ---
 
@@ -1352,7 +1353,7 @@ Do not present lower counts or faster time as proof of correctness.
 | Gap | Current accepted behavior | Planned owner | Phase/status |
 |---|---|---|---|
 | Hashmap `get` alias blocks live mutation | Shared map value access conflicts with overlapping mutation | Integration plus focused borrow facts | Phase 6 |
-| Cross-module return-alias/effect summaries | Public summaries govern caller transfer where current modules support it | Integration plus summary units | Phase 9 |
+| Cross-module return-alias/effect summaries | Public summaries govern caller transfer where current modules support it | Integration plus summary units | Phase 9 accepted (`6d92cbd1e`) |
 | Reactive update after subscription | Subscription is read-only dependency, not active borrow | Integration plus invalidation units | Phase 11 |
 | `check`/build frontend parity | Same frontend diagnostics; `check` emits no artifacts | Command tests | Phase 10 |
 | Ordered root/fragment execution | Active root once; imported root dormant; source order preserved | Integration | Phases 5 and 10 |
