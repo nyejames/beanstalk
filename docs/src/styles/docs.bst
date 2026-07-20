@@ -77,7 +77,7 @@ theme_css #= [docs_font, $css:
     }
 
     a {
-        color: light-dark(hsl(217, 83%, 39%), hsl(186, 93%, 61%));
+        color: light-dark(hsl(217, 83%, 39%), hsl(217, 82%, 67%));
     }
     
     .container {

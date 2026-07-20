@@ -222,7 +222,7 @@ body {
     }
 
     a {
-        color: light-dark(hsl(217, 83%, 39%), hsl(186, 93%, 61%));
+        color: light-dark(hsl(217, 83%, 39%), hsl(217, 82%, 67%));
     }
 
     .container {
@@ -1054,7 +1054,7 @@ body {
     ;
     </code></pre><p>Full option match:</p><pre style=""><code class='codeblock'>
     label <span class='bst-code-operator'>=</span> <span class='bst-code-keyword'>if</span> maybe_name is<span class='bst-code-operator'>:</span>
-        <span class='bst-code-string'>&quot;Ada&quot;</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> then <span class='bst-code-string'>&quot;Hi Ada&quot;</span>
+        <span class='bst-code-string'>&quot;Priya&quot;</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> then <span class='bst-code-string'>&quot;Hi Ada&quot;</span>
         <span class='bst-code-operator'>|</span>name<span class='bst-code-operator'>|</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> then name
         none <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> then <span class='bst-code-string'>&quot;guest&quot;</span>
     ;
@@ -1063,7 +1063,7 @@ body {
         io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;missing&quot;</span><span class='bst-code-parenthesis'>)</span>
     ;
     </code></pre><h3>Equality and ordering</h3><p>Options support equality comparisons:</p><pre style=""><code class='codeblock'>
-    present <span class='bst-code-operator'>=</span> maybe_name is <span class='bst-code-string'>&quot;Ada&quot;</span>
+    present <span class='bst-code-operator'>=</span> maybe_name is <span class='bst-code-string'>&quot;Priya&quot;</span>
     absent <span class='bst-code-operator'>=</span> maybe_name is none
     same <span class='bst-code-operator'>=</span> a is b
     </code></pre><p>Ordering operators such as <code>&lt;</code> on optional values are not supported.</p><h3>Postfix propagation</h3><p>Postfix <code>?</code> unwraps a present value or returns <code>none</code> from the enclosing function.</p><pre style=""><code class='codeblock'>

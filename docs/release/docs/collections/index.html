@@ -222,7 +222,7 @@ body {
     }
 
     a {
-        color: light-dark(hsl(217, 83%, 39%), hsl(186, 93%, 61%));
+        color: light-dark(hsl(217, 83%, 39%), hsl(217, 82%, 67%));
     }
 
     .container {
@@ -720,7 +720,7 @@ body {
 
             <p>Collections use curly braces and keep their values in order.</p><pre style=""><code class='codeblock'>
     scores <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-number'>10</span>, <span class='bst-code-number'>20</span>, <span class='bst-code-number'>30</span><span class='bst-code-parenthesis'>}</span>
-    names <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-string'>&quot;Ada&quot;</span>, <span class='bst-code-string'>&quot;Grace&quot;</span><span class='bst-code-parenthesis'>}</span>
+    names <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-string'>&quot;Priya&quot;</span>, <span class='bst-code-string'>&quot;Grace&quot;</span><span class='bst-code-parenthesis'>}</span>
     </code></pre><p>Every item has the same element type.</p><p>An empty collection needs an explicit type:</p><pre style=""><code class='codeblock'>
     scores <span class='bst-code-operator'>~</span><span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>Int</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span>
     </code></pre><p>Collections start at index <code>0</code>.</p><p>Use collection methods such as <code>get</code>, <code>set</code>, <code>push</code> and <code>remove</code> instead of square-bracket indexing.</p>
@@ -729,7 +729,7 @@ body {
     <div class="doc-level__panel doc-level__panel--advanced">
         <p>Collections are ordered, zero-indexed, homogeneous groups.</p><p>Collection types and literals use braces.</p><pre style=""><code class='codeblock'>
     values <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-number'>1</span>, <span class='bst-code-number'>2</span>, <span class='bst-code-number'>3</span><span class='bst-code-parenthesis'>}</span>
-    names <span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>String</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-string'>&quot;Ada&quot;</span>, <span class='bst-code-string'>&quot;Grace&quot;</span><span class='bst-code-parenthesis'>}</span>
+    names <span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>String</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-string'>&quot;Priya&quot;</span>, <span class='bst-code-string'>&quot;Grace&quot;</span><span class='bst-code-parenthesis'>}</span>
     </code></pre><h3>Literal inference</h3><ul><li>A non-empty literal infers one element type from its items.</li><li>Every item must be compatible with that element type.</li><li>A typed collection receiving site may apply normal contextual coercion to each item.</li><li>A mixed literal such as <code>{1, &quot;bad&quot;}</code> is invalid.</li><li>The element type is fixed when the literal is created.</li></ul><p>An empty literal needs an explicit collection type at its declaration or field default site.</p><pre style=""><code class='codeblock'>
     values <span class='bst-code-operator'>~</span><span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>Int</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span>
     </code></pre><p>The compiler does not infer an empty collection from:</p><ul><li>a later <code>push</code></li><li>later assignment</li><li>a loop</li><li>a function argument</li><li>HIR use</li><li>borrow analysis</li></ul><h3>Collection versus map literals</h3><p>A top-level key/value entry with <code>=</code> makes a non-empty brace literal a map literal.</p><p>Every entry in that literal must then be a key/value pair.</p><p>Collection items and map entries cannot be mixed.</p><h3>Syntax boundaries</h3><ul><li>Collections do not use square-bracket indexing.</li><li>Square brackets belong to templates.</li><li>Element reads and writes use compiler-owned collection members.</li><li><code>~</code> is binding or access mode. It is not part of collection type identity.</li></ul>
@@ -787,11 +787,11 @@ body {
             <p>A growable collection can gain and lose items.</p><pre style=""><code class='codeblock'>
     names <span class='bst-code-operator'>~</span><span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>String</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span>
 
-    <span class='bst-code-operator'>~</span>names.push<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Ada&quot;</span><span class='bst-code-parenthesis'>)</span> catch<span class='bst-code-operator'>:</span>
+    <span class='bst-code-operator'>~</span>names.push<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Priya&quot;</span><span class='bst-code-parenthesis'>)</span> catch<span class='bst-code-operator'>:</span>
         assert<span class='bst-code-parenthesis'>(</span>false, <span class='bst-code-string'>&quot;push failed&quot;</span><span class='bst-code-parenthesis'>)</span>
     ;
     </code></pre><p>The binding is mutable because the collection changes.</p><p>An immutable collection can still be read:</p><pre style=""><code class='codeblock'>
-    names <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-string'>&quot;Ada&quot;</span>, <span class='bst-code-string'>&quot;Grace&quot;</span><span class='bst-code-parenthesis'>}</span>
+    names <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-string'>&quot;Priya&quot;</span>, <span class='bst-code-string'>&quot;Grace&quot;</span><span class='bst-code-parenthesis'>}</span>
 
     first <span class='bst-code-operator'>=</span> names.get<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>0</span><span class='bst-code-parenthesis'>)</span> catch<span class='bst-code-operator'>:</span>
         then <span class='bst-code-string'>&quot;guest&quot;</span>
@@ -806,7 +806,7 @@ body {
     </code></pre><h3>Contract</h3><ul><li>The element type is part of semantic type identity.</li><li>A growable <code>{Int}</code> is not compatible with <code>{String}</code>.</li><li>Growable and fixed collections are different types.</li><li>A mutable binding is required for operations that change the collection.</li><li>An immutable growable collection remains readable but cannot be mutated through that binding.</li><li><code>length()</code> returns the current logical number of items.</li><li>The element type is not widened by later mutation.</li></ul><p><code>push</code> remains fallible and must be handled even for a growable collection. Runtime allocation and backend failures must not become unchecked language behaviour.</p><pre style=""><code class='codeblock'>
     names <span class='bst-code-operator'>~</span><span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>String</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span>
 
-    <span class='bst-code-operator'>~</span>names.push<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Ada&quot;</span><span class='bst-code-parenthesis'>)</span> catch<span class='bst-code-operator'>:</span>
+    <span class='bst-code-operator'>~</span>names.push<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Priya&quot;</span><span class='bst-code-parenthesis'>)</span> catch<span class='bst-code-operator'>:</span>
         assert<span class='bst-code-parenthesis'>(</span>false, <span class='bst-code-string'>&quot;growable push failed&quot;</span><span class='bst-code-parenthesis'>)</span>
     ;
     </code></pre><p>Use <a href="../bindings/#mutable-bindings">Mutable bindings</a> for the distinction between mutable storage and one exclusive operation.</p>
@@ -1028,11 +1028,11 @@ body {
 
             <p>A hash map stores values under keys.</p><pre style=""><code class='codeblock'>
     scores <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span>
-        <span class='bst-code-string'>&quot;Ada&quot;</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>10</span>,
+        <span class='bst-code-string'>&quot;Priya&quot;</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>10</span>,
         <span class='bst-code-string'>&quot;Grace&quot;</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>12</span>,
     <span class='bst-code-parenthesis'>}</span>
     </code></pre><p>Use <code>get</code> to read a value:</p><pre style=""><code class='codeblock'>
-    score <span class='bst-code-operator'>=</span> scores.get<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Ada&quot;</span><span class='bst-code-parenthesis'>)</span> catch<span class='bst-code-operator'>:</span>
+    score <span class='bst-code-operator'>=</span> scores.get<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Priya&quot;</span><span class='bst-code-parenthesis'>)</span> catch<span class='bst-code-operator'>:</span>
         then <span class='bst-code-number'>0</span>
     ;
     </code></pre><p>Use <code>set</code> and <code>remove</code> through a mutable receiver:</p><pre style=""><code class='codeblock'>
@@ -1049,14 +1049,14 @@ body {
 
     <div class="doc-level__panel doc-level__panel--advanced">
         <p>Hash maps are insertion-ordered key/value groups.</p><h3>Types and literals</h3><pre style=""><code class='codeblock'>
-    scores <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-string'>&quot;Ada&quot;</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>10</span>, <span class='bst-code-string'>&quot;Grace&quot;</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>12</span><span class='bst-code-parenthesis'>}</span>
+    scores <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-string'>&quot;Priya&quot;</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>10</span>, <span class='bst-code-string'>&quot;Grace&quot;</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>12</span><span class='bst-code-parenthesis'>}</span>
     empty_scores <span class='bst-code-operator'>~</span><span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> <span class='bst-code-type'>Int</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span>
     </code></pre><ul><li>A map type is <code>{Key = Value}</code>.</li><li>A map literal contains <code>key = value</code> entries.</li><li>Any top-level <code>=</code> entry makes a non-empty brace literal a map literal.</li><li>Every entry must then be a key/value pair.</li><li>Collection items and map entries cannot be mixed.</li><li>An empty map literal needs an explicit or immediate contextual map type.</li><li>A bare identifier in key position is a variable reference, not string shorthand.</li><li>Map values follow the same runtime-storable rules as collection elements.</li></ul><h3>Key contract</h3><p>Builtin map keys are permanently limited to:</p><ul><li><code>String</code></li><li><code>Int</code></li><li><code>Bool</code></li><li><code>Char</code></li></ul><p>Invalid key families include:</p><ul><li><code>Float</code></li><li>structs</li><li>choices</li><li>collections</li><li>maps</li><li>traits</li><li>functions</li><li>external opaque types</li><li>templates as a distinct key type</li><li>generic parameters</li></ul><p>The builtin map surface does not expose user-defined <code>HASHABLE</code>, custom hashers or custom comparers.</p><h3>Storage and order</h3><p>Maps own their stored keys and values.</p><p>Insertion order follows these rules:</p><ol><li>First insertion chooses the entry position.</li><li>Replacing an existing key updates the value without moving the entry.</li><li>Replacement keeps the existing stored key.</li><li>Removing a key removes its entry from the order.</li><li>Re-inserting that key appends a new entry.</li></ol><h3>Operations</h3><p><code>get(key)</code>:</p><ul><li>shared receiver</li><li>fallible</li><li>returns shared access to the stored value</li></ul><p><code>contains(key)</code>:</p><ul><li>shared receiver</li><li>infallible</li><li>returns <code>Bool</code></li></ul><p><code>set(key, value)</code>:</p><ul><li>mutable receiver</li><li>fallible</li><li>inserts or replaces</li><li>returns no old value</li></ul><p><code>remove(key)</code>:</p><ul><li>mutable receiver</li><li>fallible</li><li>returns the owned removed value</li></ul><p><code>clear()</code>:</p><ul><li>mutable receiver</li><li>infallible</li><li>removes every entry</li></ul><p><code>length</code>:</p><ul><li>shared read-only property</li><li>no parentheses</li><li>returns <code>Int</code></li><li>cannot be assigned</li></ul><pre style=""><code class='codeblock'>
-    score <span class='bst-code-operator'>=</span> scores.get<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Ada&quot;</span><span class='bst-code-parenthesis'>)</span> catch<span class='bst-code-operator'>:</span>
+    score <span class='bst-code-operator'>=</span> scores.get<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Priya&quot;</span><span class='bst-code-parenthesis'>)</span> catch<span class='bst-code-operator'>:</span>
         then <span class='bst-code-number'>0</span>
     ;
 
-    found <span class='bst-code-operator'>=</span> scores.contains<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Ada&quot;</span><span class='bst-code-parenthesis'>)</span>
+    found <span class='bst-code-operator'>=</span> scores.contains<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Priya&quot;</span><span class='bst-code-parenthesis'>)</span>
 
     <span class='bst-code-operator'>~</span>scores.set<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Linus&quot;</span>, <span class='bst-code-number'>7</span><span class='bst-code-parenthesis'>)</span> catch<span class='bst-code-operator'>:</span>
     ;

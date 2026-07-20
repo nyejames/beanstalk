@@ -222,7 +222,7 @@ body {
     }
 
     a {
-        color: light-dark(hsl(217, 83%, 39%), hsl(186, 93%, 61%));
+        color: light-dark(hsl(217, 83%, 39%), hsl(217, 82%, 67%));
     }
 
     .container {
@@ -732,7 +732,7 @@ body {
         <p>A reactive source is stable mutation-capable runtime storage declared with <code>$Type</code> or <code>$=</code>.</p><h3>Syntax</h3><pre style=""><code class='codeblock'>
     count <span class='bst-code-operator'>$</span><span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
     enabled <span class='bst-code-operator'>$</span><span class='bst-code-operator'>=</span> true
-    names <span class='bst-code-operator'>$</span><span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>String</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-string'>&quot;Ada&quot;</span><span class='bst-code-parenthesis'>}</span>
+    names <span class='bst-code-operator'>$</span><span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>String</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-string'>&quot;Priya&quot;</span><span class='bst-code-parenthesis'>}</span>
     scores <span class='bst-code-operator'>$</span><span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> <span class='bst-code-type'>Int</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span>
     </code></pre><h3>Exact contract</h3><ul><li><code>$Type</code> declares a reactive source with an explicit underlying type.</li><li><code>$=</code> infers the underlying type from the initializer.</li><li>Reactive syntax is access and storage metadata, not a first-class wrapper type.</li><li>Semantic type identity remains the underlying ordinary type.</li><li>The declaration owns stable mutation-capable storage in its runtime scope.</li><li>Source identity belongs to the binding.</li><li>Ordinary reads snapshot the current value.</li><li>A reactive declaration is runtime storage, not a compile-time constant.</li><li>Normal no-shadowing and type compatibility rules apply.</li><li>Collection and map source values retain their ordinary collection and map semantics.</li></ul><h3>Explicit and inferred types</h3><pre style=""><code class='codeblock'>
     count <span class='bst-code-operator'>$</span><span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
@@ -966,7 +966,7 @@ body {
     count <span class='bst-code-operator'>$</span><span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
     count <span class='bst-code-operator'>=</span> <span class='bst-code-number'>1</span>
     </code></pre><p>Assigning to <code>count</code> updates the source. Anything subscribed to <code>count</code> will know it may need to update.</p><h3>Mutable collection source</h3><pre style=""><code class='codeblock'>
-    names <span class='bst-code-operator'>$</span><span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>String</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-string'>&quot;Ada&quot;</span><span class='bst-code-parenthesis'>}</span>
+    names <span class='bst-code-operator'>$</span><span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>String</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-string'>&quot;Priya&quot;</span><span class='bst-code-parenthesis'>}</span>
 
     <span class='bst-code-operator'>~</span>names.push<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Grace&quot;</span><span class='bst-code-parenthesis'>)</span> catch<span class='bst-code-operator'>:</span>
         io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;push failed&quot;</span><span class='bst-code-parenthesis'>)</span>
@@ -979,7 +979,7 @@ body {
     count <span class='bst-code-operator'>$</span><span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
     count <span class='bst-code-operator'>=</span> <span class='bst-code-number'>1</span>
     </code></pre><p>Assignment updates the same stable source. Subscribers to that source are marked invalid.</p><h3>Invalidation in V1</h3><p>Mutation through a source invalidates the whole source in V1. Invalidating operations include:</p><ul><li>assignment</li><li>field writes</li><li>collection mutation</li><li>map mutation</li><li>mutable write-through calls</li></ul><p>Field, item and path-level invalidation are deferred.</p><h3>Mutation still follows access rules</h3><pre style=""><code class='codeblock'>
-    names <span class='bst-code-operator'>$</span><span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>String</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-string'>&quot;Ada&quot;</span><span class='bst-code-parenthesis'>}</span>
+    names <span class='bst-code-operator'>$</span><span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>String</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-string'>&quot;Priya&quot;</span><span class='bst-code-parenthesis'>}</span>
 
     <span class='bst-code-operator'>~</span>names.push<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Grace&quot;</span><span class='bst-code-parenthesis'>)</span> catch<span class='bst-code-operator'>:</span>
         io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;push failed&quot;</span><span class='bst-code-parenthesis'>)</span>

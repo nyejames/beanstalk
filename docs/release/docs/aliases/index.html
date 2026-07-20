@@ -222,7 +222,7 @@ body {
     }
 
     a {
-        color: light-dark(hsl(217, 83%, 39%), hsl(186, 93%, 61%));
+        color: light-dark(hsl(217, 83%, 39%), hsl(217, 82%, 67%));
     }
 
     .container {
@@ -736,7 +736,7 @@ body {
     </code></pre><p><code>UserId</code> is <code>Int</code>. <code>User</code> is a separate type.</p><h3>One collection alias</h3><p>An alias can name a collection type.</p><pre style=""><code class='codeblock'>
     <span class='bst-code-struct'>Names</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>String</span><span class='bst-code-parenthesis'>}</span>
 
-    names <span class='bst-code-struct'>Names</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-string'>&quot;Ada&quot;</span>, <span class='bst-code-string'>&quot;Grace&quot;</span><span class='bst-code-parenthesis'>}</span>
+    names <span class='bst-code-struct'>Names</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-string'>&quot;Priya&quot;</span>, <span class='bst-code-string'>&quot;Grace&quot;</span><span class='bst-code-parenthesis'>}</span>
     </code></pre><h3>Remember</h3><ul><li>A type alias is for naming, not for creating a new type.</li><li>Aliases work in parameters, fields, returns and local annotations.</li><li>Aliases are not values. You cannot pass <code>UserId</code> to a function or call it as a constructor. Even when an alias targets a struct or choice, only the target&#39;s canonical name constructs.</li></ul>
     </div>
 
@@ -765,7 +765,7 @@ body {
     <span class='bst-code-struct'>Name</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-type'>String</span>
     <span class='bst-code-struct'>Names</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-struct'>Name</span><span class='bst-code-parenthesis'>}</span>
 
-    names <span class='bst-code-struct'>Names</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-string'>&quot;Ada&quot;</span><span class='bst-code-parenthesis'>}</span>
+    names <span class='bst-code-struct'>Names</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-string'>&quot;Priya&quot;</span><span class='bst-code-parenthesis'>}</span>
     </code></pre><h3>Cycles</h3><p>Alias cycles are invalid. The compiler reports a circular dependency.</p><h3>Aliases are not constructors</h3><p>An alias does not create a new constructor. The alias name is not callable even when the alias targets a constructible nominal type. Construct the target type using its canonical nominal name.</p><p>For struct aliases, only the struct&#39;s canonical name constructs:</p><pre style=""><code class='codeblock'>
     <span class='bst-code-struct'>Person</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
         name <span class='bst-code-struct'>String,</span>
@@ -774,10 +774,10 @@ body {
     <span class='bst-code-struct'>MainPerson</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>Person</span>
 
     <span class='bst-code-comment'>-- Valid: construct with the canonical name</span>
-    person <span class='bst-code-struct'>MainPerson</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Person</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Ada&quot;</span><span class='bst-code-parenthesis'>)</span>
+    person <span class='bst-code-struct'>MainPerson</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Person</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Priya&quot;</span><span class='bst-code-parenthesis'>)</span>
 
     <span class='bst-code-comment'>-- Error: MainPerson is a type, not a constructor</span>
-    <span class='bst-code-comment'>-- person MainPerson = MainPerson(&quot;Ada&quot;)</span>
+    <span class='bst-code-comment'>-- person MainPerson = MainPerson(&quot;Priya&quot;)</span>
     </code></pre><p>For choice aliases, only the choice&#39;s canonical name constructs variants:</p><pre style=""><code class='codeblock'>
     <span class='bst-code-struct'>Status</span> <span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span>
         <span class='bst-code-struct'>Ready,</span>

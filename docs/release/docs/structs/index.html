@@ -222,7 +222,7 @@ body {
     }
 
     a {
-        color: light-dark(hsl(217, 83%, 39%), hsl(186, 93%, 61%));
+        color: light-dark(hsl(217, 83%, 39%), hsl(217, 82%, 67%));
     }
 
     .container {
@@ -809,16 +809,16 @@ body {
         score <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>,
     <span class='bst-code-operator'>|</span>
 
-    player <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Player</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Ada&quot;</span><span class='bst-code-parenthesis'>)</span>
+    player <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Player</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Priya&quot;</span><span class='bst-code-parenthesis'>)</span>
     </code></pre><p>The constructor uses the default score.</p><p>Named fields make larger constructors easier to read:</p><pre style=""><code class='codeblock'>
     player <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Player</span><span class='bst-code-parenthesis'>(</span>
-        name <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Ada&quot;</span>,
+        name <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Priya&quot;</span>,
         score <span class='bst-code-operator'>=</span> <span class='bst-code-number'>10</span>
     <span class='bst-code-parenthesis'>)</span>
     </code></pre><p>Read fields with a dot:</p><pre style=""><code class='codeblock'>
     name <span class='bst-code-operator'>=</span> player.name
     </code></pre><p>To change a field, the struct binding must be mutable:</p><pre style=""><code class='codeblock'>
-    player <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Player</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Ada&quot;</span><span class='bst-code-parenthesis'>)</span>
+    player <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Player</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Priya&quot;</span><span class='bst-code-parenthesis'>)</span>
     player.score <span class='bst-code-operator'>=</span> <span class='bst-code-number'>10</span>
     </code></pre>
     </div>

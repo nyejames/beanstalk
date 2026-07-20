@@ -222,7 +222,7 @@ body {
     }
 
     a {
-        color: light-dark(hsl(217, 83%, 39%), hsl(186, 93%, 61%));
+        color: light-dark(hsl(217, 83%, 39%), hsl(217, 82%, 67%));
     }
 
     .container {
@@ -893,7 +893,7 @@ body {
     letter <span class='bst-code-struct'>Char</span> <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&#39;🌱&#39;</span>
     label <span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Beanstalk&quot;</span>
     </code></pre><h3>Core forms</h3><ul><li><code>true</code> and <code>false</code> are <code>Bool</code> values.</li><li>Whole-number literals are naturally <code>Int</code>.</li><li>Decimal-point literals are naturally <code>Float</code>.</li><li>Single-quoted literals create <code>Char</code> values.</li><li>Quoted slices and string templates use the <code>String</code> type.</li><li><code>none</code> requires an optional <code>T?</code> receiving context.</li></ul><p>The Numbers documentation owns exact numeric grammar and arithmetic behaviour. The Strings and characters section owns the implemented string source forms. Options are documented with Errors and options.</p><h3>Composite values</h3><p>Collections use braces. String templates use square brackets.</p><pre style=""><code class='codeblock'>
-    names <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-string'>&quot;Ada&quot;</span>, <span class='bst-code-string'>&quot;Grace&quot;</span><span class='bst-code-parenthesis'>}</span>
+    names <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-string'>&quot;Priya&quot;</span>, <span class='bst-code-string'>&quot;Grace&quot;</span><span class='bst-code-parenthesis'>}</span>
 
     message <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span>
         <span class='bst-code-struct'>Hello</span> from a template.
@@ -957,7 +957,7 @@ body {
     </code></pre><p>Use single quotes for one character:</p><pre style=""><code class='codeblock'>
     seedling <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&#39;🌱&#39;</span>
     </code></pre><p>Use a template when text needs values or a larger structure:</p><pre style=""><code class='codeblock'>
-    name <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Ada&quot;</span>
+    name <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Priya&quot;</span>
 
     greeting <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span>
         <span class='bst-code-struct'>Hello,</span> <span class='bst-code-parenthesis'>[</span>name<span class='bst-code-parenthesis'>]</span>
@@ -970,7 +970,7 @@ body {
     escaped_slice <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Hello\nworld&quot;</span>
     letter <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&#39;🌱&#39;</span>
 
-    name <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Ada&quot;</span>
+    name <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Priya&quot;</span>
     message <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span>
         <span class='bst-code-struct'>Hello,</span> <span class='bst-code-parenthesis'>[</span>name<span class='bst-code-parenthesis'>]</span>
     <span class='bst-code-parenthesis'>]</span>
