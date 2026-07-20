@@ -30,13 +30,13 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 14C11 HIR module, local, metadata, and reachability unit ownership review
-LAST_ACCEPTED_COMMIT: `1c112aec9` (Phase 14C10 code)
+CURRENT_SLICE: Phase 14C12 HIR display and validation unit ownership review
+LAST_ACCEPTED_COMMIT: `1c112aec9` (Phase 14C10 code; Phase 14C11 required no code change)
 WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; accepted code is committed; concurrent example-name work remains separately committed
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: unit-test ownership, pruning, compiler-stage boundaries, and final governance rules govern the next slice
-- code: HIR expression, control-flow, result, numeric, and Float-formatting ownership is complete; module/local lowering, const/reactive/function-origin metadata, and reachability tests form the next bounded group before HIR display/validation, borrow, build-system, backend, and final TIR reviews
+- code: HIR lowering, module/local, metadata, and reachability ownership is complete; HIR display and validation tests form the final HIR group before borrow, build-system, backend, and final TIR reviews
 ACCEPTANCE_CRITERIA:
 - every remaining full-source unit has a distinct hidden invariant, parser fact, stage boundary, or policy owner
 - units superseded by a stronger canonical integration primary are deleted with replacement evidence
@@ -51,7 +51,7 @@ BLOCKERS_OR_OPEN_DECISIONS: none; 81 contract families without a primary are int
 DELEGATION_DECISION: Ollama — bounded Phase 14 implementation slices
 NEXT_WORKER_ORDER: Ollama only; no provider substitution
 STOP_REASON: none
-NEXT_RESUME_ACTION: launch the HIR module, local, metadata, and reachability unit ownership review through Ollama
+NEXT_RESUME_ACTION: launch the HIR display and validation unit ownership review through Ollama
 
 ---
 
@@ -229,6 +229,7 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 14C8 HIR expression-lowering units | `83e3d689a` | Accepted | Three pure `TypeEnvironment` tests that never lowered an expression were removed in favor of focused datatype owners plus stronger HIR collection, multi-return call, and nominal-struct lowering owners; 63 HIR value, type, place, call, prelude, CFG, handoff, reactive, carrier, operation, source, and malformed-invariant owners retained; 3,500 Rust tests and 1,793 integration executions |
 | Phase 14C9 HIR control-flow units | `75b7b2b93` | Accepted | One reference-typed collection-loop smoke that asserted only completed HIR validation was removed in favor of the executing `loop_collection_iteration` primary plus the explicit focused CFG owner; 43 branch, match, loop, value-block, and scoped-block CFG, target, merge, pattern, source-map, binding, terminality, and malformed-invariant owners retained; 3,499 Rust tests and 1,793 integration executions |
 | Phase 14C10 HIR result and numeric lowering units | `1c112aec9` | Accepted | All 27 result/fallible, checked-numeric, and Float-formatting units retained as explicit-edge, terminator, tuple-projection, alias, operation, failure-mode, conversion, prelude, formatter, and reactive-laziness owners; two module-wide fallible-branch checks were strengthened to prove outer calls and numeric operations occur only on the success edge; 3,499 Rust tests and 1,793 integration executions |
+| Phase 14C11 HIR module, local, metadata, and reachability units | no code change after `1c112aec9` | Accepted | All 31 module/local lowering, const/reactive/function-origin metadata, and reachability units retained as artefact projection, identity, binding, materialization, prelude, remapping, selected-root graph, feature-location, CFG-successor, and malformed-reference owners; latest full gate remains 3,499 Rust tests and 1,793 integration executions |
 
 ---
 
