@@ -66,9 +66,10 @@ theme_css #= [docs_font, $css:
                 ),
                 linear-gradient(
                     145deg,
-                    #d2fbe4df 0%,
-                    #e3f8d4cd 32%,
-                    #bfd1cd 100%
+                    #baf6d4 0%,
+                    #eeffe3 17%,
+                    #e2ffe2 77%,
+                    #b1fcec 100%
                 );
 
             background-repeat: no-repeat;
@@ -76,7 +77,7 @@ theme_css #= [docs_font, $css:
     }
 
     a {
-        color: light-dark(hsl(201, 84%, 41%), hsl(110, 62%, 66%));
+        color: light-dark(hsl(217, 83%, 39%), hsl(186, 93%, 61%));
     }
     
     .container {
@@ -92,13 +93,13 @@ theme_css #= [docs_font, $css:
         font-family: var(--bst-font-family-monospace);
     }
 
-        .container pre {
+    .container pre {
         max-width: 100%;
         margin-block: 1.25em;
         padding: 1em;
         overflow-x: auto;
         border-radius: 5px;
-        background-color: hsla(0, 0%, 42%, 0.12);
+        background-color: #262626fc;
     }
 
     table {
@@ -173,7 +174,7 @@ theme_css #= [docs_font, $css:
 
 Palette = |
     red String = [$html:<span style="color: light-dark(hsl(0, 84%, 35%), hsl(0, 73%, 65%));">[$slot]</span>],
-    highlight String = [$html:<span style="color: light-dark(hsl(43, 69%, 29%), hsl(110, 62%, 66%));">[$slot]</span>],
+    highlight String = [$html:<span style="color: light-dark(hsl(43, 98%, 21%), hsl(110, 62%, 66%));">[$slot]</span>],
 |
 
 palette #= Palette()
