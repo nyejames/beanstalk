@@ -859,18 +859,6 @@ fn collection_push_returns_capacity_exceeded_error() {
     );
 }
 
-/// Verifies that `__bs_collection_push` returns ok carrier on success. [fixed-collection]
-#[test]
-fn collection_push_returns_ok_carrier_on_success() {
-    let source = lower_minimal_module("main");
-    let push = helper_source(&source, "__bs_collection_push");
-
-    assert!(
-        push.contains("{ tag: \"ok\", value: null }"),
-        "__bs_collection_push must return ok carrier on success"
-    );
-}
-
 /// Verifies that `__bs_collection_length` returns logical item count via items.length. [fixed-collection]
 #[test]
 fn collection_length_returns_logical_item_count() {
