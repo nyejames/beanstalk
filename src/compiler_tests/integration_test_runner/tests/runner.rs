@@ -32,8 +32,10 @@ fn suite_with_case(role: Option<CaseRole>, contract: Option<&str>) -> TestSuiteS
                 success_contract: None,
                 artifact_assertions: Vec::new(),
                 golden: GoldenExpectation::default(),
-                rendered_output_contains: vec!["policy-marker".to_owned()],
-                rendered_output_not_contains: Vec::new(),
+                rendered_output: super::super::types::RenderedOutputExpectation {
+                    contains: vec!["policy-marker".to_owned()],
+                    ..Default::default()
+                },
                 artifacts_must_not_exist: Vec::new(),
             }),
         }],

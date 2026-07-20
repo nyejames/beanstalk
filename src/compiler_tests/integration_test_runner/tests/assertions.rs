@@ -10,8 +10,8 @@ use super::super::assertions::{
     validate_success_result,
 };
 use super::super::types::{
-    DiagnosticAssertion, ExactWarningExpectation, GoldenExpectation, SecondaryLabelAssertion,
-    SuccessContract,
+    DiagnosticAssertion, ExactWarningExpectation, GoldenExpectation, RenderedOutputExpectation,
+    SecondaryLabelAssertion, SuccessContract,
 };
 use super::super::{
     BackendId, DiagnosticMatchMode, ExpectedOutcome, FailureExpectation, FailureKind, GoldenMode,
@@ -529,8 +529,7 @@ fn exact_warning_codes_match_success_warnings_independent_of_order() {
         success_contract: None,
         artifact_assertions: Vec::new(),
         golden: GoldenExpectation::default(),
-        rendered_output_contains: Vec::new(),
-        rendered_output_not_contains: Vec::new(),
+        rendered_output: Default::default(),
         artifacts_must_not_exist: Vec::new(),
     };
     let case = success_test_case(BackendId::Html, expectation.clone());
@@ -550,8 +549,7 @@ fn exact_warning_codes_report_missing_and_unexpected_codes() {
         success_contract: None,
         artifact_assertions: Vec::new(),
         golden: GoldenExpectation::default(),
-        rendered_output_contains: Vec::new(),
-        rendered_output_not_contains: Vec::new(),
+        rendered_output: Default::default(),
         artifacts_must_not_exist: Vec::new(),
     };
     let case = success_test_case(BackendId::Html, expectation.clone());
@@ -579,8 +577,7 @@ fn exact_warning_codes_report_duplicate_count_mismatch() {
         success_contract: None,
         artifact_assertions: Vec::new(),
         golden: GoldenExpectation::default(),
-        rendered_output_contains: Vec::new(),
-        rendered_output_not_contains: Vec::new(),
+        rendered_output: Default::default(),
         artifacts_must_not_exist: Vec::new(),
     };
     let case = success_test_case(BackendId::Html, expectation.clone());
@@ -608,8 +605,7 @@ fn ignore_and_forbid_keep_their_structured_warning_behaviour() {
         success_contract: None,
         artifact_assertions: Vec::new(),
         golden: GoldenExpectation::default(),
-        rendered_output_contains: Vec::new(),
-        rendered_output_not_contains: Vec::new(),
+        rendered_output: Default::default(),
         artifacts_must_not_exist: Vec::new(),
     };
     let ignored_case = success_test_case(BackendId::Html, ignored.clone());
@@ -797,8 +793,7 @@ fn absence_expectation(forbidden: Vec<String>) -> SuccessExpectation {
         success_contract: None,
         artifact_assertions: Vec::new(),
         golden: GoldenExpectation::default(),
-        rendered_output_contains: Vec::new(),
-        rendered_output_not_contains: Vec::new(),
+        rendered_output: Default::default(),
         artifacts_must_not_exist: forbidden,
     }
 }
@@ -809,8 +804,7 @@ fn acceptance_only_expectation() -> SuccessExpectation {
         success_contract: Some(SuccessContract::AcceptanceOnly),
         artifact_assertions: Vec::new(),
         golden: GoldenExpectation::default(),
-        rendered_output_contains: Vec::new(),
-        rendered_output_not_contains: Vec::new(),
+        rendered_output: Default::default(),
         artifacts_must_not_exist: Vec::new(),
     }
 }
@@ -1007,10 +1001,84 @@ fn normalized_comparison_strips_core_css_after_crlf_normalization() {
 
 #[test]
 fn rendered_output_fragment_validation_reports_semantic_mismatch_kind() {
-    let contains = vec!["missing-fragment".to_string()];
-    let result = validate_rendered_output_fragments("rendered text", &contains, &[])
+    let expectation = RenderedOutputExpectation {
+        contains: vec!["missing-fragment".to_string()],
+        ..Default::default()
+    };
+    let result = validate_rendered_output_fragments("rendered text", &expectation)
         .expect("missing required fragment should fail");
     assert_eq!(result.1, FailureKind::RenderedOutputMismatch);
+}
+
+#[test]
+fn rendered_output_order_allows_repeated_fragments_at_distinct_occurrences() {
+    let expectation = RenderedOutputExpectation {
+        contains_in_order: vec!["first".to_owned(), "second".to_owned(), "first".to_owned()],
+        ..Default::default()
+    };
+
+    assert!(validate_rendered_output_fragments("first\nsecond\nfirst", &expectation).is_none());
+}
+
+#[test]
+fn rendered_output_order_reports_distinct_failure_kind() {
+    let expectation = RenderedOutputExpectation {
+        contains_in_order: vec!["second".to_owned(), "first".to_owned()],
+        ..Default::default()
+    };
+
+    let result = validate_rendered_output_fragments("first\nsecond", &expectation)
+        .expect("out-of-order fragments should fail");
+    assert_eq!(result.1, FailureKind::RenderedOutputOrderMismatch);
+}
+
+#[test]
+fn rendered_output_exactly_once_accepts_one_occurrence_and_rejects_missing_or_duplicate() {
+    let expectation = RenderedOutputExpectation {
+        contains_exactly_once: vec!["once".to_owned()],
+        ..Default::default()
+    };
+
+    assert!(validate_rendered_output_fragments("before\nonce\nafter", &expectation).is_none());
+
+    let missing = validate_rendered_output_fragments("before\nafter", &expectation)
+        .expect("missing exact-once fragment should fail");
+    assert_eq!(missing.1, FailureKind::RenderedOutputMultiplicityMismatch);
+
+    let duplicate = validate_rendered_output_fragments("once\nonce", &expectation)
+        .expect("duplicate exact-once fragment should fail");
+    assert_eq!(duplicate.1, FailureKind::RenderedOutputMultiplicityMismatch);
+}
+
+#[test]
+fn rendered_output_exact_normalizes_only_line_endings() {
+    let expectation = RenderedOutputExpectation {
+        exact: Some("first\nsecond\nthird".to_owned()),
+        ..Default::default()
+    };
+
+    assert!(validate_rendered_output_fragments("first\r\nsecond\rthird", &expectation).is_none());
+
+    let whitespace_difference =
+        validate_rendered_output_fragments("first\r\n second\rthird", &expectation)
+            .expect("ordinary whitespace differences should fail exact output");
+    assert_eq!(
+        whitespace_difference.1,
+        FailureKind::RenderedOutputExactMismatch
+    );
+}
+
+#[test]
+fn rendered_output_exact_accepts_empty_captured_text_only() {
+    let expectation = RenderedOutputExpectation {
+        exact: Some(String::new()),
+        ..Default::default()
+    };
+
+    assert!(validate_rendered_output_fragments("", &expectation).is_none());
+    let result = validate_rendered_output_fragments("\n", &expectation)
+        .expect("a captured newline is not empty exact output");
+    assert_eq!(result.1, FailureKind::RenderedOutputExactMismatch);
 }
 
 #[test]
@@ -1135,8 +1203,10 @@ fn rendered_output_validation_reports_harness_failure_without_script_blocks() {
         success_contract: None,
         artifact_assertions: Vec::new(),
         golden: GoldenExpectation::default(),
-        rendered_output_contains: vec!["anything".to_string()],
-        rendered_output_not_contains: Vec::new(),
+        rendered_output: super::super::types::RenderedOutputExpectation {
+            contains: vec!["anything".to_string()],
+            ..Default::default()
+        },
         artifacts_must_not_exist: Vec::new(),
     };
     let case = success_test_case(BackendId::Html, expectation.clone());
@@ -1145,6 +1215,29 @@ fn rendered_output_validation_reports_harness_failure_without_script_blocks() {
     let result = validate_success_result(&case, build_result, &expectation);
 
     assert_eq!(result.failure_kind, Some(FailureKind::HarnessFailed));
+}
+
+#[test]
+fn rendered_output_node_is_not_invoked_without_a_rendered_assertion() {
+    let expectation = SuccessExpectation {
+        warnings: WarningExpectation::Forbid,
+        success_contract: None,
+        artifact_assertions: Vec::new(),
+        golden: GoldenExpectation::default(),
+        rendered_output: RenderedOutputExpectation::default(),
+        artifacts_must_not_exist: Vec::new(),
+    };
+    let case = success_test_case(BackendId::Html, expectation.clone());
+    let result = validate_success_result(
+        &case,
+        build_result_with_index_html(VALID_HTML),
+        &expectation,
+    );
+
+    assert!(
+        result.passed,
+        "Node should not be needed without assertions"
+    );
 }
 
 #[test]

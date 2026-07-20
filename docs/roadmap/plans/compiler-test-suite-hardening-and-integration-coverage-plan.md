@@ -30,26 +30,26 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 5A — typed chronological runtime-event model accepted and ready to commit
-LAST_ACCEPTED_COMMIT: `14bd9178b` (Phase 4D)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 5A runner files and this plan are ready to commit; unrelated generated font/style rebuild churn from `a83e9587f` remains unstaged
+CURRENT_SLICE: Phase 5B — exact, ordered, and exact-once runtime assertion schema accepted and ready to commit
+LAST_ACCEPTED_COMMIT: `786171dd3` (Phase 5A)
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 5B runner files and this plan are ready to commit; unrelated generated font/style rebuild churn from `a83e9587f` remains unstaged
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: testing standards require one Node harness and external behaviour assertions; Phase 5 owns exact/order/exact-once runtime semantics without adding another executor
-- code: `assertions/rendered_output.rs` records typed console and fragment-insert events in one chronological array and derives chronological combined plus channel-specific views
+- code: `types.rs`, `expectations.rs`, suite completeness/policy, reporting, `assertions/rendered_output.rs`, and runner self-tests own the runtime assertion surface from TOML through audit and execution
 ACCEPTANCE_CRITERIA:
-- record console and fragment inserts in one typed chronological event array at event time
-- derive existing channel/combined views from that array while preserving current contains/not-contains contracts, one executor, one microtask flush, and cleanup/retry behaviour
-- add focused extraction, decoding, ordering, and infrastructure-failure coverage without adding Phase 5B expectation fields
+- add optional exact output, ordered-fragment, and exact-once-fragment fields over the chronological combined event payload while retaining contains/not-contains
+- normalize line endings only for exact comparison; exact is exclusive with other rendered fields; ordered requires meaningful sequence input; exact-once rejects empty/duplicate authored fragments
+- give exact, order, and multiplicity mismatches distinct failure kinds and thread all new fields through completeness, acceptance-only exclusion, Node gating, audit schema/reporting, and focused self-tests
 VALIDATION_STATE:
-- `just validate`: passed; cross-target Clippy, 3,562 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
-- Phase 5A focused runner tests: passed; 48 assertion tests plus both representative HTML executions
-DOCS_IMPACT: none until the Phase 5 expectation surface and migrations are complete; progress matrix and `index.md` unchanged
+- `just validate`: passed; cross-target Clippy, 3,575 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
+- Phase 5B focused runner tests: passed; 164 integration-runner tests, schema-6 audit, and representative HTML execution
+DOCS_IMPACT: `testing.bd` still names schema 5 and must be updated with the complete runtime assertion workflow during Phase 5 documentation/closure; progress matrix and `index.md` unchanged
 BLOCKERS_OR_OPEN_DECISIONS: Ollama wrapper still requires removed `docs/codebase-style-guide.md`; 19 justified diagnostic-contains blocks record duplicate module compilation that the queued canonical-module plan must remove
 DELEGATION_DECISION: codex-cli fallback — the user-selected Ollama default remains cleanly blocked before edits by its stale required-document path
 NEXT_WORKER_ORDER: none for this accepted slice
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit Phase 5A, refresh its hash, then define and delegate the bounded Phase 5B expectation-schema slice
+NEXT_RESUME_ACTION: commit Phase 5B, refresh its hash, then delegate the first Phase 5C order-sensitive expectation migration
 
 ---
 
@@ -171,7 +171,8 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 4C9 generated generic remapping | `a72876029` | Accepted | Recursive generic instantiation keeps the call site primary while body, declaration, and substitution labels remap to a helper source; rendered label prose removed; 1,778/1,778 executions |
 | Phase 4C10 declaration/conflict secondary labels | `83aecdad2` | Accepted | Duplicate declarations and duplicate exclusive accesses assert primary and earlier-site secondary paths/lines through rule and borrow diagnostic lanes; 1,778/1,778 executions |
 | Phase 4D structured assertion documentation | `14bd9178b` | Accepted | Testing/contributor workflow and progress coverage now describe compiler-owned reasons plus primary/secondary remapping; release docs rebuilt and owned routes inspected |
-| Phase 5A chronological runtime-event model | pending acceptance commit | Accepted | One typed event array preserves console/fragment chronology; strict decoding and chronological/channel views have focused coverage; 3,562 Rust tests and 1,778 integration executions |
+| Phase 5A chronological runtime-event model | `786171dd3` | Accepted | One typed event array preserves console/fragment chronology; strict decoding and chronological/channel views have focused coverage; 3,562 Rust tests and 1,778 integration executions |
+| Phase 5B stronger runtime assertion schema | pending acceptance commit | Accepted | Typed exact/order/exact-once contracts use one Node harness; schema 6 reports all five runtime forms; 3,575 Rust tests and 1,778 integration executions |
 
 ---
 
@@ -839,13 +840,13 @@ Extend the existing Node harness to protect chronology, exact output, and exact-
 
 ## 5B — Stronger runtime fields
 
-- [ ] Add exact output.
-- [ ] Add ordered fragments.
-- [ ] Add exact-once fragments.
-- [ ] Retain contains/not-contains.
-- [ ] Validate empty or incompatible combinations.
-- [ ] Normalize line endings only; do not broadly collapse whitespace in exact mode.
-- [ ] Give exact/ordered mismatches distinct triage kinds.
+- [x] Add exact output.
+- [x] Add ordered fragments.
+- [x] Add exact-once fragments.
+- [x] Retain contains/not-contains.
+- [x] Validate empty or incompatible combinations.
+- [x] Normalize line endings only; do not broadly collapse whitespace in exact mode.
+- [x] Give exact/ordered mismatches distinct triage kinds.
 
 ## 5C — Order-sensitive migrations
 

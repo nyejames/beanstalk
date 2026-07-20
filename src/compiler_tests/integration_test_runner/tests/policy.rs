@@ -39,8 +39,10 @@ fn success_case(
             success_contract,
             artifact_assertions: Vec::new(),
             golden: GoldenExpectation::default(),
-            rendered_output_contains: rendered_output.map(str::to_owned).into_iter().collect(),
-            rendered_output_not_contains: Vec::new(),
+            rendered_output: super::super::types::RenderedOutputExpectation {
+                contains: rendered_output.map(str::to_owned).into_iter().collect(),
+                ..Default::default()
+            },
             artifacts_must_not_exist: Vec::new(),
         }),
     }

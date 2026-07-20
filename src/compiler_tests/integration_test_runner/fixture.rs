@@ -282,8 +282,7 @@ fn load_canonical_case_specs_at(
                 success_contract: backend_expectation.success_contract,
                 artifact_assertions: backend_expectation.artifact_assertions,
                 golden,
-                rendered_output_contains: backend_expectation.rendered_output_contains,
-                rendered_output_not_contains: backend_expectation.rendered_output_not_contains,
+                rendered_output: backend_expectation.rendered_output,
                 artifacts_must_not_exist: backend_expectation.artifacts_must_not_exist,
             }),
             ExpectationMode::Failure => ExpectedOutcome::Failure(FailureExpectation {
@@ -425,8 +424,7 @@ fn has_authored_success_contract(
     backend_expectation.success_contract == Some(SuccessContract::AcceptanceOnly)
         || !backend_expectation.artifact_assertions.is_empty()
         || golden.is_present()
-        || !backend_expectation.rendered_output_contains.is_empty()
-        || !backend_expectation.rendered_output_not_contains.is_empty()
+        || backend_expectation.rendered_output.is_present()
         || !backend_expectation.artifacts_must_not_exist.is_empty()
         || matches!(&backend_expectation.warnings, WarningExpectation::Exact(_))
 }

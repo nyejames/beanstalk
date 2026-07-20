@@ -6,7 +6,8 @@
 use super::super::policy::evaluate_suite;
 use super::super::reporting::{build_suite_inventory_report, format_case_listing};
 use super::super::types::{
-    DiagnosticAssertion, ExactWarningExpectation, GoldenExpectation, SuccessContract,
+    DiagnosticAssertion, ExactWarningExpectation, GoldenExpectation, RenderedOutputExpectation,
+    SuccessContract,
 };
 use super::super::{
     BackendId, CaseRole, DiagnosticMatchMode, ExpectedOutcome, FailureExpectation,
@@ -142,8 +143,10 @@ fn inventory_json_groups_backend_metadata_under_one_canonical_case() {
             success_contract: None,
             artifact_assertions: Vec::new(),
             golden: GoldenExpectation::default(),
-            rendered_output_contains: vec!["ok".to_owned()],
-            rendered_output_not_contains: Vec::new(),
+            rendered_output: super::super::types::RenderedOutputExpectation {
+                contains: vec!["ok".to_owned()],
+                ..Default::default()
+            },
             artifacts_must_not_exist: Vec::new(),
         }),
     );
@@ -151,7 +154,7 @@ fn inventory_json_groups_backend_metadata_under_one_canonical_case() {
     let report = report_for_cases(&[html_case, wasm_case], Some("0123456789abcdef".to_owned()));
     let json = serde_json::to_value(&report).expect("inventory should serialize");
 
-    assert_eq!(json["schema_version"], 5);
+    assert_eq!(json["schema_version"], 6);
     assert_eq!(json["repository_commit"], "0123456789abcdef");
     assert_eq!(json["manifest_case_count"], 1);
     assert_eq!(json["expanded_backend_execution_count"], 2);
@@ -208,8 +211,7 @@ fn inventory_reports_acceptance_only_without_baseline_only_state() {
             success_contract: Some(SuccessContract::AcceptanceOnly),
             artifact_assertions: Vec::new(),
             golden: GoldenExpectation::default(),
-            rendered_output_contains: Vec::new(),
-            rendered_output_not_contains: Vec::new(),
+            rendered_output: Default::default(),
             artifacts_must_not_exist: Vec::new(),
         }),
     );
@@ -224,6 +226,125 @@ fn inventory_reports_acceptance_only_without_baseline_only_state() {
     );
     assert_eq!(json["summary"]["acceptance_only_backend_blocks"], 1);
     assert_eq!(json["summary"]["baseline_only_backend_blocks"], 0);
+}
+
+#[test]
+fn inventory_reports_each_rendered_output_form_and_schema_six_summary_counts() {
+    let cases = vec![
+        case(
+            "exact_output",
+            BackendId::Html,
+            &["integration"],
+            None,
+            None,
+            ExpectedOutcome::Success(SuccessExpectation {
+                warnings: WarningExpectation::Forbid,
+                success_contract: None,
+                artifact_assertions: Vec::new(),
+                golden: GoldenExpectation::default(),
+                rendered_output: RenderedOutputExpectation {
+                    exact: Some(String::new()),
+                    ..Default::default()
+                },
+                artifacts_must_not_exist: Vec::new(),
+            }),
+        ),
+        case(
+            "ordered_output",
+            BackendId::Html,
+            &["integration"],
+            None,
+            None,
+            ExpectedOutcome::Success(SuccessExpectation {
+                warnings: WarningExpectation::Forbid,
+                success_contract: None,
+                artifact_assertions: Vec::new(),
+                golden: GoldenExpectation::default(),
+                rendered_output: RenderedOutputExpectation {
+                    contains: vec!["prefix".to_owned()],
+                    not_contains: vec!["forbidden".to_owned()],
+                    contains_in_order: vec!["first".to_owned(), "second".to_owned()],
+                    ..Default::default()
+                },
+                artifacts_must_not_exist: Vec::new(),
+            }),
+        ),
+        case(
+            "exactly_once_output",
+            BackendId::Html,
+            &["integration"],
+            None,
+            None,
+            ExpectedOutcome::Success(SuccessExpectation {
+                warnings: WarningExpectation::Forbid,
+                success_contract: None,
+                artifact_assertions: Vec::new(),
+                golden: GoldenExpectation::default(),
+                rendered_output: RenderedOutputExpectation {
+                    contains_exactly_once: vec!["once".to_owned()],
+                    ..Default::default()
+                },
+                artifacts_must_not_exist: Vec::new(),
+            }),
+        ),
+    ];
+
+    let json =
+        serde_json::to_value(report_for_cases(&cases, None)).expect("report should serialize");
+
+    assert_eq!(json["schema_version"], 6);
+    assert_eq!(json["summary"]["rendered_output_backend_blocks"], 3);
+    assert_eq!(json["summary"]["rendered_output_exact_backend_blocks"], 1);
+    assert_eq!(json["summary"]["rendered_output_order_backend_blocks"], 1);
+    assert_eq!(
+        json["summary"]["rendered_output_exactly_once_backend_blocks"],
+        1
+    );
+
+    let exact_backend = &json["cases"][0]["backends"][0];
+    assert_eq!(exact_backend["rendered_output_assertion_count"], 1);
+    assert_eq!(exact_backend["rendered_output_exact"], true);
+    assert_eq!(
+        exact_backend["assertion_kinds"],
+        serde_json::json!([
+            "backend_baseline",
+            "rendered_output",
+            "rendered_output_exact"
+        ])
+    );
+
+    let ordered_backend = &json["cases"][1]["backends"][0];
+    assert_eq!(ordered_backend["rendered_output_assertion_count"], 4);
+    assert_eq!(ordered_backend["rendered_output_contains_count"], 1);
+    assert_eq!(ordered_backend["rendered_output_not_contains_count"], 1);
+    assert_eq!(
+        ordered_backend["rendered_output_contains_in_order_count"],
+        2
+    );
+    assert_eq!(
+        ordered_backend["assertion_kinds"],
+        serde_json::json!([
+            "backend_baseline",
+            "rendered_output",
+            "rendered_output_contains",
+            "rendered_output_not_contains",
+            "rendered_output_contains_in_order"
+        ])
+    );
+
+    let exactly_once_backend = &json["cases"][2]["backends"][0];
+    assert_eq!(
+        exactly_once_backend["rendered_output_contains_exactly_once_count"],
+        1
+    );
+    assert_eq!(
+        exactly_once_backend["assertion_kinds"],
+        serde_json::json!([
+            "backend_baseline",
+            "rendered_output",
+            "rendered_output_contains_exactly_once"
+        ])
+    );
 }
 
 #[test]
@@ -242,8 +363,7 @@ fn inventory_counts_authored_expected_warning_as_a_contract() {
                 success_contract: None,
                 artifact_assertions: Vec::new(),
                 golden: GoldenExpectation::default(),
-                rendered_output_contains: Vec::new(),
-                rendered_output_not_contains: Vec::new(),
+                rendered_output: Default::default(),
                 artifacts_must_not_exist: Vec::new(),
             }),
         )],
@@ -289,8 +409,7 @@ fn inventory_serializes_exact_warning_codes_without_a_transitional_count() {
                 success_contract: None,
                 artifact_assertions: Vec::new(),
                 golden: GoldenExpectation::default(),
-                rendered_output_contains: Vec::new(),
-                rendered_output_not_contains: Vec::new(),
+                rendered_output: Default::default(),
                 artifacts_must_not_exist: Vec::new(),
             }),
         )],
@@ -324,8 +443,10 @@ fn report_serializes_supplied_policy_evaluation() {
                 success_contract: None,
                 artifact_assertions: Vec::new(),
                 golden: GoldenExpectation::default(),
-                rendered_output_contains: vec!["case-a".to_owned()],
-                rendered_output_not_contains: Vec::new(),
+                rendered_output: super::super::types::RenderedOutputExpectation {
+                    contains: vec!["case-a".to_owned()],
+                    ..Default::default()
+                },
                 artifacts_must_not_exist: Vec::new(),
             }),
         ),
@@ -340,8 +461,10 @@ fn report_serializes_supplied_policy_evaluation() {
                 success_contract: None,
                 artifact_assertions: Vec::new(),
                 golden: GoldenExpectation::default(),
-                rendered_output_contains: vec!["case-b".to_owned()],
-                rendered_output_not_contains: Vec::new(),
+                rendered_output: super::super::types::RenderedOutputExpectation {
+                    contains: vec!["case-b".to_owned()],
+                    ..Default::default()
+                },
                 artifacts_must_not_exist: Vec::new(),
             }),
         ),

@@ -23,7 +23,7 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
-const SUITE_INVENTORY_SCHEMA_VERSION: u32 = 5;
+const SUITE_INVENTORY_SCHEMA_VERSION: u32 = 6;
 
 pub(crate) fn format_case_listing(cases: &[TestCaseSpec]) -> String {
     if cases.is_empty() {
@@ -97,6 +97,9 @@ pub(crate) struct InventorySummary {
     // this canonical audit invariant visible without reimplementing completeness classification.
     pub baseline_only_backend_blocks: usize,
     pub rendered_output_backend_blocks: usize,
+    pub rendered_output_exact_backend_blocks: usize,
+    pub rendered_output_order_backend_blocks: usize,
+    pub rendered_output_exactly_once_backend_blocks: usize,
     pub artifact_backend_blocks: usize,
     pub golden_backend_blocks: usize,
     pub absence_backend_blocks: usize,
@@ -129,6 +132,11 @@ pub(crate) struct InventoryBackend {
     pub golden_present: bool,
     pub artifact_assertion_count: usize,
     pub rendered_output_assertion_count: usize,
+    pub rendered_output_exact: bool,
+    pub rendered_output_contains_count: usize,
+    pub rendered_output_not_contains_count: usize,
+    pub rendered_output_contains_in_order_count: usize,
+    pub rendered_output_contains_exactly_once_count: usize,
     pub artifact_absence_assertion_count: usize,
 }
 
@@ -174,6 +182,9 @@ fn build_inventory_summary(cases: &[InventoryCase]) -> InventorySummary {
         acceptance_only_backend_blocks: 0,
         baseline_only_backend_blocks: 0,
         rendered_output_backend_blocks: 0,
+        rendered_output_exact_backend_blocks: 0,
+        rendered_output_order_backend_blocks: 0,
+        rendered_output_exactly_once_backend_blocks: 0,
         artifact_backend_blocks: 0,
         golden_backend_blocks: 0,
         absence_backend_blocks: 0,
@@ -192,6 +203,15 @@ fn build_inventory_summary(cases: &[InventoryCase]) -> InventorySummary {
         }
         if has_rendered_output {
             summary.rendered_output_backend_blocks += 1;
+        }
+        if backend.rendered_output_exact {
+            summary.rendered_output_exact_backend_blocks += 1;
+        }
+        if backend.rendered_output_contains_in_order_count > 0 {
+            summary.rendered_output_order_backend_blocks += 1;
+        }
+        if backend.rendered_output_contains_exactly_once_count > 0 {
+            summary.rendered_output_exactly_once_backend_blocks += 1;
         }
         if has_artifacts {
             summary.artifact_backend_blocks += 1;
@@ -226,8 +246,18 @@ fn build_backend_inventory(case: &TestCaseSpec) -> InventoryBackend {
             golden_mode: expectation.golden.mode.map(golden_mode_label),
             golden_present: expectation.golden.is_present(),
             artifact_assertion_count: expectation.artifact_assertions.len(),
-            rendered_output_assertion_count: expectation.rendered_output_contains.len()
-                + expectation.rendered_output_not_contains.len(),
+            rendered_output_assertion_count: expectation.rendered_output.assertion_count(),
+            rendered_output_exact: expectation.rendered_output.exact.is_some(),
+            rendered_output_contains_count: expectation.rendered_output.contains.len(),
+            rendered_output_not_contains_count: expectation.rendered_output.not_contains.len(),
+            rendered_output_contains_in_order_count: expectation
+                .rendered_output
+                .contains_in_order
+                .len(),
+            rendered_output_contains_exactly_once_count: expectation
+                .rendered_output
+                .contains_exactly_once
+                .len(),
             artifact_absence_assertion_count: expectation.artifacts_must_not_exist.len(),
         },
         ExpectedOutcome::Failure(expectation) => InventoryBackend {
@@ -245,6 +275,11 @@ fn build_backend_inventory(case: &TestCaseSpec) -> InventoryBackend {
             golden_present: false,
             artifact_assertion_count: 0,
             rendered_output_assertion_count: 0,
+            rendered_output_exact: false,
+            rendered_output_contains_count: 0,
+            rendered_output_not_contains_count: 0,
+            rendered_output_contains_in_order_count: 0,
+            rendered_output_contains_exactly_once_count: 0,
             artifact_absence_assertion_count: 0,
         },
     }
@@ -269,10 +304,23 @@ fn success_assertion_kinds(
     if expectation.golden.is_present() {
         kinds.push("golden");
     }
-    if !expectation.rendered_output_contains.is_empty()
-        || !expectation.rendered_output_not_contains.is_empty()
-    {
+    if expectation.rendered_output.is_present() {
         kinds.push("rendered_output");
+    }
+    if expectation.rendered_output.exact.is_some() {
+        kinds.push("rendered_output_exact");
+    }
+    if !expectation.rendered_output.contains.is_empty() {
+        kinds.push("rendered_output_contains");
+    }
+    if !expectation.rendered_output.not_contains.is_empty() {
+        kinds.push("rendered_output_not_contains");
+    }
+    if !expectation.rendered_output.contains_in_order.is_empty() {
+        kinds.push("rendered_output_contains_in_order");
+    }
+    if !expectation.rendered_output.contains_exactly_once.is_empty() {
+        kinds.push("rendered_output_contains_exactly_once");
     }
     if !expectation.artifacts_must_not_exist.is_empty() {
         kinds.push("artifact_absence");
@@ -380,6 +428,11 @@ pub(crate) fn render_case_result(
             FailureKind::StrictGoldenMismatch => "[strict golden mismatch]",
             FailureKind::NormalizedSemanticMismatch => "[normalized mismatch]",
             FailureKind::RenderedOutputMismatch => "[rendered output mismatch]",
+            FailureKind::RenderedOutputExactMismatch => "[rendered output exact mismatch]",
+            FailureKind::RenderedOutputOrderMismatch => "[rendered output order mismatch]",
+            FailureKind::RenderedOutputMultiplicityMismatch => {
+                "[rendered output multiplicity mismatch]"
+            }
             FailureKind::HarnessFailed => "[harness error]",
             FailureKind::ExpectationViolation => "[expectation violation]",
         };

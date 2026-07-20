@@ -33,8 +33,7 @@ fn case(
             success_contract: None,
             artifact_assertions: Vec::new(),
             golden: Default::default(),
-            rendered_output_contains: Vec::new(),
-            rendered_output_not_contains: Vec::new(),
+            rendered_output: Default::default(),
             artifacts_must_not_exist: Vec::new(),
         }),
     }

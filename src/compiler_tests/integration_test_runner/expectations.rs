@@ -6,8 +6,8 @@
 
 use super::path_validation::{CurrentDirectoryRule, validate_relative_path};
 use super::types::{
-    DiagnosticAssertion, DiagnosticMatchMode, ExactWarningExpectation, SecondaryLabelAssertion,
-    SuccessContract,
+    DiagnosticAssertion, DiagnosticMatchMode, ExactWarningExpectation, RenderedOutputExpectation,
+    SecondaryLabelAssertion, SuccessContract,
 };
 use super::{
     ArtifactAssertion, ArtifactKind, BackendId, ExpectationMode, GoldenMode,
@@ -60,9 +60,15 @@ struct BackendExpectationToml {
     artifact_assertions: Vec<ArtifactAssertionToml>,
     golden_mode: Option<String>,
     #[serde(default)]
+    rendered_output_exact: Option<String>,
+    #[serde(default)]
     rendered_output_contains: Vec<String>,
     #[serde(default)]
     rendered_output_not_contains: Vec<String>,
+    #[serde(default)]
+    rendered_output_contains_in_order: Option<Vec<String>>,
+    #[serde(default)]
+    rendered_output_contains_exactly_once: Option<Vec<String>>,
     #[serde(default)]
     artifacts_must_not_exist: Vec<String>,
 }
@@ -222,13 +228,21 @@ fn parse_matrix_expectation_file(
 
         let golden_mode =
             parse_golden_mode(path, &context, backend_expectation.golden_mode.as_deref())?;
+        let rendered_output = parse_rendered_output_expectation(
+            path,
+            &context,
+            backend_expectation.rendered_output_exact,
+            backend_expectation.rendered_output_contains,
+            backend_expectation.rendered_output_not_contains,
+            backend_expectation.rendered_output_contains_in_order,
+            backend_expectation.rendered_output_contains_exactly_once,
+        )?;
 
         let has_authored_expected_warning = matches!(&warnings, WarningExpectation::Exact(_));
         if success_contract.is_some()
             && (!artifact_assertions.is_empty()
                 || backend_expectation.golden_mode.is_some()
-                || !backend_expectation.rendered_output_contains.is_empty()
-                || !backend_expectation.rendered_output_not_contains.is_empty()
+                || rendered_output.is_present()
                 || !backend_expectation.artifacts_must_not_exist.is_empty()
                 || !diagnostic_assertions.is_empty()
                 || has_authored_expected_warning)
@@ -242,30 +256,16 @@ fn parse_matrix_expectation_file(
 
         // rendered_output_* is only valid for success mode; validate here so the
         // error message can reference the backend context.
-        if backend_expectation.mode == ExpectationMode::Failure
-            && (!backend_expectation.rendered_output_contains.is_empty()
-                || !backend_expectation.rendered_output_not_contains.is_empty())
-        {
+        if backend_expectation.mode == ExpectationMode::Failure && rendered_output.is_present() {
             return Err(format!(
                 "Expectation file '{}' {} uses mode = \"failure\" and must not set \
-                 'rendered_output_contains' or 'rendered_output_not_contains'.",
+                 'rendered_output_exact', 'rendered_output_contains', \
+                 'rendered_output_not_contains', 'rendered_output_contains_in_order', or \
+                 'rendered_output_contains_exactly_once'.",
                 path.display(),
                 context
             ));
         }
-
-        validate_rendered_output_strings(
-            path,
-            &context,
-            "rendered_output_contains",
-            &backend_expectation.rendered_output_contains,
-        )?;
-        validate_rendered_output_strings(
-            path,
-            &context,
-            "rendered_output_not_contains",
-            &backend_expectation.rendered_output_not_contains,
-        )?;
 
         // artifacts_must_not_exist is a success-only negative contract.
         // Reject it in failure mode so absence expectations never couple to
@@ -300,8 +300,7 @@ fn parse_matrix_expectation_file(
             diagnostic_match_reason: backend_expectation.diagnostic_match_reason,
             artifact_assertions,
             golden_mode,
-            rendered_output_contains: backend_expectation.rendered_output_contains,
-            rendered_output_not_contains: backend_expectation.rendered_output_not_contains,
+            rendered_output,
             artifacts_must_not_exist,
         });
     }
@@ -814,6 +813,84 @@ fn validate_exact_diagnostic_match_reason(
     }
 
     Ok(())
+}
+
+fn parse_rendered_output_expectation(
+    path: &Path,
+    context: &str,
+    exact: Option<String>,
+    contains: Vec<String>,
+    not_contains: Vec<String>,
+    contains_in_order: Option<Vec<String>>,
+    contains_exactly_once: Option<Vec<String>>,
+) -> Result<RenderedOutputExpectation, String> {
+    if exact.is_some()
+        && (!contains.is_empty()
+            || !not_contains.is_empty()
+            || contains_in_order.is_some()
+            || contains_exactly_once.is_some())
+    {
+        return Err(format!(
+            "Expectation file '{}' {} sets 'rendered_output_exact' and must not combine it with any other rendered-output assertion field.",
+            path.display(),
+            context
+        ));
+    }
+
+    validate_rendered_output_strings(path, context, "rendered_output_contains", &contains)?;
+    validate_rendered_output_strings(path, context, "rendered_output_not_contains", &not_contains)?;
+
+    let contains_in_order_was_authored = contains_in_order.is_some();
+    let contains_in_order = contains_in_order.unwrap_or_default();
+    if contains_in_order_was_authored && contains_in_order.len() < 2 {
+        return Err(format!(
+            "Expectation file '{}' {} requires 'rendered_output_contains_in_order' to contain at least two entries.",
+            path.display(),
+            context
+        ));
+    }
+    validate_rendered_output_strings(
+        path,
+        context,
+        "rendered_output_contains_in_order",
+        &contains_in_order,
+    )?;
+
+    let contains_exactly_once_was_authored = contains_exactly_once.is_some();
+    let contains_exactly_once = contains_exactly_once.unwrap_or_default();
+    if contains_exactly_once_was_authored && contains_exactly_once.is_empty() {
+        return Err(format!(
+            "Expectation file '{}' {} requires 'rendered_output_contains_exactly_once' to contain at least one entry.",
+            path.display(),
+            context
+        ));
+    }
+    validate_rendered_output_strings(
+        path,
+        context,
+        "rendered_output_contains_exactly_once",
+        &contains_exactly_once,
+    )?;
+
+    let mut authored_exactly_once = BTreeSet::new();
+    for fragment in &contains_exactly_once {
+        if !authored_exactly_once.insert(fragment) {
+            return Err(format!(
+                "Expectation file '{}' {} contains duplicate 'rendered_output_contains_exactly_once' value '{}'.",
+                path.display(),
+                context,
+                fragment
+            ));
+        }
+    }
+
+    Ok(RenderedOutputExpectation {
+        exact,
+        contains,
+        not_contains,
+        contains_in_order,
+        contains_exactly_once,
+    })
 }
 
 fn validate_rendered_output_strings(

@@ -802,6 +802,172 @@ fn accepts_success_fixture_with_rendered_output_only() {
 }
 
 #[test]
+fn parses_and_retains_all_rendered_output_assertion_forms() {
+    let (root, case_root) = write_fixture(
+        "rendered_output_forms",
+        concat!(
+            "[backends.html]\n",
+            "mode = \"success\"\n",
+            "warnings = \"forbid\"\n",
+            "rendered_output_contains = [\"contains\"]\n",
+            "rendered_output_not_contains = [\"forbidden\"]\n",
+            "rendered_output_contains_in_order = [\"first\", \"second\", \"first\"]\n",
+            "rendered_output_contains_exactly_once = [\"once\"]\n",
+        ),
+    );
+
+    let cases = load_canonical_case_specs(&case_root, None)
+        .expect("all rendered-output forms should satisfy success completeness");
+    let ExpectedOutcome::Success(expectation) = &cases[0].expected else {
+        panic!("case should have a success expectation");
+    };
+    assert_eq!(expectation.rendered_output.exact, None);
+    assert_eq!(
+        expectation.rendered_output.contains,
+        vec!["contains".to_owned()]
+    );
+    assert_eq!(
+        expectation.rendered_output.not_contains,
+        vec!["forbidden".to_owned()]
+    );
+    assert_eq!(
+        expectation.rendered_output.contains_in_order,
+        vec!["first", "second", "first"]
+    );
+    assert_eq!(
+        expectation.rendered_output.contains_exactly_once,
+        vec!["once".to_owned()]
+    );
+
+    fs::remove_dir_all(&root).expect("should clean up");
+}
+
+#[test]
+fn exact_output_accepts_authored_empty_string() {
+    let (root, case_root) = write_fixture(
+        "rendered_output_exact_empty",
+        "[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\nrendered_output_exact = \"\"\n",
+    );
+
+    let cases = load_canonical_case_specs(&case_root, None)
+        .expect("empty exact output should be a valid success contract");
+    let ExpectedOutcome::Success(expectation) = &cases[0].expected else {
+        panic!("case should have a success expectation");
+    };
+    assert_eq!(expectation.rendered_output.exact.as_deref(), Some(""));
+    assert!(expectation.rendered_output.is_present());
+
+    fs::remove_dir_all(&root).expect("should clean up");
+}
+
+#[test]
+fn rejects_exact_output_combined_with_each_other_rendered_form() {
+    let fields = [
+        "rendered_output_contains = [\"contains\"]",
+        "rendered_output_not_contains = [\"forbidden\"]",
+        "rendered_output_contains_in_order = [\"first\", \"second\"]",
+        "rendered_output_contains_exactly_once = [\"once\"]",
+    ];
+
+    for (index, field) in fields.iter().enumerate() {
+        let (root, case_root) = write_fixture(
+            &format!("rendered_output_exact_exclusive_{index}"),
+            &format!(
+                "[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\nrendered_output_exact = \"exact\"\n{field}\n"
+            ),
+        );
+
+        let Err(error) = load_canonical_case_specs(&case_root, None) else {
+            panic!("exact output combined with {field} should be rejected");
+        };
+        assert!(error.contains("rendered_output_exact"), "{error}");
+        assert!(error.contains("must not combine"), "{error}");
+
+        fs::remove_dir_all(&root).expect("should clean up");
+    }
+}
+
+#[test]
+fn rejects_each_new_rendered_form_in_acceptance_only_and_failure_modes() {
+    let fields = [
+        "rendered_output_exact = \"exact\"",
+        "rendered_output_contains_in_order = [\"first\", \"second\"]",
+        "rendered_output_contains_exactly_once = [\"once\"]",
+    ];
+
+    for (index, field) in fields.iter().enumerate() {
+        for (mode, suffix) in [
+            ("acceptance_only", "success_contract = \"acceptance_only\""),
+            ("failure", "diagnostic_codes = [\"BST-RULE-0001\"]"),
+        ] {
+            let (root, case_root) = write_fixture(
+                &format!("rendered_output_rejected_{index}_{mode}"),
+                &format!(
+                    "[backends.html]\nmode = \"{mode}\"\nwarnings = \"forbid\"\n{suffix}\n{field}\n"
+                ),
+            );
+
+            let Err(error) = load_canonical_case_specs(&case_root, None) else {
+                panic!("{field} should be rejected in {mode} mode");
+            };
+            assert!(error.contains("rendered_output"), "{error}");
+
+            fs::remove_dir_all(&root).expect("should clean up");
+        }
+    }
+}
+
+#[test]
+fn rejects_invalid_ordered_and_exactly_once_authored_lists() {
+    let cases = [
+        (
+            "ordered_minimum",
+            "rendered_output_contains_in_order = [\"only\"]",
+            "at least two",
+        ),
+        (
+            "ordered_empty_value",
+            "rendered_output_contains_in_order = [\"first\", \"\"]",
+            "empty",
+        ),
+        (
+            "ordered_empty_list",
+            "rendered_output_contains_in_order = []",
+            "at least two",
+        ),
+        (
+            "exactly_once_empty_value",
+            "rendered_output_contains_exactly_once = [\"\"]",
+            "empty",
+        ),
+        (
+            "exactly_once_empty_list",
+            "rendered_output_contains_exactly_once = []",
+            "at least one",
+        ),
+        (
+            "exactly_once_duplicate",
+            "rendered_output_contains_exactly_once = [\"same\", \"same\"]",
+            "duplicate",
+        ),
+    ];
+
+    for (name, field, expected_error) in cases {
+        let (root, case_root) = write_fixture(
+            &format!("rendered_output_invalid_{name}"),
+            &format!("[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\n{field}\n"),
+        );
+
+        let Err(error) = load_canonical_case_specs(&case_root, None) else {
+            panic!("{field} should be rejected");
+        };
+        assert!(error.contains(expected_error), "unexpected error: {error}");
+
+        fs::remove_dir_all(&root).expect("should clean up");
+    }
+}
+
+#[test]
 fn rejects_rendered_output_in_failure_mode() {
     let root = temp_dir("rendered_output_failure_mode");
     let case_root = root.join("case");

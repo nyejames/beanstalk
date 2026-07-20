@@ -21,6 +21,8 @@ pub(crate) use rendered_output::{
 use super::GoldenMode;
 #[cfg(test)]
 use super::types::GoldenExpectation;
+#[cfg(test)]
+use super::types::RenderedOutputExpectation;
 use super::{
     BackendId, CaseExecutionResult, FailureExpectation, FailureKind, SuccessExpectation,
     TestCaseSpec,
@@ -113,10 +115,9 @@ pub(crate) fn validate_golden_outputs(
 #[cfg(test)]
 pub(crate) fn validate_rendered_output_fragments(
     rendered_output: &str,
-    contains: &[String],
-    not_contains: &[String],
+    expectation: &RenderedOutputExpectation,
 ) -> Option<(String, FailureKind)> {
-    rendered_output::validate_rendered_output_fragments(rendered_output, contains, not_contains)
+    rendered_output::validate_rendered_output_fragments(rendered_output, expectation)
 }
 
 pub(crate) fn validate_success_result(
@@ -161,13 +162,9 @@ pub(crate) fn validate_success_result(
         return fail(build_result, reason, kind);
     }
 
-    if (!expectation.rendered_output_contains.is_empty()
-        || !expectation.rendered_output_not_contains.is_empty())
-        && let Some((reason, kind)) = rendered_output::validate_rendered_output(
-            &build_result,
-            &expectation.rendered_output_contains,
-            &expectation.rendered_output_not_contains,
-        )
+    if expectation.rendered_output.is_present()
+        && let Some((reason, kind)) =
+            rendered_output::validate_rendered_output(&build_result, &expectation.rendered_output)
     {
         return fail(build_result, reason, kind);
     }

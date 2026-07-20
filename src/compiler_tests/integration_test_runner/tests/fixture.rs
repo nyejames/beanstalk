@@ -469,6 +469,39 @@ fn accepts_success_fixture_with_rendered_output_assertion() {
 }
 
 #[test]
+fn each_new_rendered_output_form_satisfies_success_completeness() {
+    let fields = [
+        ("exact", "rendered_output_exact = \"\""),
+        (
+            "ordered",
+            "rendered_output_contains_in_order = [\"first\", \"second\"]",
+        ),
+        (
+            "exactly_once",
+            "rendered_output_contains_exactly_once = [\"once\"]",
+        ),
+    ];
+
+    for (name, field) in fields {
+        let root = temp_dir(&format!("rendered_output_success_completeness_{name}"));
+        let case_root = root.join("case");
+        let input_root = case_root.join(INPUT_DIR_NAME);
+        fs::create_dir_all(&input_root).expect("should create input directory");
+        fs::write(input_root.join("#page.bst"), "#[:ok]\n").expect("should write source");
+        fs::write(
+            case_root.join(EXPECT_FILE_NAME),
+            format!("[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\n{field}\n"),
+        )
+        .expect("should write expect file");
+
+        load_canonical_case_specs(&case_root, None)
+            .unwrap_or_else(|error| panic!("{name} should satisfy completeness: {error}"));
+
+        fs::remove_dir_all(&root).expect("should clean up");
+    }
+}
+
+#[test]
 fn accepts_success_fixture_with_artifact_absence_assertion() {
     let root = temp_dir("success_contract_artifact_absence");
     let case_root = root.join("case");

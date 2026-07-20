@@ -72,14 +72,40 @@ pub(crate) enum ExpectationMode {
     Failure,
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct RenderedOutputExpectation {
+    pub exact: Option<String>,
+    pub contains: Vec<String>,
+    pub not_contains: Vec<String>,
+    pub contains_in_order: Vec<String>,
+    pub contains_exactly_once: Vec<String>,
+}
+
+impl RenderedOutputExpectation {
+    pub(crate) fn is_present(&self) -> bool {
+        self.exact.is_some()
+            || !self.contains.is_empty()
+            || !self.not_contains.is_empty()
+            || !self.contains_in_order.is_empty()
+            || !self.contains_exactly_once.is_empty()
+    }
+
+    pub(crate) fn assertion_count(&self) -> usize {
+        usize::from(self.exact.is_some())
+            + self.contains.len()
+            + self.not_contains.len()
+            + self.contains_in_order.len()
+            + self.contains_exactly_once.len()
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct SuccessExpectation {
     pub warnings: WarningExpectation,
     pub success_contract: Option<SuccessContract>,
     pub artifact_assertions: Vec<ArtifactAssertion>,
     pub golden: GoldenExpectation,
-    pub rendered_output_contains: Vec<String>,
-    pub rendered_output_not_contains: Vec<String>,
+    pub rendered_output: RenderedOutputExpectation,
     pub artifacts_must_not_exist: Vec<String>,
 }
 
@@ -196,6 +222,9 @@ pub(crate) enum FailureKind {
     StrictGoldenMismatch,
     NormalizedSemanticMismatch,
     RenderedOutputMismatch,
+    RenderedOutputExactMismatch,
+    RenderedOutputOrderMismatch,
+    RenderedOutputMultiplicityMismatch,
     HarnessFailed,
     ExpectationViolation,
 }
@@ -401,7 +430,6 @@ pub(crate) struct ParsedBackendExpectation {
     pub diagnostic_match_reason: Option<String>,
     pub artifact_assertions: Vec<ArtifactAssertion>,
     pub golden_mode: Option<GoldenMode>,
-    pub rendered_output_contains: Vec<String>,
-    pub rendered_output_not_contains: Vec<String>,
+    pub rendered_output: RenderedOutputExpectation,
     pub artifacts_must_not_exist: Vec<String>,
 }

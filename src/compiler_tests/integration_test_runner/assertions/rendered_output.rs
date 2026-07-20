@@ -7,6 +7,7 @@
 
 use super::super::{ArtifactKind, FailureKind};
 use crate::build_system::build::BuildResult;
+use crate::compiler_tests::integration_test_runner::types::RenderedOutputExpectation;
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
@@ -15,8 +16,7 @@ static RENDER_HARNESS_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 pub(super) fn validate_rendered_output(
     build_result: &BuildResult,
-    contains: &[String],
-    not_contains: &[String],
+    expectation: &RenderedOutputExpectation,
 ) -> Option<(String, FailureKind)> {
     let Some(index_html_file) = super::artifacts::find_output_file(build_result, "index.html")
     else {
@@ -39,7 +39,7 @@ pub(super) fn validate_rendered_output(
         Err(reason) => return Some((reason, FailureKind::HarnessFailed)),
     };
 
-    validate_rendered_output_fragments(&rendered.combined_output(), contains, not_contains)
+    validate_rendered_output_fragments(&rendered.combined_output(), expectation)
 }
 
 /// Validates rendered fragments independently of harness execution.
@@ -49,10 +49,46 @@ pub(super) fn validate_rendered_output(
 ///      self-tests without requiring a Node runtime.
 pub(super) fn validate_rendered_output_fragments(
     rendered_output: &str,
-    contains: &[String],
-    not_contains: &[String],
+    expectation: &RenderedOutputExpectation,
 ) -> Option<(String, FailureKind)> {
-    for required in contains {
+    if let Some(expected) = &expectation.exact {
+        let normalized_expected = normalize_line_endings(expected);
+        let normalized_actual = normalize_line_endings(rendered_output);
+        if normalized_expected != normalized_actual {
+            return Some((
+                format!(
+                    "Rendered output did not exactly match.\nExpected output:\n{expected}\nActual output:\n{rendered_output}"
+                ),
+                FailureKind::RenderedOutputExactMismatch,
+            ));
+        }
+    }
+
+    if !expectation.contains_in_order.is_empty()
+        && !super::contains_ordered_substrings(rendered_output, &expectation.contains_in_order)
+    {
+        return Some((
+            format!(
+                "Rendered output did not contain required ordered fragments {:?}.\nActual output:\n{rendered_output}",
+                expectation.contains_in_order
+            ),
+            FailureKind::RenderedOutputOrderMismatch,
+        ));
+    }
+
+    for fragment in &expectation.contains_exactly_once {
+        let actual_count = rendered_output.match_indices(fragment).count();
+        if actual_count != 1 {
+            return Some((
+                format!(
+                    "Rendered output contained fragment '{fragment}' {actual_count} time(s), expected exactly once.\nActual output:\n{rendered_output}"
+                ),
+                FailureKind::RenderedOutputMultiplicityMismatch,
+            ));
+        }
+    }
+
+    for required in &expectation.contains {
         if !rendered_output.contains(required.as_str()) {
             return Some((
                 format!(
@@ -63,7 +99,7 @@ pub(super) fn validate_rendered_output_fragments(
         }
     }
 
-    for forbidden in not_contains {
+    for forbidden in &expectation.not_contains {
         if rendered_output.contains(forbidden.as_str()) {
             return Some((
                 format!(
@@ -75,6 +111,10 @@ pub(super) fn validate_rendered_output_fragments(
     }
 
     None
+}
+
+fn normalize_line_endings(text: &str) -> String {
+    text.replace("\r\n", "\n").replace('\r', "\n")
 }
 
 #[derive(Debug)]
@@ -178,7 +218,7 @@ fn execute_html_in_node(html: &str) -> Result<RenderedOutput, String> {
             let _ = remove_temp_harness_file_with_retry(&temp_path);
             format!(
                 "rendered_output: failed to invoke node: {error}. \
-                 Ensure 'node' is on PATH to use rendered_output_contains."
+                 Ensure 'node' is on PATH to use rendered-output assertions."
             )
         })?;
 
