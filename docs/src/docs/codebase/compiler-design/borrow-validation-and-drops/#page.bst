@@ -1,9 +1,9 @@
 import @./borrow-validation-and-drops {content as reference_content}
-import @styles/docs {navbar, section, codebase_theme_head}
+import @styles/docs {navbar, section, theme_head}
 
 page_title #= "13. Borrow validation and drops"
 page_description #= "How Beanstalk analyses HIR for safe access and inferred ownership."
-page_head #= codebase_theme_head
+page_head #= theme_head
 
 #[navbar]
 

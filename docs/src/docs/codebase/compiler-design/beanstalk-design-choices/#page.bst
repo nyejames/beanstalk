@@ -1,9 +1,9 @@
 import @./beanstalk-design-choices {content as reference_content}
-import @styles/docs {navbar, section, codebase_theme_head}
+import @styles/docs {navbar, section, theme_head}
 
 page_title #= "02. Why Beanstalk makes different choices"
 page_description #= "The design trade-offs behind Beanstalk's language and compiler."
-page_head #= codebase_theme_head
+page_head #= theme_head
 
 #[navbar]
 

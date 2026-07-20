@@ -1,9 +1,9 @@
 import @./target-planning-and-validation {content as reference_content}
-import @styles/docs {navbar, section, codebase_theme_head}
+import @styles/docs {navbar, section, theme_head}
 
 page_title #= "16. Target planning and validation"
 page_description #= "How Beanstalk plans and validates mixed JavaScript and Wasm targets."
-page_head #= codebase_theme_head
+page_head #= theme_head
 
 #[navbar]
 

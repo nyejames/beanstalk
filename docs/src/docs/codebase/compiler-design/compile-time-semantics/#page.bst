@@ -1,9 +1,9 @@
 import @./compile-time-semantics {content as reference_content}
-import @styles/docs {navbar, section, codebase_theme_head}
+import @styles/docs {navbar, section, theme_head}
 
 page_title #= "08. Compile-time semantics"
 page_description #= "How AST-owned static work becomes concrete data and requests."
-page_head #= codebase_theme_head
+page_head #= theme_head
 
 #[navbar]
 

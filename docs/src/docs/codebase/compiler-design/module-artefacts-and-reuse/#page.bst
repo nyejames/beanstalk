@@ -1,9 +1,9 @@
 import @./module-artefacts-and-reuse {content as reference_content}
-import @styles/docs {navbar, section, codebase_theme_head}
+import @styles/docs {navbar, section, theme_head}
 
 page_title #= "14. Module artefacts and reuse"
 page_description #= "How successful modules become immutable reusable artefacts."
-page_head #= codebase_theme_head
+page_head #= theme_head
 
 #[navbar]
 

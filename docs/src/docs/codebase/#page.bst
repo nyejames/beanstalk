@@ -1,9 +1,9 @@
 import @html {table}
-import @styles/docs {navbar, section, codebase_theme_head, codeblock}
+import @styles/docs {navbar, section, theme_head, codeblock}
 
 page_title #= "Codebase documentation"
 page_description #= "Internal compiler and build-system references for maintainers and curious readers."
-page_head #= codebase_theme_head
+page_head #= theme_head
 
 #[navbar]
 

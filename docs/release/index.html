@@ -192,7 +192,7 @@ body {
 
         background-color:
             light-dark(
-                hsl(125 67% 97%),
+                hsl(0, 0%, 98%),
                 #080d0c
             );
     }
@@ -212,9 +212,33 @@ body {
                 ),
                 linear-gradient(
                     145deg,
-                    #07100d 0%,
-                    #0a1010 48%,
-                    #0b0f13 100%
+                    #0c1d17 0%,
+                    #101a18 48%,
+                    #081606 100%
+                );
+
+            background-repeat: no-repeat;
+        }
+    }
+
+    @media (prefers-color-scheme: light) {
+        body {
+            background-image:
+                radial-gradient(
+                    80rem 55rem at 8% -10%,
+                    rgb(0 50 80 / 20%),
+                    transparent 60%
+                ),
+                radial-gradient(
+                    65rem 45rem at 100% 18%,
+                    rgb(0 67 100 / 10%),
+                    transparent 65%
+                ),
+                linear-gradient(
+                    145deg,
+                    #d2fbe4df 0%,
+                    #e3f8d4cd 32%,
+                    #bfd1cd 100%
                 );
 
             background-repeat: no-repeat;
@@ -222,7 +246,7 @@ body {
     }
 
     a {
-        color: light-dark(hsl(111, 96%, 26%), hsl(110, 62%, 66%));
+        color: light-dark(hsl(201, 84%, 41%), hsl(110, 62%, 66%));
     }
 
     .container {
@@ -237,6 +261,32 @@ body {
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     }
+
+        .container pre {
+        max-width: 100%;
+        margin-block: 1.25em;
+        padding: 1em;
+        overflow-x: auto;
+        border-radius: 5px;
+        background-color: hsla(0, 0%, 42%, 0.12);
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        max-width: 100%;
+    }
+
+    th,
+    td {
+        border: 1px solid;
+        border-color: light-dark(hsl(0, 0%, 75%), hsl(0, 0%, 30%));
+        padding: 0.5em 1em;
+        vertical-align: top;
+        text-align: left;
+    }
+
+
 
     @media (min-width: 576px) {
         .container {
@@ -256,6 +306,15 @@ body {
     @media (min-width: 1024px) {
         .container {
             max-width: 950px;
+        }
+
+        table {
+            font-size: 0.8rem;
+        }
+
+        th,
+        td {
+            padding: 0.4em;
         }
     }
 
@@ -360,7 +419,7 @@ body {
             </a>
         </div>
     </nav>
-    <section class="container"><h1>What is Beanstalk?</h1><p>Beanstalk is a new programming language and toolchain.</p><br><span style="color: light-dark(hsl(44, 82%, 29%), hsl(110, 62%, 66%));"> This website was created using Beanstalk.</span><br><br><p>Everything you see on this page, including the layout, styles, and even the text content  was written in Beanstalk files and generated using the compiler&#39;s built-in HTML project builder.</p><p>The source code for this website can be found on <a href="https://github.com/nyejames/beanstalk/tree/main/docs/src">Github</a>.</p><h2>Documentation</h2><p>The <a href="./docs">Alpha language docs</a> cover the current supported compiler surface.</p></section>
+    <section class="container"><h1>What is Beanstalk?</h1><p>Beanstalk is a new programming language and toolchain.</p><span style="color: light-dark(hsl(43, 69%, 29%), hsl(110, 62%, 66%));"><p> <em>This website was created using Beanstalk!</em></p></span><p>Everything you see on this page, including the layout, styles, and even the text content  was written in Beanstalk files and generated using the compiler&#39;s built-in HTML project builder.</p><p>The source code for this whole website can be found on <a href="https://github.com/nyejames/beanstalk/tree/main/docs/src">Github</a>.</p><h2>Documentation</h2><p>The <a href="./docs">Alpha language docs</a> explains everything about the language, compiler and making Beanstalk projects.</p><p>This compiler is in early alpha and is undergoing rapid development, so not everything is exactly up to date with the current compiler.</p><span style="color: light-dark(hsl(43, 69%, 29%), hsl(110, 62%, 66%));"><p> <em>You can already use beanstalk for web projects, but be aware of the early alpha status</em></p></span></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;

@@ -1,9 +1,9 @@
 import @./html-assembly-and-output {content as reference_content}
-import @styles/docs {navbar, section, codebase_theme_head}
+import @styles/docs {navbar, section, theme_head}
 
 page_title #= "18. HTML assembly and output"
 page_description #= "How the HTML builder assembles and owns the generated page and assets."
-page_head #= codebase_theme_head
+page_head #= theme_head
 
 #[navbar]
 

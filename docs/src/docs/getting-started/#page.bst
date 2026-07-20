@@ -41,45 +41,45 @@ page_head #= language_theme_head
         [header: [: Command] [: Use] [: Notes] ]
 
         [data:
-            [: [$html:<code>help</code>] ]
+            [$md: `help` ]
             [: Prints the current command list and supported flags.]
             [: Use this when the docs and local compiler may be out of sync.]
         ]
 
         [data:
-            [: [$html:<code>--version</code>] ]
+            [$md:`--version` ]
             [: Prints the current compiler/tool version.]
-            [: [$html:<code>-v</code>] and [$html:<code>-V</code>] are also accepted.]
+            [$md: `-v` and `-V` are also accepted.]
         ]
 
         [data:
-            [: [$html:<code>new html</code>] ]
+            [$md:`new html`]
             [: Creates a complete HTML project scaffold.]
-            [: Accepts an optional path and [$html:<code>--force</code>]. If path is omitted, bean shows the current directory and asks for confirmation before scaffolding there. It then asks for a project name, a .gitignore choice, and creates the full default scaffold including [$html:<code>src/#page.bst</code>], [$html:<code>lib/</code>], output manifests, and an optional .gitignore.]
+            [$md: Accepts an optional path and `--force`. If path is omitted, bean shows the current directory and asks for confirmation before scaffolding there. It then asks for a project name, a .gitignore choice, and creates the full default scaffold including `src/#page.bst`, `lib/`, output manifests, and an optional .gitignore.]
         ]
 
         [data:
-            [: [$html:<code>check .</code>] ]
+            [$md:`check .`]
             [: Runs project discovery, frontend compilation, type checking, HIR lowering, and borrow validation without writing build artifacts.]
-            [: Add [$html:<code>--terse</code>] for compact one-line diagnostics.]
+            [$md: Add `--terse` for compact one-line diagnostics.]
         ]
 
         [data:
-            [: [$html:<code>dev .</code>] ]
+            [$md:`dev .`]
             [: Builds the project, starts a local dev server, watches files, and reloads the browser when sources change.]
             [: This is the main day-to-day command for working on HTML projects.]
         ]
 
         [data:
-            [: [$html:<code>build .</code>] ]
+            [$md:`build .`]
             [: Builds the project and writes output files.]
-            [: Without [$html:<code>--release</code>], directory projects write to the configured dev output folder. With [$html:<code>--release</code>], they write to the configured release output folder.]
+            [$md: Without `--release`, directory projects write to the configured dev output folder. With `--release`, they write to the configured release output folder.]
         ]
 
         [data:
-            [: [$html:<code>tests</code>] ]
+            [$md:`tests`]
             [: Runs the compiler integration test suite. (developer tool)]
-            [: Mainly useful when working on the compiler itself. Use [$html:<code>--backend html</code>] or [$html:<code>--backend html_wasm</code>] to focus one backend profile.]
+            [$md: Mainly useful when working on the compiler itself. Use `--backend html` or `--backend html_wasm` to focus one backend profile.]
         ]
     ]
 ]
@@ -91,33 +91,33 @@ page_head #= language_theme_head
         [header: [: Flag] [: Applies to] [: Effect] ]
 
         [data:
-            [: [$html:<code>--release</code>] ]
-            [: [$html:<code>build</code>], [$html:<code>dev</code>] ]
+            [$md:`--release`]
+            [$md:`build`, `dev` ]
             [: Selects the release build profile and release output folder where supported.]
         ]
 
         [data:
-            [: [$html:<code>--html-wasm</code>] ]
+            [$md:`--html-wasm`]
             [: HTML builds]
             [: Uses the experimental HTML-Wasm backend path. The JavaScript HTML backend is the current Alpha target.]
         ]
 
         [data:
-            [: [$html:<code>--terse</code>] ]
-            [: [$html:<code>check</code>] only]
+            [$md:`--terse`]
+            [$md:`check` only]
             [: Prints compact diagnostics for tools, logs, and LLM workflows.]
         ]
 
         [data:
-            [: [$html:<code>--force</code>] ]
-            [: [$html:<code>new html</code>] only]
-            [: Allows replacing existing scaffold-owned files after a confirmation warning. Never overwrites .gitignore or unrelated files.]
+            [$md:`--force`]
+            [$md:`new html` only]
+            [$md: Allows replacing existing scaffold-owned files after a confirmation warning. Never overwrites `.gitignore` or unrelated files.]
         ]
 
         [data:
-            [: [$html:<code>--host</code>], [$html:<code>--port</code>], [$html:<code>--poll-interval-ms</code>] ]
-            [: [$html:<code>dev</code>] only]
-            [: Configures the local dev server. Defaults are [$html:<code>127.0.0.1</code>], [$html:<code>6342</code>], and [$html:<code>300</code>].]
+            [$md:`--host`, `--port`, `--poll-interval-ms`]
+            [$md:`dev` only]
+            [: Configures the local dev server. Defaults are [$html:`127.0.0.1`], [$html:`6342`], and [$html:`300`].]
         ]
     ]
 ]
@@ -356,13 +356,13 @@ page_head #= language_theme_head
         [data:
             [: Missing File or Directory]
             [: The project references a file, directory, import path, or output path that cannot be resolved.]
-            [: Check spelling, relative paths, [$html:<code>entry_root</code>] and project config.]
+            [: Check spelling, relative paths, [$html:`entry_root`] and project config.]
         ]
 
         [data:
             [: Malformed Config]
             [: The project config exists but contains unsupported, missing, or invalid settings.]
-            [: Check [$html:<code>config.bst</code>] and backend-specific config rules.]
+            [: Check [$html:`config.bst`] and backend-specific config rules.]
         ]
 
         [data:

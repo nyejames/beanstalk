@@ -1,9 +1,9 @@
 import @./diagnostics {content as reference_content}
-import @styles/docs {navbar, section, codebase_theme_head}
+import @styles/docs {navbar, section, theme_head}
 
 page_title #= "10. Diagnostics"
 page_description #= "How compiler failures carry semantic context from owner to renderer."
-page_head #= codebase_theme_head
+page_head #= theme_head
 
 #[navbar]
 

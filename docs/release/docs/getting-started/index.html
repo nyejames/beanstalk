@@ -192,7 +192,7 @@ body {
 
         background-color:
             light-dark(
-                hsl(125 67% 97%),
+                hsl(0, 0%, 98%),
                 #080d0c
             );
     }
@@ -212,9 +212,33 @@ body {
                 ),
                 linear-gradient(
                     145deg,
-                    #07100d 0%,
-                    #0a1010 48%,
-                    #0b0f13 100%
+                    #0c1d17 0%,
+                    #101a18 48%,
+                    #081606 100%
+                );
+
+            background-repeat: no-repeat;
+        }
+    }
+
+    @media (prefers-color-scheme: light) {
+        body {
+            background-image:
+                radial-gradient(
+                    80rem 55rem at 8% -10%,
+                    rgb(0 50 80 / 20%),
+                    transparent 60%
+                ),
+                radial-gradient(
+                    65rem 45rem at 100% 18%,
+                    rgb(0 67 100 / 10%),
+                    transparent 65%
+                ),
+                linear-gradient(
+                    145deg,
+                    #d2fbe4df 0%,
+                    #e3f8d4cd 32%,
+                    #bfd1cd 100%
                 );
 
             background-repeat: no-repeat;
@@ -222,7 +246,7 @@ body {
     }
 
     a {
-        color: light-dark(hsl(111, 96%, 26%), hsl(110, 62%, 66%));
+        color: light-dark(hsl(201, 84%, 41%), hsl(110, 62%, 66%));
     }
 
     .container {
@@ -237,6 +261,32 @@ body {
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     }
+
+        .container pre {
+        max-width: 100%;
+        margin-block: 1.25em;
+        padding: 1em;
+        overflow-x: auto;
+        border-radius: 5px;
+        background-color: hsla(0, 0%, 42%, 0.12);
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        max-width: 100%;
+    }
+
+    th,
+    td {
+        border: 1px solid;
+        border-color: light-dark(hsl(0, 0%, 75%), hsl(0, 0%, 30%));
+        padding: 0.5em 1em;
+        vertical-align: top;
+        text-align: left;
+    }
+
+
 
     @media (min-width: 576px) {
         .container {
@@ -256,6 +306,15 @@ body {
     @media (min-width: 1024px) {
         .container {
             max-width: 950px;
+        }
+
+        table {
+            font-size: 0.8rem;
+        }
+
+        th,
+        td {
+            padding: 0.4em;
         }
     }
 
@@ -279,75 +338,6 @@ body {
         border-bottom-style: solid;
         border-bottom-width: 1px;
         padding: 0rem 2rem 0rem 2rem;
-    }</style>
-    <style>.container pre {
-        max-width: 100%;
-        margin-block: 1.25em;
-        padding: 1em;
-        overflow-x: auto;
-        border-radius: 5px;
-        background-color: hsla(0, 0%, 42%, 0.12);
-    }
-
-    table {
-        width: 100%;
-        border-collapse: collapse;
-        max-width: 100%;
-        margin-block: 1.5em;
-    }
-
-    th,
-    td {
-        border: 1px solid;
-        border-color: light-dark(hsl(0, 0%, 75%), hsl(0, 0%, 30%));
-        padding: 0.5em;
-        vertical-align: top;
-        text-align: left;
-    }
-
-    thead tr,
-    tbody tr:first-child,
-    table > tr:first-child {
-        background-color: light-dark(hsla(107, 100%, 36%, 0.15), hsla(107, 60%, 30%, 0.25));
-        font-weight: 700;
-    }
-
-    td p,
-    th p {
-        margin-block: 0.35em;
-    }
-
-    td p:first-child,
-    th p:first-child {
-        margin-top: 0;
-    }
-
-    td p:last-child,
-    th p:last-child {
-        margin-bottom: 0;
-    }
-
-    th,
-    td {
-        overflow-wrap: anywhere;
-    }
-
-    th code,
-    td code {
-        white-space: normal;
-        overflow-wrap: anywhere;
-        word-break: break-word;
-    }
-
-    @media (max-width: 768px) {
-        table {
-            font-size: 0.9rem;
-        }
-
-        th,
-        td {
-            padding: 0.4em;
-        }
     }</style>
     <style>.doc-level,
     .doc-pager {
@@ -726,45 +716,45 @@ body {
                 
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <code>help</code> </td>
-     <td style="padding: 0.2em 0.5em;  "> Prints the current command list and supported flags.</td>
-     <td style="padding: 0.2em 0.5em;  "> Use this when the docs and local compiler may be out of sync.</td>
+             <td style="padding: 0.1em 0.5em; "><p> <code>help</code> </p></td>
+     <td style="padding: 0.1em 0.5em; "> Prints the current command list and supported flags.</td>
+     <td style="padding: 0.1em 0.5em; "> Use this when the docs and local compiler may be out of sync.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <code>--version</code> </td>
-     <td style="padding: 0.2em 0.5em;  "> Prints the current compiler/tool version.</td>
-     <td style="padding: 0.2em 0.5em;  "> <code>-v</code> and <code>-V</code> are also accepted.</td>
+             <td style="padding: 0.1em 0.5em; "><p><code>--version</code> </p></td>
+     <td style="padding: 0.1em 0.5em; "> Prints the current compiler/tool version.</td>
+     <td style="padding: 0.1em 0.5em; "><p> <code>-v</code> and <code>-V</code> are also accepted.</p></td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <code>new html</code> </td>
-     <td style="padding: 0.2em 0.5em;  "> Creates a complete HTML project scaffold.</td>
-     <td style="padding: 0.2em 0.5em;  "> Accepts an optional path and <code>--force</code>. If path is omitted, bean shows the current directory and asks for confirmation before scaffolding there. It then asks for a project name, a .gitignore choice, and creates the full default scaffold including <code>src/#page.bst</code>, <code>lib/</code>, output manifests, and an optional .gitignore.</td>
+             <td style="padding: 0.1em 0.5em; "><p><code>new html</code></p></td>
+     <td style="padding: 0.1em 0.5em; "> Creates a complete HTML project scaffold.</td>
+     <td style="padding: 0.1em 0.5em; "><p> Accepts an optional path and <code>--force</code>. If path is omitted, bean shows the current directory and asks for confirmation before scaffolding there. It then asks for a project name, a .gitignore choice, and creates the full default scaffold including <code>src/#page.bst</code>, <code>lib/</code>, output manifests, and an optional .gitignore.</p></td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <code>check .</code> </td>
-     <td style="padding: 0.2em 0.5em;  "> Runs project discovery, frontend compilation, type checking, HIR lowering, and borrow validation without writing build artifacts.</td>
-     <td style="padding: 0.2em 0.5em;  "> Add <code>--terse</code> for compact one-line diagnostics.</td>
+             <td style="padding: 0.1em 0.5em; "><p><code>check .</code></p></td>
+     <td style="padding: 0.1em 0.5em; "> Runs project discovery, frontend compilation, type checking, HIR lowering, and borrow validation without writing build artifacts.</td>
+     <td style="padding: 0.1em 0.5em; "><p> Add <code>--terse</code> for compact one-line diagnostics.</p></td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <code>dev .</code> </td>
-     <td style="padding: 0.2em 0.5em;  "> Builds the project, starts a local dev server, watches files, and reloads the browser when sources change.</td>
-     <td style="padding: 0.2em 0.5em;  "> This is the main day-to-day command for working on HTML projects.</td>
+             <td style="padding: 0.1em 0.5em; "><p><code>dev .</code></p></td>
+     <td style="padding: 0.1em 0.5em; "> Builds the project, starts a local dev server, watches files, and reloads the browser when sources change.</td>
+     <td style="padding: 0.1em 0.5em; "> This is the main day-to-day command for working on HTML projects.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <code>build .</code> </td>
-     <td style="padding: 0.2em 0.5em;  "> Builds the project and writes output files.</td>
-     <td style="padding: 0.2em 0.5em;  "> Without <code>--release</code>, directory projects write to the configured dev output folder. With <code>--release</code>, they write to the configured release output folder.</td>
+             <td style="padding: 0.1em 0.5em; "><p><code>build .</code></p></td>
+     <td style="padding: 0.1em 0.5em; "> Builds the project and writes output files.</td>
+     <td style="padding: 0.1em 0.5em; "><p> Without <code>--release</code>, directory projects write to the configured dev output folder. With <code>--release</code>, they write to the configured release output folder.</p></td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <code>tests</code> </td>
-     <td style="padding: 0.2em 0.5em;  "> Runs the compiler integration test suite. (developer tool)</td>
-     <td style="padding: 0.2em 0.5em;  "> Mainly useful when working on the compiler itself. Use <code>--backend html</code> or <code>--backend html_wasm</code> to focus one backend profile.</td>
+             <td style="padding: 0.1em 0.5em; "><p><code>tests</code></p></td>
+     <td style="padding: 0.1em 0.5em; "> Runs the compiler integration test suite. (developer tool)</td>
+     <td style="padding: 0.1em 0.5em; "><p> Mainly useful when working on the compiler itself. Use <code>--backend html</code> or <code>--backend html_wasm</code> to focus one backend profile.</p></td>
         </tr>
             
 
@@ -781,33 +771,33 @@ body {
                 
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <code>--release</code> </td>
-     <td style="padding: 0.2em 0.5em;  "> <code>build</code>, <code>dev</code> </td>
-     <td style="padding: 0.2em 0.5em;  "> Selects the release build profile and release output folder where supported.</td>
+             <td style="padding: 0.1em 0.5em; "><p><code>--release</code></p></td>
+     <td style="padding: 0.1em 0.5em; "><p><code>build</code>, <code>dev</code> </p></td>
+     <td style="padding: 0.1em 0.5em; "> Selects the release build profile and release output folder where supported.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <code>--html-wasm</code> </td>
-     <td style="padding: 0.2em 0.5em;  "> HTML builds</td>
-     <td style="padding: 0.2em 0.5em;  "> Uses the experimental HTML-Wasm backend path. The JavaScript HTML backend is the current Alpha target.</td>
+             <td style="padding: 0.1em 0.5em; "><p><code>--html-wasm</code></p></td>
+     <td style="padding: 0.1em 0.5em; "> HTML builds</td>
+     <td style="padding: 0.1em 0.5em; "> Uses the experimental HTML-Wasm backend path. The JavaScript HTML backend is the current Alpha target.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <code>--terse</code> </td>
-     <td style="padding: 0.2em 0.5em;  "> <code>check</code> only</td>
-     <td style="padding: 0.2em 0.5em;  "> Prints compact diagnostics for tools, logs, and LLM workflows.</td>
+             <td style="padding: 0.1em 0.5em; "><p><code>--terse</code></p></td>
+     <td style="padding: 0.1em 0.5em; "><p><code>check</code> only</p></td>
+     <td style="padding: 0.1em 0.5em; "> Prints compact diagnostics for tools, logs, and LLM workflows.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <code>--force</code> </td>
-     <td style="padding: 0.2em 0.5em;  "> <code>new html</code> only</td>
-     <td style="padding: 0.2em 0.5em;  "> Allows replacing existing scaffold-owned files after a confirmation warning. Never overwrites .gitignore or unrelated files.</td>
+             <td style="padding: 0.1em 0.5em; "><p><code>--force</code></p></td>
+     <td style="padding: 0.1em 0.5em; "><p><code>new html</code> only</p></td>
+     <td style="padding: 0.1em 0.5em; "><p> Allows replacing existing scaffold-owned files after a confirmation warning. Never overwrites <code>.gitignore</code> or unrelated files.</p></td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <code>--host</code>, <code>--port</code>, <code>--poll-interval-ms</code> </td>
-     <td style="padding: 0.2em 0.5em;  "> <code>dev</code> only</td>
-     <td style="padding: 0.2em 0.5em;  "> Configures the local dev server. Defaults are <code>127.0.0.1</code>, <code>6342</code>, and <code>300</code>.</td>
+             <td style="padding: 0.1em 0.5em; "><p><code>--host</code>, <code>--port</code>, <code>--poll-interval-ms</code></p></td>
+     <td style="padding: 0.1em 0.5em; "><p><code>dev</code> only</p></td>
+     <td style="padding: 0.1em 0.5em; "> Configures the local dev server. Defaults are `127.0.0.1`, `6342`, and `300`.</td>
         </tr>
             
 
@@ -1026,51 +1016,51 @@ body {
                 
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> Syntax Error</td>
-     <td style="padding: 0.2em 0.5em;  "> The source text could not be parsed as Beanstalk syntax.</td>
-     <td style="padding: 0.2em 0.5em;  "> Check punctuation, block delimiters, template brackets, imports, and declaration shape.</td>
+             <td style="padding: 0.1em 0.5em; "> Syntax Error</td>
+     <td style="padding: 0.1em 0.5em; "> The source text could not be parsed as Beanstalk syntax.</td>
+     <td style="padding: 0.1em 0.5em; "> Check punctuation, block delimiters, template brackets, imports, and declaration shape.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> Type Error</td>
-     <td style="padding: 0.2em 0.5em;  "> The expression type does not match the expected type.</td>
-     <td style="padding: 0.2em 0.5em;  "> Check annotations, return types, function arguments, collection element types, and contextual casts.</td>
+             <td style="padding: 0.1em 0.5em; "> Type Error</td>
+     <td style="padding: 0.1em 0.5em; "> The expression type does not match the expected type.</td>
+     <td style="padding: 0.1em 0.5em; "> Check annotations, return types, function arguments, collection element types, and contextual casts.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> Language Rule Error</td>
-     <td style="padding: 0.2em 0.5em;  "> The syntax is valid, but it violates a language rule.</td>
-     <td style="padding: 0.2em 0.5em;  "> Check things like mutability, import visibility, unsupported feature surfaces, duplicate names, or invalid top-level code.</td>
+             <td style="padding: 0.1em 0.5em; "> Language Rule Error</td>
+     <td style="padding: 0.1em 0.5em; "> The syntax is valid, but it violates a language rule.</td>
+     <td style="padding: 0.1em 0.5em; "> Check things like mutability, import visibility, unsupported feature surfaces, duplicate names, or invalid top-level code.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> Missing File or Directory</td>
-     <td style="padding: 0.2em 0.5em;  "> The project references a file, directory, import path, or output path that cannot be resolved.</td>
-     <td style="padding: 0.2em 0.5em;  "> Check spelling, relative paths, <code>entry_root</code> and project config.</td>
+             <td style="padding: 0.1em 0.5em; "> Missing File or Directory</td>
+     <td style="padding: 0.1em 0.5em; "> The project references a file, directory, import path, or output path that cannot be resolved.</td>
+     <td style="padding: 0.1em 0.5em; "> Check spelling, relative paths, `entry_root` and project config.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> Malformed Config</td>
-     <td style="padding: 0.2em 0.5em;  "> The project config exists but contains unsupported, missing, or invalid settings.</td>
-     <td style="padding: 0.2em 0.5em;  "> Check <code>config.bst</code> and backend-specific config rules.</td>
+             <td style="padding: 0.1em 0.5em; "> Malformed Config</td>
+     <td style="padding: 0.1em 0.5em; "> The project config exists but contains unsupported, missing, or invalid settings.</td>
+     <td style="padding: 0.1em 0.5em; "> Check `config.bst` and backend-specific config rules.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> Borrow Checker Violation</td>
-     <td style="padding: 0.2em 0.5em;  "> The program violates Beanstalk's access and ownership rules.</td>
-     <td style="padding: 0.2em 0.5em;  "> Check mutable/exclusive access, later uses after possible moves, and overlapping borrows.</td>
+             <td style="padding: 0.1em 0.5em; "> Borrow Checker Violation</td>
+     <td style="padding: 0.1em 0.5em; "> The program violates Beanstalk's access and ownership rules.</td>
+     <td style="padding: 0.1em 0.5em; "> Check mutable/exclusive access, later uses after possible moves, and overlapping borrows.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> Dev Server Issue</td>
-     <td style="padding: 0.2em 0.5em;  "> The local server could not start, watch, build, or serve the project correctly.</td>
-     <td style="padding: 0.2em 0.5em;  "> Check port conflicts, host binding, project path, and file permissions.</td>
+             <td style="padding: 0.1em 0.5em; "> Dev Server Issue</td>
+     <td style="padding: 0.1em 0.5em; "> The local server could not start, watch, build, or serve the project correctly.</td>
+     <td style="padding: 0.1em 0.5em; "> Check port conflicts, host binding, project path, and file permissions.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> Compiler Bug / HIR / LIR / WASM Generation Bug</td>
-     <td style="padding: 0.2em 0.5em;  "> The compiler hit an internal invariant or unsupported backend path.</td>
-     <td style="padding: 0.2em 0.5em;  "> Reduce the input if practical and report it. User code should receive structured errors instead of compiler bugs.</td>
+             <td style="padding: 0.1em 0.5em; "> Compiler Bug / HIR / LIR / WASM Generation Bug</td>
+     <td style="padding: 0.1em 0.5em; "> The compiler hit an internal invariant or unsupported backend path.</td>
+     <td style="padding: 0.1em 0.5em; "> Reduce the input if practical and report it. User code should receive structured errors instead of compiler bugs.</td>
         </tr>
             
 

@@ -1,9 +1,9 @@
 import @./declarations-imports-and-ordering {content as reference_content}
-import @styles/docs {navbar, section, codebase_theme_head}
+import @styles/docs {navbar, section, theme_head}
 
 page_title #= "06. Declarations, imports and ordering"
 page_description #= "How retained syntax becomes bound visibility and ordered declarations."
-page_head #= codebase_theme_head
+page_head #= theme_head
 
 #[navbar]
 

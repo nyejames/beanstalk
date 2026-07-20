@@ -1,9 +1,9 @@
 import @html {table, th, td}
-import @styles/docs {navbar, section, codebase_theme_head, codeblock}
+import @styles/docs {navbar, section, theme_head, codeblock}
 
 page_title #= "Design scope"
 page_description #= "Accepted language mechanisms, design constraints and intentionally excluded complexity."
-page_head #= codebase_theme_head
+page_head #= theme_head
 
 #[navbar]
 

@@ -1,9 +1,9 @@
 import @./overview {content as reference_content}
-import @styles/docs {navbar, section, codebase_theme_head}
+import @styles/docs {navbar, section, theme_head}
 
 page_title #= "Compiler design: source to page"
 page_description #= "A chronological educational tour of Beanstalk's compiler and build pipeline."
-page_head #= codebase_theme_head
+page_head #= theme_head
 
 #[navbar]
 

@@ -1,8 +1,8 @@
-import @styles/docs {navbar, section, codebase_theme_head, codeblock}
+import @styles/docs {navbar, section, theme_head, codeblock}
 
 page_title #= "Memory management"
 page_description #= "GC semantics, shared access, borrow validation, ownership and backend memory lowering."
-page_head #= codebase_theme_head
+page_head #= theme_head
 
 #[navbar]
 

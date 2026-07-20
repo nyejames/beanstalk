@@ -1,9 +1,9 @@
 import @./starting-a-build {content as reference_content}
-import @styles/docs {navbar, section, codebase_theme_head}
+import @styles/docs {navbar, section, theme_head}
 
 page_title #= "03. Starting a build"
 page_description #= "How command selection and project config prepare a Beanstalk build."
-page_head #= codebase_theme_head
+page_head #= theme_head
 
 #[navbar]
 

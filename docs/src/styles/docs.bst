@@ -22,7 +22,7 @@ theme_css #= [docs_font, $css:
 
         background-color:
             light-dark(
-                hsl(125 67% 97%),
+                hsl(0, 0%, 98%),
                 #080d0c
             );
     }
@@ -42,9 +42,33 @@ theme_css #= [docs_font, $css:
                 ),
                 linear-gradient(
                     145deg,
-                    #07100d 0%,
-                    #0a1010 48%,
-                    #0b0f13 100%
+                    #0c1d17 0%,
+                    #101a18 48%,
+                    #081606 100%
+                );
+
+            background-repeat: no-repeat;
+        }
+    }
+
+    @media (prefers-color-scheme: light) {
+        body {
+            background-image:
+                radial-gradient(
+                    80rem 55rem at 8% -10%,
+                    rgb(0 50 80 / 20%),
+                    transparent 60%
+                ),
+                radial-gradient(
+                    65rem 45rem at 100% 18%,
+                    rgb(0 67 100 / 10%),
+                    transparent 65%
+                ),
+                linear-gradient(
+                    145deg,
+                    #d2fbe4df 0%,
+                    #e3f8d4cd 32%,
+                    #bfd1cd 100%
                 );
 
             background-repeat: no-repeat;
@@ -52,7 +76,7 @@ theme_css #= [docs_font, $css:
     }
 
     a {
-        color: light-dark(hsl(111, 96%, 26%), hsl(110, 62%, 66%));
+        color: light-dark(hsl(201, 84%, 41%), hsl(110, 62%, 66%));
     }
     
     .container {
@@ -67,6 +91,32 @@ theme_css #= [docs_font, $css:
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     }
+
+        .container pre {
+        max-width: 100%;
+        margin-block: 1.25em;
+        padding: 1em;
+        overflow-x: auto;
+        border-radius: 5px;
+        background-color: hsla(0, 0%, 42%, 0.12);
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        max-width: 100%;
+    }
+
+    th,
+    td {
+        border: 1px solid;
+        border-color: light-dark(hsl(0, 0%, 75%), hsl(0, 0%, 30%));
+        padding: 0.5em 1em;
+        vertical-align: top;
+        text-align: left;
+    }
+
+
 
     @media (min-width: 576px) {
         .container {
@@ -86,6 +136,15 @@ theme_css #= [docs_font, $css:
     @media (min-width: 1024px) {
         .container {
             max-width: 950px;
+        }
+
+        table {
+            font-size: 0.8rem;
+        }
+
+        th,
+        td {
+            padding: 0.4em;
         }
     }
 
@@ -114,7 +173,7 @@ theme_css #= [docs_font, $css:
 
 Palette = |
     red String = [$html:<span style="color: light-dark(hsl(0, 84%, 35%), hsl(0, 73%, 65%));">[$slot]</span>],
-    highlight String = [$html:<span style="color: light-dark(hsl(44, 82%, 29%), hsl(110, 62%, 66%));">[$slot]</span>],
+    highlight String = [$html:<span style="color: light-dark(hsl(43, 69%, 29%), hsl(110, 62%, 66%));">[$slot]</span>],
 |
 
 palette #= Palette()
@@ -399,87 +458,9 @@ language_docs_css #= [$css:
     }
 ]
 
-docs_content_css #= [$css:
-    .container pre {
-        max-width: 100%;
-        margin-block: 1.25em;
-        padding: 1em;
-        overflow-x: auto;
-        border-radius: 5px;
-        background-color: hsla(0, 0%, 42%, 0.12);
-    }
-
-    table {
-        width: 100%;
-        border-collapse: collapse;
-        max-width: 100%;
-        margin-block: 1.5em;
-    }
-
-    th,
-    td {
-        border: 1px solid;
-        border-color: light-dark(hsl(0, 0%, 75%), hsl(0, 0%, 30%));
-        padding: 0.5em;
-        vertical-align: top;
-        text-align: left;
-    }
-
-    thead tr,
-    tbody tr:first-child,
-    table > tr:first-child {
-        background-color: light-dark(hsla(107, 100%, 36%, 0.15), hsla(107, 60%, 30%, 0.25));
-        font-weight: 700;
-    }
-
-    td p,
-    th p {
-        margin-block: 0.35em;
-    }
-
-    td p:first-child,
-    th p:first-child {
-        margin-top: 0;
-    }
-
-    td p:last-child,
-    th p:last-child {
-        margin-bottom: 0;
-    }
-
-    th,
-    td {
-        overflow-wrap: anywhere;
-    }
-
-    th code,
-    td code {
-        white-space: normal;
-        overflow-wrap: anywhere;
-        word-break: break-word;
-    }
-
-    @media (max-width: 768px) {
-        table {
-            font-size: 0.9rem;
-        }
-
-        th,
-        td {
-            padding: 0.4em;
-        }
-    }
-]
-
 language_theme_head #= [$html:
     [theme_head]
-    <style>[docs_content_css]</style>
     <style>[language_docs_css]</style>
-]
-
-codebase_theme_head #= [$html:
-    [theme_head]
-    <style>[docs_content_css]</style>
 ]
 
 section #= [$html:
@@ -704,7 +685,7 @@ styled_table #= [$html:
 ]
 
 data #= [$html:
-    [$children([$html: <td style="padding: 0.2em 0.5em;  [$slot("style")]">[$slot]</td>]):
+    [$children([$html: <td style="padding: 0.1em 0.5em; [$slot("style")]">[$slot]</td>]):
         [$slot]
     ]
 ]

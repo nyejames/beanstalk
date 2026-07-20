@@ -1,9 +1,9 @@
 import @./what-a-compiler-does {content as reference_content}
-import @styles/docs {navbar, section, codebase_theme_head}
+import @styles/docs {navbar, section, theme_head}
 
 page_title #= "01. What a compiler does"
 page_description #= "How compiler responsibilities and intermediate representations fit together."
-page_head #= codebase_theme_head
+page_head #= theme_head
 
 #[navbar]
 

@@ -1,9 +1,9 @@
 import @./access-and-aliasing {content as reference_content}
-import @styles/docs {navbar, section, codebase_theme_head}
+import @styles/docs {navbar, section, theme_head}
 
 page_title #= "Access and aliasing"
 page_description #= "How Beanstalk shares, copies and requests exclusive access to values."
-page_head #= codebase_theme_head
+page_head #= theme_head
 
 #[navbar]
 

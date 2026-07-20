@@ -1,9 +1,9 @@
 import @./borrow-validation {content as reference_content}
-import @styles/docs {navbar, section, codebase_theme_head}
+import @styles/docs {navbar, section, theme_head}
 
 page_title #= "Borrow validation"
 page_description #= "How Beanstalk checks exclusivity, aliasing and move safety."
-page_head #= codebase_theme_head
+page_head #= theme_head
 
 #[navbar]
 

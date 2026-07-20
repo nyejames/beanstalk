@@ -1,9 +1,9 @@
 import @./backend-lowering {content as reference_content}
-import @styles/docs {navbar, section, codebase_theme_head}
+import @styles/docs {navbar, section, theme_head}
 
 page_title #= "17. Backend lowering"
 page_description #= "How target backends lower validated semantic inputs."
-page_head #= codebase_theme_head
+page_head #= theme_head
 
 #[navbar]
 

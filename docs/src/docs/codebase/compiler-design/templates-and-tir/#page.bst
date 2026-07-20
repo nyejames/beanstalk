@@ -1,9 +1,9 @@
 import @./templates-and-tir {content as reference_content}
-import @styles/docs {navbar, section, codebase_theme_head}
+import @styles/docs {navbar, section, theme_head}
 
 page_title #= "09. Templates and TIR"
 page_description #= "How Beanstalk preserves template structure before runtime lowering."
-page_head #= codebase_theme_head
+page_head #= theme_head
 
 #[navbar]
 

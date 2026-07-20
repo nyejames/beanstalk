@@ -9,20 +9,18 @@ page_head #= theme_head
     # What is Beanstalk?
     Beanstalk is a new programming language and toolchain.
 
-    
-
-    [palette.highlight: This website was created using Beanstalk.]
-
-
-
+    [palette.highlight, $md: *This website was created using Beanstalk!*]
 
     Everything you see on this page, including the layout, styles, and even the text content 
     was written in Beanstalk files and generated using the compiler's built-in HTML project builder.
 
-    The source code for this website can be found on @https://github.com/nyejames/beanstalk/tree/main/docs/src (Github).
+    The source code for this whole website can be found on @https://github.com/nyejames/beanstalk/tree/main/docs/src (Github).
 
     ## Documentation
-    The @./docs (Alpha language docs) cover the current supported compiler surface.
+    The @./docs (Alpha language docs) explains everything about the language, compiler and making Beanstalk projects.
+
+    This compiler is in early alpha and is undergoing rapid development, so not everything is exactly up to date with the current compiler.
+    [palette.highlight, $md: *You can already use beanstalk for web projects, but be aware of the early alpha status*]
 ]
 
 export:
@@ -31,10 +29,8 @@ export:
         theme_css,
         palette,
         theme_head,
-        docs_content_css,
         language_docs_css,
         language_theme_head,
-        codebase_theme_head,
         section,
         navbar,
         footer,

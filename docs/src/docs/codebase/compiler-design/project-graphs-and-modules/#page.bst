@@ -1,9 +1,9 @@
 import @./project-graphs-and-modules {content as reference_content}
-import @styles/docs {navbar, section, codebase_theme_head}
+import @styles/docs {navbar, section, theme_head}
 
 page_title #= "04. Project graphs and modules"
 page_description #= "How Beanstalk turns project files into deterministic module and package graphs."
-page_head #= codebase_theme_head
+page_head #= theme_head
 
 #[navbar]
 

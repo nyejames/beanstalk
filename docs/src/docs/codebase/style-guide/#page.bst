@@ -1,11 +1,11 @@
 import @./style-guide {content as style_content}
 import @./testing {content as testing_content}
 import @./validation {content as validation_content}
-import @styles/docs {navbar, section, codebase_theme_head}
+import @styles/docs {navbar, section, theme_head}
 
 page_title #= "Codebase development standards"
 page_description #= "Rust code style, testing strategy and validation gates for Beanstalk compiler work."
-page_head #= codebase_theme_head
+page_head #= theme_head
 
 #[navbar]
 
