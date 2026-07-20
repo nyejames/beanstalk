@@ -2,4 +2,7 @@
 mode = "failure"
 warnings = "forbid"
 diagnostic_codes = ["BST-RULE-0051"]
-message_contains = ["`catch ||:` is invalid."]
+
+[[backends.html.diagnostic_assertions]]
+code = "BST-RULE-0051"
+reason = "invalid_fallible_handling.empty_catch_handler_binding"

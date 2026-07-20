@@ -4,4 +4,7 @@ entry = "."
 mode = "failure"
 warnings = "forbid"
 diagnostic_codes = ["BST-RULE-0051"]
-message_contains = ["`catch` handles fallible `Error!` expressions"]
+
+[[backends.html.diagnostic_assertions]]
+code = "BST-RULE-0051"
+reason = "invalid_fallible_handling.catch_on_non_fallible"

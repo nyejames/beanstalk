@@ -2,4 +2,7 @@
 mode = "failure"
 warnings = "forbid"
 diagnostic_codes = ["BST-RULE-0051"]
-message_contains = ["the surrounding function does not declare an error return slot"]
+
+[[backends.html.diagnostic_assertions]]
+code = "BST-RULE-0051"
+reason = "invalid_fallible_handling.function_has_no_error_slot"
