@@ -30,8 +30,8 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 14A canonical contract and role backfill, batch 8 (entries 1101–1300)
-LAST_ACCEPTED_COMMIT: `4908f02e0` (Phase 14A classification batch 7)
+CURRENT_SLICE: Phase 14A canonical contract and role backfill, batch 9 (entries 1301–1500)
+LAST_ACCEPTED_COMMIT: `925d446e9` (Phase 14A classification batch 8)
 WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; accepted code is committed; concurrent docs work is out of scope and remains separate if present
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
@@ -43,13 +43,13 @@ ACCEPTANCE_CRITERIA:
 - tag spelling/order and obsolete tags are normalized without changing behavior
 VALIDATION_STATE:
 - `just validate`: passed; cross-target Clippy, 3,526 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
-- Phase 14A audit: passed; zero hard findings; 543 missing roles and 547 missing contracts remain after batch 7
+- Phase 14A audit: passed; zero hard findings; 343 missing roles and 347 missing contracts remain after batch 8
 DOCS_IMPACT: progress matrix reviewed; support and backend coverage are unchanged by fixture consolidation; index unchanged
 BLOCKERS_OR_OPEN_DECISIONS: none for the next slice; Ollama remains required with no provider substitution
 DELEGATION_DECISION: Ollama — bounded Phase 14 implementation slices
 NEXT_WORKER_ORDER: Ollama only; no provider substitution
 STOP_REASON: none
-NEXT_RESUME_ACTION: launch Phase 14A classification batch 8 (entries 1101–1300) through Ollama
+NEXT_RESUME_ACTION: launch Phase 14A classification batch 9 (entries 1301–1500) through Ollama
 
 ---
 
@@ -212,6 +212,7 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 14A classification batch 5 | `76ae0584f` | Accepted | Entries 501–700 reviewed; 185 contracts and roles added, three whole-case acceptance-only fixtures retained as smoke, shared option/result/loop/path families consolidated, and the canonical hashmap runtime/order case confirmed as a language primary; zero hard findings; 942 missing roles and 946 missing contracts remain; 3,526 Rust tests and 1,793 integration executions |
 | Phase 14A classification batch 6 | `139a88195` | Accepted | Entries 701–900 reviewed; 200 contracts and roles added, 32 boundary cases consolidated under deliberate normal primaries, runtime cases remained language-primary, and template const-loop variants reused matching loop contracts without creating duplicate primaries; zero hard findings; 742 missing roles and 746 missing contracts remain; 3,526 Rust tests and 1,793 integration executions |
 | Phase 14A classification batch 7 | `4908f02e0` | Accepted | Entries 901–1100 reviewed; 199 contracts and roles added while one whole-case acceptance-only fixture remained smoke, cast/char/assert families gained explicit ownership, eight target-lowering/ABI cases remained backend-role, and the shared unhandled-fallible-expression family received context-neutral naming; zero hard findings; 543 missing roles and 547 missing contracts remain; 3,526 Rust tests and 1,793 integration executions |
+| Phase 14A classification batch 8 | `925d446e9` | Accepted | Entries 1101–1300 reviewed; 200 contracts and roles added, four JS lowering cases remained backend-role, observable Core package behavior stayed primary, and config/facade policy families were narrowed so distinct rejection reasons do not hide under broad secondary ownership; zero hard findings; 343 missing roles and 347 missing contracts remain; 3,526 Rust tests and 1,793 integration executions |
 
 ---
 
