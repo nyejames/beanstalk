@@ -30,26 +30,26 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 13B4 JS policy, symbol, and inline-expression ownership
-LAST_ACCEPTED_COMMIT: `b42e9ab6f` (Phase 13B3 JS runtime-helper ownership)
+CURRENT_SLICE: Phase 13C Wasm lowering, emission, and feature-validation ownership
+LAST_ACCEPTED_COMMIT: `b87477d98` (Phase 13B4 JS policy and symbol ownership)
 WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; accepted code is committed; unrelated concurrent docs source and generated-release edits remain unstaged
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: backend lowering, ABI, artifact, and semantic-substitute ownership rules govern the next slice
-- code: JS prelude, host, symbol, inline-expression, and emission-policy tests are the next ownership inventory
+- code: Wasm lowering/emission tests and shared backend feature-validation tests are the next ownership inventory
 ACCEPTANCE_CRITERIA:
 - classify backend tests as ABI, helper, mapping, planning, malformed HIR, artifact, or semantic substitute
 - remove only semantic substitutes with verified integration owners
 - retain deliberate target representation and malformed-HIR contracts without broadening backend support
 VALIDATION_STATE:
 - `just validate`: passed; cross-target Clippy, 3,540 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
-- focused Phase 13B3 coverage: passed; all 198 JS backend tests pass; all 65 assigned runtime-helper tests classified, one weaker push-success carrier duplicate removed, and 64 helper-selection/contract/ABI owners retained
+- focused Phase 13B4 coverage: passed; all 198 JS backend tests pass; all 41 assigned prelude, host, symbol, inline-expression, and emission-policy tests classified as backend-local owners; one stale assertion message corrected
 DOCS_IMPACT: progress matrix reviewed; support and backend coverage are unchanged by fixture consolidation; index unchanged
 BLOCKERS_OR_OPEN_DECISIONS: none for the next slice; Ollama remains required with no provider substitution
 DELEGATION_DECISION: Ollama — bounded Phase 13 backend ownership slices
 NEXT_WORKER_ORDER: Ollama only; no provider substitution
 STOP_REASON: none
-NEXT_RESUME_ACTION: launch the JS policy, symbol, and inline-expression classification slice through Ollama
+NEXT_RESUME_ACTION: launch the Wasm lowering, emission, and backend feature-validation classification slice through Ollama
 
 ---
 
@@ -200,6 +200,7 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 13B1 JS control/value ABI | `7350c0825` | Accepted | All 32 control-flow, binding, and value-use tests are deliberate CFG/jump, place/helper, alias-write, or load/copy/call/return ABI owners; three match-temp assertions no longer pin incidental numeric suffixes; 3,541 Rust tests and 1,793 integration executions |
 | Phase 13B2 JS numeric/reactive mappings | `ecbce5fc6` | Accepted | All 37 numeric and reactive tests are deliberate failure-mode mapping, helper selection/contract, runtime ABI, invalidation/scheduler, or malformed-HIR owners; no substitute deleted; stale Phase 7 mounting wording removed; 3,541 Rust tests and 1,793 integration executions |
 | Phase 13B3 JS runtime-helper ownership | `b42e9ab6f` | Accepted | All 65 runtime-helper tests classified; one weaker collection-push success-carrier duplicate removed; 64 helper-selection, helper-contract, and ABI owners retained; 3,540 Rust tests and 1,793 integration executions |
+| Phase 13B4 JS policy and symbol ownership | `b87477d98` | Accepted | All 41 prelude, host, symbol, inline-expression, and emission-policy tests retained as helper selection/ordering, ABI, mapping, planning, or malformed-input owners; stale legacy wording corrected; 3,540 Rust tests and 1,793 integration executions |
 
 ---
 
