@@ -28,7 +28,7 @@ use crate::compiler_frontend::symbols::string_interning::StringTable;
 use rustc_hash::FxHashMap;
 
 #[test]
-fn lowers_calls_and_cfg_with_deterministic_block_mapping() {
+fn lowers_calls_and_cfg_with_resolvable_branch_targets() {
     let mut string_table = StringTable::new();
     let (type_environment, types) = build_type_environment();
 
@@ -133,36 +133,51 @@ fn lowers_calls_and_cfg_with_deterministic_block_mapping() {
         .find(|function| function.id == WasmLirFunctionId(1))
         .expect("lowered main function should be present");
     assert_eq!(main_lir.blocks.len(), 3);
-    assert_eq!(
-        main_lir
-            .blocks
-            .iter()
-            .map(|block| block.id.0)
-            .collect::<Vec<_>>(),
-        vec![0, 1, 2]
-    );
 
+    // WHAT: the lowering renumbers reachable blocks into a complete, unique LIR block set.
+    // WHY: emission re-indexes blocks by sorted id, so the exact sequential LIR block ids are not
+    // a stable contract. Assert a complete unique mapping with resolvable branch targets instead
+    // of pinning the incidental sequential renumbering.
+    let mut block_ids: Vec<u32> = main_lir.blocks.iter().map(|block| block.id.0).collect();
+    block_ids.sort_unstable();
+    block_ids.dedup();
+    assert_eq!(block_ids.len(), 3, "lowered blocks should have unique ids");
+
+    let entry_block = main_lir
+        .blocks
+        .iter()
+        .find(|block| {
+            block.statements.iter().any(|statement| {
+                matches!(
+                    statement,
+                    WasmLirStmt::Call {
+                        callee: WasmCalleeRef::Function(WasmLirFunctionId(0)),
+                        ..
+                    }
+                )
+            })
+        })
+        .expect("entry block should contain the lowered callee invocation");
+
+    // The branch targets are LIR block ids produced by the internal renumbering; assert they
+    // resolve to real lowered blocks rather than pinning the incidental sequential values.
+    let WasmLirTerminator::Branch {
+        then_block,
+        else_block,
+        ..
+    } = &entry_block.terminator
+    else {
+        panic!("entry block terminator should lower to a Branch");
+    };
+    assert_ne!(then_block, else_block, "branch targets should be distinct");
     assert!(
-        main_lir.blocks[0]
-            .statements
-            .iter()
-            .any(|statement| matches!(
-                statement,
-                WasmLirStmt::Call {
-                    callee: WasmCalleeRef::Function(WasmLirFunctionId(0)),
-                    ..
-                }
-            ))
+        main_lir.blocks.iter().any(|block| block.id == *then_block),
+        "then target should resolve to a lowered block"
     );
-
-    assert!(matches!(
-        main_lir.blocks[0].terminator,
-        WasmLirTerminator::Branch {
-            then_block,
-            else_block,
-            ..
-        } if then_block.0 == 1 && else_block.0 == 2
-    ));
+    assert!(
+        main_lir.blocks.iter().any(|block| block.id == *else_block),
+        "else target should resolve to a lowered block"
+    );
 }
 
 #[test]
@@ -776,8 +791,22 @@ fn maps_advisory_drop_sites_to_drop_if_owned_statements() {
         .iter()
         .find(|function| function.id == WasmLirFunctionId(0))
         .expect("lowered start function should be present");
+    // WHAT: the advisory drop site must lower to a DropIfOwned on the owned string handle.
+    // WHY: LIR local ids are an internal renumbering that emission re-indexes, so identify the
+    // drop target by its handle ABI type rather than the incidental sequential local id.
+    let handle_locals: Vec<WasmLirLocalId> = lowered_start
+        .locals
+        .iter()
+        .filter(|local| local.ty == WasmAbiType::Handle)
+        .map(|local| local.id)
+        .collect();
+    assert_eq!(
+        handle_locals.len(),
+        1,
+        "fixture should declare exactly one owned handle local"
+    );
     assert!(lowered_start.blocks[0].statements.iter().any(
-        |statement| matches!(statement, WasmLirStmt::DropIfOwned { value } if *value == WasmLirLocalId(0))
+        |statement| matches!(statement, WasmLirStmt::DropIfOwned { value } if *value == handle_locals[0])
     ));
 }
 
