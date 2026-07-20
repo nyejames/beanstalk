@@ -30,26 +30,26 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 8 type-resolution unit ownership reassignment
-LAST_ACCEPTED_COMMIT: `720c23e9a` (Phase 8 function-call ownership)
+CURRENT_SLICE: Phase 8 generic unit ownership reassignment
+LAST_ACCEPTED_COMMIT: `53039a0e4` (Phase 8 type-resolution ownership)
 WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; accepted code is committed; unrelated concurrent edits remain in `docs/src/#page.bst` and `docs/src/styles/docs.bst`
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: compiler type-identity contracts and testing standards require canonical `TypeId` facts to remain unit-owned while user-visible capacity behavior is integration-owned
-- code: `src/compiler_frontend/ast/tests/type_resolution_tests.rs` and adjacent datatype tests are the next ownership inventory
+- docs: generic language and compiler contracts require parameter/binding/substitution identity to remain unit-owned while declaration and inference behavior is integration-owned
+- code: `src/compiler_frontend/datatypes/tests/generics_tests.rs` and `src/compiler_frontend/ast/generic_functions/tests/diagnostics_tests.rs` are the next ownership inventory
 ACCEPTANCE_CRITERIA:
-- retain canonical `TypeId`, collection/map shape, alias transparency, imported canonical type, field/variant registration, and impossible parsed-type facts
-- remove whole-source type acceptance/rejection units only where exact integration owners exist
-- ensure fixed-capacity behavior remains covered across signatures, fields, aliases, returns, cross-file resolution, and current backend rejection
+- retain parameter identity, binding consistency/order, type keys, substitution/unification, generated identity, rollback, trait-bound lookup, and impossible-state facts
+- remove declaration/inference behavior units only where exact integration owners exist
+- remove datatype renderer wording assertions that do not own a semantic invariant
 VALIDATION_STATE:
-- `just validate`: passed; cross-target Clippy, 3,548 Rust tests, 1,797 integration executions, docs check, and 28 benchmark cases
-- focused call tests: passed; 11 tests; suite audit has zero hard findings across 1,655 cases
-DOCS_IMPACT: progress matrix reviewed; broad function-call and call-site mutability coverage wording remains accurate; index unchanged
+- `just validate`: passed; cross-target Clippy, 3,544 Rust tests, 1,799 integration executions, docs check, and 28 benchmark cases
+- focused type-resolution tests: passed; 18 tests; suite audit has zero hard findings across 1,657 cases
+DOCS_IMPACT: progress matrix reviewed; broad fixed-collection and type-identity coverage wording remains accurate; index unchanged
 BLOCKERS_OR_OPEN_DECISIONS: none for the next slice; Ollama remains required with no provider substitution
-DELEGATION_DECISION: Ollama — bounded type-resolution test ownership/pruning slice
+DELEGATION_DECISION: Ollama — bounded generic test ownership/pruning slice
 NEXT_WORKER_ORDER: Ollama only; no provider substitution
 STOP_REASON: none
-NEXT_RESUME_ACTION: inventory and launch Phase 8 type-resolution ownership reassignment through Ollama
+NEXT_RESUME_ACTION: inventory and launch Phase 8 generic ownership reassignment through Ollama
 
 ---
 
@@ -186,6 +186,7 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 6 inserted ownership and explicit-copy insertion | `4c323a4f4` | Accepted | Three primary negatives distinguish immutable `set` later-use access from literal key/value ownership transfer; one exact runtime owner proves copied insertion independence; 1,654 cases and 1,796 executions |
 | Phase 7 hashmap unit pruning | `f6c514180` | Accepted | Fifteen source-shaped units removed; five hidden get/remove/set/nested-literal state facts retained in the fact owner; 3,566 Rust tests and 1,796 integration executions |
 | Phase 8 function-call ownership | `720c23e9a` | Accepted | Eighteen whole-source units removed; eleven parser/access/location facts retained; computed mutable-rvalue behavior gained one exact-output primary integration owner; 3,548 Rust tests and 1,797 integration executions |
+| Phase 8 type-resolution ownership | `53039a0e4` | Accepted | Four source-shaped capacity rejection units removed; eighteen hidden bridge/folding/TypeId/registration/map facts retained; struct-field and return-slot zero-capacity diagnostics gained primary integration owners; 3,544 Rust tests and 1,799 integration executions |
 
 ---
 
@@ -1333,6 +1334,10 @@ Do not present lower counts or faster time as proof of correctness.
 | `function_call_tests::{accepts_fresh_template_for_mutable_parameter,accepts_fresh_collection_for_mutable_parameter,accepts_fresh_struct_constructor_for_mutable_parameter,accepts_explicit_copy_as_fresh_mutable_argument}` | Fresh template, collection, struct, and explicit-copy values satisfy mutable parameters | `function_call_mutable_param_{fresh_template_arg,fresh_collection_arg,fresh_struct_arg,copy_arg}` | none | `720c23e9a` |
 | `function_call_tests::{rejects_tilde_on_immutable_place_argument,rejects_tilde_on_non_place_argument_literal,rejects_immutable_place_without_tilde_for_mutable_parameter,rejects_tilde_on_explicit_copy_argument}` | Invalid mutable call-site access forms | `function_call_tilde_on_immutable_place`, `function_call_tilde_on_non_place_expression`, and `function_call_immutable_place_missing_tilde` | Three source-location units retain marker/value precision | `720c23e9a` |
 | `function_call_tests::{duplicate_named_parameter_uses_canonical_diagnostic_text,unknown_named_parameter_lists_known_parameter_hint}` | Claimed call-diagnostic wording/hint coverage but asserted only reason identity | `function_call_named_args_duplicate` and `function_call_named_args_unknown` | none | `720c23e9a` |
+| `type_resolution_tests::zero_capacity_rejected` | Zero fixed capacity is rejected | `fixed_collection_zero_capacity_declaration_rejected`, with distinct signature/alias/field/return owners | none | `53039a0e4` |
+| `type_resolution_tests::negative_capacity_rejected` | Negative fixed capacity is rejected | `fixed_collection_negative_capacity_rejected` | none | `53039a0e4` |
+| `type_resolution_tests::runtime_int_binding_is_rejected_as_fixed_collection_capacity` | Runtime bindings cannot supply fixed capacity | `fixed_collection_capacity_runtime_variable_rejected` | none | `53039a0e4` |
+| `type_resolution_tests::invalid_function_signature_capacity_is_not_erased_to_growable` | Invalid signature capacity remains a structured rejection | `fixed_collection_zero_capacity_signature_rejected` | none | `53039a0e4` |
 | Phase 5D2 15 normalized HTML whole-page goldens | Runtime values for calls, collections, logical expressions, chars, structs, and short-circuit behavior | The same 15 canonical cases through `rendered_output_exact` | none | `d5256868b` |
 | Phase 5D3 nine normalized receiver HTML whole-page goldens | Immutable, mutable, nested, chained, exported, alias-return, and post-mutation receiver behavior | The same nine canonical cases through exact context-rich runtime output | none | `914c1c131` |
 | Phase 5D4 nine normalized template/import HTML whole-page goldens | Import execution/suppression, runtime templates, const slots, CSS, Markdown, and positional slot behavior | Runtime exact/order/exact-once plus narrow static `index.html` assertions in the same nine cases | none | `71f75c220` |
