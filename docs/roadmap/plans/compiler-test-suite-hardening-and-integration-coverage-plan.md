@@ -30,26 +30,26 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 8 generic unit ownership reassignment
-LAST_ACCEPTED_COMMIT: `53039a0e4` (Phase 8 type-resolution ownership)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; accepted code is committed; unrelated concurrent edits remain in `docs/src/#page.bst` and `docs/src/styles/docs.bst`
+CURRENT_SLICE: Phase 9 cross-module effect-summary and diagnostic-remapping coverage
+LAST_ACCEPTED_COMMIT: `034f919ed` (Phase 8 generic ownership)
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; accepted code is committed; unrelated concurrent edits remain in `docs/src/#page.bst`, `docs/src/docs/getting-started/#page.bst`, and `docs/src/styles/docs.bst`
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: generic language and compiler contracts require parameter/binding/substitution identity to remain unit-owned while declaration and inference behavior is integration-owned
-- code: `src/compiler_frontend/datatypes/tests/generics_tests.rs` and `src/compiler_frontend/ast/generic_functions/tests/diagnostics_tests.rs` are the next ownership inventory
+- docs: module visibility, access/effect summaries, aliasing, and diagnostic remapping contracts govern current supported cross-module behavior
+- code: exported function summaries, caller transfer, facade/re-export binding, and existing cross-file borrow fixtures are the next inventory
 ACCEPTANCE_CRITERIA:
-- retain parameter identity, binding consistency/order, type keys, substitution/unification, generated identity, rollback, trait-bound lookup, and impossible-state facts
-- remove declaration/inference behavior units only where exact integration owners exist
-- remove datatype renderer wording assertions that do not own a semantic invariant
+- exported return aliases block caller mutation while live and permit it after final use; exported fresh returns remain independent
+- cross-module mutable parameters accept authored `~` and reject missing `~` at the consumer
+- supported facade/re-export paths preserve access/effect semantics and structured source remapping without bypassing visibility
 VALIDATION_STATE:
-- `just validate`: passed; cross-target Clippy, 3,544 Rust tests, 1,799 integration executions, docs check, and 28 benchmark cases
-- focused type-resolution tests: passed; 18 tests; suite audit has zero hard findings across 1,657 cases
-DOCS_IMPACT: progress matrix reviewed; broad fixed-collection and type-identity coverage wording remains accurate; index unchanged
+- `just validate`: passed; cross-target Clippy, 3,540 Rust tests, 1,799 integration executions, docs check, and 28 benchmark cases
+- focused generic tests: passed; 24 datatype facts and nine AST remapping facts; 11 strengthened cases; zero audit hard findings across 1,657 cases
+DOCS_IMPACT: progress matrix reviewed; broad generic declaration/inference/trait-bound coverage wording remains accurate; index unchanged
 BLOCKERS_OR_OPEN_DECISIONS: none for the next slice; Ollama remains required with no provider substitution
-DELEGATION_DECISION: Ollama — bounded generic test ownership/pruning slice
+DELEGATION_DECISION: Ollama — bounded Phase 9 cross-module coverage slices
 NEXT_WORKER_ORDER: Ollama only; no provider substitution
 STOP_REASON: none
-NEXT_RESUME_ACTION: inventory and launch Phase 8 generic ownership reassignment through Ollama
+NEXT_RESUME_ACTION: inventory current cross-module effect-summary support and launch the first Phase 9 slice through Ollama
 
 ---
 
@@ -187,6 +187,7 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 7 hashmap unit pruning | `f6c514180` | Accepted | Fifteen source-shaped units removed; five hidden get/remove/set/nested-literal state facts retained in the fact owner; 3,566 Rust tests and 1,796 integration executions |
 | Phase 8 function-call ownership | `720c23e9a` | Accepted | Eighteen whole-source units removed; eleven parser/access/location facts retained; computed mutable-rvalue behavior gained one exact-output primary integration owner; 3,548 Rust tests and 1,797 integration executions |
 | Phase 8 type-resolution ownership | `53039a0e4` | Accepted | Four source-shaped capacity rejection units removed; eighteen hidden bridge/folding/TypeId/registration/map facts retained; struct-field and return-slot zero-capacity diagnostics gained primary integration owners; 3,544 Rust tests and 1,799 integration executions |
+| Phase 8 generic ownership | `034f919ed` | Accepted | Three user-behavior scope units and one datatype-renderer wording unit removed; 24 binding/identity/substitution/rollback facts and nine AST remapping facts retained; 11 canonical diagnostics strengthened; 3,540 Rust tests and 1,799 integration executions |
 
 ---
 
@@ -1018,13 +1019,13 @@ Ensure integration ownership for duplicate/invalid/colliding/unused parameters, 
 
 ## Phase 8 acceptance
 
-- [ ] Parser units stop at parser facts.
-- [ ] Type units stop at semantic identity.
-- [ ] Generic units stop at identity/binding/substitution.
-- [ ] User behavior is integration-owned with exact output/diagnostics.
-- [ ] No renderer wording is pinned in datatype units.
-- [ ] No test-only production API remains.
-- [ ] Full validation passes.
+- [x] Parser units stop at parser facts.
+- [x] Type units stop at semantic identity.
+- [x] Generic units stop at identity/binding/substitution.
+- [x] User behavior is integration-owned with exact output/diagnostics.
+- [x] No renderer wording is pinned in datatype units.
+- [x] No test-only production API remains.
+- [x] Full validation passes.
 
 ---
 
@@ -1338,6 +1339,9 @@ Do not present lower counts or faster time as proof of correctness.
 | `type_resolution_tests::negative_capacity_rejected` | Negative fixed capacity is rejected | `fixed_collection_negative_capacity_rejected` | none | `53039a0e4` |
 | `type_resolution_tests::runtime_int_binding_is_rejected_as_fixed_collection_capacity` | Runtime bindings cannot supply fixed capacity | `fixed_collection_capacity_runtime_variable_rejected` | none | `53039a0e4` |
 | `type_resolution_tests::invalid_function_signature_capacity_is_not_erased_to_growable` | Invalid signature capacity remains a structured rejection | `fixed_collection_zero_capacity_signature_rejected` | none | `53039a0e4` |
+| `generics_tests::{generic_scope_rejects_duplicate_parameter_names,generic_scope_rejects_collisions_with_forbidden_names,generic_scope_rejects_non_type_style_parameter_names}` | User-visible generic parameter declaration rejection | `generic_duplicate_parameter_rejected`, `generic_parameter_visible_type_collision_rejected`, and `generic_parameter_invalid_name_rejected` with structured reason/location assertions | `generic_scope_accepts_pascal_case_and_single_uppercase_names` retains hidden scope membership | `034f919ed` |
+| `generics_tests::generic_display_uses_beanstalk_surface_style` | Legacy `DataType` renderer wording across generic shapes | none; datatype units do not own rendered compiler wording | canonical `TypeId` display and diagnostic render owners remain | `034f919ed` |
+| `ReturnSlot::error` test-only helper | Constructed legacy error-return shape for the removed datatype renderer test | none | ordinary parsed/resolved return-channel paths | `034f919ed` |
 | Phase 5D2 15 normalized HTML whole-page goldens | Runtime values for calls, collections, logical expressions, chars, structs, and short-circuit behavior | The same 15 canonical cases through `rendered_output_exact` | none | `d5256868b` |
 | Phase 5D3 nine normalized receiver HTML whole-page goldens | Immutable, mutable, nested, chained, exported, alias-return, and post-mutation receiver behavior | The same nine canonical cases through exact context-rich runtime output | none | `914c1c131` |
 | Phase 5D4 nine normalized template/import HTML whole-page goldens | Import execution/suppression, runtime templates, const slots, CSS, Markdown, and positional slot behavior | Runtime exact/order/exact-once plus narrow static `index.html` assertions in the same nine cases | none | `71f75c220` |
