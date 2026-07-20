@@ -30,21 +30,21 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 14C14f builder-surface registry and source-kind unit ownership review
-LAST_ACCEPTED_COMMIT: `2aa652d29` (Phase 14C14e code)
+CURRENT_SLICE: Phase 14C14g build import, directive, and infrastructure unit ownership review
+LAST_ACCEPTED_COMMIT: `76894bb2c` (Phase 14C14f code)
 WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; accepted code is committed; concurrent example-name work remains separately committed
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: unit-test ownership, pruning, compiler-stage boundaries, and final governance rules govern the next slice
-- code: all 149 retained tests across the reviewed Stage 0, frontend-preparation, filesystem-identity, and compile-project frontend groups now have distinct owners; builder-surface registries and source-kind policy are next
+- code: all 177 retained tests across the reviewed Stage 0, compile-project frontend, and builder-surface groups now have distinct owners; build import, directive, and infrastructure boundaries are next
 ACCEPTANCE_CRITERIA:
 - every remaining full-source unit has a distinct hidden invariant, parser fact, stage boundary, or policy owner
 - units superseded by a stronger canonical integration primary are deleted with replacement evidence
 - stale test-only helpers or production APIs are removed with their final caller
 - HIR, build-system, backend, and final TIR units keep only their owning semantic relationships and hidden facts
 VALIDATION_STATE:
-- `just validate`: passed; cross-target Clippy, 3,480 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
-- Phase 14C14e focused group: passed; 25 compile-project frontend tests
+- `just validate`: passed; cross-target Clippy, 3,475 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
+- Phase 14C14f focused group: passed; 28 builder-surface registry tests
 - Phase 14B audit: passed; zero hard findings; 66 backend-only and 15 adversarial-only primary-less contract advisories
 - Priya expectation alignment: accepted at `6efac7012`; 13 stale Rust and integration expectation files now match renamed inputs
 DOCS_IMPACT: testing, validation, and contributor workflow aligned with final suite policy; progress matrix and index unchanged
@@ -52,7 +52,7 @@ BLOCKERS_OR_OPEN_DECISIONS: none; 81 contract families without a primary are int
 DELEGATION_DECISION: Ollama — bounded Phase 14 implementation slices
 NEXT_WORKER_ORDER: Ollama only; no provider substitution
 STOP_REASON: none
-NEXT_RESUME_ACTION: launch the builder-surface registry and source-kind unit group through Ollama
+NEXT_RESUME_ACTION: launch the build import, directive, and infrastructure unit group through Ollama
 
 ---
 
@@ -238,6 +238,7 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 14C14c Stage 0 source loading and provider orchestration | `afa944551` | Accepted | All 11 source-kind diagnostic, one-read cache, deterministic ordering, infrastructure error, provider separation/call-count, parallel/serial strategy, and cross-module-root queuing units retained as hidden Stage 0 owners; Markdown explicit-extension and unsupported-kind units now assert exact typed path and extension payloads; 3,484 Rust tests and 1,793 integration executions |
 | Phase 14C14d frontend preparation and filesystem identity | no code change after `afa944551` | Accepted | All 20 frontend-preparation and 13 filesystem-identity tests retained as deterministic merge/remapping, scheduling-policy, chunk-planning, counter, malformed-payload, canonicalization, discovery-outcome, and strict platform filesystem-identity owners; 19 frontend tests and five host-runnable filesystem tests pass on macOS, while eight non-UTF-8 identity tests remain Linux-gated; latest full gate remains 3,484 Rust tests and 1,793 integration executions |
 | Phase 14C14e compile-project frontend units | `2aa652d29` | Accepted | Four weak source-visible or cosmetic duplicates removed in favor of canonical import-collision and unsupported-JS owners, an exact external-JS parser owner, and the retained realistic project-local receiver rejection; missing entry-root coverage now asserts `ConfiguredEntryRootMissing`; 25 provider registry, cache, runtime-metadata reachability, identity/remapping, capability, infrastructure, discovery, and HIR metadata owners remain; 3,480 Rust tests and 1,793 integration executions |
+| Phase 14C14f builder-surface registry units | `76894bb2c` | Accepted | Five construction, equality, lookup, default, and single-kind smokes consolidated into stronger provider-resolution, cache-key, replacement-lookup, empty-registry, and deterministic multi-kind owners; one misleading package-registry test name corrected; 28 provider registration/cache/resolution-table, source-kind, package-order, collision, origin, and backing owners remain; 3,475 Rust tests and 1,793 integration executions |
 
 ---
 
@@ -1422,6 +1423,11 @@ Do not present lower counts or faster time as proof of correctness.
 | `compile_project_frontend_tests::html_js_provider_invalid_js_file_surfaces_diagnostics` | Unannotated project-local JavaScript exports are rejected | `unsupported_external_js_import_rejected` (`language.imports.unsupported_external_js_import_rejected`) with exact `BST-IMPORT-0022` | none; the removed unit asserted only generic failure | `2aa652d29` |
 | `compile_project_frontend_tests::html_js_provider_malformed_receiver_signature_surfaces_diagnostics` | A receiver parameter after a normal parameter is rejected | `external_js::parser::tests::receiver_parameter_must_be_first` with exact `InvalidReceiverParameter` and free-function classification | `unsupported_external_js_import_rejected` owns end-to-end `BST-IMPORT-0022` propagation | `2aa652d29` |
 | `compile_project_frontend_tests::html_js_provider_rejects_well_formed_receiver_methods_in_project_local_js` | Project-local JavaScript cannot expose receiver-style signatures | `html_js_provider_receiver_method_in_project_local_js_rejected` | none; the removed bare-import form was a cosmetic duplicate of the retained call-site fixture | `2aa652d29` |
+| `provider_registry_tests::resolved_import_can_carry_all_expected_fields` | `ResolvedExternalImport` construction carries package, type, function, asset, and runtime-import fields | `dummy_provider_resolves_import_with_all_fields` through the actual provider path | none | `76894bb2c` |
+| `provider_registry_tests::cache_key_equal_for_same_path_and_kind` | Equal canonical path/provider-kind pairs form equal cache keys | `cache_key_distinguishes_provider_kinds_and_matches_identical_keys` | same owner also protects provider-kind inequality | `76894bb2c` |
+| `provider_registry_tests::resolution_table_get_lookup_unchanged_after_indexing` | Exact source/prefix lookup returns the indexed payload | `resolution_table_replacing_same_source_prefix_updates_collected_package`, strengthened to assert the replaced package, type, and function payload through `get` | none | `76894bb2c` |
+| `source_file_kind_registry_tests::registry_default_is_empty` | The default registry starts empty | `empty_registry_has_no_supported_kinds` | `Default` and `new` share the same empty representation | `76894bb2c` |
+| `source_file_kind_registry_tests::register_multiple_kinds` | A single registered Beandown kind appears in `supported_kinds` | `supported_kinds_sorts_multiple_kinds_deterministically` | `register_beandown_lookup_succeeds` retains direct registration/lookup | `76894bb2c` |
 
 ### Coverage gap and handoff ledger
 
