@@ -219,7 +219,7 @@ fn fixed_collection_alias_literal_is_accepted() {
     let (ast, string_table) = parse_single_file_ast(
         r#"
 Names as {2 String}
-names Names = {"Ada"}
+names Names = {"Priya"}
 "#,
     );
     let body = start_function_body(&ast, &string_table);

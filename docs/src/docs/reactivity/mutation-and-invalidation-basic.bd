@@ -12,7 +12,7 @@ Assigning to `count` updates the source. Anything subscribed to `count` will kno
 ### Mutable collection source
 
 [codeblock, $code("bst"):
-    names ${String} = {"Ada"}
+    names ${String} = {"Priya"}
 
     ~names.push("Grace") catch:
         io.line("push failed")

@@ -1,3 +1,3 @@
-scores ~{String = Int} = {"Ada" = 10}
-score = scores.get("Ada")
+scores ~{String = Int} = {"Priya" = 10}
+score = scores.get("Priya")
 [:test]

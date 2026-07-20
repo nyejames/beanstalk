@@ -1,16 +1,16 @@
 -- Success-path coverage for JS hashmap helpers and runtime ordering contracts.
 
 render_hashmap_contract || -> String:
-    scores ~= {"Ada" = 10, "Grace" = 12}
+    scores ~= {"Priya" = 10, "Grace" = 12}
 
-    has_ada_before = scores.contains("Ada")
+    has_ada_before = scores.contains("Priya")
     has_linus_before = scores.contains("Linus")
 
     ~scores.set("Linus", 7) catch:
     ;
     len_after_insert = scores.length
 
-    ~scores.set("Ada", 11) catch:
+    ~scores.set("Priya", 11) catch:
     ;
     len_after_replace = scores.length
 

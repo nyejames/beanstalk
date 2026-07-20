@@ -2,7 +2,7 @@ A collection loop visits the values in a Beanstalk collection in collection
 order.
 
 [codeblock, $code("bst"):
-    names = {"Ada", "Grace", "Linus"}
+    names = {"Priya", "Grace", "Linus"}
 
     loop names |name, index|:
         io.line([: [index]: [name]])

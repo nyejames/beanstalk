@@ -2045,7 +2045,7 @@ fn const_required_template_option_capture_present_folds_then_branch() {
     let capture_name = string_table.intern("name");
     let capture_path = context_scope.append(capture_name);
     let present_value = Expression::string_slice(
-        string_table.intern("Ada"),
+        string_table.intern("Priya"),
         SourceLocation::default(),
         ValueMode::ImmutableOwned,
     );
@@ -2120,7 +2120,7 @@ fn const_required_template_option_capture_inlines_present_source_const() {
     let string_type_id = type_environment.builtins().string;
     let option_string_type_id = type_environment.intern_option(string_type_id);
     let present_value = Expression::string_slice(
-        string_table.intern("Ada"),
+        string_table.intern("Priya"),
         token_stream.current_location(),
         ValueMode::ImmutableOwned,
     );

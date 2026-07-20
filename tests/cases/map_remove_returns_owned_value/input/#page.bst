@@ -4,7 +4,7 @@ observe |value String, before Int| -> String:
     return [:map_remove_returns_owned_value observed=[value] length_before=[before]]
 ;
 
-scores ~{String = String} = {"Ada" = "ten", "Grace" = "twelve"}
+scores ~{String = String} = {"Priya" = "ten", "Grace" = "twelve"}
 removed = ~scores.remove("Grace") catch:
     then ""
 ;

@@ -14,7 +14,7 @@ Collections also need a mutable binding before they can change:
 [codeblock, $code("bst"):
     names ~{String} = {}
 
-    ~names.push("Ada") catch:
+    ~names.push("Priya") catch:
     ;
 ]
 

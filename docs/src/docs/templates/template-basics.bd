@@ -3,7 +3,7 @@ Templates create owned `String` values.
 They use square brackets. Collections and maps use braces.
 
 [codeblock, $code("bst"):
-    name = "Ada"
+    name = "Priya"
 
     greeting = [:
         Hello, [name]

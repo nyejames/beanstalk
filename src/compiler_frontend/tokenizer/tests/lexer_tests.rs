@@ -972,7 +972,7 @@ fn uppercase_exponent_on_signed_literal_preserves_authored_text() {
 #[test]
 fn tokenizer_does_not_steal_parser_owned_punctuation_diagnostics() {
     tokenize_source("value = identity<Int>(42)\n");
-    tokenize_source(r#"scores = {"Ada" =}"#);
+    tokenize_source(r#"scores = {"Priya" =}"#);
 }
 
 #[test]

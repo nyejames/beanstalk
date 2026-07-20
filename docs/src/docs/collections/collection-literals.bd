@@ -4,7 +4,7 @@ Collection types and literals use braces.
 
 [codeblock, $code("bst"):
     values ~= {1, 2, 3}
-    names {String} = {"Ada", "Grace"}
+    names {String} = {"Priya", "Grace"}
 ]
 
 ### Literal inference

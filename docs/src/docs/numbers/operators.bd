@@ -27,7 +27,7 @@ Two plain string slices can use `+`.
 
 [codeblock, $code("bst"):
     prefix = "Hello, "
-    name = "Ada"
+    name = "Priya"
     greeting = prefix + name
 ]
 

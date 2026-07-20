@@ -340,7 +340,7 @@ pub(super) fn lower_minimal_map_module(function_name: &str) -> String {
     let map_expression = expression(
         1,
         HirExpressionKind::MapLiteral(vec![HirMapEntry {
-            key: string_expression(2, "Ada", types.string, region),
+            key: string_expression(2, "Priya", types.string, region),
             value: int_expression(3, 10, types.int, region),
         }]),
         types.map_string_int,

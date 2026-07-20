@@ -2,7 +2,7 @@ A collection loop visits each value in a collection, from the first item to the
 last.
 
 [codeblock, $code("bst"):
-    names = {"Ada", "Grace", "Linus"}
+    names = {"Priya", "Grace", "Linus"}
 
     loop names |name|:
         io.line([: Hello, [name]])
@@ -17,7 +17,7 @@ refers to the current item.
 A second name receives the zero-based position of the item.
 
 [codeblock, $code("bst"):
-    names = {"Ada", "Grace", "Linus"}
+    names = {"Priya", "Grace", "Linus"}
 
     loop names |name, index|:
         io.line([: [index]: [name]])

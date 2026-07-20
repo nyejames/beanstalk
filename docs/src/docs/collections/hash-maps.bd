@@ -3,7 +3,7 @@ Hash maps are insertion-ordered key/value groups.
 ### Types and literals
 
 [codeblock, $code("bst"):
-    scores ~= {"Ada" = 10, "Grace" = 12}
+    scores ~= {"Priya" = 10, "Grace" = 12}
     empty_scores ~{String = Int} = {}
 ]
 
@@ -94,11 +94,11 @@ Insertion order follows these rules:
 - cannot be assigned
 
 [codeblock, $code("bst"):
-    score = scores.get("Ada") catch:
+    score = scores.get("Priya") catch:
         then 0
     ;
 
-    found = scores.contains("Ada")
+    found = scores.contains("Priya")
 
     ~scores.set("Linus", 7) catch:
     ;

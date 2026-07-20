@@ -2,7 +2,7 @@ Collections use curly braces and keep their values in order.
 
 [codeblock, $code("bst"):
     scores = {10, 20, 30}
-    names = {"Ada", "Grace"}
+    names = {"Priya", "Grace"}
 ]
 
 Every item has the same element type.

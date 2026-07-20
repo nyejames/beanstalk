@@ -5,7 +5,7 @@ A reactive source is stable mutation-capable runtime storage declared with `$Typ
 [codeblock, $code("bst"):
     count $Int = 0
     enabled $= true
-    names ${String} = {"Ada"}
+    names ${String} = {"Priya"}
     scores ${String = Int} = {}
 ]
 

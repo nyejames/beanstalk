@@ -4,8 +4,8 @@ observe |key String, value String, present Bool| -> String:
     return [:borrowed_lookup_key key=[key] value=[value] present=[present]]
 ;
 
-scores ~{String = String} = {"Ada" = "ten", "Grace" = "twelve"}
-key String = "Ada"
+scores ~{String = String} = {"Priya" = "ten", "Grace" = "twelve"}
+key String = "Priya"
 present = scores.contains(key)
 value = scores.get(key) catch:
     then ""

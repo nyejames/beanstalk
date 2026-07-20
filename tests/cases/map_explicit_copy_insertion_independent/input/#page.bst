@@ -1,7 +1,7 @@
 -- Explicit copies of a non-copy key and value remain usable after `set` inserts the copies.
 
 scores ~{String = String} = {}
-key String = "Ada"
+key String = "Priya"
 value String = "ten"
 key_copy = copy key
 value_copy = copy value

@@ -36,7 +36,7 @@ Full option match:
 
 [codeblock, $code("bst"):
     label = if maybe_name is:
-        "Ada" => then "Hi Ada"
+        "Priya" => then "Hi Ada"
         |name| => then name
         none => then "guest"
     ;
@@ -71,7 +71,7 @@ Statement `if` can test for absence:
 Options support equality comparisons:
 
 [codeblock, $code("bst"):
-    present = maybe_name is "Ada"
+    present = maybe_name is "Priya"
     absent = maybe_name is none
     same = a is b
 ]

@@ -24,7 +24,7 @@ Field, item and path-level invalidation are deferred.
 ### Mutation still follows access rules
 
 [codeblock, $code("bst"):
-    names ${String} = {"Ada"}
+    names ${String} = {"Priya"}
 
     ~names.push("Grace") catch:
         io.line("push failed")

@@ -442,7 +442,7 @@ fn map_literal_with_entries_lowers_to_map_new() {
     let (type_environment, types) = build_type_environment();
 
     let entry1 = HirMapEntry {
-        key: string_expression(1, "Ada", types.string, RegionId(0)),
+        key: string_expression(1, "Priya", types.string, RegionId(0)),
         value: int_expression(2, 10, types.int, RegionId(0)),
     };
     let entry2 = HirMapEntry {

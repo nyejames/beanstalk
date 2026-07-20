@@ -26,7 +26,7 @@ fn map_get_statement_lowers_to_helper() {
         region,
         ValueKind::Place,
     );
-    let key = string_expression(2, "Ada", types.string, region);
+    let key = string_expression(2, "Priya", types.string, region);
 
     let get_stmt = statement(
         1,
@@ -103,7 +103,7 @@ fn map_set_statement_without_result_emits_plain_call() {
         region,
         ValueKind::Place,
     );
-    let key = string_expression(2, "Ada", types.string, region);
+    let key = string_expression(2, "Priya", types.string, region);
     let value = int_expression(3, 42, types.int, region);
 
     let set_stmt = statement(
@@ -172,7 +172,7 @@ fn map_infallible_ops_lower_to_plain_helpers() {
         region,
         ValueKind::Place,
     );
-    let key = string_expression(2, "Ada", types.string, region);
+    let key = string_expression(2, "Priya", types.string, region);
 
     let contains_stmt = statement(
         1,
@@ -282,7 +282,7 @@ fn map_remove_statement_lowers_to_helper() {
         region,
         ValueKind::Place,
     );
-    let key = string_expression(2, "Ada", types.string, region);
+    let key = string_expression(2, "Priya", types.string, region);
 
     let remove_stmt = statement(
         1,

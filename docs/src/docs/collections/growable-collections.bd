@@ -22,7 +22,7 @@ behaviour.
 [codeblock, $code("bst"):
     names ~{String} = {}
 
-    ~names.push("Ada") catch:
+    ~names.push("Priya") catch:
         assert(false, "growable push failed")
     ;
 ]

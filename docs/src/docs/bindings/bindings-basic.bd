@@ -2,7 +2,7 @@ A binding is a name for a value.
 
 [codeblock, $code("bst"):
     score = 10
-    player_name = "Ada"
+    player_name = "Priya"
 ]
 
 Beanstalk usually infers the type from the value.
@@ -12,7 +12,7 @@ context:
 
 [codeblock, $code("bst"):
     score Int = 10
-    player_name String = "Ada"
+    player_name String = "Priya"
 ]
 
 Bindings are immutable unless you mark them as mutable. An immutable binding

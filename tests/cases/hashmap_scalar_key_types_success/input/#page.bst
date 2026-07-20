@@ -1,7 +1,7 @@
 UserId as Int
 
 render || -> String:
-    by_name ~{String = Int} = {"Ada" = 1}
+    by_name ~{String = Int} = {"Priya" = 1}
     by_id ~{Int = String} = {7 = "seven"}
     by_flag ~{Bool = String} = {true = "yes"}
     by_letter ~{Char = String} = {'a' = "letter"}

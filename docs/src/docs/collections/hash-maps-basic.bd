@@ -2,7 +2,7 @@ A hash map stores values under keys.
 
 [codeblock, $code("bst"):
     scores ~= {
-        "Ada" = 10,
+        "Priya" = 10,
         "Grace" = 12,
     }
 ]
@@ -10,7 +10,7 @@ A hash map stores values under keys.
 Use `get` to read a value:
 
 [codeblock, $code("bst"):
-    score = scores.get("Ada") catch:
+    score = scores.get("Priya") catch:
         then 0
     ;
 ]

@@ -1,2 +1,2 @@
-scores ~{String = Int} = {"Ada" = 10}
+scores ~{String = Int} = {"Priya" = 10}
 [:[scores]]

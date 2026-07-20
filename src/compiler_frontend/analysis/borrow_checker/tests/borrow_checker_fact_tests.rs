@@ -394,8 +394,8 @@ fn map_get_operation_result_alias_retains_receiver_root() {
     //      handling transfers the success value.
     // WHY: later conflict analysis reads this alias state; integration only sees the
     //      resulting conflict, not which root the get binding aliases.
-    let source = r#"scores ~{String = Int} = {"Ada" = 10}
-score = scores.get("Ada") catch:
+    let source = r#"scores ~{String = Int} = {"Priya" = 10}
+score = scores.get("Priya") catch:
     then 0
 ;
 "#;
@@ -439,8 +439,8 @@ fn map_remove_result_is_fresh_owned() {
     //      receiver alias root, unlike `get`.
     // WHY: the Fresh result-alias decision is a hidden transfer fact; if remove aliased
     //      the receiver, a later mutation would falsely conflict with the removed value.
-    let source = r#"scores ~{String = String} = {"Ada" = "ten"}
-removed = ~scores.remove("Ada") catch:
+    let source = r#"scores ~{String = String} = {"Priya" = "ten"}
+removed = ~scores.remove("Priya") catch:
     then ""
 ;
 sentinel = 0"#;

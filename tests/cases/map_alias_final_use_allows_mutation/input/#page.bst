@@ -4,8 +4,8 @@ observe |value String, before Int| -> String:
     return [:map_alias_final_use_allows_mutation observed=[value] length_before=[before]]
 ;
 
-scores ~{String = String} = {"Ada" = "ten"}
-score = scores.get("Ada") catch:
+scores ~{String = String} = {"Priya" = "ten"}
+score = scores.get("Priya") catch:
     then ""
 ;
 length_before = scores.length

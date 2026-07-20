@@ -350,7 +350,7 @@ else
 ;
 
 label = if maybe_name is:
-    "Ada" => then "Hi Ada"
+    "Priya" => then "Hi Ada"
     |name| => then name
     none => then "guest"
 ;
@@ -510,10 +510,10 @@ Rules:
 Hash maps are insertion-ordered key/value groups. The current source surface targets the HTML JavaScript backend; HTML-Wasm rejects reachable map use before backend lowering.
 
 ```beanstalk
-scores ~= {"Ada" = 10, "Grace" = 12} -- {String = Int}
+scores ~= {"Priya" = 10, "Grace" = 12} -- {String = Int}
 empty_scores ~{String = Int} = {}
 
-score = scores.get("Ada") catch:
+score = scores.get("Priya") catch:
     then 0
 ;
 
@@ -524,7 +524,7 @@ removed = ~scores.remove("Grace") catch:
     then 0
 ;
 
-if scores.contains("Ada"):
+if scores.contains("Priya"):
     io.line("found")
 ;
 

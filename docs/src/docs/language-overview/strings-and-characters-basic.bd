@@ -20,7 +20,7 @@ Use single quotes for one character:
 Use a template when text needs values or a larger structure:
 
 [codeblock, $code("bst"):
-    name = "Ada"
+    name = "Priya"
 
     greeting = [:
         Hello, [name]

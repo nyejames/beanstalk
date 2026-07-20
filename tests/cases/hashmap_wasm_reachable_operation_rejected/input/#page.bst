@@ -1,9 +1,9 @@
 get_map || -> {String = Int}:
-    return {"Ada" = 10}
+    return {"Priya" = 10}
 ;
 
 scores = get_map()
-value = scores.get("Ada") catch:
+value = scores.get("Priya") catch:
     then 0
 ;
 [:hashmap reachable operation]

@@ -13,9 +13,9 @@ get_score |p Person, key String| -> Int:
     ;
 ;
 
-scores ~Scores = {"Ada" = 10}
+scores ~Scores = {"Priya" = 10}
 p ~= Person("Grace", scores)
-ada_score = get_score(p, "Ada")
+ada_score = get_score(p, "Priya")
 
 -- Mutate the local mutable map directly
 ~scores.set("Linus", 7) catch:

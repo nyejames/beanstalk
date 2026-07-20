@@ -1,7 +1,7 @@
 Templates are Beanstalk's powerful string-building form.
 
 [codeblock, $code("bst"):
-    name = "Ada"
+    name = "Priya"
 
     greeting = [:
         Hello, [name]

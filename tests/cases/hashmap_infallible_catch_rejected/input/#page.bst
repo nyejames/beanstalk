@@ -1,5 +1,5 @@
-scores ~{String = Int} = {"Ada" = 10}
-has_ada = scores.contains("Ada") catch:
+scores ~{String = Int} = {"Priya" = 10}
+has_ada = scores.contains("Priya") catch:
     then false
 ;
 [:test]

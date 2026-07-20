@@ -29,7 +29,7 @@ Declaration mutability and call-site exclusive access are separate operations.
     ;
 
     names ~{String} = {}
-    add_name(~names, "Ada")
+    add_name(~names, "Priya")
 ]
 
 A mutable parameter accepts:

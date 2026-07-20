@@ -77,7 +77,7 @@ Aliases may chain through other aliases. The chain remains transparent and resol
     Name as String
     Names as {Name}
 
-    names Names = {"Ada"}
+    names Names = {"Priya"}
 ]
 
 ### Cycles
@@ -98,10 +98,10 @@ For struct aliases, only the struct's canonical name constructs:
     MainPerson as Person
 
     -- Valid: construct with the canonical name
-    person MainPerson = Person("Ada")
+    person MainPerson = Person("Priya")
 
     -- Error: MainPerson is a type, not a constructor
-    -- person MainPerson = MainPerson("Ada")
+    -- person MainPerson = MainPerson("Priya")
 ]
 
 For choice aliases, only the choice's canonical name constructs variants:

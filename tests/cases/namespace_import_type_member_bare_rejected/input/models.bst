@@ -3,5 +3,5 @@ User = |
 |
 
 make_user || -> User:
-    return User("Ada")
+    return User("Priya")
 ;

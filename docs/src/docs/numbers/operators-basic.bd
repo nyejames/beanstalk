@@ -28,7 +28,7 @@ an `Int`.
 Plain string slices can be joined with `+`:
 
 [codeblock, $code("bst"):
-    greeting = "Hello, " + "Ada"
+    greeting = "Hello, " + "Priya"
 ]
 
 Use templates when text needs interpolation or a larger structure.

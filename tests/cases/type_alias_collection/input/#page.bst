@@ -1,3 +1,3 @@
 Names as {String}
-names Names = {"Ada", "Grace"}
+names Names = {"Priya", "Grace"}
 io.line([: [names.length()]])

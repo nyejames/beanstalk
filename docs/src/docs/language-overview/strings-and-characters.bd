@@ -4,7 +4,7 @@ Beanstalk has two string source forms and one character form.
     escaped_slice = "Hello\nworld"
     letter = '🌱'
 
-    name = "Ada"
+    name = "Priya"
     message = [:
         Hello, [name]
     ]

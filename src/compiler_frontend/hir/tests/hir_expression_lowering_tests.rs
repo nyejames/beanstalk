@@ -3284,7 +3284,7 @@ fn lowers_collection_builtin_host_calls_from_explicit_ast_nodes() {
 fn map_literal_lowering_preserves_entry_order() {
     let mut string_table = StringTable::new();
     let location = location(37);
-    let ada = string_table.intern("Ada");
+    let ada = string_table.intern("Priya");
     let grace = string_table.intern("Grace");
     let mut builder = setup_builder(&mut string_table);
     let map_type = builder
@@ -3321,7 +3321,7 @@ fn map_literal_lowering_preserves_entry_order() {
     assert_eq!(entries.len(), 2);
     assert!(matches!(
         (&entries[0].key.kind, &entries[0].value.kind),
-        (HirExpressionKind::StringLiteral(key), HirExpressionKind::Int(10)) if key == "Ada"
+        (HirExpressionKind::StringLiteral(key), HirExpressionKind::Int(10)) if key == "Priya"
     ));
     assert!(matches!(
         (&entries[1].key.kind, &entries[1].value.kind),
@@ -3334,7 +3334,7 @@ fn map_builtin_calls_lower_to_first_class_hir_ops() {
     let mut string_table = StringTable::new();
     let location = location(41);
     let scores_name = InternedPath::from_single_str("scores", &mut string_table);
-    let key_name = string_table.intern("Ada");
+    let key_name = string_table.intern("Priya");
     let mut builder = setup_builder(&mut string_table);
     let map_type = builder
         .type_environment
