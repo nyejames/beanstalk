@@ -1,17 +1,11 @@
 //! Unit tests for generic parameter metadata and TypeId-native generic helpers.
 
-use crate::compiler_frontend::ast::statements::functions::{
-    FunctionReturn, FunctionSignature, ReturnSlot,
-};
-use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
-use crate::compiler_frontend::compiler_messages::render::DiagnosticRenderContext;
-use crate::compiler_frontend::compiler_messages::render::terse::format_terse_diagnostic_with_context;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::definitions::{StructTypeDefinition, TypeDefinition};
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::generic_bindings::GenericTypeBindings;
 use crate::compiler_frontend::datatypes::generic_identity_bridge::{
-    BuiltinTypeKey, GenericBaseType, GenericInstantiationKey, TypeIdentityKey,
+    BuiltinTypeKey, GenericInstantiationKey, TypeIdentityKey,
 };
 use crate::compiler_frontend::datatypes::generic_parameters::{
     GenericParameter, GenericParameterList, GenericParameterScope, TypeParameterId,
@@ -28,15 +22,6 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 fn location() -> SourceLocation {
     SourceLocation::default()
-}
-
-fn render_diagnostic_message(
-    diagnostic: &CompilerDiagnostic,
-    string_table: &StringTable,
-) -> String {
-    let render_context = DiagnosticRenderContext::new(string_table);
-
-    format_terse_diagnostic_with_context(diagnostic, render_context)
 }
 
 fn register_environment_parameter(
@@ -84,86 +69,13 @@ fn register_empty_generic_struct(
     nominal_id
 }
 
-#[test]
-fn generic_scope_rejects_duplicate_parameter_names() {
-    let mut string_table = StringTable::new();
-    let name = string_table.intern("T");
-    let parameter = GenericParameter {
-        id: TypeParameterId(0),
-        name,
-        location: location(),
-        trait_bounds: Vec::new(),
-    };
-    let list = GenericParameterList {
-        parameters: vec![parameter.clone(), parameter],
-    };
-
-    let error = GenericParameterScope::from_parameter_list(
-        &list,
-        None,
-        &FxHashSet::default(),
-        &string_table,
-        "AST Construction",
-    )
-    .expect_err("duplicate generic names should fail");
-
-    let rendered_msg = render_diagnostic_message(&error, &string_table);
-    assert!(rendered_msg.contains("Duplicate generic parameter"));
-}
-
-#[test]
-fn generic_scope_rejects_collisions_with_forbidden_names() {
-    let mut string_table = StringTable::new();
-    let name = string_table.intern("Item");
-    let list = GenericParameterList {
-        parameters: vec![GenericParameter {
-            id: TypeParameterId(0),
-            name,
-            location: location(),
-            trait_bounds: Vec::new(),
-        }],
-    };
-    let mut forbidden = FxHashSet::default();
-    forbidden.insert(name);
-
-    let error = GenericParameterScope::from_parameter_list(
-        &list,
-        None,
-        &forbidden,
-        &string_table,
-        "AST Construction",
-    )
-    .expect_err("generic collisions should fail");
-
-    let rendered_msg = render_diagnostic_message(&error, &string_table);
-    assert!(rendered_msg.contains("collides with an existing visible type name"));
-}
-
-#[test]
-fn generic_scope_rejects_non_type_style_parameter_names() {
-    let mut string_table = StringTable::new();
-    let list = GenericParameterList {
-        parameters: vec![GenericParameter {
-            id: TypeParameterId(0),
-            name: string_table.intern("item_type"),
-            location: location(),
-            trait_bounds: Vec::new(),
-        }],
-    };
-
-    let error = GenericParameterScope::from_parameter_list(
-        &list,
-        None,
-        &FxHashSet::default(),
-        &string_table,
-        "AST Construction",
-    )
-    .expect_err("non-type-style names should fail");
-
-    let rendered_msg = render_diagnostic_message(&error, &string_table);
-    assert!(rendered_msg.contains("must be PascalCase or a single uppercase letter"));
-}
-
+/// Owns the hidden `GenericParameterScope` membership algorithm, not source acceptance.
+///
+/// WHAT: valid names build a scope whose `contains_name` lookup resolves every interned
+///      parameter name that was registered for the list.
+/// WHY: source acceptance of valid parameter names is integration-owned. This unit stays
+///      because the interned-name to scope-membership mapping is a hidden data-structure
+///      fact that integration output cannot inspect.
 #[test]
 fn generic_scope_accepts_pascal_case_and_single_uppercase_names() {
     let mut string_table = StringTable::new();
@@ -661,94 +573,6 @@ fn substitute_type_id_rewrites_constructed_function_and_nominal_instances() {
         Some(int_type_id)
     );
     assert_eq!(function_definition.returns[0], substituted_tuple);
-}
-
-#[test]
-fn generic_display_uses_beanstalk_surface_style() {
-    let mut string_table = StringTable::new();
-    let t_name = string_table.intern("T");
-    let box_name = string_table.intern("Box");
-    let pair_name = string_table.intern("Pair");
-    let error_name = string_table.intern("Error");
-
-    let t = DataType::TypeParameter {
-        id: TypeParameterId(0),
-        canonical_id: None,
-        name: t_name,
-    };
-    let box_of_int = DataType::GenericInstance {
-        base: GenericBaseType::Named(box_name),
-        arguments: vec![DataType::Int],
-    };
-    let pair_of_string_int = DataType::GenericInstance {
-        base: GenericBaseType::Named(pair_name),
-        arguments: vec![DataType::StringSlice, DataType::Int],
-    };
-    let collection_of_box_string = DataType::collection(DataType::GenericInstance {
-        base: GenericBaseType::Named(box_name),
-        arguments: vec![DataType::StringSlice],
-    });
-    let fixed_collection_of_box_string = DataType::fixed_collection(
-        DataType::GenericInstance {
-            base: GenericBaseType::Named(box_name),
-            arguments: vec![DataType::StringSlice],
-        },
-        64,
-    );
-    let optional_box_int = DataType::Option(Box::new(box_of_int.to_owned()));
-    let fallible_box_int_and_error =
-        DataType::fallible_carrier(box_of_int.to_owned(), DataType::NamedType(error_name));
-    let multi_success_carrier = DataType::fallible_carrier(
-        DataType::Returns(vec![DataType::StringSlice, box_of_int.to_owned()]),
-        DataType::NamedType(error_name),
-    );
-    let zero_success_carrier =
-        DataType::fallible_carrier(DataType::None, DataType::NamedType(error_name));
-    let fallible_function = DataType::Function(
-        Box::new(None),
-        FunctionSignature {
-            parameters: Vec::new(),
-            returns: vec![
-                ReturnSlot::success(FunctionReturn::Value(DataType::Int)),
-                ReturnSlot::error(FunctionReturn::Value(DataType::NamedType(error_name))),
-            ],
-        },
-    );
-
-    assert_eq!(t.display_with_table(&string_table), "T");
-    assert_eq!(box_of_int.display_with_table(&string_table), "Box of Int");
-    assert_eq!(
-        pair_of_string_int.display_with_table(&string_table),
-        "Pair of String, Int"
-    );
-    assert_eq!(
-        collection_of_box_string.display_with_table(&string_table),
-        "{Box of String}"
-    );
-    assert_eq!(
-        fixed_collection_of_box_string.display_with_table(&string_table),
-        "{64 Box of String}"
-    );
-    assert_eq!(
-        optional_box_int.display_with_table(&string_table),
-        "Box of Int?"
-    );
-    assert_eq!(
-        fallible_box_int_and_error.display_with_table(&string_table),
-        "Box of Int, Error!"
-    );
-    assert_eq!(
-        multi_success_carrier.display_with_table(&string_table),
-        "String, Box of Int, Error!"
-    );
-    assert_eq!(
-        zero_success_carrier.display_with_table(&string_table),
-        "Error!"
-    );
-    assert_eq!(
-        fallible_function.display_with_table(&string_table),
-        "Function( -> Int, Error!)"
-    );
 }
 
 #[test]

@@ -3,3 +3,10 @@ mode = "failure"
 warnings = "forbid"
 diagnostic_codes = ["BST-RULE-0043"]
 message_contains = ["Generic parameter 'Existing' collides with an existing visible type name"]
+
+[[backends.html.diagnostic_assertions]]
+code = "BST-RULE-0043"
+reason = "invalid_declaration.generic_parameter_name_collision"
+path = "input/#page.bst"
+line = 5
+count = 1

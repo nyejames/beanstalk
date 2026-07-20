@@ -3,3 +3,10 @@ mode = "failure"
 warnings = "forbid"
 diagnostic_codes = ["BST-RULE-0043"]
 message_contains = ["Invalid generic parameter name 'item'"]
+
+[[backends.html.diagnostic_assertions]]
+code = "BST-RULE-0043"
+reason = "invalid_declaration.invalid_generic_parameter_name"
+path = "input/#page.bst"
+line = 1
+count = 1

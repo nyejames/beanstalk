@@ -106,16 +106,6 @@ impl ReturnSlot {
         }
     }
 
-    #[cfg(test)]
-    pub fn error(value: FunctionReturn) -> Self {
-        Self {
-            value,
-            type_id: None,
-            reactive_template: None,
-            channel: ReturnChannel::Error,
-        }
-    }
-
     pub fn data_type(&self) -> &DataType {
         self.value.data_type()
     }

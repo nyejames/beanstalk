@@ -2,7 +2,11 @@
 mode = "failure"
 warnings = "forbid"
 diagnostic_codes = ["BST-RULE-0057"]
-message_contains = [
-    "requires 'T' to satisfy trait 'DISPLAY_TEXT'",
-    "has no visible trait evidence",
-]
+message_contains = ["requires 'T' to satisfy trait 'DISPLAY_TEXT'"]
+
+[[backends.html.diagnostic_assertions]]
+code = "BST-RULE-0057"
+reason = "invalid_generic_instantiation.missing_trait_evidence"
+path = "input/#page.bst"
+line = 3
+count = 1
