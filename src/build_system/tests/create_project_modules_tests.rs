@@ -316,19 +316,16 @@ fn source_tree_index_collects_one_scan_and_applies_skip_policy() {
 }
 
 #[test]
-fn source_tree_index_ignores_collision_in_skipped_directories() {
-    let root = temp_dir("source_tree_index_skipped_collision");
+fn source_tree_index_ignores_collision_in_fixed_skipped_directory() {
+    let root = temp_dir("source_tree_index_fixed_skipped_collision");
     let entry_root = root.clone();
 
     // Fixed-skipped directory with collision-shaped contents.
+    // The canonical `skipped_directory_collision_ignored` integration case covers the
+    // configured-skip path; this unit retains the fixed-skip policy fact.
     let target_dir = entry_root.join("target");
     fs::create_dir_all(target_dir.join("helper")).expect("should create target/helper");
     fs::write(target_dir.join("helper.bst"), "x ~= 1\n").expect("should write colliding file");
-
-    // Configured-skipped directory with collision-shaped contents.
-    let dev_dir = entry_root.join("scratch");
-    fs::create_dir_all(dev_dir.join("widget")).expect("should create scratch/widget");
-    fs::write(dev_dir.join("widget.bst"), "y ~= 2\n").expect("should write colliding file");
 
     // Real module root that should be discovered.
     let nested = entry_root.join("nested");
@@ -336,9 +333,7 @@ fn source_tree_index_ignores_collision_in_skipped_directories() {
     fs::write(entry_root.join("#home.bst"), "").expect("should write entry root");
     fs::write(nested.join("#nested.bst"), "").expect("should write nested root");
 
-    let mut config = Config::new(root.clone());
-    config.dev_folder = PathBuf::from("scratch");
-    config.release_folder = PathBuf::from("generated");
+    let config = Config::new(root.clone());
     let canonical_root = fs::canonicalize(&root).expect("project root should canonicalize");
     let canonical_entry_root =
         fs::canonicalize(&entry_root).expect("entry root should canonicalize");
@@ -351,10 +346,10 @@ fn source_tree_index_ignores_collision_in_skipped_directories() {
         &crate::builder_surface::SourcePackageRegistry::default(),
         &mut string_table,
     )
-    .expect("skipped collision-shaped inputs must not trigger collision diagnostics");
+    .expect("fixed-skipped collision-shaped inputs must not trigger collision diagnostics");
 
     assert_eq!(index.entry_candidates().len(), 2);
-    assert_eq!(index.stats().dirs_skipped, 2);
+    assert_eq!(index.stats().dirs_skipped, 1);
 
     fs::remove_dir_all(&root).expect("should remove temp root");
 }
@@ -781,36 +776,38 @@ fn rejects_unknown_config_key() {
 }
 
 #[test]
-fn rejects_config_plain_immutable_bindings() {
-    let root = temp_dir("config_plain_immutable");
-    fs::create_dir_all(&root).expect("should create root dir");
-    let config_path = root.join(settings::CONFIG_FILE_NAME);
+fn rejects_config_plain_and_mutable_bindings() {
+    // Both `=` and `~=` produce the same `PlainBindingUnsupported` reason. The canonical
+    // `config_plain_project_rejected` and `config_mutable_key_rejected` cases cover the
+    // user-visible rejection; this unit retains the typed reason for both binding modes.
+    for (operator, label) in [("=", "plain"), ("~=", "mutable")] {
+        let root = temp_dir(&format!("config_{label}_binding_rejected"));
+        fs::create_dir_all(&root).expect("should create root dir");
+        let config_path = root.join(settings::CONFIG_FILE_NAME);
 
-    fs::write(
-        &config_path,
-        "entry_root = \"src\"\ndev_folder = \"dev\"\noutput_folder = \"release\"\n",
-    )
-    .expect("should write config");
+        fs::write(&config_path, format!("entry_root {operator} \"src\"\n"))
+            .expect("should write config");
 
-    let mut config = Config::new(root.clone());
-    let style_directives = test_style_directives();
-    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
-        .expect_err("config should reject plain immutable bindings");
+        let mut config = Config::new(root.clone());
+        let style_directives = test_style_directives();
+        let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
+            .expect_err("config should reject binding");
 
-    let diagnostic = first_error_diagnostic(&messages);
-    assert!(
-        matches!(
-            &diagnostic.payload,
-            DiagnosticPayload::InvalidConfig {
-                reason: InvalidConfigReason::PlainBindingUnsupported,
-                ..
-            }
-        ),
-        "unexpected diagnostic payload: {:?}",
-        diagnostic.payload
-    );
+        let diagnostic = first_error_diagnostic(&messages);
+        assert!(
+            matches!(
+                &diagnostic.payload,
+                DiagnosticPayload::InvalidConfig {
+                    reason: InvalidConfigReason::PlainBindingUnsupported,
+                    ..
+                }
+            ),
+            "unexpected diagnostic payload for {label} binding: {:?}",
+            diagnostic.payload
+        );
 
-    fs::remove_dir_all(&root).expect("should remove temp root");
+        fs::remove_dir_all(&root).expect("should remove temp root");
+    }
 }
 
 #[test]
@@ -904,35 +901,6 @@ fn accepts_config_type_declarations() {
 }
 
 #[test]
-fn rejects_config_mutable_bindings() {
-    let root = temp_dir("config_mutable_rejected");
-    fs::create_dir_all(&root).expect("should create root dir");
-    let config_path = root.join(settings::CONFIG_FILE_NAME);
-
-    fs::write(&config_path, "entry_root ~= \"src\"\n").expect("should write config");
-
-    let mut config = Config::new(root.clone());
-    let style_directives = test_style_directives();
-    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
-        .expect_err("config should fail");
-
-    let diagnostic = first_error_diagnostic(&messages);
-    assert!(
-        matches!(
-            &diagnostic.payload,
-            DiagnosticPayload::InvalidConfig {
-                reason: InvalidConfigReason::PlainBindingUnsupported,
-                ..
-            }
-        ),
-        "unexpected diagnostic payload: {:?}",
-        diagnostic.payload
-    );
-
-    fs::remove_dir_all(&root).expect("should remove temp root");
-}
-
-#[test]
 fn rejects_config_standalone_template() {
     let root = temp_dir("config_standalone_template_rejected");
     fs::create_dir_all(&root).expect("should create root dir");
@@ -1016,67 +984,6 @@ fn rejects_project_local_config_import_even_when_module_root_exists() {
             }
         ),
         "unexpected diagnostic payload: {:?}",
-        diagnostic.payload
-    );
-
-    fs::remove_dir_all(&root).expect("should remove temp root");
-}
-
-#[test]
-fn rejects_relative_config_imports() {
-    let root = temp_dir("config_relative_import_rejected");
-    fs::create_dir_all(&root).expect("should create root dir");
-    fs::write(root.join("defaults.bst"), "value #= \"src\"\n").expect("should write defaults");
-    let config_path = root.join(settings::CONFIG_FILE_NAME);
-
-    fs::write(&config_path, "import @./defaults { value }\n").expect("should write config");
-
-    let mut config = Config::new(root.clone());
-    let style_directives = test_style_directives();
-    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
-        .expect_err("config should fail");
-
-    let diagnostic = first_error_diagnostic(&messages);
-    assert!(
-        matches!(
-            &diagnostic.payload,
-            DiagnosticPayload::InvalidConfig {
-                reason: InvalidConfigReason::ConfigImportRootViolation,
-                ..
-            }
-        ),
-        "unexpected diagnostic payload: {:?}",
-        diagnostic.payload
-    );
-
-    fs::remove_dir_all(&root).expect("should remove temp root");
-}
-
-#[test]
-fn rejects_provider_backed_js_config_imports() {
-    let root = temp_dir("config_js_import_rejected");
-    fs::create_dir_all(&root).expect("should create root dir");
-    fs::write(root.join("drawing.js"), "export const root = 'src';\n").expect("should write js");
-    let config_path = root.join(settings::CONFIG_FILE_NAME);
-
-    fs::write(&config_path, "import @./drawing.js { root }\n").expect("should write config");
-
-    let mut config = Config::new(root.clone());
-    let style_directives = test_style_directives();
-    let messages =
-        parse_project_config_for_test_with_html_keys(&mut config, &config_path, &style_directives)
-            .expect_err("config should reject provider-backed JS imports");
-
-    let diagnostic = first_error_diagnostic(&messages);
-    assert!(
-        matches!(
-            &diagnostic.payload,
-            DiagnosticPayload::InvalidConfig {
-                reason: InvalidConfigReason::ConfigImportRootViolation,
-                ..
-            }
-        ),
-        "expected config import-root diagnostic for JS import, got: {:?}",
         diagnostic.payload
     );
 
@@ -1313,56 +1220,6 @@ fn imported_config_support_duplicate_keeps_normal_duplicate_diagnostic() {
             DiagnosticPayload::DuplicateDeclaration { .. }
         ),
         "expected normal duplicate declaration diagnostic, got: {:?}",
-        diagnostic.payload
-    );
-
-    fs::remove_dir_all(&root).expect("should remove temp root");
-}
-
-#[test]
-fn rejects_config_call_to_imported_builder_source_package_function() {
-    let root = temp_dir("config_builder_package_function_call");
-    let package_root = root.join("builder/defaults");
-    fs::create_dir_all(&package_root).expect("should create Builder package");
-    fs::write(
-        package_root.join("#mod.bst"),
-        "export:\n    default_entry_root || -> String:\n        return \"src\"\n    ;\n;\n",
-    )
-    .expect("should write builder root");
-    let config_path = root.join(settings::CONFIG_FILE_NAME);
-    fs::write(
-        &config_path,
-        "import @defaults { default_entry_root }\nentry_root #= default_entry_root()\n",
-    )
-    .expect("should write config");
-
-    let mut frontend_surface = crate::builder_surface::BuilderSurface::with_mandatory_core();
-    frontend_surface.source_packages.register_filesystem_root(
-        "defaults",
-        package_root,
-        PackageOrigin::Builder,
-    );
-
-    let mut config = Config::new(root.clone());
-    let style_directives = test_style_directives();
-    let messages = parse_project_config_for_test_with_packages(
-        &mut config,
-        &config_path,
-        &style_directives,
-        &frontend_surface,
-    )
-    .expect_err("config should reject imported function calls");
-
-    let diagnostic = first_error_diagnostic(&messages);
-    assert!(
-        matches!(
-            &diagnostic.payload,
-            DiagnosticPayload::CompileTimeEvaluationError {
-                reason: CompileTimeEvaluationErrorReason::NonConstantReferenceInConstant,
-                ..
-            }
-        ),
-        "expected non-constant-reference-in-constant diagnostic for imported function call, got: {:?}",
         diagnostic.payload
     );
 
