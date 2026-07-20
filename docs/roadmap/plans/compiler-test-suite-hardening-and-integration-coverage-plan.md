@@ -30,13 +30,13 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 14C13 borrow-checker unit ownership review
-LAST_ACCEPTED_COMMIT: `fcb30e1ac` (Phase 14C12 code)
+CURRENT_SLICE: Phase 14C14 build-system unit ownership review
+LAST_ACCEPTED_COMMIT: `dac197185` (Phase 14C13 code)
 WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; accepted code is committed; concurrent example-name work remains separately committed
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: unit-test ownership, pruning, compiler-stage boundaries, and final governance rules govern the next slice
-- code: HIR unit ownership is complete; the remaining 50 call-summary, fact, loop, scope, reactivity, drop-site, and pipeline borrow-checker tests form the next bounded group before build-system, backend, and final TIR reviews
+- code: HIR and borrow-checker unit ownership is complete; build-system source-shaped and policy-focused units are next before backend and final TIR reviews
 ACCEPTANCE_CRITERIA:
 - every remaining full-source unit has a distinct hidden invariant, parser fact, stage boundary, or policy owner
 - units superseded by a stronger canonical integration primary are deleted with replacement evidence
@@ -51,7 +51,7 @@ BLOCKERS_OR_OPEN_DECISIONS: none; 81 contract families without a primary are int
 DELEGATION_DECISION: Ollama — bounded Phase 14 implementation slices
 NEXT_WORKER_ORDER: Ollama only; no provider substitution
 STOP_REASON: none
-NEXT_RESUME_ACTION: launch the borrow-checker unit ownership review through Ollama
+NEXT_RESUME_ACTION: inventory and launch the first bounded build-system unit ownership group through Ollama
 
 ---
 
@@ -231,6 +231,7 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 14C10 HIR result and numeric lowering units | `1c112aec9` | Accepted | All 27 result/fallible, checked-numeric, and Float-formatting units retained as explicit-edge, terminator, tuple-projection, alias, operation, failure-mode, conversion, prelude, formatter, and reactive-laziness owners; two module-wide fallible-branch checks were strengthened to prove outer calls and numeric operations occur only on the success edge; 3,499 Rust tests and 1,793 integration executions |
 | Phase 14C11 HIR module, local, metadata, and reachability units | no code change after `1c112aec9` | Accepted | All 31 module/local lowering, const/reactive/function-origin metadata, and reachability units retained as artefact projection, identity, binding, materialization, prelude, remapping, selected-root graph, feature-location, CFG-successor, and malformed-reference owners; latest full gate remains 3,499 Rust tests and 1,793 integration executions |
 | Phase 14C12 HIR display and validation units | `fcb30e1ac` | Accepted | Three collection-type display tests removed in favor of exact datatype display owners; the final-caller helper and obsolete test-only `with_type_environment` exposure were removed; six HIR-only display vocabulary owners and all 40 malformed/positive validator owners retained; 3,496 Rust tests and 1,793 integration executions |
+| Phase 14C13 borrow-checker units | `dac197185` | Accepted | All 50 call-summary, fact, loop, pipeline, reactivity, scope, and advisory drop-site units retained as transfer, side-table, fixed-point, join, origin, invalidation, boundary, and malformed-HIR owners; one duplicate drop-site HIR fixture lowerer was consolidated onto the shared owner; 3,496 Rust tests and 1,793 integration executions |
 
 ---
 
