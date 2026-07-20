@@ -30,26 +30,26 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 12 positive integration consolidation
-LAST_ACCEPTED_COMMIT: `780d0419c` (Phase 11 reactive mutation ownership)
+CURRENT_SLICE: Phase 12 choice equality consolidation
+LAST_ACCEPTED_COMMIT: `73f13864c` (Phase 12A fresh mutable values)
 WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; accepted code is committed; unrelated concurrent docs source and generated-release edits remain unstaged
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: test ownership, pruning, exact runtime assertion, and failure-localization rules govern the next slice
-- code: fresh mutable arguments, choice equality, named/default calls, and ordered collection/map positive cases are the consolidation inventory
+- code: choice equality, named/default calls, and ordered collection/map positive cases remain in the consolidation inventory
 ACCEPTANCE_CRITERIA:
 - consolidate only exact shared positive contracts into the strongest existing primary owner
 - retain distinct negative diagnostic reasons and avoid cross-feature mega-fixtures
 - remove superseded folders/manifest entries atomically with no semantic coverage loss
 VALIDATION_STATE:
-- `just validate`: passed; cross-target Clippy, 3,541 Rust tests, 1,807 integration executions, docs check, and 28 benchmark cases
-- focused Phase 11 coverage: passed; 44 reactivity executions, six hidden reactivity facts, and zero audit hard findings across 1,661 cases
-DOCS_IMPACT: progress matrix reviewed; current reactivity support/rejection and coverage wording remains accurate; index unchanged
+- `just validate`: passed; cross-target Clippy, 3,541 Rust tests, 1,804 integration executions, docs check, and 28 benchmark cases
+- focused Phase 12A coverage: passed; consolidated owner, explicit-copy owner, functions-plus-borrows selection, and zero audit hard findings across 1,658 cases
+DOCS_IMPACT: progress matrix reviewed; support and backend coverage are unchanged by fixture consolidation; index unchanged
 BLOCKERS_OR_OPEN_DECISIONS: none for the next slice; Ollama remains required with no provider substitution
 DELEGATION_DECISION: Ollama — bounded Phase 12 consolidation slices
 NEXT_WORKER_ORDER: Ollama only; no provider substitution
 STOP_REASON: none
-NEXT_RESUME_ACTION: inventory the Phase 12 candidate clusters and launch the first coherent consolidation through Ollama
+NEXT_RESUME_ACTION: inventory the choice equality cluster and launch the next coherent consolidation through Ollama
 
 ---
 
@@ -192,6 +192,7 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 10A check/build frontend parity | `6a2c2e6b0` | Accepted | One focused command test compares exact typed warning and error identity across check/build seams, including reason/path/line/multiplicity, and proves check writes no artifacts; 3,541 Rust tests and 1,804 integration executions |
 | Phase 10B root/fragment activation | `68fb90fb6` | Accepted | Existing exact/ordered owners cover active/imported/API-only roots, mixed fragment order, loop-control output, and non-duplicated hydration; API-only imported runtime output is now exact-once; 3,541 Rust tests and 1,804 integration executions |
 | Phase 11 reactive mutation ownership | `780d0419c` | Accepted | Exact HTML events protect one mount plus one batched rerender, the mount call is exact-once, HTML-Wasm rejects the same source structurally, and reactive-parameter assignment has a primary reason/path/label owner; 3,541 Rust tests and 1,807 integration executions |
+| Phase 12A fresh mutable values | `73f13864c` | Accepted | Four positive fresh-rvalue forms consolidated into one exact-output primary owner; every mutable callee mutates its fresh local; explicit-copy and negative diagnostic owners remain separate; 3,541 Rust tests, 1,658 cases, and 1,804 integration executions |
 
 ---
 
@@ -1346,6 +1347,7 @@ Do not present lower counts or faster time as proof of correctness.
 | `generics_tests::{generic_scope_rejects_duplicate_parameter_names,generic_scope_rejects_collisions_with_forbidden_names,generic_scope_rejects_non_type_style_parameter_names}` | User-visible generic parameter declaration rejection | `generic_duplicate_parameter_rejected`, `generic_parameter_visible_type_collision_rejected`, and `generic_parameter_invalid_name_rejected` with structured reason/location assertions | `generic_scope_accepts_pascal_case_and_single_uppercase_names` retains hidden scope membership | `034f919ed` |
 | `generics_tests::generic_display_uses_beanstalk_surface_style` | Legacy `DataType` renderer wording across generic shapes | none; datatype units do not own rendered compiler wording | canonical `TypeId` display and diagnostic render owners remain | `034f919ed` |
 | `ReturnSlot::error` test-only helper | Constructed legacy error-return shape for the removed datatype renderer test | none | ordinary parsed/resolved return-channel paths | `034f919ed` |
+| `function_call_mutable_param_fresh_computed_arg` -> `function_call_mutable_param_fresh_values`; removed `function_call_mutable_param_fresh_{template_arg,collection_arg,struct_arg}` | Fresh computed, template, collection, and struct values satisfy mutable parameters without authored `~` | `function_call_mutable_param_fresh_values` | `function_call_mutable_param_copy_arg` retains explicit-copy independence; negative access forms remain isolated | `73f13864c` |
 | Phase 5D2 15 normalized HTML whole-page goldens | Runtime values for calls, collections, logical expressions, chars, structs, and short-circuit behavior | The same 15 canonical cases through `rendered_output_exact` | none | `d5256868b` |
 | Phase 5D3 nine normalized receiver HTML whole-page goldens | Immutable, mutable, nested, chained, exported, alias-return, and post-mutation receiver behavior | The same nine canonical cases through exact context-rich runtime output | none | `914c1c131` |
 | Phase 5D4 nine normalized template/import HTML whole-page goldens | Import execution/suppression, runtime templates, const slots, CSS, Markdown, and positional slot behavior | Runtime exact/order/exact-once plus narrow static `index.html` assertions in the same nine cases | none | `71f75c220` |
