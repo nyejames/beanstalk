@@ -21,8 +21,8 @@ use crate::compiler_frontend::ast::type_resolution::{
 use crate::compiler_frontend::ast::{Ast, TopLevelDeclarationTable};
 use crate::compiler_frontend::compiler_errors::SourceLocation;
 use crate::compiler_frontend::compiler_messages::{
-    DiagnosticPayload, InvalidCollectionTypeReason, InvalidMapTypeReason,
-    InvalidTypeAnnotationReason, NameNamespace, TypeAnnotationContext,
+    DiagnosticPayload, InvalidMapTypeReason, InvalidTypeAnnotationReason, NameNamespace,
+    TypeAnnotationContext,
 };
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::builtin_type_ids;
@@ -34,7 +34,7 @@ use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tests::parse_support::{
-    parse_single_file_ast, parse_single_file_ast_diagnostic, parse_single_file_ast_result,
+    parse_single_file_ast, parse_single_file_ast_result,
 };
 use crate::compiler_frontend::tokenizer::tokens::TokenKind;
 use crate::compiler_frontend::value_mode::ValueMode;
@@ -200,90 +200,6 @@ fn literal_capacity_resolves_to_fixed_collection() {
 }
 
 #[test]
-fn zero_capacity_rejected() {
-    let mut string_table = StringTable::new();
-    let mut type_environment = TypeEnvironment::new();
-    let declaration_table = Rc::new(TopLevelDeclarationTable::new(Vec::new()));
-    let mut resolution_context =
-        TypeResolutionContext::from_declaration_table(&declaration_table, &mut type_environment);
-
-    let location = SourceLocation::default();
-    let parsed = ParsedTypeRef::Collection {
-        element: Box::new(ParsedTypeRef::BuiltinInt {
-            location: location.clone(),
-        }),
-        location: location.clone(),
-        fixed_capacity: Some(ParsedCollectionCapacity::Literal {
-            value: 0,
-            location: location.clone(),
-        }),
-    };
-
-    let error = resolve_parsed_type_annotation(
-        parsed,
-        &location,
-        &mut resolution_context,
-        &mut string_table,
-        None,
-    )
-    .expect_err("zero capacity should be rejected");
-
-    assert!(
-        matches!(
-            &error.payload,
-            DiagnosticPayload::InvalidCollectionType {
-                reason: InvalidCollectionTypeReason::ZeroCapacity,
-                ..
-            }
-        ),
-        "expected ZeroCapacity error, got {:?}",
-        error.payload
-    );
-}
-
-#[test]
-fn negative_capacity_rejected() {
-    let mut string_table = StringTable::new();
-    let mut type_environment = TypeEnvironment::new();
-    let declaration_table = Rc::new(TopLevelDeclarationTable::new(Vec::new()));
-    let mut resolution_context =
-        TypeResolutionContext::from_declaration_table(&declaration_table, &mut type_environment);
-
-    let location = SourceLocation::default();
-    let parsed = ParsedTypeRef::Collection {
-        element: Box::new(ParsedTypeRef::BuiltinInt {
-            location: location.clone(),
-        }),
-        location: location.clone(),
-        fixed_capacity: Some(ParsedCollectionCapacity::Literal {
-            value: -5,
-            location: location.clone(),
-        }),
-    };
-
-    let error = resolve_parsed_type_annotation(
-        parsed,
-        &location,
-        &mut resolution_context,
-        &mut string_table,
-        None,
-    )
-    .expect_err("negative capacity should be rejected");
-
-    assert!(
-        matches!(
-            &error.payload,
-            DiagnosticPayload::InvalidCollectionType {
-                reason: InvalidCollectionTypeReason::NegativeCapacity,
-                ..
-            }
-        ),
-        "expected NegativeCapacity error for negative value, got {:?}",
-        error.payload
-    );
-}
-
-#[test]
 fn constant_capacity_resolves_to_fixed_collection() {
     let mut string_table = StringTable::new();
     let mut type_environment = TypeEnvironment::new();
@@ -343,67 +259,6 @@ fn constant_capacity_resolves_to_fixed_collection() {
         Some(42),
         "capacity should be folded from constant to 42"
     );
-}
-
-#[test]
-fn runtime_int_binding_is_rejected_as_fixed_collection_capacity() {
-    let mut string_table = StringTable::new();
-    let mut type_environment = TypeEnvironment::new();
-    let declaration_table = Rc::new(TopLevelDeclarationTable::new(Vec::new()));
-    let mut resolution_context =
-        TypeResolutionContext::from_declaration_table(&declaration_table, &mut type_environment);
-
-    let location = SourceLocation::default();
-    let capacity_name = string_table.intern("capacity");
-    let mut scope_context = ScopeContext::new_for_tests(
-        ContextKind::Function,
-        InternedPath::new(),
-        declaration_table.clone(),
-        Arc::new(ExternalPackageRegistry::new()),
-        vec![],
-        0,
-    );
-    scope_context.add_var(
-        Declaration {
-            id: InternedPath::from_components(vec![capacity_name]),
-            value: Expression::new(
-                ExpressionKind::Int(42),
-                location.clone(),
-                builtin_type_ids::INT,
-                DataType::Int,
-                ValueMode::ImmutableOwned,
-            ),
-        },
-        SourceLocation::default(),
-    );
-
-    let parsed = ParsedTypeRef::Collection {
-        element: Box::new(ParsedTypeRef::BuiltinInt {
-            location: location.clone(),
-        }),
-        location: location.clone(),
-        fixed_capacity: Some(ParsedCollectionCapacity::BareConstant {
-            name: capacity_name,
-            location: location.clone(),
-        }),
-    };
-
-    let error = resolve_parsed_type_annotation(
-        parsed,
-        &location,
-        &mut resolution_context,
-        &mut string_table,
-        Some(&scope_context),
-    )
-    .expect_err("runtime Int binding must not be accepted as fixed capacity");
-
-    assert!(matches!(
-        error.payload,
-        DiagnosticPayload::InvalidCollectionType {
-            reason: InvalidCollectionTypeReason::CapacityNotConstant,
-            ..
-        }
-    ));
 }
 
 #[test]
@@ -568,28 +423,6 @@ fn struct_field_default_inlines_slot_template_through_module_store() {
         resolved_fields[0].value.kind,
         ExpressionKind::Template(_)
     ));
-}
-
-#[test]
-fn invalid_function_signature_capacity_is_not_erased_to_growable() {
-    let diagnostic = parse_single_file_ast_diagnostic(
-        r#"
-take |items {0 Int}|:
-;
-"#,
-    );
-
-    assert!(
-        matches!(
-            diagnostic.payload,
-            DiagnosticPayload::InvalidCollectionType {
-                reason: InvalidCollectionTypeReason::ZeroCapacity,
-                ..
-            }
-        ),
-        "expected invalid fixed-capacity diagnostic, got {:?}",
-        diagnostic.payload
-    );
 }
 
 #[test]

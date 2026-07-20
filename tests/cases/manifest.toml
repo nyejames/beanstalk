@@ -1678,6 +1678,20 @@ path = "fixed_collection_zero_capacity_alias_rejected"
 tags = ["integration", "collections", "fixed-collections", "diagnostics"]
 
 [[case]]
+id = "fixed_collection_zero_capacity_struct_field_rejected"
+path = "fixed_collection_zero_capacity_struct_field_rejected"
+tags = ["integration", "collections", "fixed-collections", "diagnostics"]
+contract = "language.collections.fixed_capacity_struct_field_zero_rejected"
+role = "primary"
+
+[[case]]
+id = "fixed_collection_zero_capacity_function_return_rejected"
+path = "fixed_collection_zero_capacity_function_return_rejected"
+tags = ["integration", "collections", "fixed-collections", "diagnostics"]
+contract = "language.collections.fixed_capacity_function_return_zero_rejected"
+role = "primary"
+
+[[case]]
 id = "fixed_collection_negative_capacity_rejected"
 path = "fixed_collection_negative_capacity_rejected"
 tags = ["integration", "collections", "fixed-collections", "diagnostics"]
