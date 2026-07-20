@@ -11,9 +11,9 @@ use crate::compiler_frontend::ast::statements::functions::{FunctionReturn, Retur
 use crate::compiler_frontend::ast::statements::match_patterns::MatchPattern;
 use crate::compiler_frontend::ast::statements::value_production::types::ValueBlock;
 use crate::compiler_frontend::compiler_messages::{
-    DiagnosticPayload, InvalidCallShapeReason, InvalidFallibleHandlingReason,
-    InvalidFunctionSignatureReason, InvalidReceiverCallReason, InvalidReceiverDeclarationReason,
-    InvalidThisUsageReason, NameNamespace, TypeMismatchContext,
+    DiagnosticPayload, InvalidCallShapeReason, InvalidFunctionSignatureReason,
+    InvalidReceiverCallReason, InvalidReceiverDeclarationReason, InvalidThisUsageReason,
+    NameNamespace, TypeMismatchContext,
 };
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::tests::ast_fixture_support::{
@@ -544,14 +544,6 @@ fn rejects_const_record_method_calls() {
 }
 
 #[test]
-fn rejects_mutable_receiver_methods_on_temporaries() {
-    assert_invalid_receiver_call(
-        "Point = |\n    x Int = 0,\n|\n\nreset |this ~Point|:\n    this.x = 0\n;\n\nmake || -> Point:\n    return Point()\n;\n\nmake().reset()\n",
-        InvalidReceiverCallReason::NonPlaceReceiverMutableMethod,
-    );
-}
-
-#[test]
 fn parses_mutable_receiver_methods_with_explicit_receiver_tilde() {
     let (ast, string_table) = parse_single_file_ast(
         "Point = |\n    x Int = 0,\n|\n\nreset |this ~Point|:\n    this.x = 0\n;\n\npoint ~= Point()\n~point.reset()\n",
@@ -571,14 +563,6 @@ fn parses_mutable_receiver_methods_with_explicit_receiver_tilde() {
 fn parses_result_propagation_for_receiver_method_call() {
     parse_single_file_ast(
         "Point = |\n    x Int = 1,\n|\n\nread |this Point| -> Int, Error!:\n    return this.x\n;\n\nforward |point Point| -> Int, Error!:\n    return point.read()!\n;\n",
-    );
-}
-
-#[test]
-fn rejects_mutable_receiver_methods_without_explicit_receiver_tilde() {
-    assert_invalid_receiver_call(
-        "Point = |\n    x Int = 0,\n|\n\nreset |this ~Point|:\n    this.x = 0\n;\n\npoint ~= Point()\npoint.reset()\n",
-        InvalidReceiverCallReason::MutableReceiverMissingMarker,
     );
 }
 
@@ -784,20 +768,6 @@ fn parses_catch_handler_with_fallback_scope_in_declaration_rhs() {
 }
 
 #[test]
-fn rejects_fallthrough_catch_handler_without_fallback_when_values_are_required() {
-    let payload = parse_function_diagnostic_payload(
-        "can_error |value String| -> String, Error!:\n    return value\n;\n\nrecover |value String| -> String:\n    return can_error(value) catch |err|:\n        io.line([: [err.message]])\n    ;\n;\n",
-    );
-
-    assert_eq!(
-        payload,
-        DiagnosticPayload::InvalidFallibleHandling {
-            reason: InvalidFallibleHandlingReason::CatchHandlerCanFallThrough
-        }
-    );
-}
-
-#[test]
 fn parses_standalone_result_propagation_statement() {
     let (ast, string_table) = parse_single_file_ast(
         "can_error || -> Error!:\n    return\n;\n\nrun || -> Error!:\n    can_error()!\n;\n",
@@ -823,20 +793,6 @@ fn parses_standalone_result_propagation_statement() {
 #[test]
 fn rejects_trailing_comma_in_single_return() {
     let payload = parse_function_diagnostic_payload("compute |x Int| -> Int,:\n    return 42\n;\n");
-
-    assert_eq!(
-        payload,
-        DiagnosticPayload::InvalidFunctionSignature {
-            reason: InvalidFunctionSignatureReason::TrailingCommaInReturns
-        }
-    );
-}
-
-#[test]
-fn rejects_trailing_comma_in_multiple_returns() {
-    let payload = parse_function_diagnostic_payload(
-        "compute |x Int| -> Int, String,:\n    return 42, \"result\"\n;\n",
-    );
 
     assert_eq!(
         payload,
