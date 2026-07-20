@@ -9,9 +9,9 @@ use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::datatypes::{DataType, builtin_type_ids};
-use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind};
+use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind, HirMapOp};
 use crate::compiler_frontend::hir::hir_side_table::HirLocation;
-use crate::compiler_frontend::hir::ids::{BlockId, HirNodeId, HirValueId};
+use crate::compiler_frontend::hir::ids::{BlockId, HirNodeId, HirValueId, LocalId};
 use crate::compiler_frontend::hir::places::HirPlace;
 use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
 use crate::compiler_frontend::hir::terminators::HirTerminator;
@@ -23,6 +23,7 @@ use crate::compiler_frontend::tests::ast_fixture_support::{
 use crate::compiler_frontend::tests::borrow_fixture_support::run_borrow_checker;
 use crate::compiler_frontend::tests::external_package_support::default_external_package_registry;
 use crate::compiler_frontend::tests::hir_fixture_support::{build_ast, entry_and_start, lower_hir};
+use crate::compiler_frontend::tests::parse_support::parse_single_file_ast;
 use crate::compiler_frontend::value_mode::ValueMode;
 use rustc_hash::FxHashSet;
 use std::collections::VecDeque;
@@ -382,6 +383,239 @@ fn statement_entry_state_marks_source_uninitialized_after_inferred_assignment_mo
     );
 }
 
+// WHAT: hidden map-operation transfer facts that integration output cannot inspect.
+// WHY: Phase 6 integration owns user-visible map borrow behavior; these narrow state
+//      assertions protect the receiver-alias shape, MayConsume last-use classification,
+//      and recursive aggregate-literal ownership transfer.
+
+#[test]
+fn map_get_operation_result_alias_retains_receiver_root() {
+    // WHAT: the first-class HIR map-operation result aliases the receiver root before catch
+    //      handling transfers the success value.
+    // WHY: later conflict analysis reads this alias state; integration only sees the
+    //      resulting conflict, not which root the get binding aliases.
+    let source = r#"scores ~{String = Int} = {"Ada" = 10}
+score = scores.get("Ada") catch:
+    then 0
+;
+"#;
+    let (ast, mut string_table) = parse_single_file_ast(source);
+    let hir = lower_hir(ast, &mut string_table);
+    let external_package_registry = default_external_package_registry(&mut string_table);
+    let report = run_borrow_checker(&hir, &external_package_registry, &string_table)
+        .expect("a get with no later mutation should pass");
+
+    let scores_local = find_local_by_name(&hir, &string_table, "scores")
+        .expect("should locate the receiver local by name");
+    let (result_local, following_statement) =
+        find_map_op_result_and_following_statement(&hir, HirMapOp::Get)
+            .expect("should locate the get operation result and its consumer");
+    let entry_state = report
+        .analysis
+        .statement_entry_states
+        .get(&following_statement)
+        .expect("the operation-result consumer should have an entry snapshot");
+    let result_snapshot = entry_state
+        .locals
+        .iter()
+        .find(|snapshot| snapshot.local == result_local)
+        .expect("entry snapshot should include the map-operation result");
+
+    assert!(
+        result_snapshot.mode.contains(LocalMode::ALIAS),
+        "get result should alias the receiver, got mode {:?}",
+        result_snapshot.mode
+    );
+    assert!(
+        result_snapshot.alias_roots.contains(&scores_local),
+        "get result alias root should be the receiver, got {:?}",
+        result_snapshot.alias_roots
+    );
+}
+
+#[test]
+fn map_remove_result_is_fresh_owned() {
+    // WHAT: the binding produced by fallible map `remove` is a fresh owned slot with no
+    //      receiver alias root, unlike `get`.
+    // WHY: the Fresh result-alias decision is a hidden transfer fact; if remove aliased
+    //      the receiver, a later mutation would falsely conflict with the removed value.
+    let source = r#"scores ~{String = String} = {"Ada" = "ten"}
+removed = ~scores.remove("Ada") catch:
+    then ""
+;
+sentinel = 0"#;
+    let (ast, mut string_table) = parse_single_file_ast(source);
+    let hir = lower_hir(ast, &mut string_table);
+    let external_package_registry = default_external_package_registry(&mut string_table);
+    let report = run_borrow_checker(&hir, &external_package_registry, &string_table)
+        .expect("a remove with no later mutation should pass");
+
+    let removed_local = find_local_by_name(&hir, &string_table, "removed")
+        .expect("should locate the remove binding by name");
+    let sentinel_statement =
+        find_assign_statement_id_for_local_name(&hir, &string_table, "sentinel")
+            .expect("should locate the sentinel statement by its assigned local");
+    let entry_state = report
+        .analysis
+        .statement_entry_states
+        .get(&sentinel_statement)
+        .expect("sentinel statement should have an entry snapshot");
+    let result_snapshot = entry_state
+        .locals
+        .iter()
+        .find(|snapshot| snapshot.local == removed_local)
+        .expect("entry snapshot should include the remove binding");
+
+    assert!(
+        result_snapshot.mode.contains(LocalMode::SLOT),
+        "remove result should own a fresh slot, got mode {:?}",
+        result_snapshot.mode
+    );
+    assert!(
+        !result_snapshot.mode.contains(LocalMode::ALIAS),
+        "remove result should not alias the receiver, got mode {:?} with aliases {:?}",
+        result_snapshot.mode,
+        result_snapshot.alias_roots
+    );
+    assert!(
+        result_snapshot.alias_roots.is_empty(),
+        "remove result should carry no alias roots, got {:?}",
+        result_snapshot.alias_roots
+    );
+}
+
+#[test]
+fn map_set_final_use_moves_inserted_non_copy_roots() {
+    // WHAT: `set` MayConsume on final-use non-copy key and value inputs moves their roots.
+    // WHY: last-use classification must consume ownership; a regression to a borrow would
+    //      leave the root live, which integration output cannot distinguish from a move.
+    let source = r#"scores ~{String = String} = {}
+key ~= "key"
+value ~= "hello"
+~scores.set(key, value) catch:
+;
+sentinel = 0"#;
+    let (ast, mut string_table) = parse_single_file_ast(source);
+    let hir = lower_hir(ast, &mut string_table);
+    let external_package_registry = default_external_package_registry(&mut string_table);
+    let report = run_borrow_checker(&hir, &external_package_registry, &string_table)
+        .expect("a final-use set with no later value use should pass");
+
+    let sentinel_statement =
+        find_assign_statement_id_for_local_name(&hir, &string_table, "sentinel")
+            .expect("should locate the sentinel statement by its assigned local");
+    let entry_state = report
+        .analysis
+        .statement_entry_states
+        .get(&sentinel_statement)
+        .expect("sentinel statement should have an entry snapshot");
+    for name in ["key", "value"] {
+        let local = find_local_by_name(&hir, &string_table, name)
+            .unwrap_or_else(|| panic!("should locate the inserted {name} local by name"));
+        let snapshot = entry_state
+            .locals
+            .iter()
+            .find(|snapshot| snapshot.local == local)
+            .unwrap_or_else(|| panic!("entry snapshot should include the inserted {name} local"));
+
+        assert!(
+            snapshot.mode.is_definitely_uninit(),
+            "final-use set should move the inserted {name} root, got mode {:?} with aliases {:?}",
+            snapshot.mode,
+            snapshot.alias_roots
+        );
+    }
+}
+
+#[test]
+fn map_set_later_use_keeps_mutable_inputs_borrowed() {
+    // WHAT: `set` MayConsume on later-use mutable key and value inputs borrows rather than moving.
+    // WHY: last-use classification must not unconditionally move; the root stays live so
+    //      the binding remains usable, which a regression to always-move would break.
+    let source = r#"scores ~{String = String} = {}
+key ~= "key"
+value ~= "hello"
+~scores.set(key, value) catch:
+;
+key_label = key
+label = value
+"#;
+    let (ast, mut string_table) = parse_single_file_ast(source);
+    let hir = lower_hir(ast, &mut string_table);
+    let external_package_registry = default_external_package_registry(&mut string_table);
+    let report = run_borrow_checker(&hir, &external_package_registry, &string_table)
+        .expect("a later-use mutable set should borrow and keep the value usable");
+
+    let first_use_statement =
+        find_assign_statement_id_for_local_name(&hir, &string_table, "key_label")
+            .expect("should locate the first later-use statement by its assigned local");
+    let entry_state = report
+        .analysis
+        .statement_entry_states
+        .get(&first_use_statement)
+        .expect("first later-use statement should have an entry snapshot");
+
+    for name in ["key", "value"] {
+        let local = find_local_by_name(&hir, &string_table, name)
+            .unwrap_or_else(|| panic!("should locate the inserted {name} local by name"));
+        let snapshot = entry_state
+            .locals
+            .iter()
+            .find(|snapshot| snapshot.local == local)
+            .unwrap_or_else(|| panic!("entry snapshot should include the inserted {name} local"));
+
+        assert!(
+            snapshot.mode.contains(LocalMode::SLOT),
+            "later-use set should keep the {name} as a live slot, got mode {:?}",
+            snapshot.mode
+        );
+        assert!(
+            !snapshot.mode.is_definitely_uninit(),
+            "later-use set should not move the {name} root, got mode {:?} with aliases {:?}",
+            snapshot.mode,
+            snapshot.alias_roots
+        );
+    }
+}
+
+#[test]
+fn nested_map_literal_moves_inner_non_copy_value_root() {
+    // WHAT: a nested map literal recursively moves an inner inserted non-copy value.
+    // WHY: aggregate ownership transfer must recurse into inner literals; integration
+    //      only proves the outer rejection, not the inner root invalidation.
+    let source = r#"value ~= "hello"
+scores ~{String = {String = String}} = {"outer" = {"inner" = value}}
+sentinel = 0"#;
+    let (ast, mut string_table) = parse_single_file_ast(source);
+    let hir = lower_hir(ast, &mut string_table);
+    let external_package_registry = default_external_package_registry(&mut string_table);
+    let report = run_borrow_checker(&hir, &external_package_registry, &string_table)
+        .expect("a final-use nested literal with no later value use should pass");
+
+    let value_local = find_local_by_name(&hir, &string_table, "value")
+        .expect("should locate the inner inserted value local by name");
+    let sentinel_statement =
+        find_assign_statement_id_for_local_name(&hir, &string_table, "sentinel")
+            .expect("should locate the sentinel statement by its assigned local");
+    let entry_state = report
+        .analysis
+        .statement_entry_states
+        .get(&sentinel_statement)
+        .expect("sentinel statement should have an entry snapshot");
+    let value_snapshot = entry_state
+        .locals
+        .iter()
+        .find(|snapshot| snapshot.local == value_local)
+        .expect("entry snapshot should include the inner inserted value local");
+
+    assert!(
+        value_snapshot.mode.is_definitely_uninit(),
+        "nested literal should move the inner inserted value root, got mode {:?} with aliases {:?}",
+        value_snapshot.mode,
+        value_snapshot.alias_roots
+    );
+}
+
 fn find_statement_id_for_line(
     hir: &crate::compiler_frontend::hir::module::HirModule,
     line: i32,
@@ -423,6 +657,57 @@ fn find_assigned_local_for_line(
             } = &statement.kind
             {
                 return Some(*local);
+            }
+        }
+    }
+    None
+}
+
+fn find_local_by_name(
+    hir: &crate::compiler_frontend::hir::module::HirModule,
+    string_table: &StringTable,
+    name: &str,
+) -> Option<LocalId> {
+    hir.blocks
+        .iter()
+        .flat_map(|block| block.locals.iter())
+        .find(|local| hir.side_table.resolve_local_name(local.id, string_table) == Some(name))
+        .map(|local| local.id)
+}
+
+fn find_assign_statement_id_for_local_name(
+    hir: &crate::compiler_frontend::hir::module::HirModule,
+    string_table: &StringTable,
+    name: &str,
+) -> Option<HirNodeId> {
+    for block in &hir.blocks {
+        for statement in &block.statements {
+            if let HirStatementKind::Assign {
+                target: HirPlace::Local(local),
+                ..
+            } = &statement.kind
+                && hir.side_table.resolve_local_name(*local, string_table) == Some(name)
+            {
+                return Some(statement.id);
+            }
+        }
+    }
+    None
+}
+
+/// Finds the semantic result state immediately after a first-class HIR map operation.
+fn find_map_op_result_and_following_statement(
+    hir: &crate::compiler_frontend::hir::module::HirModule,
+    wanted_op: HirMapOp,
+) -> Option<(LocalId, HirNodeId)> {
+    for block in &hir.blocks {
+        for (index, statement) in block.statements.iter().enumerate() {
+            if let HirStatementKind::MapOp { op, result, .. } = &statement.kind
+                && *op == wanted_op
+                && let Some(result_local) = *result
+                && let Some(following_statement) = block.statements.get(index + 1)
+            {
+                return Some((result_local, following_statement.id));
             }
         }
     }
