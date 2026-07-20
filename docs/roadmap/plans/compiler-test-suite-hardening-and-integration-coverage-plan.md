@@ -30,26 +30,27 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 3A — complete assertion-module ownership
-LAST_ACCEPTED_COMMIT: `5ae591167` (Phase 2D3e)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 2E implementation ready to commit; no unrelated worktree changes currently visible
+CURRENT_SLICE: Phase 3B — exact diagnostic code multisets
+LAST_ACCEPTED_COMMIT: `1b97b360b` (Phase 2E)
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; reviewed Phase 3A module split ready to commit; no unrelated worktree changes currently visible
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: `testing.bd` now defines baseline-only success as invalid; the progress matrix needs no change for this harness-only enforcement
-- code: fixture loading rejects baseline-only success; policy no longer owns a baseline-only advisory; reporting retains a single zero audit invariant; Phase 3A owns the assertion-module split
+- docs: `index.md` points to the new assertion-family owner tree; testing guidance remains current through Phase 2 and needs Phase 3 exact-mode wording at phase closure
+- code: `assertions/diagnostics.rs` now solely owns current diagnostic containment/rendered-message checks; Phase 3B adds typed exact/contains multiset semantics without duplicating compiler diagnostic identity
 ACCEPTANCE_CRITERIA:
-- move each assertion family into the target `assertions/` module without copying logic or leaving a monolithic path
-- keep orchestration in `assertions/mod.rs`, Node output execution with rendered-output assertions, and Wasm parsing with Wasm assertions
-- preserve fixture behavior and pass focused assertion tests, audit, `git diff --check`, and the full code-bearing gate
+- add `DiagnosticMatchMode::{Exact, Contains}` with exact as the canonical default
+- compare unordered code multisets with duplicate counts and distinct missing, unexpected, and count-mismatch reports
+- require a non-empty authored reason for contains mode, reject a reason in exact mode, and keep `message_contains` additive
+- cover exact success, unexpected extras, duplicate mismatches, and justified contains before audit and the full gate
 VALIDATION_STATE:
-- `just validate`: passed for Phase 2E; cross-target Clippy, 3,511 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
+- `just validate`: passed for Phase 3A; cross-target Clippy, 3,511 Rust tests, 1,778 integration executions, docs check, and 28 benchmark cases
 - `cargo run --quiet -- tests --audit`: passed; 1,645 cases, 1,778 executions, 13 acceptance-only, zero baseline-only, 548 rendered-output, 267 artifact, and zero hard findings
-DOCS_IMPACT: `testing.bd` updated; release docs build passed, while generated site churn from the separate docs/font stream remains excluded; progress matrix unchanged
-BLOCKERS_OR_OPEN_DECISIONS: none; inspect the current assertion owners before assigning Phase 3A
-DELEGATION_DECISION: Ollama implementation — timed user-selected provider override is active
-NEXT_WORKER_ORDER: Ollama, then codex-cli, then parent-direct
+DOCS_IMPACT: `index.md` updated for the moved assertion module tree; progress matrix unchanged
+BLOCKERS_OR_OPEN_DECISIONS: reviewed Ollama wrapper cleanly blocked before edits because it still requires removed `docs/codebase-style-guide.md`; Phase 3B can use the configured fallback
+DELEGATION_DECISION: codex-cli fallback — Ollama remains preferred but its wrapper preflight is stale
+NEXT_WORKER_ORDER: codex-cli, then parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit accepted Phase 2E, refresh its hash, then inspect and launch bounded Phase 3A through `ollama-codex-beanstalk`
+NEXT_RESUME_ACTION: commit accepted Phase 3A, refresh its hash, then inspect and launch bounded Phase 3B through `codex-cli-beanstalk`
 
 ---
 
@@ -147,7 +148,8 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 2D3c HTML-Wasm content parity contracts | `b537bee80` | Accepted | 13 acceptance-only; 7 baseline-only; 541 rendered-output; 267 artifact; zero hard findings |
 | Phase 2D3d const-record contracts | `b7a60487d` | Accepted | 13 acceptance-only; 3 baseline-only; 545 rendered-output; 267 artifact; zero hard findings |
 | Phase 2D3e final baseline contracts | `5ae591167` | Accepted | 13 acceptance-only; zero baseline-only; 548 rendered-output; 267 artifact; zero hard findings |
-| Phase 2E authored completeness enforcement | pending acceptance commit | Accepted | 3,511 Rust tests; 1,645 cases and 1,778 executions; 13 acceptance-only; zero baseline-only; zero hard findings |
+| Phase 2E authored completeness enforcement | `1b97b360b` | Accepted | 3,511 Rust tests; 1,645 cases and 1,778 executions; 13 acceptance-only; zero baseline-only; zero hard findings |
+| Phase 3A assertion ownership split | pending acceptance commit | Accepted | Seven assertion-family modules; 27 focused assertion tests; 3,511 Rust tests; 1,778 integration executions |
 
 ---
 
@@ -690,13 +692,13 @@ assertions/
 └── wasm.rs
 ```
 
-- [ ] Keep orchestration in `mod.rs`.
-- [ ] Move code; do not copy it.
-- [ ] Delete the monolithic path after migration.
-- [ ] Keep helper visibility narrow.
-- [ ] Keep Node execution with rendered output.
-- [ ] Keep Wasm parsing/validation with Wasm assertions.
-- [ ] Keep golden discovery/comparison with goldens.
+- [x] Keep orchestration in `mod.rs`.
+- [x] Move code; do not copy it.
+- [x] Delete the monolithic path after migration.
+- [x] Keep helper visibility narrow.
+- [x] Keep Node execution with rendered output.
+- [x] Keep Wasm parsing/validation with Wasm assertions.
+- [x] Keep golden discovery/comparison with goldens.
 
 ## 3B — Exact diagnostic code multisets
 

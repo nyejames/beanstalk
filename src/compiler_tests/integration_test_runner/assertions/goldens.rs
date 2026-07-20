@@ -162,7 +162,7 @@ pub(super) fn validate_golden_outputs(
     for file in &golden.inventory.files {
         let relative = &file.relative_path;
 
-        let Some(output) = super::find_output_file(build_result, relative) else {
+        let Some(output) = super::artifacts::find_output_file(build_result, relative) else {
             return Some((
                 format!("Golden output '{relative}' was not produced."),
                 FailureKind::StrictGoldenMismatch,
@@ -238,11 +238,11 @@ fn validate_expected_artifact_paths(
     build_result: &BuildResult,
     expected_paths: &[String],
 ) -> Option<String> {
-    let actual_paths = super::collect_built_artifact_paths(build_result);
+    let actual_paths = super::artifacts::collect_built_artifact_paths(build_result);
 
     let mut expected = expected_paths
         .iter()
-        .map(|path| super::normalize_relative_path_text(path))
+        .map(|path| super::super::normalize_relative_path_text(path))
         .collect::<Vec<_>>();
     expected.sort();
 
@@ -260,8 +260,8 @@ pub(super) fn compare_text_golden(
     actual: &str,
     mode: GoldenMode,
 ) -> Option<String> {
-    let normalized_expected = super::normalize_text_line_endings(expected);
-    let normalized_actual = super::normalize_text_line_endings(actual);
+    let normalized_expected = normalize_text_line_endings(expected);
+    let normalized_actual = normalize_text_line_endings(actual);
 
     match mode {
         GoldenMode::Strict => {
@@ -275,8 +275,8 @@ pub(super) fn compare_text_golden(
             ))
         }
         GoldenMode::Normalized => {
-            let semantic_expected = super::normalize_text_for_comparison(&normalized_expected);
-            let semantic_actual = super::normalize_text_for_comparison(&normalized_actual);
+            let semantic_expected = normalize_text_for_comparison(&normalized_expected);
+            let semantic_actual = normalize_text_for_comparison(&normalized_actual);
             if semantic_expected == semantic_actual {
                 return None;
             }
@@ -316,4 +316,126 @@ fn generate_text_diff(expected: &str, actual: &str, max_pairs: usize) -> String 
         out.push_str(&format!("\n... ({extra} more differing lines)"));
     }
     out
+}
+
+/// Normalizes compiler-generated counter suffixes in JS/HTML text for comparison.
+///
+/// WHAT: replaces unstable numeric counters in `bst_`-prefixed identifiers with the placeholder
+///       `N` while preserving line endings and the embedded core-CSS contract.
+/// WHY: generated names can vary between compilations even when emitted structure is equivalent.
+pub(super) fn normalize_text_for_comparison(text: &str) -> String {
+    let line_normalized = normalize_text_line_endings(text);
+    let text = strip_embedded_css(&line_normalized);
+    let mut result = String::with_capacity(text.len());
+    let mut token_start: Option<usize> = None;
+
+    for (index, character) in text.char_indices() {
+        let in_identifier = character.is_ascii_alphanumeric() || character == '_';
+        match (token_start, in_identifier) {
+            (None, true) => token_start = Some(index),
+            (Some(start), false) => {
+                result.push_str(&normalize_bst_identifier(&text[start..index]));
+                result.push(character);
+                token_start = None;
+            }
+            (Some(_), true) => {}
+            (None, false) => result.push(character),
+        }
+    }
+    if let Some(start) = token_start {
+        result.push_str(&normalize_bst_identifier(&text[start..]));
+    }
+    result
+}
+
+fn normalize_text_line_endings(text: &str) -> String {
+    let mut normalized = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+
+    while let Some(character) = chars.next() {
+        if character == '\r' {
+            if matches!(chars.peek(), Some('\n')) {
+                chars.next();
+            }
+            normalized.push('\n');
+            continue;
+        }
+
+        normalized.push(character);
+    }
+
+    normalized
+}
+
+/// Strips the embedded core CSS block so golden files stay stable when the core stylesheet changes.
+fn strip_embedded_css(text: &str) -> String {
+    const STYLE_OPEN: &str = "<style>";
+    const STYLE_CLOSE: &str = "</style>";
+
+    let Some(start) = text.find(STYLE_OPEN) else {
+        return text.to_owned();
+    };
+    let after_open = start + STYLE_OPEN.len();
+    let Some(close_start) = text[after_open..].find(STYLE_CLOSE) else {
+        return text.to_owned();
+    };
+    let close_end = after_open + close_start + STYLE_CLOSE.len();
+
+    let mut result = String::with_capacity(text.len() - (close_end - start) + 28);
+    result.push_str(&text[..start]);
+    result.push_str("<style>/* CORE_CSS */</style>");
+    result.push_str(&text[close_end..]);
+    result
+}
+
+fn normalize_bst_identifier(token: &str) -> String {
+    if !token.starts_with("bst_") {
+        return token.to_owned();
+    }
+
+    let parts: Vec<&str> = token.split('_').collect();
+    let mut result: Vec<String> = Vec::with_capacity(parts.len());
+
+    for (index, &part) in parts.iter().enumerate() {
+        let previous = if index > 0 { parts[index - 1] } else { "" };
+
+        let is_pure_digit =
+            !part.is_empty() && part.chars().all(|character| character.is_ascii_digit());
+        let previous_is_trigger = matches!(previous, "fn" | "tmp" | "frag");
+        if is_pure_digit && previous_is_trigger {
+            result.push("N".to_owned());
+            continue;
+        }
+
+        if let Some(normalized) = normalize_counter_suffix(part) {
+            result.push(normalized);
+            continue;
+        }
+
+        result.push(part.to_owned());
+    }
+
+    result.join("_")
+}
+
+fn normalize_counter_suffix(segment: &str) -> Option<String> {
+    let digit_start = segment
+        .char_indices()
+        .rev()
+        .take_while(|(_, character)| character.is_ascii_digit())
+        .last()
+        .map(|(index, _)| index);
+
+    let digit_start = digit_start?;
+
+    if digit_start == 0 {
+        return None;
+    }
+
+    let prefix = &segment[..digit_start];
+    if matches!(prefix, "fn" | "l") {
+        Some(format!("{prefix}N"))
+    } else {
+        None
+    }
 }

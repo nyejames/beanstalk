@@ -4,12 +4,14 @@
 //! WHY: assertion regressions can silently weaken the suite without changing compilation.
 
 use super::super::assertions::{
-    normalize_text_for_comparison, validate_failure_result, validate_success_result,
+    compare_text_golden, discover_golden_expectation, normalize_text_for_comparison,
+    validate_failure_result, validate_golden_outputs, validate_rendered_output_fragments,
+    validate_success_result,
 };
 use super::super::types::{GoldenExpectation, SuccessContract};
 use super::super::{
-    BackendId, ExpectedOutcome, FailureExpectation, SuccessExpectation, TestCaseSpec,
-    WarningExpectation,
+    BackendId, ExpectedOutcome, FailureExpectation, FailureKind, GoldenMode, SuccessExpectation,
+    TestCaseSpec, WarningExpectation,
 };
 use crate::build_system::build::{BuildResult, CleanupPolicy, FileKind, OutputFile, Project};
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerMessages;
@@ -19,10 +21,12 @@ use crate::compiler_frontend::compiler_messages::{
 };
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_tests::test_support::temp_dir;
 use crate::projects::settings::Config;
+use std::fs;
 use std::path::PathBuf;
 
-const ASSERTIONS_SOURCE: &str = include_str!("../assertions.rs");
+const DIAGNOSTICS_SOURCE: &str = include_str!("../assertions/diagnostics.rs");
 
 fn test_location(path: InternedPath) -> SourceLocation {
     SourceLocation::new(
@@ -99,7 +103,7 @@ fn failure_message_contains_stays_on_typed_render_output() {
     let removed_conversion_name = ["to", "_", "legacy", "_", "error"].concat();
 
     assert!(
-        !ASSERTIONS_SOURCE.contains(&removed_conversion_name),
+        !DIAGNOSTICS_SOURCE.contains(&removed_conversion_name),
         "failure message assertions must stay on typed render-boundary output",
     );
 }
@@ -226,6 +230,13 @@ fn build_result_with_output_files(files: Vec<(PathBuf, FileKind)>) -> BuildResul
         warnings: Vec::new(),
         string_table: StringTable::new(),
     }
+}
+
+fn build_result_with_index_html(html: &str) -> BuildResult {
+    build_result_with_output_files(vec![(
+        PathBuf::from("index.html"),
+        FileKind::Html(html.to_owned()),
+    )])
 }
 
 fn absence_expectation(forbidden: Vec<String>) -> SuccessExpectation {
@@ -411,4 +422,129 @@ fn absence_contract_ignores_not_built_files() {
         result.passed,
         "NotBuilt files must not count as emitted artifacts"
     );
+}
+
+#[test]
+fn strict_text_goldens_ignore_lf_vs_crlf_differences() {
+    assert!(
+        compare_text_golden("<p>a\r\nb</p>\r\n", "<p>a\nb</p>\n", GoldenMode::Strict).is_none()
+    );
+}
+
+#[test]
+fn normalized_text_goldens_ignore_lf_vs_crlf_differences() {
+    assert!(
+        compare_text_golden(
+            "<p>bst_rhs_and_fn0\r\n</p>\r\n",
+            "<p>bst_rhs_and_fn7\n</p>\n",
+            GoldenMode::Normalized,
+        )
+        .is_none()
+    );
+}
+
+#[test]
+fn normalized_comparison_strips_core_css_after_crlf_normalization() {
+    let normalized =
+        normalize_text_for_comparison("<style>\r\nbody { color: red; }\r\n</style>\r\nok");
+    assert!(normalized.contains("<style>/* CORE_CSS */</style>"));
+    assert!(!normalized.contains("body { color: red; }"));
+}
+
+#[test]
+fn rendered_output_fragment_validation_reports_semantic_mismatch_kind() {
+    let contains = vec!["missing-fragment".to_string()];
+    let result = validate_rendered_output_fragments("rendered text", &contains, &[])
+        .expect("missing required fragment should fail");
+    assert_eq!(result.1, FailureKind::RenderedOutputMismatch);
+}
+
+#[test]
+fn rendered_output_validation_reports_harness_failure_without_script_blocks() {
+    let expectation = SuccessExpectation {
+        warnings: WarningExpectation::Forbid,
+        success_contract: None,
+        artifact_assertions: Vec::new(),
+        golden: GoldenExpectation::default(),
+        rendered_output_contains: vec!["anything".to_string()],
+        rendered_output_not_contains: Vec::new(),
+        artifacts_must_not_exist: Vec::new(),
+    };
+    let case = success_test_case(BackendId::Html, expectation.clone());
+    let build_result = build_result_with_index_html(VALID_HTML);
+
+    let result = validate_success_result(&case, build_result, &expectation);
+
+    assert_eq!(result.failure_kind, Some(FailureKind::HarnessFailed));
+}
+
+#[test]
+fn strict_golden_validation_treats_crlf_and_lf_as_equivalent_for_text() {
+    let root = temp_dir("strict_golden_line_endings");
+    let golden_dir = root.join("golden");
+    fs::create_dir_all(&golden_dir).expect("should create golden dir");
+    fs::write(golden_dir.join("index.html"), "<p>a\r\nb</p>\r\n")
+        .expect("should write CRLF golden");
+
+    let build_result = build_result_with_index_html("<p>a\nb</p>\n");
+    let golden = discover_golden_expectation(&golden_dir, None)
+        .expect("golden inventory should be discovered");
+    let mismatch = validate_golden_outputs(&build_result, &golden);
+    assert!(
+        mismatch.is_none(),
+        "strict text golden checks should ignore line-ending-only differences"
+    );
+
+    fs::remove_dir_all(&root).expect("should clean temp directory");
+}
+
+#[test]
+fn normalized_golden_validation_treats_crlf_and_lf_as_equivalent_for_text() {
+    let root = temp_dir("normalized_golden_line_endings");
+    let golden_dir = root.join("golden");
+    fs::create_dir_all(&golden_dir).expect("should create golden dir");
+    fs::write(golden_dir.join("index.html"), "bst_rhs_and_fn0\r\n")
+        .expect("should write CRLF golden");
+
+    let build_result = build_result_with_index_html("bst_rhs_and_fn8\n");
+    let golden = discover_golden_expectation(&golden_dir, Some(GoldenMode::Normalized))
+        .expect("golden inventory should be discovered");
+    let mismatch = validate_golden_outputs(&build_result, &golden);
+    assert!(
+        mismatch.is_none(),
+        "normalized golden checks should ignore counter and line-ending drift"
+    );
+
+    fs::remove_dir_all(&root).expect("should clean temp directory");
+}
+
+#[test]
+fn nested_golden_validation_compares_relative_paths() {
+    let root = temp_dir("nested_golden_comparison");
+    let golden_dir = root.join("golden");
+    let golden_file = golden_dir.join("nested").join("page.html");
+    fs::create_dir_all(golden_file.parent().expect("nested parent should exist"))
+        .expect("should create nested golden directory");
+    fs::write(&golden_file, "<p>nested</p>\n").expect("should write nested golden");
+
+    let build_result = BuildResult {
+        project: Project {
+            output_files: vec![OutputFile::new(
+                PathBuf::from("nested/page.html"),
+                FileKind::Html("<p>nested</p>\n".to_owned()),
+            )],
+            entry_page_rel: None,
+            cleanup_policy: CleanupPolicy::html(),
+            warnings: Vec::new(),
+        },
+        config: Config::new(PathBuf::from("main.bst")),
+        warnings: Vec::new(),
+        string_table: StringTable::new(),
+    };
+    let golden = discover_golden_expectation(&golden_dir, None)
+        .expect("golden inventory should be discovered");
+
+    assert!(validate_golden_outputs(&build_result, &golden).is_none());
+
+    fs::remove_dir_all(&root).expect("should clean temp directory");
 }

@@ -155,7 +155,7 @@ Flow: [projects](src/projects/) → [build_system](src/build_system/) → [compi
 
 ## Tests/tooling
 
-- [integration test runner](src/compiler_tests/integration_test_runner/): manifest fixtures, expectations, execution.
+- [integration test runner](src/compiler_tests/integration_test_runner/): manifest fixtures, expectations, execution, and assertion-family owners under [assertions](src/compiler_tests/integration_test_runner/assertions/).
 - [integration fixtures](tests/cases/): expect.toml backend matrices.
 - [subsystem unit tests](src/): `*/tests` and module tests throughout src/.
 - [in-process compiler benchmark API](src/benchmarking/): for xtask/dev tooling.
