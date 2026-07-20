@@ -30,8 +30,8 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 14A canonical contract and role backfill, batch 2 (entries 101–200)
-LAST_ACCEPTED_COMMIT: `96130e3f4` (Phase 14A classification batch 1)
+CURRENT_SLICE: Phase 14A canonical contract and role backfill, batch 3 (entries 201–300)
+LAST_ACCEPTED_COMMIT: `e403e628f` (Phase 14A classification batch 2)
 WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; accepted code is committed; unrelated concurrent docs source and generated-release edits remain unstaged
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
@@ -43,13 +43,13 @@ ACCEPTANCE_CRITERIA:
 - tag spelling/order and obsolete tags are normalized without changing behavior
 VALIDATION_STATE:
 - `just validate`: passed; cross-target Clippy, 3,526 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
-- Phase 14A audit: passed; zero hard findings; 1,516 missing roles and 1,527 missing contracts remain after batch 1
+- Phase 14A audit: passed; zero hard findings; 1,416 missing roles and 1,427 missing contracts remain after batch 2
 DOCS_IMPACT: progress matrix reviewed; support and backend coverage are unchanged by fixture consolidation; index unchanged
 BLOCKERS_OR_OPEN_DECISIONS: none for the next slice; Ollama remains required with no provider substitution
 DELEGATION_DECISION: Ollama — bounded Phase 14 implementation slices
 NEXT_WORKER_ORDER: Ollama only; no provider substitution
 STOP_REASON: none
-NEXT_RESUME_ACTION: launch Phase 14A classification batch 2 through Ollama
+NEXT_RESUME_ACTION: launch Phase 14A classification batch 3 through Ollama
 
 ---
 
@@ -206,6 +206,7 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 13E HTML assembly-policy ownership | `ca89c014e` | Accepted | All 55 document, JS-path, output-plan, metadata, registry, and tracked-asset tests classified; 14 weaker artifact substitutes removed in favor of nine canonical integration owners; 41 hidden config, escaping, mapping, registry, and warning-policy owners retained; 3,526 Rust tests and 1,793 integration executions |
 | Phase 13F external-JS runtime ownership | no code change after `461559f1e` | Accepted | All 23 external-JavaScript runtime-emission and glue tests retained as ABI, helper, mapping, planning, or malformed-input owners; canonical integration owns reachable/unreachable page behavior; latest full gate remains 3,526 Rust tests and 1,793 integration executions |
 | Phase 14A classification batch 1 | `96130e3f4` | Accepted | First 100 manifest entries reviewed; 95 contracts and 86 roles added; two boundary-only families given explicit primary owners; zero hard findings; 1,516 missing roles and 1,527 missing contracts remain; 3,526 Rust tests and 1,793 integration executions |
+| Phase 14A classification batch 2 | `e403e628f` | Accepted | Entries 101–200 reviewed; 100 contracts and 100 roles added; generic, trait, and choice families consolidated under one primary with deliberate boundaries; zero hard findings; 1,416 missing roles and 1,427 missing contracts remain; 3,526 Rust tests and 1,793 integration executions |
 
 ---
 
