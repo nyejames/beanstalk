@@ -323,24 +323,6 @@ fn tir_view_classification_rejects_reactive_text() {
 }
 
 #[test]
-fn tir_view_classification_unresolved_slot_returns_renderable_string() {
-    let mut string_table = StringTable::new();
-
-    let const_kind =
-        classify_store_view_template(&mut string_table, TemplateType::String, |builder, _| {
-            let slot = builder.push_slot_node(SlotKey::Default, empty_location());
-
-            builder.push_sequence_node(vec![slot], empty_location())
-        });
-
-    assert_eq!(
-        const_kind,
-        TemplateConstValueKind::RenderableString,
-        "an unresolved slot with no slot-resolution overlay folds to empty output"
-    );
-}
-
-#[test]
 fn tir_view_classification_preserves_slot_insert_helper_kind() {
     let mut string_table = StringTable::new();
     let slot_name = string_table.intern("title");
@@ -764,16 +746,19 @@ fn finalized_tir_view_classification_accepts_wrapper_context_overlay() {
     );
 }
 
-/// Effective view classification with a structural slot but no slot-resolution
-/// overlay returns `RenderableString`.
+/// Effective view classification of a structural slot returns `RenderableString`
+/// whether the slot-resolution overlay is absent or allocated-but-empty.
 ///
-/// WHAT: the template still has a `Slot` node, so `has_unresolved_slots` stays
-///       `true`. With no overlay covering the occurrence, the slot folds to no
-///       output, so the const-value kind is `RenderableString`.
-/// WHY: matches the fold path and the language rule that unfilled slots are
-///      structural no-output.
+/// WHAT: a template with one `Slot` node and no resolved entry folds the slot to
+///       no output in both contexts. `has_unresolved_slots` stays `true` because
+///       the structural slot remains present regardless of overlay allocation.
+/// WHY: proves the presence of an allocated empty slot-resolution dimension alone
+///      does not force a `WrapperTemplate` classification and does not erase the
+///      structural slot flag. The no-overlay and empty-overlay rows are parallel
+///      because the fold path treats an absent overlay and an uncovered overlay
+///      identically.
 #[test]
-fn effective_view_classification_unresolved_slot_with_no_overlay_returns_renderable_string() {
+fn unresolved_slot_is_renderable_with_absent_or_empty_overlay() {
     let mut store = TemplateIrStore::new();
 
     let template_id = {
@@ -790,79 +775,58 @@ fn effective_view_classification_unresolved_slot_with_no_overlay_returns_rendera
         )
     };
 
-    let context = TemplateViewContext::default();
-    let view = TirView::with_minimum_phase(
+    // Row 1: no slot-resolution overlay (default context).
+    let no_overlay_view = TirView::with_minimum_phase(
         &store,
         template_id,
         TemplateTirPhase::Finalized,
         TemplateTirPhase::Finalized,
-        context,
+        TemplateViewContext::default(),
     )
-    .expect("test view should resolve");
+    .expect("no-overlay test view should resolve");
 
-    let classification = classify_effective_tir_view_template(&view)
-        .expect("effective view classification should succeed");
+    let no_overlay_classification = classify_effective_tir_view_template(&no_overlay_view)
+        .expect("no-overlay effective view classification should succeed");
 
     assert_eq!(
-        classification.const_value_kind,
+        no_overlay_classification.const_value_kind,
         TemplateConstValueKind::RenderableString,
-        "an uncovered slot should classify as RenderableString"
+        "an uncovered slot with no overlay should classify as RenderableString"
     );
     assert!(
-        classification.has_unresolved_slots,
-        "structural slot flag must remain true"
+        no_overlay_classification.has_unresolved_slots,
+        "structural slot flag must remain true without an overlay"
     );
-}
 
-/// Effective view classification with a slot-resolution overlay that does not
-/// cover the structural slot returns `RenderableString`.
-///
-/// WHAT: the overlay dimension exists but has no entry for the slot occurrence,
-///       so the slot is still unfilled from the view's perspective.
-/// WHY: proves the presence of an empty slot-resolution dimension alone does
-///      not force a `WrapperTemplate` classification.
-#[test]
-fn effective_view_classification_unresolved_slot_with_empty_overlay_returns_renderable_string() {
-    let mut store = TemplateIrStore::new();
-
-    let template_id = {
-        let mut builder = TemplateIrBuilder::new(&mut store);
-        let slot_node = builder.push_slot_node(SlotKey::Default, empty_location());
-        let root = builder.push_sequence_node(vec![slot_node], empty_location());
-
-        builder.finish_template(
-            root,
-            Style::default(),
-            TemplateType::String,
-            TemplateIrSummary::empty(),
-            empty_location(),
-        )
-    };
-
-    let slot_overlay_id = store.allocate_slot_resolution_overlay(TirSlotResolutionOverlay {
+    // Row 2: an allocated empty slot-resolution overlay (no entries for the slot).
+    let empty_overlay_id = store.allocate_slot_resolution_overlay(TirSlotResolutionOverlay {
         resolutions: Vec::new(),
     });
-    let context = TemplateViewContext {
+    let empty_overlay_context = TemplateViewContext {
         expression_overlay: None,
-        slot_resolution: Some(slot_overlay_id),
+        slot_resolution: Some(empty_overlay_id),
         wrapper_context: None,
     };
-    let view = TirView::with_minimum_phase(
+    let empty_overlay_view = TirView::with_minimum_phase(
         &store,
         template_id,
         TemplateTirPhase::Finalized,
         TemplateTirPhase::Finalized,
-        context,
+        empty_overlay_context,
     )
-    .expect("test view should resolve");
+    .expect("empty-overlay test view should resolve");
 
-    let classification = classify_effective_tir_view_template(&view)
-        .expect("effective view classification should succeed");
+    let empty_overlay_classification = classify_effective_tir_view_template(&empty_overlay_view)
+        .expect("empty-overlay effective view classification should succeed");
 
     assert_eq!(
-        classification.const_value_kind,
+        empty_overlay_classification.const_value_kind,
         TemplateConstValueKind::RenderableString,
-        "a slot not covered by the overlay should classify as RenderableString"
+        "a slot not covered by an empty overlay should classify as RenderableString"
+    );
+    assert!(
+        empty_overlay_classification.has_unresolved_slots,
+        "structural slot flag must remain true with an empty overlay"
     );
 }
 
