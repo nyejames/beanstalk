@@ -350,7 +350,7 @@ else
 ;
 
 label = if maybe_name is:
-    "Priya" => then "Hi Ada"
+    "Priya" => then "Hi Priya"
     |name| => then name
     none => then "guest"
 ;

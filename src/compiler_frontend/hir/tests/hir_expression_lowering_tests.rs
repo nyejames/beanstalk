@@ -3284,7 +3284,7 @@ fn lowers_collection_builtin_host_calls_from_explicit_ast_nodes() {
 fn map_literal_lowering_preserves_entry_order() {
     let mut string_table = StringTable::new();
     let location = location(37);
-    let ada = string_table.intern("Priya");
+    let priya = string_table.intern("Priya");
     let grace = string_table.intern("Grace");
     let mut builder = setup_builder(&mut string_table);
     let map_type = builder
@@ -3294,7 +3294,7 @@ fn map_literal_lowering_preserves_entry_order() {
     let expression = Expression::new(
         ExpressionKind::MapLiteral(vec![
             MapLiteralEntry {
-                key: Expression::string_slice(ada, location.clone(), ValueMode::ImmutableOwned),
+                key: Expression::string_slice(priya, location.clone(), ValueMode::ImmutableOwned),
                 value: Expression::int(10, location.clone(), ValueMode::ImmutableOwned),
             },
             MapLiteralEntry {

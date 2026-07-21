@@ -15,7 +15,7 @@ get_score |p Person, key String| -> Int:
 
 scores ~Scores = {"Priya" = 10}
 p ~= Person("Grace", scores)
-ada_score = get_score(p, "Priya")
+priya_score = get_score(p, "Priya")
 
 -- Mutate the local mutable map directly
 ~scores.set("Linus", 7) catch:
@@ -24,4 +24,4 @@ linus_score = get_score(p, "Linus")
 p2 = Person("Bo", scores)
 bo_score = get_score(p2, "Linus")
 
-[:alias_struct_param ada=[ada_score] linus=[linus_score] bo=[bo_score]]
+[:alias_struct_param priya=[priya_score] linus=[linus_score] bo=[bo_score]]

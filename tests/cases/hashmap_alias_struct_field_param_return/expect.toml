@@ -3,7 +3,7 @@ entry = "."
 [backends.html]
 mode = "success"
 warnings = "forbid"
-rendered_output_contains = ["alias_struct_param ada=10 linus=7 bo=7"]
+rendered_output_contains = ["alias_struct_param priya=10 linus=7 bo=7"]
 
 [backends.html_wasm]
 mode = "failure"
