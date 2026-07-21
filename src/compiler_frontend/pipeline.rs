@@ -62,14 +62,39 @@ pub(crate) struct FrontendFilePrepareContext<'a> {
     pub(crate) options: &'a HeaderParseOptions,
 }
 
-/// Per-file source inputs and numbering offsets for local frontend preparation.
+/// State-safe per-file source payload for frontend preparation.
 ///
-/// WHAT: keeps the source text/path and synthetic-fragment offsets together for one worker item.
+/// WHAT: one variant per source kind. Beanstalk carries the retained `FileTokens` from the
+///       single Stage 0 lexical pass; Beandown and PlainMarkdown carry only raw source text.
+/// WHY: the variant makes the source-kind/token relationship unrepresentable as an invalid
+///      state. The Beanstalk preparation arm receives `FileTokens` by type, so it cannot panic
+///      on absent tokens, and Beandown/PlainMarkdown cannot carry Beanstalk tokens.
+///
+/// This is the frontend's borrowed view across the build-system/frontend stage boundary. The
+/// build system owns the `PreparedSourceInput` storage and constructs this view from it; the
+/// frontend does not depend on build-system types.
+pub(crate) enum FrontendFilePrepareSource<'a> {
+    Beanstalk {
+        source_path: &'a PathBuf,
+        tokens: &'a FileTokens,
+    },
+    Beandown {
+        source_code: &'a str,
+        source_path: &'a PathBuf,
+    },
+    PlainMarkdown {
+        source_code: &'a str,
+        source_path: &'a PathBuf,
+    },
+}
+
+/// Per-file source payload and numbering offsets for local frontend preparation.
+///
+/// WHAT: keeps the state-safe source variant and synthetic-fragment offsets together for one
+///       worker item.
 /// WHY: grouping these inputs keeps the preparation API explicit without a broad argument list.
 pub(crate) struct FrontendFilePrepareInput<'a> {
-    pub(crate) source_code: &'a str,
-    pub(crate) source_path: &'a PathBuf,
-    pub(crate) source_kind: SourceFileKind,
+    pub(crate) source: FrontendFilePrepareSource<'a>,
     pub(crate) const_template_offset: usize,
     pub(crate) runtime_fragment_offset: usize,
 }
@@ -190,31 +215,32 @@ impl CompilerFrontend {
         Ok(tokens)
     }
 
-    /// Tokenize and header-parse one source file against a caller-provided local string table.
+    /// Prepare one source file against a caller-provided local string table.
     ///
-    /// WHAT: this is the core per-file preparation logic without merge/remap, so callers can run
-    ///       tokenization and header parsing in parallel before deterministically merging results.
+    /// WHAT: parses retained Beanstalk tokens, tokenizes and prepares Beandown, or prepares plain
+    ///       Markdown without merge/remap so callers can run file work in parallel.
     /// WHY: parallel frontend preparation needs each worker to own its local table without shared
-    ///      mutable access to the module-global table.
+    ///      mutable access to the module-global table, while Stage 0 remains the sole tokenizer
+    ///      owner for discovered Beanstalk source.
     pub(crate) fn prepare_file_frontend_local(
         context: &FrontendFilePrepareContext<'_>,
         input: FrontendFilePrepareInput<'_>,
         local_string_table: &mut StringTable,
     ) -> Result<FileFrontendPrepareOutput, FileFrontendPrepareError> {
-        match input.source_kind {
-            SourceFileKind::PlainMarkdown => {
-                let identity = source_file_identity(
-                    context.source_files,
-                    input.source_path,
-                    local_string_table,
-                )
-                .map_err(|error| FileFrontendPrepareError {
-                    warnings: Vec::new(),
-                    diagnostic: Box::new(compiler_error_to_diagnostic(&error)),
-                })?;
+        match input.source {
+            FrontendFilePrepareSource::PlainMarkdown {
+                source_code,
+                source_path,
+            } => {
+                let identity =
+                    source_file_identity(context.source_files, source_path, local_string_table)
+                        .map_err(|error| FileFrontendPrepareError {
+                            warnings: Vec::new(),
+                            diagnostic: Box::new(compiler_error_to_diagnostic(&error)),
+                        })?;
                 Ok(prepare_plain_markdown_file(
                     PlainMarkdownPrepareInput {
-                        source_code: input.source_code,
+                        source_code,
                         source_file: identity.logical_path,
                         file_id: identity.file_id,
                         canonical_os_path: identity.canonical_os_path,
@@ -222,23 +248,57 @@ impl CompilerFrontend {
                     local_string_table,
                 ))
             }
-            SourceFileKind::Beanstalk | SourceFileKind::Beandown => {
+            FrontendFilePrepareSource::Beanstalk {
+                source_path,
+                tokens,
+            } => {
+                // Beanstalk files carry the exact token stream retained from the single Stage 0
+                // lexical pass. Rebind it to the module source identity and parse headers without
+                // re-tokenizing. `tokens` is present by type, so no absent-token panic is possible.
+                let identity =
+                    source_file_identity(context.source_files, source_path, local_string_table)
+                        .map_err(|error| FileFrontendPrepareError {
+                            warnings: Vec::new(),
+                            diagnostic: Box::new(compiler_error_to_diagnostic(&error)),
+                        })?;
+
+                let mut file_tokens = tokens.clone();
+                file_tokens.rebind_source_identity(
+                    identity.logical_path,
+                    identity.file_id,
+                    identity.canonical_os_path,
+                );
+
+                parse_file_headers_with_table(
+                    &mut file_tokens,
+                    context.entry_file_path,
+                    context.options,
+                    local_string_table,
+                    input.const_template_offset,
+                    input.runtime_fragment_offset,
+                )
+            }
+            FrontendFilePrepareSource::Beandown {
+                source_code,
+                source_path,
+            } => {
+                // Beandown is tokenized exactly once by its template-body preparation path.
                 let tokenizer_entry_mode =
-                    match TokenizerEntryMode::for_source_file_kind(input.source_kind) {
+                    match TokenizerEntryMode::for_source_file_kind(SourceFileKind::Beandown) {
                         Some(mode) => mode,
-                        None => unreachable!("Beanstalk and Beandown have tokenizer entry modes"),
+                        None => unreachable!("Beandown has a tokenizer entry mode"),
                     };
 
                 let tokenization = Self::tokenize_source(
                     context.source_files,
                     context.style_directives,
-                    input.source_code,
-                    input.source_path,
+                    source_code,
+                    source_path,
                     tokenizer_entry_mode,
                     local_string_table,
                 );
 
-                let mut file_tokens = match tokenization {
+                let file_tokens = match tokenization {
                     Ok(tokens) => tokens,
                     Err(diagnostic) => {
                         return Err(FileFrontendPrepareError {
@@ -248,18 +308,7 @@ impl CompilerFrontend {
                     }
                 };
 
-                if input.source_kind == SourceFileKind::Beanstalk {
-                    parse_file_headers_with_table(
-                        &mut file_tokens,
-                        context.entry_file_path,
-                        context.options,
-                        local_string_table,
-                        input.const_template_offset,
-                        input.runtime_fragment_offset,
-                    )
-                } else {
-                    Ok(prepare_beandown_file(file_tokens, local_string_table))
-                }
+                Ok(prepare_beandown_file(file_tokens, local_string_table))
             }
         }
     }

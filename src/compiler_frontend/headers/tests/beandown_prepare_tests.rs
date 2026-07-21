@@ -29,6 +29,7 @@ use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::pipeline::{
     CompilerFrontend, FrontendFilePrepareContext, FrontendFilePrepareInput,
+    FrontendFilePrepareSource,
 };
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::identity::SourceFileTable;
@@ -80,9 +81,10 @@ fn prepare_via_pipeline(
     };
     let input_path = PathBuf::from("src/intro.bd");
     let input = FrontendFilePrepareInput {
-        source_code: source,
-        source_path: &input_path,
-        source_kind: SourceFileKind::Beandown,
+        source: FrontendFilePrepareSource::Beandown {
+            source_code: source,
+            source_path: &input_path,
+        },
         const_template_offset: 0,
         runtime_fragment_offset: 0,
     };
@@ -116,9 +118,10 @@ fn ast_from_beandown_source(source: &str) -> (Ast, StringTable) {
     };
     let input_path = PathBuf::from("src/intro.bd");
     let input = FrontendFilePrepareInput {
-        source_code: source,
-        source_path: &input_path,
-        source_kind: SourceFileKind::Beandown,
+        source: FrontendFilePrepareSource::Beandown {
+            source_code: source,
+            source_path: &input_path,
+        },
         const_template_offset: 0,
         runtime_fragment_offset: 0,
     };
@@ -368,10 +371,46 @@ impl BeandownScopeFixture {
                 .and_then(SourceFileKind::from_extension)
                 .unwrap_or(SourceFileKind::Beanstalk);
 
+            // Tokenize Beanstalk sources before building the prepare input so the borrowed
+            // `FileTokens` outlive the `FrontendFilePrepareSource` that references them.
+            let beanstalk_tokens = if source_kind == SourceFileKind::Beanstalk {
+                Some(
+                    CompilerFrontend::tokenize_source(
+                        &self.source_files,
+                        &style_directives,
+                        &source_code,
+                        &source_path,
+                        TokenizerEntryMode::SourceFile,
+                        &mut string_table,
+                    )
+                    .map_err(|diagnostic| *diagnostic)?,
+                )
+            } else {
+                None
+            };
+
+            let source = match source_kind {
+                SourceFileKind::Beanstalk => {
+                    let tokens = beanstalk_tokens
+                        .as_ref()
+                        .expect("Beanstalk source should have retained tokens");
+                    FrontendFilePrepareSource::Beanstalk {
+                        source_path: &source_path,
+                        tokens,
+                    }
+                }
+                SourceFileKind::Beandown => FrontendFilePrepareSource::Beandown {
+                    source_code: &source_code,
+                    source_path: &source_path,
+                },
+                SourceFileKind::PlainMarkdown => FrontendFilePrepareSource::PlainMarkdown {
+                    source_code: &source_code,
+                    source_path: &source_path,
+                },
+            };
+
             let input = FrontendFilePrepareInput {
-                source_code: &source_code,
-                source_path: &source_path,
-                source_kind,
+                source,
                 const_template_offset: 0,
                 runtime_fragment_offset: 0,
             };

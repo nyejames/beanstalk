@@ -5,9 +5,8 @@
 //! WHY: these tests exercise infrastructure invariants that integration cases cannot inspect
 //!      directly, while keeping test code out of the production orchestration module.
 
+use super::super::prepared_source::PreparedSourceInput;
 use super::merge_stage_messages;
-use crate::build_system::build::InputFile;
-use crate::builder_surface::SourceFileKind;
 use crate::builder_surface::external_import_providers::resolution_table::ExternalImportResolutionTable;
 use crate::compiler_frontend::CompilerFrontend;
 use crate::compiler_frontend::compiler_errors::{CompilerMessages, SourceLocation};
@@ -24,45 +23,70 @@ use crate::compiler_frontend::headers::parse_file_headers::{
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::identity::SourceFileTable;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::compiler_frontend::tokenizer::tokens::TokenKind;
-use crate::compiler_frontend::{FrontendFilePrepareContext, FrontendFilePrepareInput};
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind, TokenizerEntryMode};
+use crate::compiler_frontend::{
+    FrontendFilePrepareContext, FrontendFilePrepareInput, FrontendFilePrepareSource,
+};
 use crate::projects::settings::Config;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-fn beanstalk_input_file(source_path: PathBuf, source_code: &str) -> InputFile {
-    InputFile {
+fn beanstalk_prepared_input(
+    source_path: PathBuf,
+    source_code: &str,
+    tokens: FileTokens,
+) -> PreparedSourceInput {
+    PreparedSourceInput::Beanstalk {
         source_code: source_code.to_owned(),
         source_path,
-        source_kind: SourceFileKind::Beanstalk,
+        tokens: Box::new(tokens),
     }
 }
 
-fn source_byte_count(input_files: &[InputFile]) -> usize {
+/// Tokenize source text against a source file table and string table, then build a Beanstalk
+/// `PreparedSourceInput` carrying the retained token stream.
+fn tokenized_beanstalk_prepared_input(
+    source_files: &SourceFileTable,
+    style_directives: &StyleDirectiveRegistry,
+    string_table: &mut StringTable,
+    source_path: PathBuf,
+    source_code: &str,
+) -> PreparedSourceInput {
+    let tokens = CompilerFrontend::tokenize_source(
+        source_files,
+        style_directives,
+        source_code,
+        &source_path,
+        TokenizerEntryMode::SourceFile,
+        string_table,
+    )
+    .expect("test source should tokenize");
+    beanstalk_prepared_input(source_path, source_code, tokens)
+}
+
+fn source_byte_count(input_files: &[PreparedSourceInput]) -> usize {
     input_files
         .iter()
-        .map(|input_file| input_file.source_code.len())
+        .map(|input_file| input_file.source_code().len())
         .sum()
 }
 
 struct FrontendPreparationFixture {
     _temp_dir: tempfile::TempDir,
     frontend: CompilerFrontend,
-    input_files: Vec<InputFile>,
+    input_files: Vec<PreparedSourceInput>,
     entry_file_path: PathBuf,
 }
 
 fn frontend_preparation_fixture(file_sources: &[(&str, &str)]) -> FrontendPreparationFixture {
     let temp_dir = tempfile::tempdir().expect("should create temp dir");
     let mut canonical_paths = Vec::new();
-    let mut input_files = Vec::new();
 
     for (file_name, source) in file_sources {
         let path = temp_dir.path().join(file_name);
         fs::write(&path, source).expect("test source file should be written");
         let canonical = fs::canonicalize(&path).expect("test source file should canonicalize");
-        input_files.push(beanstalk_input_file(canonical.clone(), source));
         canonical_paths.push(canonical);
     }
 
@@ -80,10 +104,30 @@ fn frontend_preparation_fixture(file_sources: &[(&str, &str)]) -> FrontendPrepar
     )
     .expect("source file table should build");
 
+    // Tokenize each source file once so the retained token stream is available for header
+    // preparation, mirroring the single Stage 0 lexical pass in production discovery.
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let input_files = canonical_paths
+        .iter()
+        .zip(file_sources)
+        .map(|(canonical, (_, source))| {
+            let tokens = CompilerFrontend::tokenize_source(
+                &source_files,
+                &style_directives,
+                source,
+                canonical,
+                TokenizerEntryMode::SourceFile,
+                &mut string_table,
+            )
+            .expect("fixture source should tokenize");
+            beanstalk_prepared_input(canonical.clone(), source, tokens)
+        })
+        .collect();
+
     let mut frontend = CompilerFrontend::new(
         &Config::new(temp_dir.path().to_path_buf()),
         string_table,
-        StyleDirectiveRegistry::built_ins(),
+        style_directives,
         Arc::new(ExternalPackageRegistry::new()),
         None,
     );
@@ -212,6 +256,17 @@ fn fused_preparation_merges_local_forks_and_resolves_source_and_generated_string
                                  source_path: &std::path::PathBuf,
                                  const_template_offset: usize,
                                  runtime_fragment_offset: usize| {
+        // Tokenize against the module string table before forking, mirroring Stage 0 retention.
+        let retained_tokens = CompilerFrontend::tokenize_source(
+            &frontend.source_files,
+            &frontend.style_directives,
+            source_code,
+            source_path,
+            TokenizerEntryMode::SourceFile,
+            &mut frontend.string_table,
+        )
+        .expect("test source should tokenize");
+
         let fork_source = frontend.string_table.fork_source();
         let (mut local_string_table, base_len) = fork_source.fork_for_module().into_parts();
 
@@ -223,9 +278,10 @@ fn fused_preparation_merges_local_forks_and_resolves_source_and_generated_string
                 options: &options,
             };
             let input = FrontendFilePrepareInput {
-                source_code,
-                source_path,
-                source_kind: crate::builder_surface::SourceFileKind::Beanstalk,
+                source: FrontendFilePrepareSource::Beanstalk {
+                    source_path,
+                    tokens: &retained_tokens,
+                },
                 const_template_offset,
                 runtime_fragment_offset,
             };
@@ -476,9 +532,27 @@ fn serial_file_preparation_produces_deterministic_ordered_output() {
     frontend.set_source_files(source_files);
 
     let input_files = vec![
-        beanstalk_input_file(canonical_a.clone(), "alpha = 1\n#[hello]\n[runtime]\n"),
-        beanstalk_input_file(canonical_b.clone(), "Beta #= 2\n"),
-        beanstalk_input_file(canonical_c.clone(), "Gamma #= 3\n"),
+        tokenized_beanstalk_prepared_input(
+            &frontend.source_files,
+            &frontend.style_directives,
+            &mut frontend.string_table,
+            canonical_a.clone(),
+            "alpha = 1\n#[hello]\n[runtime]\n",
+        ),
+        tokenized_beanstalk_prepared_input(
+            &frontend.source_files,
+            &frontend.style_directives,
+            &mut frontend.string_table,
+            canonical_b.clone(),
+            "Beta #= 2\n",
+        ),
+        tokenized_beanstalk_prepared_input(
+            &frontend.source_files,
+            &frontend.style_directives,
+            &mut frontend.string_table,
+            canonical_c.clone(),
+            "Gamma #= 3\n",
+        ),
     ];
     let source_byte_count = source_byte_count(&input_files);
     assert_eq!(
@@ -634,13 +708,13 @@ fn parallel_file_preparation_produces_deterministic_ordered_output() {
     let temp_dir = tempfile::tempdir().expect("should create temp dir");
 
     let mut canonical_paths = Vec::new();
-    let mut input_files = Vec::new();
+    let mut sources = Vec::new();
     for index in 0..super::FILE_PREPARATION_ALWAYS_PARALLEL_FILE_COUNT {
         let path = temp_dir.path().join(format!("{index}.bst"));
         let source = format!("value_{index} #= {index}\n");
         fs::write(&path, &source).unwrap();
         let canonical = fs::canonicalize(&path).unwrap();
-        input_files.push(beanstalk_input_file(canonical.clone(), &source));
+        sources.push(source);
         canonical_paths.push(canonical);
     }
 
@@ -658,10 +732,25 @@ fn parallel_file_preparation_produces_deterministic_ordered_output() {
     )
     .expect("source file table should build");
 
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let input_files = canonical_paths
+        .iter()
+        .zip(&sources)
+        .map(|(canonical, source)| {
+            tokenized_beanstalk_prepared_input(
+                &source_files,
+                &style_directives,
+                &mut string_table,
+                canonical.clone(),
+                source,
+            )
+        })
+        .collect::<Vec<PreparedSourceInput>>();
+
     let mut frontend = CompilerFrontend::new(
         &Config::new(temp_dir.path().to_path_buf()),
         string_table,
-        StyleDirectiveRegistry::built_ins(),
+        style_directives,
         Arc::new(ExternalPackageRegistry::new()),
         None,
     );

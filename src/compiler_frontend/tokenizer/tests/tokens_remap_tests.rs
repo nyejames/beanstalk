@@ -268,3 +268,60 @@ fn file_tokens_with_path_tokens_remaps_nested_items() {
     assert_eq!(second_path, vec!["utils", "helper"]);
     assert!(second.alias.is_none());
 }
+
+#[test]
+fn rebind_source_identity_updates_scopes_without_changing_spans_or_paths() {
+    let mut table = StringTable::new();
+
+    let original_scope = InternedPath::from_single_str("stage0_absolute.bst", &mut table);
+    let logical_scope = InternedPath::from_single_str("module/logical.bst", &mut table);
+
+    let path_item = make_path_token_item(&["helper", "util"], Some("u"), &mut table);
+    let tokens = vec![
+        make_token(
+            TokenKind::Symbol(table.intern("alpha")),
+            original_scope.clone(),
+        ),
+        make_token(TokenKind::Path(vec![path_item]), original_scope.clone()),
+    ];
+
+    let canonical = std::path::PathBuf::from("/canonical/logical.bst");
+    let mut file_tokens = FileTokens::new_with_identity(original_scope.clone(), None, None, tokens);
+
+    let file_id = crate::compiler_frontend::symbols::identity::FileId(7);
+    file_tokens.rebind_source_identity(
+        logical_scope.clone(),
+        Some(file_id),
+        Some(canonical.clone()),
+    );
+
+    // Top-level identity fields are rebound.
+    assert_eq!(file_tokens.src_path, logical_scope);
+    assert_eq!(file_tokens.file_id, Some(file_id));
+    assert_eq!(file_tokens.canonical_os_path, Some(canonical));
+
+    // Every token location scope is rebound, spans are untouched.
+    for token in &file_tokens.tokens {
+        assert_eq!(token.location.scope, logical_scope);
+        assert_eq!(token.location.start_pos, CharPosition::default());
+        assert_eq!(token.location.end_pos, CharPosition::default());
+    }
+
+    // Path token item locations are rebound but the import path payload is unchanged.
+    let path_token = &file_tokens.tokens[1];
+    let items = match &path_token.kind {
+        TokenKind::Path(items) => items,
+        _ => panic!("expected Path token"),
+    };
+    let item = &items[0];
+    assert_eq!(item.path_location.scope, logical_scope);
+    assert!(item.alias_location.is_some());
+    assert_eq!(item.alias_location.as_ref().unwrap().scope, logical_scope);
+    let path_strings: Vec<&str> = item
+        .path
+        .as_components()
+        .iter()
+        .map(|id| table.resolve(*id))
+        .collect();
+    assert_eq!(path_strings, vec!["helper", "util"]);
+}

@@ -233,6 +233,7 @@ pub(crate) fn compile_single_file_frontend(
         &project_path_resolver,
         style_directives,
         &mut external_imports,
+        None,
         string_table,
     ) {
         Ok(input_files) => input_files,

@@ -23,6 +23,7 @@ use crate::compiler_frontend::symbols::identity::SourceFileTable;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::{
     CompilerFrontend, FrontendBuildProfile, FrontendFilePrepareContext, FrontendFilePrepareInput,
+    FrontendFilePrepareSource,
 };
 use crate::projects::html_project::beandown::input::{BeandownCompileRequest, BeandownSourceUnit};
 use crate::projects::html_project::beandown::output::{
@@ -167,9 +168,10 @@ fn prepare_source_file(
         options: &options,
     };
     let input = FrontendFilePrepareInput {
-        source_code: &source.source_text,
-        source_path: &source.source_path,
-        source_kind: SourceFileKind::Beandown,
+        source: FrontendFilePrepareSource::Beandown {
+            source_code: &source.source_text,
+            source_path: &source.source_path,
+        },
         const_template_offset: 0,
         runtime_fragment_offset: 0,
     };

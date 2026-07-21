@@ -5,7 +5,7 @@
 //! borrow checking.
 
 use crate::build_system::build::{
-    CompiledModuleResult, InputFile, Module, ModuleRootActivity, ResolvedConstFragment,
+    CompiledModuleResult, Module, ModuleRootActivity, ResolvedConstFragment,
 };
 
 use crate::builder_surface::external_import_providers::provider::BuilderRuntimePackageMetadata;
@@ -33,7 +33,10 @@ use crate::compiler_frontend::symbols::identity::SourceFileTable;
 use crate::compiler_frontend::symbols::string_interning::{StringTable, StringTableForkSource};
 use crate::compiler_frontend::{
     CompilerFrontend, FrontendBuildProfile, FrontendFilePrepareContext, FrontendFilePrepareInput,
+    FrontendFilePrepareSource,
 };
+
+use super::prepared_source::PreparedSourceInput;
 
 #[cfg(feature = "detailed_timers")]
 use crate::benchmark_timer_log;
@@ -174,7 +177,7 @@ impl FrontendModuleBuildContext<'_> {
     /// Compile one discovered module through the full frontend pipeline.
     pub(super) fn compile_module(
         self,
-        module: &[InputFile],
+        module: &[PreparedSourceInput],
         entry_file_path: &Path,
         string_table: StringTable,
     ) -> Result<CompiledModuleResult, CompilerMessages> {
@@ -204,8 +207,9 @@ impl FrontendModuleBuildContext<'_> {
             // 1. Map input source files into the compiler's source table.
             Self::attach_source_files(&mut compiler, module, entry_file_path)?;
 
-            // 2. Prepare all files: tokenize and parse headers in one local string-table
-            //    per file, then merge/remap once before aggregation.
+            // 2. Prepare all files against one local string-table per worker chunk. Beanstalk
+            //    files parse retained Stage 0 tokens, Beandown tokenizes its body once and plain
+            //    Markdown bypasses tokenization. Merge/remap once before aggregation.
             let (module_headers, file_warnings) = timed_frontend_stage(
                 "frontend.file_prepare",
                 "Files Prepared in: ",
@@ -381,13 +385,11 @@ impl FrontendModuleBuildContext<'_> {
 
     fn attach_source_files(
         compiler: &mut CompilerFrontend,
-        module: &[InputFile],
+        module: &[PreparedSourceInput],
         entry_file_path: &Path,
     ) -> Result<(), CompilerMessages> {
         let source_files = SourceFileTable::build(
-            module
-                .iter()
-                .map(|input_file| input_file.source_path.as_path()),
+            module.iter().map(|input_file| input_file.source_path()),
             entry_file_path,
             compiler.project_path_resolver.as_ref(),
             &mut compiler.string_table,
@@ -398,8 +400,8 @@ impl FrontendModuleBuildContext<'_> {
         Ok(())
     }
 
-    /// Prepare all source files in the module by tokenizing and header-parsing each one against a
-    /// local string-table fork, then merging and remapping in deterministic input order.
+    /// Prepare all source files in the module against local string-table forks, then merge and
+    /// remap them in deterministic input order.
     ///
     /// WHAT: small modules use a serial fast path, while large modules use Rayon. Both paths
     ///       produce the same per-file result records and share the same merge/remap aggregation.
@@ -407,7 +409,7 @@ impl FrontendModuleBuildContext<'_> {
     ///      without changing deterministic merge order or frontend ownership boundaries.
     fn prepare_module_files(
         compiler: &mut CompilerFrontend,
-        module: &[InputFile],
+        module: &[PreparedSourceInput],
         entry_file_path: &Path,
         external_import_resolution_table: &ExternalImportResolutionTable,
         source_byte_count: usize,
@@ -647,7 +649,7 @@ impl FrontendModuleBuildContext<'_> {
     }
 
     fn prepare_module_file_chunks(
-        module: &[InputFile],
+        module: &[PreparedSourceInput],
         fork_source: &StringTableForkSource,
         prepare_context: &FrontendFilePrepareContext<'_>,
         const_template_offset: usize,
@@ -710,7 +712,7 @@ impl FrontendModuleBuildContext<'_> {
 
     fn prepare_module_file_chunk(
         plan: FilePreparationChunkPlan,
-        module: &[InputFile],
+        module: &[PreparedSourceInput],
         fork_source: &StringTableForkSource,
         prepare_context: &FrontendFilePrepareContext<'_>,
         const_template_offset: usize,
@@ -721,10 +723,32 @@ impl FrontendModuleBuildContext<'_> {
 
         for file_index in plan.file_range.clone() {
             let file = &module[file_index];
+            let source = match file {
+                PreparedSourceInput::Beanstalk {
+                    source_path,
+                    tokens,
+                    ..
+                } => FrontendFilePrepareSource::Beanstalk {
+                    source_path,
+                    tokens: tokens.as_ref(),
+                },
+                PreparedSourceInput::Beandown {
+                    source_code,
+                    source_path,
+                } => FrontendFilePrepareSource::Beandown {
+                    source_code,
+                    source_path,
+                },
+                PreparedSourceInput::PlainMarkdown {
+                    source_code,
+                    source_path,
+                } => FrontendFilePrepareSource::PlainMarkdown {
+                    source_code,
+                    source_path,
+                },
+            };
             let input = FrontendFilePrepareInput {
-                source_code: &file.source_code,
-                source_path: &file.source_path,
-                source_kind: file.source_kind,
+                source,
                 const_template_offset,
                 runtime_fragment_offset,
             };
@@ -917,13 +941,13 @@ fn validate_preparation_chunk_order(
     Ok(())
 }
 
-fn record_module_input_counters(module: &[InputFile]) -> usize {
+fn record_module_input_counters(module: &[PreparedSourceInput]) -> usize {
     add_frontend_counter(FrontendCounter::ModuleCount, 1);
     add_frontend_counter(FrontendCounter::SourceFileCount, module.len());
 
     let source_byte_count = module
         .iter()
-        .map(|input_file| input_file.source_code.len())
+        .map(|input_file| input_file.source_code().len())
         .sum();
     add_frontend_counter(FrontendCounter::SourceByteCount, source_byte_count);
     source_byte_count
@@ -1092,7 +1116,7 @@ fn merge_stage_messages(
 }
 
 fn collect_module_source_logical_paths(
-    module: &[InputFile],
+    module: &[PreparedSourceInput],
     project_path_resolver: Option<&ProjectPathResolver>,
     string_table: &mut StringTable,
 ) -> Result<Vec<String>, CompilerError> {
@@ -1103,7 +1127,7 @@ fn collect_module_source_logical_paths(
     let mut logical_paths = Vec::with_capacity(module.len());
     for input_file in module {
         let logical_path = project_path_resolver
-            .logical_path_for_canonical_file(&input_file.source_path, string_table)?;
+            .logical_path_for_canonical_file(input_file.source_path(), string_table)?;
         let logical_path_text = logical_path.to_str().ok_or_else(|| {
             CompilerError::file_error(
                 &logical_path,

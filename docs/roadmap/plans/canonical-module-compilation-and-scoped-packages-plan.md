@@ -9,29 +9,30 @@ Replace entry-closure compilation with canonical project and package graphs, imm
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/canonical-module-compilation-and-scoped-packages-plan.md
 STATUS: active
-CURRENT_SLICE: Phase 4d accepted; checkpoint commit pending
-LAST_ACCEPTED_COMMIT: 96a7ac138 (Phase 4c typed local declaration-ordering hints)
-WORKTREE: main at 96a7ac138 with accepted Phase 4d code, tests and this plan update; unrelated user documentation work may appear and must be preserved
+CURRENT_SLICE: Phase 4e accepted; checkpoint commit pending
+LAST_ACCEPTED_COMMIT: 8ad4c9a2a (Phase 4d provider-independent declaration-shell preparation)
+WORKTREE: main at 8ad4c9a2a with accepted Phase 4e code, tests, index update and this parent-owned plan update; unrelated user documentation work may appear and must be preserved
 REQUIRED_RELOADS: startup files, this plan, relevant language/import and borrow references, current frontend/header source and diff
 RELEVANT_CONTEXT_NOW:
 - docs: compiler-design-overview.md Stage 2 and build-system-design.md Prepared-source orchestration require retained syntax before provider binding with no reparse
-- code: per-file token/header preparation and its contexts no longer receive ExternalPackageRegistry; bind_module_headers validates retained prelude-function declaration names and prelude-type generic parameters before building provider-backed visibility
+- code: ScannedImportSource retains source text, StructuralProviderReference values and FileTokens; PreparedSourceInput makes source-kind/token states explicit; header preparation consumes retained .bst tokens after source-identity rebinding
 ACCEPTANCE_CRITERIA:
-- per-file token/header syntax preparation takes no ExternalPackageRegistry or provider-interface input
-- retained declaration and generic-parameter shells carry enough authored identity and location for binding to validate prelude collisions after provider interfaces exist
-- bind_module_headers owns provider/prelude collision validation without retokenizing or reparsing source
-- existing reserved-name and generic-parameter collision diagnostic codes, reasons and source locations remain unchanged
-- obsolete registry fields and arguments are removed rather than retained as compatibility plumbing
+- Stage 0 import scanning retains the exact FileTokens stream used to collect structural provider references and carries it with the discovered Beanstalk source
+- frontend header preparation consumes retained .bst tokens and never invokes the tokenizer again for a discovered Beanstalk file; Beandown remains tokenized exactly once and plain Markdown remains non-tokenized
+- retained token paths, nested path-item locations and FileId/canonical identity are rebound or remapped into the module SourceFileTable without reconstructing lexical facts
+- provider-capable serial discovery, provider-free classification/parallel discovery and provider-required fallback all preserve one lexical pass per .bst source and deterministic string-table/diagnostic order
+- the old scan-and-discard token path and frontend retokenization fallback for discovered .bst files are removed rather than kept as optional compatibility paths
+- import behavior, diagnostics, module inputs, file-preparation scheduling and current language behavior remain unchanged with focused hidden-invariant coverage
 VALIDATION_STATE:
-- Phase 4c just validate: passed; cross-target Clippy, 3417 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases
-- Phase 4d focused validation: passed; 116 header tests, 13 namespace-import tests, 20 generic-parameter tests, 19 orchestration tests, canonical prelude collision case and cargo check --tests
 - Phase 4d just validate: passed; cross-target Clippy, 3419 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases
-DOCS_IMPACT: current plan state refreshed; progress matrix unchanged for a behavior-preserving stage-ownership move
-BLOCKERS_OR_OPEN_DECISIONS: provider-independent declaration-shell preparation is complete; temporal Stage 0 retention must preserve deterministic string-table/file identity and provider-free parallel discovery
+- Phase 4e focused validation: passed; 2 import-scanning, 5 reachability, 178 module-discovery, 19 orchestration, 5 token-remap and 116 header tests plus cargo check --tests and git diff --check
+- Phase 4e just validate: passed; cross-target Clippy, 3423 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases (-1ms average)
+DOCS_IMPACT: index.md names prepared_source.rs; progress matrix unchanged because support and behavior did not change
+BLOCKERS_OR_OPEN_DECISIONS: none; exact token retention and provider-free/provider-required reuse are accepted
 DELEGATION_DECISION: ollama - user requires Ollama for every worker slice
 NEXT_WORKER_ORDER: ollama only; no provider substitution for this run
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit Phase 4d, record its hash, then scope the smallest coherent Stage 0 prepared-syntax retention slice
+NEXT_RESUME_ACTION: commit Phase 4e, record its hash, then scope the smallest coherent retained PreparedHeaderSyntax scheduling slice
 ```
 
 ## Hard prerequisites
@@ -391,6 +392,21 @@ Accepted Phase 4d checkpoint:
 - import-alias generic collisions remain syntax-owned, while same-file and imported visible-type
   generic collisions remain AST-owned. No duplicate provider-aware syntax path or compatibility
   argument remains.
+
+Accepted Phase 4e checkpoint:
+
+- Stage 0 retains each discovered Beanstalk file's exact `FileTokens` beside its source text and
+  structural provider references. `PreparedSourceInput` represents Beanstalk, Beandown and plain
+  Markdown as type-distinct states, so only Beanstalk can carry retained tokens.
+- frontend file preparation rebinds retained token source identity to the module `SourceFileTable`
+  and parses it without another lexical pass. Beandown still tokenizes its template body exactly
+  once and plain Markdown remains non-tokenized.
+- provider-free classification completes the reachable local graph and retains one shared scan
+  cache. Provider-free workers and provider-required serial replay consume that cache without
+  rereading or retokenizing Beanstalk source while preserving deterministic string-table identity.
+- the discarded-token scan path, discovered-Beanstalk frontend retokenization and obsolete raw
+  `InputFile` payload were removed. Focused tests cover source reads, retained-token state and
+  nested path-location rebinding without changing import or diagnostic behavior.
 
 ### Phase 5: Build deterministic project, package and provider graphs
 

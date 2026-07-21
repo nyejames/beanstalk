@@ -264,6 +264,43 @@ impl FileTokens {
             token.remap_string_ids(remap);
         }
     }
+
+    /// Rebind this token stream to a new module source identity.
+    ///
+    /// WHAT: replaces `src_path`, `file_id`, `canonical_os_path`, every top-level token
+    ///       location scope, and every `PathTokenItem` path/alias location scope with the
+    ///       supplied logical path and file identity.
+    /// WHY: Stage 0 tokenizes each `.bst` file once against a filesystem identity. After the
+    ///      complete module file set is known, `SourceFileTable` assigns the module logical
+    ///      path, deterministic `FileId`, and canonical OS path. Retained tokens must adopt
+    ///      that identity so downstream header parsing, diagnostics, and import shells see the
+    ///      same logical source scope as freshly tokenized files.
+    ///
+    /// This method does not change import path payloads (`PathTokenItem.path`) or source spans
+    /// (`start_pos`/`end_pos`). Only the source-scope identity is rebound.
+    pub fn rebind_source_identity(
+        &mut self,
+        logical_path: InternedPath,
+        file_id: Option<FileId>,
+        canonical_os_path: Option<PathBuf>,
+    ) {
+        self.src_path = logical_path.clone();
+        self.file_id = file_id;
+        self.canonical_os_path = canonical_os_path;
+
+        for token in &mut self.tokens {
+            token.location.scope = logical_path.clone();
+
+            if let TokenKind::Path(items) = &mut token.kind {
+                for item in items {
+                    item.path_location.scope = logical_path.clone();
+                    if let Some(alias_location) = &mut item.alias_location {
+                        alias_location.scope = logical_path.clone();
+                    }
+                }
+            }
+        }
+    }
 }
 
 pub struct TokenStream<'a> {

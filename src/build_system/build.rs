@@ -24,10 +24,10 @@ use crate::compiler_frontend::style_directives::{StyleDirectiveRegistry, StyleDi
 use crate::compiler_frontend::symbols::compiler_symbols::CompilerSymbolSet;
 use crate::compiler_frontend::symbols::string_interning::{StringIdRemap, StringTable};
 
+use crate::builder_surface::BuilderSurface;
 use crate::builder_surface::external_import_providers::provider::{
     RequiredRuntimeImport, RuntimeAssetIdentity,
 };
-use crate::builder_surface::{BuilderSurface, SourceFileKind};
 use crate::compiler_frontend::external_packages::{ExternalPackageId, ExternalPackageRegistry};
 use crate::projects::settings::{Config, ProjectConfigError};
 
@@ -203,15 +203,8 @@ pub(crate) struct BuildBootstrap {
 }
 
 // -------------------------
-//  Input/Output Payload
+//  Output Payload
 // -------------------------
-
-/// Raw input source payload used by builders that compile from in-memory files.
-pub struct InputFile {
-    pub source_code: String,
-    pub source_path: PathBuf,
-    pub source_kind: SourceFileKind,
-}
 
 pub struct OutputFile {
     relative_output_path: PathBuf,

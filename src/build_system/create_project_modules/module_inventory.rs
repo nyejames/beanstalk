@@ -5,8 +5,6 @@
 //! WHY: module inventory is the Stage 0 bridge between filesystem discovery and parallel
 //! frontend compilation; root setup and source-backed package validation live in sibling modules.
 
-use crate::build_system::build::InputFile;
-
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_messages::InvalidConfigReason;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
@@ -15,9 +13,12 @@ use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::projects::settings::Config;
 
 use rayon::prelude::*;
+use rustc_hash::FxHashMap;
 
 use std::path::PathBuf;
 
+use super::import_scanning::ScannedImportSource;
+use super::prepared_source::PreparedSourceInput;
 use super::project_structure_diagnostics::{config_diagnostic_messages, path_id};
 use super::reachable_file_discovery::{
     ExternalImportDiscoveryState, ProviderFreeDiscoveryFailed, ProviderFreeProjectInventory,
@@ -35,7 +36,7 @@ const PROVIDER_FREE_PARALLEL_MIN_MODULES: usize = 2;
 /// Entry point and all collected source files for one discovered module.
 pub(crate) struct DiscoveredModule {
     pub(crate) entry_point: PathBuf,
-    pub(crate) input_files: Vec<InputFile>,
+    pub(crate) input_files: Vec<PreparedSourceInput>,
 }
 
 /// Scans the directory project for all root entry files and their reachable dependencies.
@@ -63,8 +64,13 @@ pub(crate) fn discover_all_modules_in_project(
     // Conservative gate: only take the provider-free parallel path when the entire reachable
     // import graph contains no provider-backed imports and no unsupported non-Beanstalk
     // extensions. This keeps provider cache/resolution table mutations on the serial path.
-    // WHY: classification itself reads Beanstalk source files; skip it for the common single-entry
-    //      case because that path stays serial provider-capable anyway.
+    // WHY: classification itself reads and tokenizes every reachable Beanstalk source file and
+    //      retains the complete scan cache. It records `provider_capable_required` and skips the
+    //      external edge when a provider-backed or unsupported package import needs the serial
+    //      owner, but it never aborts and discards that cache. The serial fallback then reuses the
+    //      retained lexical data for every already-scanned `.bst` so the lexer never runs twice.
+    //      Skip classification for the common single-entry case because that path stays serial
+    //      provider-capable anyway.
     let provider_free_inventory = if entry_points.len() >= PROVIDER_FREE_PARALLEL_MIN_MODULES {
         classify_provider_free_project(
             &entry_points,
@@ -75,10 +81,10 @@ pub(crate) fn discover_all_modules_in_project(
         )
         .map_err(|error| error.into_messages(string_table))?
     } else {
-        None
+        ProviderFreeProjectInventory::provider_capable_required()
     };
 
-    if let Some(provider_free_inventory) = provider_free_inventory {
+    if !provider_free_inventory.provider_capable_required {
         let provider_free_modules = discover_modules_provider_free_parallel(
             &entry_points,
             project_path_resolver,
@@ -93,7 +99,16 @@ pub(crate) fn discover_all_modules_in_project(
             Err(ProviderFreeDiscoveryFailed) => {
                 // Worker-local diagnostics cannot be rendered on the parent string table. Retry on
                 // the serial provider-capable path so the existing Stage 0 diagnostic owner reports
-                // the real filesystem/import failure with stable path identity.
+                // the real filesystem/import failure with stable path identity. Reuse the complete
+                // classification cache so the lexer never runs twice for the same source.
+                return discover_modules_serial_provider_capable(
+                    entry_points,
+                    project_path_resolver,
+                    style_directives,
+                    external_imports,
+                    Some(&provider_free_inventory.source_cache),
+                    string_table,
+                );
             }
         }
     }
@@ -103,6 +118,7 @@ pub(crate) fn discover_all_modules_in_project(
         project_path_resolver,
         style_directives,
         external_imports,
+        Some(&provider_free_inventory.source_cache),
         string_table,
     )
 }
@@ -117,6 +133,7 @@ fn discover_modules_serial_provider_capable(
     project_path_resolver: &ProjectPathResolver,
     style_directives: &StyleDirectiveRegistry,
     external_imports: &mut ExternalImportDiscoveryState<'_>,
+    classification_cache: Option<&FxHashMap<PathBuf, ScannedImportSource>>,
     string_table: &mut StringTable,
 ) -> Result<Vec<DiscoveredModule>, CompilerMessages> {
     let mut modules = Vec::with_capacity(entry_points.len());
@@ -127,6 +144,7 @@ fn discover_modules_serial_provider_capable(
             project_path_resolver,
             style_directives,
             external_imports,
+            classification_cache,
             string_table,
         )?;
 
@@ -142,8 +160,8 @@ fn discover_modules_serial_provider_capable(
 /// Parallel provider-free module discovery.
 ///
 /// WHAT: discovers each module's reachable files in a separate Rayon worker using a worker-local
-///       `StringTable`; the shared `StringTable` is only used again when assembling `InputFile`
-///       values on the main thread.
+///       `StringTable`; the shared `StringTable` is only used again when assembling
+///       `PreparedSourceInput` values on the main thread.
 /// WHY: provider-free BFS is embarrassingly parallel across entry points and does not need the
 ///      mutable provider state that makes provider-capable discovery serial.
 fn discover_modules_provider_free_parallel(
@@ -154,14 +172,17 @@ fn discover_modules_provider_free_parallel(
     provider_free_inventory: &ProviderFreeProjectInventory,
     string_table: &mut StringTable,
 ) -> Result<Vec<DiscoveredModule>, ProviderFreeDiscoveryFailed> {
-    // Run provider-free BFS for each entry point in parallel. Each worker owns a fresh
-    // `StringTable` and only returns `ReachableSourceInventory` (paths + source text), so no
-    // interned IDs need cross-thread interpretation or remapping.
+    // Run provider-free BFS for each entry point in parallel. Each worker forks a local
+    // `StringTable` from the parent so classification's retained tokens (parent-valid StringIds)
+    // stay interpretable without re-tokenizing. Workers only return `ReachableSourceInventory`
+    // carrying source text plus retained tokens whose StringIds are parent-valid, so no
+    // worker-local IDs need cross-thread interpretation or remapping.
+    let fork_source = string_table.fork_source();
     let mut indexed_inventories: Vec<(usize, ReachableSourceInventory)> = entry_points
         .par_iter()
         .enumerate()
         .map(|(index, entry_path)| {
-            let mut local_string_table = StringTable::new();
+            let mut local_string_table = fork_source.fork_for_module().into_parts().0;
             let inventory = discover_reachable_source_files_provider_free(
                 entry_path,
                 project_path_resolver,

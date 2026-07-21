@@ -12,7 +12,7 @@ use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::interned_path::{InternedPath, NonUtf8PathComponent};
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::lexer::tokenize;
-use crate::compiler_frontend::tokenizer::tokens::TokenizerEntryMode;
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenizerEntryMode};
 
 use std::path::Path;
 
@@ -25,10 +25,17 @@ use super::source_loading::extract_source_code;
 ///      them.
 /// WHY: reachable-file discovery consumes the references directly, using `path` for current
 ///      resolution while retaining `path_location` for the graph boundary, and reuses the source
-///      when assembling `InputFile` values instead of reading each scanned `.bst` file again.
+///      when assembling `PreparedSourceInput` values instead of reading each scanned `.bst` file again.
+#[derive(Clone)]
 pub(super) struct ScannedImportSource {
     pub(super) imports: Vec<StructuralProviderReference>,
     pub(super) source_code: String,
+    /// Exact token stream from the single Stage 0 lexical pass over this Beanstalk file.
+    ///
+    /// WHAT: the `FileTokens` produced by the same `tokenize` call that discovered `imports`.
+    /// WHY: frontend header preparation consumes this retained stream instead of re-tokenizing
+    ///      the source text, so each discovered `.bst` file is lexed exactly once.
+    pub(super) tokens: FileTokens,
 }
 
 // -------------------------
@@ -75,7 +82,7 @@ pub(super) fn scan_imports_from_source(
 
     // Tokenize the file to find path declarations. Callers may supply source text that was read
     // during an earlier Stage 0 classification pass so provider-free discovery does not re-read
-    // the same Beanstalk file before assembling `InputFile` values.
+    // the same Beanstalk file before assembling `PreparedSourceInput` values.
     let tokens = tokenize(
         &source,
         &interned_path,
@@ -92,5 +99,6 @@ pub(super) fn scan_imports_from_source(
     Ok(ScannedImportSource {
         imports,
         source_code: source,
+        tokens,
     })
 }

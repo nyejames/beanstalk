@@ -1,12 +1,10 @@
 //! BFS traversal over Beanstalk import graphs to find all reachable source files.
 //!
 //! Given an entry `.bst` file, walks its import declarations transitively to build the complete
-//! set of source files that belong to a module. Also assembles `InputFile` payloads from those
-//! paths for downstream compilation stages.
+//! set of source files that belong to a module. Also assembles `PreparedSourceInput` payloads
+//! from those paths for downstream compilation stages.
 // Stage 0 deliberately returns full diagnostic/infrastructure payloads in `SourceDiscoveryError`
 // so import discovery does not erase source locations or downgrade filesystem failures.
-
-use crate::build_system::build::InputFile;
 
 use crate::builder_surface::SourceFileKind;
 use crate::builder_surface::external_import_providers::cache::ExternalImportCacheKey;
@@ -34,9 +32,8 @@ use std::collections::{BTreeSet, VecDeque};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use super::import_scanning::{
-    ScannedImportSource, scan_imports_from_source, scan_imports_with_source,
-};
+use super::import_scanning::{ScannedImportSource, scan_imports_with_source};
+use super::prepared_source::PreparedSourceInput;
 use super::source_discovery_error::SourceDiscoveryError;
 use super::source_loading::{extract_source_code, read_source_code, source_read_error};
 
@@ -80,24 +77,47 @@ pub(super) struct ReachableSourceFile {
 
 /// Stage 0 inventory produced by reachable-file discovery.
 ///
-/// WHAT: owns the deterministic input-file list plus source text already read while scanning
-///       Beanstalk imports.
-/// WHY: source loading policy belongs to Stage 0. Header parsing and later frontend stages should
-///      continue to receive plain `InputFile` values without knowing whether text came from the
+/// WHAT: owns the deterministic input-file list plus the retained `ScannedImportSource` for every
+///       reachable `.bst` file read while scanning imports.
+/// WHY: source loading policy belongs to Stage 0. `assemble_input_files_from_inventory` turns
+///      this into `PreparedSourceInput` values, so header parsing and later frontend stages
+///      receive the state-safe prepared type without knowing whether text came from the
 ///      import-scan cache or a later raw file read.
 pub(super) struct ReachableSourceInventory {
     pub(super) files: Vec<ReachableSourceFile>,
-    source_cache: FxHashMap<PathBuf, String>,
+    source_cache: FxHashMap<PathBuf, ScannedImportSource>,
 }
 
-/// Source text proven provider-free during the serial classification pass.
+/// Retained Stage 0 source proven provider-free during the serial classification pass.
 ///
-/// WHAT: keeps the Beanstalk source read while proving whether provider-free parallel discovery is
-///       safe.
-/// WHY: the provider-free workers still need to tokenize imports per entry module, but they should
-///      not undo Phase 3's source-reuse work by re-reading every classified `.bst` file.
+/// WHAT: keeps the `ScannedImportSource` (source text, structural provider references, and the
+///       exact `FileTokens` from the single lexical pass) for every reachable `.bst` file.
+/// WHY: provider-free workers reuse this retained lexical data instead of re-reading or
+///      re-tokenizing each classified `.bst` file. The serial provider-capable fallback also
+///      reuses it when a worker fails, so the lexer never runs twice for the same source.
 pub(super) struct ProviderFreeProjectInventory {
-    pub(super) source_cache: FxHashMap<PathBuf, String>,
+    pub(super) source_cache: FxHashMap<PathBuf, ScannedImportSource>,
+    /// Whether provider-capable serial replay is required.
+    ///
+    /// WHAT: set when classification traversed the complete reachable local `.bst` graph and
+    ///       encountered a provider-backed import or unsupported package condition that only the
+    ///       serial provider-capable owner can resolve.
+    /// WHY: the inventory is still returned with its complete retained scan cache so the serial
+    ///      fallback reuses it instead of re-tokenizing every already-scanned `.bst`.
+    pub(super) provider_capable_required: bool,
+}
+
+impl ProviderFreeProjectInventory {
+    /// An empty inventory that forces the serial provider-capable path with no retained cache.
+    ///
+    /// WHY: used for the single-entry case where classification is skipped because the path stays
+    ///      serial provider-capable anyway.
+    pub(super) fn provider_capable_required() -> Self {
+        ProviderFreeProjectInventory {
+            source_cache: FxHashMap::default(),
+            provider_capable_required: true,
+        }
+    }
 }
 
 struct MissingSourceFile {
@@ -109,6 +129,39 @@ struct LoadedMissingSourceFile {
     input_index: usize,
     source_file: ReachableSourceFile,
     source_code: String,
+}
+
+/// Build a `PreparedSourceInput` from a cache-miss load.
+///
+/// WHAT: selects the Beandown or PlainMarkdown variant from the resolved source kind. Cache
+///       misses are never Beanstalk — every reachable `.bst` is scanned and cached during
+///       traversal — so no Beanstalk variant carries a raw load here.
+/// WHY: keeps the strict source-kind/token relationship: a loaded file has no retained tokens
+///      and cannot become a Beanstalk `PreparedSourceInput`.
+fn prepared_input_from_loaded(loaded: LoadedMissingSourceFile) -> PreparedSourceInput {
+    let LoadedMissingSourceFile {
+        source_file,
+        source_code,
+        ..
+    } = loaded;
+    match source_file.kind {
+        SourceFileKind::Beandown => PreparedSourceInput::Beandown {
+            source_code,
+            source_path: source_file.path,
+        },
+        SourceFileKind::PlainMarkdown => PreparedSourceInput::PlainMarkdown {
+            source_code,
+            source_path: source_file.path,
+        },
+        SourceFileKind::Beanstalk => {
+            // Every reachable Beanstalk file is scanned and cached during traversal, so a cache
+            // miss can only be Beandown or PlainMarkdown. Reaching this arm is a proven
+            // invariant violation rather than a user-facing failure.
+            unreachable!(
+                "Stage 0 cache-miss load produced a Beanstalk file without retained tokens"
+            )
+        }
+    }
 }
 
 struct SourceReadFailure {
@@ -127,8 +180,9 @@ pub(super) fn collect_reachable_input_files(
     project_path_resolver: &ProjectPathResolver,
     style_directives: &StyleDirectiveRegistry,
     external_imports: &mut ExternalImportDiscoveryState<'_>,
+    classification_cache: Option<&FxHashMap<PathBuf, ScannedImportSource>>,
     string_table: &mut StringTable,
-) -> Result<Vec<InputFile>, CompilerMessages> {
+) -> Result<Vec<PreparedSourceInput>, CompilerMessages> {
     let total_start = crate::timing::start_pipeline_timing();
 
     // 1. Traverse the import graph to find all paths.
@@ -137,6 +191,7 @@ pub(super) fn collect_reachable_input_files(
         project_path_resolver,
         style_directives,
         external_imports,
+        classification_cache,
         string_table,
     ) {
         Ok(files) => files,
@@ -151,29 +206,35 @@ pub(super) fn collect_reachable_input_files(
     result
 }
 
-/// Assemble `InputFile` values from a deterministic Stage 0 inventory.
+/// Assemble `PreparedSourceInput` values from a deterministic Stage 0 inventory.
 ///
-/// WHAT: reuses source text cached during import scanning and loads remaining files through the
-///       serial/parallel cache-miss path.
+/// WHAT: reuses the retained `ScannedImportSource` cached during import scanning for Beanstalk
+///       files and loads remaining Beandown/PlainMarkdown files through the serial/parallel
+///       cache-miss path.
 /// WHY: inventory assembly is the same whether discovery was provider-capable or provider-free,
-///      so it is shared between both paths to keep ordering and loading policy in one place.
+///      so it is shared between both paths to keep ordering and loading policy in one place. The
+///      import-scan cache only holds Beanstalk files, so cache hits always carry the retained
+///      Stage 0 `FileTokens`; cache misses are Beandown/PlainMarkdown, which never carry tokens.
 pub(super) fn assemble_input_files_from_inventory(
     inventory: ReachableSourceInventory,
     string_table: &mut StringTable,
-) -> Result<Vec<InputFile>, CompilerMessages> {
+) -> Result<Vec<PreparedSourceInput>, CompilerMessages> {
     let input_file_count = inventory.files.len();
-    let mut input_slots: Vec<Option<InputFile>> = (0..input_file_count).map(|_| None).collect();
+    let mut input_slots: Vec<Option<PreparedSourceInput>> =
+        (0..input_file_count).map(|_| None).collect();
     let mut missing_sources = Vec::new();
     let mut source_cache = inventory.source_cache;
 
     for (input_index, source_file) in inventory.files.into_iter().enumerate() {
-        if let Some(source_code) = source_cache.remove(&source_file.path) {
+        if let Some(scanned_source) = source_cache.remove(&source_file.path) {
             add_frontend_counter(FrontendCounter::Stage0SourceCacheHitCount, 1);
 
-            input_slots[input_index] = Some(InputFile {
-                source_code,
+            // The import-scan cache only holds Beanstalk files, so the retained token stream is
+            // always present here. Non-Beanstalk files fall through to the cache-miss load path.
+            input_slots[input_index] = Some(PreparedSourceInput::Beanstalk {
+                source_code: scanned_source.source_code,
                 source_path: source_file.path,
-                source_kind: source_file.kind,
+                tokens: Box::new(scanned_source.tokens),
             });
         } else {
             add_frontend_counter(FrontendCounter::Stage0SourceCacheMissCount, 1);
@@ -200,11 +261,8 @@ pub(super) fn assemble_input_files_from_inventory(
             loaded.source_code.len(),
         );
 
-        input_slots[loaded.input_index] = Some(InputFile {
-            source_code: loaded.source_code,
-            source_path: loaded.source_file.path,
-            source_kind: loaded.source_file.kind,
-        });
+        let input_index = loaded.input_index;
+        input_slots[input_index] = Some(prepared_input_from_loaded(loaded));
     }
 
     // All slots are either cache hits or successful miss loads. Keep the join explicit so input
@@ -246,8 +304,13 @@ enum ImportPolicyAction {
     Skip,
     /// Resolve and queue the import as a normal local Beanstalk import.
     QueueLocal,
-    /// Stop the whole traversal and report that the project is not provider-free.
-    AbortClassification,
+    /// Skip this external edge and record that provider-capable serial replay is required.
+    ///
+    /// WHAT: classification returns this for provider-backed imports and unsupported package
+    ///       conditions that only the serial provider-capable owner can resolve. The traversal
+    ///       keeps scanning every reachable local `.bst` file and retains its complete cache, only
+    ///       declining to follow the external edge.
+    SkipProviderCapableRequired,
 }
 
 /// Stage 0 import policy that customizes the shared reachable-file traversal.
@@ -258,13 +321,20 @@ enum ImportPolicyAction {
 ///       while letting the shared BFS own queue handling, canonicalization, and local queuing.
 enum ImportPolicy<'a, 'b> {
     /// Full provider-capable path. Mutates provider cache and resolution tables.
-    Capable(&'a mut ExternalImportDiscoveryState<'b>),
+    ///
+    /// `classification_cache` is `Some` when a provider-free classification pass already
+    /// tokenized every reachable `.bst` file and the provider-free worker path failed. The
+    /// serial fallback reuses those retained tokens instead of re-tokenizing.
+    Capable {
+        external_imports: &'a mut ExternalImportDiscoveryState<'b>,
+        classification_cache: Option<&'a FxHashMap<PathBuf, ScannedImportSource>>,
+    },
     /// Conservative pre-scan that proves a directory build has no provider-backed imports.
     FreeClassification(&'a ExternalPackageRegistry),
-    /// Provider-free worker path that reuses source text proved safe by classification.
+    /// Provider-free worker path that reuses retained lexical data proved safe by classification.
     FreeWorker {
         external_packages: &'a ExternalPackageRegistry,
-        project_source_cache: &'a FxHashMap<PathBuf, String>,
+        project_source_cache: &'a FxHashMap<PathBuf, ScannedImportSource>,
     },
 }
 
@@ -277,25 +347,37 @@ impl<'a, 'b> ImportPolicy<'a, 'b> {
         string_table: &mut StringTable,
     ) -> Result<(ScannedImportSource, SourceScanOrigin), SourceDiscoveryError> {
         match self {
-            ImportPolicy::FreeWorker {
-                project_source_cache,
+            ImportPolicy::Capable {
+                classification_cache,
                 ..
             } => {
-                if let Some(source_code) = project_source_cache.get(canonical_file) {
-                    let scanned_source = scan_imports_from_source(
-                        canonical_file,
-                        source_code.to_owned(),
-                        style_directives,
-                        string_table,
-                    )?;
-                    return Ok((scanned_source, SourceScanOrigin::ReusedFromCache));
+                if let Some(cache) = classification_cache
+                    && let Some(cached) = cache.get(canonical_file)
+                {
+                    return Ok((cached.clone(), SourceScanOrigin::ReusedFromCache));
                 }
 
                 let scanned_source =
                     scan_imports_with_source(canonical_file, style_directives, string_table)?;
                 Ok((scanned_source, SourceScanOrigin::FreshRead))
             }
-            _ => {
+            ImportPolicy::FreeWorker {
+                project_source_cache,
+                ..
+            } => {
+                if let Some(cached) = project_source_cache.get(canonical_file) {
+                    return Ok((cached.clone(), SourceScanOrigin::ReusedFromCache));
+                }
+
+                // Classification walks the full import graph from every entry point, so its
+                // cache covers every Beanstalk file any single-module worker can reach. A miss
+                // here is an invariant violation; fail so the parent retries on the serial
+                // provider-capable path where the lexer can run safely.
+                Err(SourceDiscoveryError::from(CompilerError::compiler_error(
+                    "Provider-free worker reached a Beanstalk file absent from the classification cache",
+                )))
+            }
+            ImportPolicy::FreeClassification(_) => {
                 let scanned_source =
                     scan_imports_with_source(canonical_file, style_directives, string_table)?;
                 Ok((scanned_source, SourceScanOrigin::FreshRead))
@@ -312,7 +394,10 @@ impl<'a, 'b> ImportPolicy<'a, 'b> {
         string_table: &mut StringTable,
     ) -> Result<ImportPolicyAction, SourceDiscoveryError> {
         match self {
-            ImportPolicy::Capable(state) => handle_provider_capable_import(
+            ImportPolicy::Capable {
+                external_imports: state,
+                ..
+            } => handle_provider_capable_import(
                 import_path,
                 canonical_file,
                 project_path_resolver,
@@ -347,17 +432,30 @@ impl<'a, 'b> ImportPolicy<'a, 'b> {
 ///      import scanning, source-cache insertion, and local import queueing are identical across all
 ///      Stage 0 discovery paths. Keeping them in one place prevents the provider-capable and
 ///      provider-free paths from drifting.
+/// Outcome of a shared reachable-file traversal.
+///
+/// WHAT: the complete retained inventory plus whether a provider-backed or unsupported package
+///       import required the serial provider-capable owner.
+/// WHY: classification never discards its cache when replay is required. The serial fallback
+///      consumes the retained cache for every already-scanned `.bst`, so the flag stays separate
+///      from the inventory itself.
+struct ReachableTraversalOutcome {
+    inventory: ReachableSourceInventory,
+    provider_capable_required: bool,
+}
+
 fn traverse_reachable_source_files(
     entry_paths: &[PathBuf],
     project_path_resolver: &ProjectPathResolver,
     style_directives: &StyleDirectiveRegistry,
     policy: &mut ImportPolicy<'_, '_>,
     string_table: &mut StringTable,
-) -> Result<Option<ReachableSourceInventory>, SourceDiscoveryError> {
+) -> Result<ReachableTraversalOutcome, SourceDiscoveryError> {
     let mut reachable = BTreeSet::new();
     let mut queue = VecDeque::new();
     let mut source_cache = FxHashMap::default();
     let mut imports_scanned: usize = 0;
+    let mut provider_capable_required = false;
 
     // Seed with entry points in deterministic order.
     for entry_path in entry_paths {
@@ -434,9 +532,12 @@ fn traverse_reachable_source_files(
             );
         }
 
-        let import_references = scanned_source.imports;
+        // Clone the import references for the traversal loop so the full `ScannedImportSource`
+        // (source text plus retained tokens) can be cached for reuse by provider-free workers
+        // and the serial fallback without re-tokenizing.
+        let import_references = scanned_source.imports.clone();
         imports_scanned += import_references.len();
-        source_cache.insert(canonical_file.clone(), scanned_source.source_code);
+        source_cache.insert(canonical_file.clone(), scanned_source);
 
         for provider in &import_references {
             // Stage 0 resolves reachability through the provider path today; the structural
@@ -467,7 +568,10 @@ fn traverse_reachable_source_files(
                     );
                     result?;
                 }
-                ImportPolicyAction::AbortClassification => return Ok(None),
+                ImportPolicyAction::SkipProviderCapableRequired => {
+                    provider_capable_required = true;
+                    continue;
+                }
             }
         }
     }
@@ -484,10 +588,13 @@ fn traverse_reachable_source_files(
         imports_scanned as f64,
     );
 
-    Ok(Some(ReachableSourceInventory {
-        files: reachable.into_iter().collect(),
-        source_cache,
-    }))
+    Ok(ReachableTraversalOutcome {
+        inventory: ReachableSourceInventory {
+            files: reachable.into_iter().collect(),
+            source_cache,
+        },
+        provider_capable_required,
+    })
 }
 
 /// BFS over import declarations starting from `entry_point`, preserving source kind.
@@ -501,10 +608,14 @@ pub(super) fn discover_reachable_source_files(
     project_path_resolver: &ProjectPathResolver,
     style_directives: &StyleDirectiveRegistry,
     external_imports: &mut ExternalImportDiscoveryState<'_>,
+    classification_cache: Option<&FxHashMap<PathBuf, ScannedImportSource>>,
     string_table: &mut StringTable,
 ) -> Result<ReachableSourceInventory, SourceDiscoveryError> {
-    let mut policy = ImportPolicy::Capable(external_imports);
-    let inventory = traverse_reachable_source_files(
+    let mut policy = ImportPolicy::Capable {
+        external_imports,
+        classification_cache,
+    };
+    let outcome = traverse_reachable_source_files(
         &[entry_point.to_path_buf()],
         project_path_resolver,
         style_directives,
@@ -512,12 +623,12 @@ pub(super) fn discover_reachable_source_files(
         string_table,
     )?;
 
-    inventory.ok_or_else(|| {
-        // Provider-capable traversal never aborts classification, so this is unreachable.
-        SourceDiscoveryError::from(CompilerError::compiler_error(
-            "Provider-capable reachable-file traversal aborted unexpectedly",
-        ))
-    })
+    // Provider-capable traversal never marks replay required, so the flag is always false here.
+    debug_assert!(
+        !outcome.provider_capable_required,
+        "provider-capable traversal must not mark provider-capable replay required"
+    );
+    Ok(outcome.inventory)
 }
 
 /// Resolve a normal Beanstalk import to a filesystem path and enqueue reachable files.
@@ -645,29 +756,32 @@ fn handle_provider_capable_import(
 
 /// Conservative pre-scan that proves a directory build has no reachable provider-backed imports.
 ///
-/// WHAT: walks the same import graph as discovery and returns cached source text only when every
-///       reachable import is either a virtual package import, an extensionless Beanstalk import,
-///       or a builder-supported source kind (e.g. registered `.bd`/`.md`).
+/// WHAT: walks the same import graph as discovery, tokenizing and caching every reachable `.bst`
+///       file. It always completes the full local traversal and retains the complete scan cache.
+///       When a provider-backed import or unsupported package condition requires the serial
+///       provider-capable owner, it records `provider_capable_required` and skips that external
+///       edge rather than aborting and discarding the cache.
 /// WHY: the provider-capable discovery path mutates `ExternalImportDiscoveryState`; proving the
 ///      project is provider-free before forking lets multi-entry module discovery run in Rayon
-///      workers that never touch provider registry deltas.
+///      workers that never touch provider registry deltas. When replay is required, the serial
+///      fallback consumes the retained cache so the lexer never runs twice for the same source.
 pub(super) fn classify_provider_free_project(
     entry_points: &[PathBuf],
     project_path_resolver: &ProjectPathResolver,
     style_directives: &StyleDirectiveRegistry,
     external_packages: &ExternalPackageRegistry,
     string_table: &mut StringTable,
-) -> Result<Option<ProviderFreeProjectInventory>, SourceDiscoveryError> {
+) -> Result<ProviderFreeProjectInventory, SourceDiscoveryError> {
     let total_start = crate::timing::start_pipeline_timing();
     let mut policy = ImportPolicy::FreeClassification(external_packages);
-    let inventory = match traverse_reachable_source_files(
+    let outcome = match traverse_reachable_source_files(
         entry_points,
         project_path_resolver,
         style_directives,
         &mut policy,
         string_table,
     ) {
-        Ok(inventory) => inventory,
+        Ok(outcome) => outcome,
         Err(error) => {
             log_stage_timing("stage0.reachable_discovery.total", total_start);
             return Err(error);
@@ -675,9 +789,10 @@ pub(super) fn classify_provider_free_project(
     };
 
     log_stage_timing("stage0.reachable_discovery.total", total_start);
-    Ok(inventory.map(|reachable| ProviderFreeProjectInventory {
-        source_cache: reachable.source_cache,
-    }))
+    Ok(ProviderFreeProjectInventory {
+        source_cache: outcome.inventory.source_cache,
+        provider_capable_required: outcome.provider_capable_required,
+    })
 }
 
 fn handle_provider_free_classification_import(
@@ -694,15 +809,17 @@ fn handle_provider_free_classification_import(
         .unsupported_known_package_import(import_path, string_table)
         .is_some()
     {
-        // The existing serial path reports this diagnostic with full context.
-        return Ok(ImportPolicyAction::AbortClassification);
+        // The serial provider-capable path reports this diagnostic with full context. Skip the
+        // external edge and mark replay required without discarding the retained cache.
+        return Ok(ImportPolicyAction::SkipProviderCapableRequired);
     }
 
     if provider_backed_import_prefix(import_path, string_table).is_some() {
-        // Registered provider extensions need the serial provider-capable path so the
-        // provider is called and the resolution table is populated. Unsupported non-Beanstalk
-        // extensions also fall back so the existing diagnostic shape is preserved.
-        return Ok(ImportPolicyAction::AbortClassification);
+        // Registered provider extensions need the serial provider-capable path so the provider is
+        // called and the resolution table is populated. Unsupported non-Beanstalk extensions also
+        // fall back so the existing diagnostic shape is preserved. Skip the external edge and mark
+        // replay required without discarding the retained cache.
+        return Ok(ImportPolicyAction::SkipProviderCapableRequired);
     }
 
     Ok(ImportPolicyAction::QueueLocal)
@@ -727,7 +844,7 @@ pub(super) fn discover_reachable_source_files_provider_free(
     project_path_resolver: &ProjectPathResolver,
     style_directives: &StyleDirectiveRegistry,
     external_packages: &ExternalPackageRegistry,
-    project_source_cache: &FxHashMap<PathBuf, String>,
+    project_source_cache: &FxHashMap<PathBuf, ScannedImportSource>,
     string_table: &mut StringTable,
 ) -> Result<ReachableSourceInventory, SourceDiscoveryError> {
     let total_start = crate::timing::start_pipeline_timing();
@@ -736,29 +853,29 @@ pub(super) fn discover_reachable_source_files_provider_free(
         external_packages,
         project_source_cache,
     };
-    let inventory = match traverse_reachable_source_files(
+    let outcome = match traverse_reachable_source_files(
         &[entry_point.to_path_buf()],
         project_path_resolver,
         style_directives,
         &mut policy,
         string_table,
     ) {
-        Ok(inventory) => inventory,
+        Ok(outcome) => outcome,
         Err(error) => {
             log_stage_timing("stage0.reachable_discovery.total", total_start);
             return Err(error);
         }
     };
 
-    let result = inventory.ok_or_else(|| {
-        // Worker traversal never aborts classification, so this is unreachable.
-        SourceDiscoveryError::from(CompilerError::compiler_error(
-            "Provider-free worker reachable-file traversal aborted unexpectedly",
-        ))
-    });
+    // Workers only run when classification proved the project is provider-free, so the worker
+    // policy never marks replay required.
+    debug_assert!(
+        !outcome.provider_capable_required,
+        "provider-free worker traversal must not mark provider-capable replay required"
+    );
 
     log_stage_timing("stage0.reachable_discovery.total", total_start);
-    result
+    Ok(outcome.inventory)
 }
 
 fn handle_provider_free_worker_import(
@@ -891,7 +1008,7 @@ pub(super) fn load_missing_source_paths_for_test(
     source_paths: Vec<PathBuf>,
     source_kind: SourceFileKind,
     string_table: &mut StringTable,
-) -> Result<Vec<crate::build_system::build::InputFile>, CompilerMessages> {
+) -> Result<Vec<PreparedSourceInput>, CompilerMessages> {
     let missing_sources = source_paths
         .into_iter()
         .enumerate()
@@ -907,11 +1024,7 @@ pub(super) fn load_missing_source_paths_for_test(
     load_missing_sources(missing_sources, string_table).map(|loaded_sources| {
         loaded_sources
             .into_iter()
-            .map(|loaded| crate::build_system::build::InputFile {
-                source_code: loaded.source_code,
-                source_path: loaded.source_file.path,
-                source_kind: loaded.source_file.kind,
-            })
+            .map(prepared_input_from_loaded)
             .collect()
     })
 }

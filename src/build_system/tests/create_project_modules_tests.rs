@@ -1,3 +1,4 @@
+use super::prepared_source::PreparedSourceInput;
 use super::*;
 use crate::build_system::build::BackendBuilder;
 use crate::build_system::create_project_modules::resolve_project_entry_root;
@@ -28,6 +29,14 @@ use std::ffi::OsStr;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+
+/// Serializes tests that reset and read the process-global `SOURCE_READ_COUNT_FOR_TEST` counter.
+///
+/// WHY: source-read counting uses one global atomic and one global tracked-prefix slot. Parallel
+/// test execution would otherwise let one test's reset/prefix overwrite another's mid-snapshot, so
+/// every test that asserts on `source_read_count_for_test` holds this lock for its whole window.
+#[cfg(test)]
+static SOURCE_READ_COUNTER_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 fn configured_resolver(config: &Config) -> ProjectPathResolver {
     configured_resolver_with_source_file_kinds(
@@ -1612,7 +1621,7 @@ fn discover_modules_uses_reachable_files_only() {
         .input_files
         .iter()
         .map(|file| {
-            file.source_path
+            file.source_path()
                 .file_name()
                 .unwrap()
                 .to_string_lossy()
@@ -1672,7 +1681,7 @@ fn discover_modules_resolves_relative_child_imports() {
         .input_files
         .iter()
         .map(|file| {
-            file.source_path
+            file.source_path()
                 .file_name()
                 .and_then(OsStr::to_str)
                 .unwrap_or_default()
@@ -1733,7 +1742,7 @@ fn entry_root_fallback_wins_for_unmatched_non_relative_imports() {
     let discovered_paths = modules[0]
         .input_files
         .iter()
-        .map(|file| file.source_path.clone())
+        .map(|file| file.source_path().to_path_buf())
         .collect::<HashSet<_>>();
 
     assert!(
@@ -3128,7 +3137,7 @@ fn beandown_files_are_reachable_without_import_scanning() {
     let input_paths: HashSet<_> = modules[0]
         .input_files
         .iter()
-        .map(|input| input.source_path.file_name().unwrap().to_owned())
+        .map(|input| input.source_path().file_name().unwrap().to_owned())
         .collect();
     assert!(input_paths.contains(OsStr::new("#page.bst")));
     assert!(input_paths.contains(OsStr::new("intro.bd")));
@@ -3136,12 +3145,12 @@ fn beandown_files_are_reachable_without_import_scanning() {
     let beandown_input = modules[0]
         .input_files
         .iter()
-        .find(|input| input.source_path.file_name() == Some(OsStr::new("intro.bd")))
+        .find(|input| input.source_path().file_name() == Some(OsStr::new("intro.bd")))
         .expect("intro.bd should be in discovered inputs");
-    assert_eq!(
-        beandown_input.source_kind,
-        crate::builder_surface::SourceFileKind::Beandown
-    );
+    assert!(matches!(
+        beandown_input,
+        PreparedSourceInput::Beandown { .. }
+    ));
 
     fs::remove_dir_all(&root).expect("should remove temp root");
 }
@@ -3182,7 +3191,7 @@ fn reachable_beandown_queues_same_directory_root_file() {
     let input_paths: HashSet<_> = modules[0]
         .input_files
         .iter()
-        .map(|input| input.source_path.file_name().unwrap().to_owned())
+        .map(|input| input.source_path().file_name().unwrap().to_owned())
         .collect();
     assert!(input_paths.contains(OsStr::new("#page.bst")));
     assert!(input_paths.contains(OsStr::new("intro.bd")));
@@ -3191,22 +3200,19 @@ fn reachable_beandown_queues_same_directory_root_file() {
     let beandown_input = modules[0]
         .input_files
         .iter()
-        .find(|input| input.source_path.file_name() == Some(OsStr::new("intro.bd")))
+        .find(|input| input.source_path().file_name() == Some(OsStr::new("intro.bd")))
         .expect("intro.bd should be in discovered inputs");
-    assert_eq!(
-        beandown_input.source_kind,
-        crate::builder_surface::SourceFileKind::Beandown
-    );
+    assert!(matches!(
+        beandown_input,
+        PreparedSourceInput::Beandown { .. }
+    ));
 
     let root_input = modules[0]
         .input_files
         .iter()
-        .find(|input| input.source_path.file_name() == Some(OsStr::new("#docs.bst")))
+        .find(|input| input.source_path().file_name() == Some(OsStr::new("#docs.bst")))
         .expect("#docs.bst should be in discovered inputs");
-    assert_eq!(
-        root_input.source_kind,
-        crate::builder_surface::SourceFileKind::Beanstalk
-    );
+    assert!(matches!(root_input, PreparedSourceInput::Beanstalk { .. }));
 
     fs::remove_dir_all(&root).expect("should remove temp root");
 }
@@ -3244,13 +3250,13 @@ fn unimported_beandown_file_under_entry_root_is_ignored() {
 
     assert_eq!(modules[0].input_files.len(), 1);
     assert_eq!(
-        modules[0].input_files[0].source_path.file_name().unwrap(),
+        modules[0].input_files[0].source_path().file_name().unwrap(),
         OsStr::new("#page.bst")
     );
-    assert_eq!(
-        modules[0].input_files[0].source_kind,
-        crate::builder_surface::SourceFileKind::Beanstalk
-    );
+    assert!(matches!(
+        modules[0].input_files[0],
+        PreparedSourceInput::Beanstalk { .. }
+    ));
 
     fs::remove_dir_all(&root).expect("should remove temp root");
 }
@@ -3299,7 +3305,7 @@ fn extensionless_bst_import_and_virtual_package_import_still_work() {
         .input_files
         .iter()
         .map(|file| {
-            file.source_path
+            file.source_path()
                 .file_name()
                 .and_then(OsStr::to_str)
                 .unwrap_or_default()
@@ -3348,7 +3354,7 @@ fn reachable_file_discovery_markdown_files_are_reachable_without_import_scanning
     let input_paths: HashSet<_> = modules[0]
         .input_files
         .iter()
-        .map(|input| input.source_path.file_name().unwrap().to_owned())
+        .map(|input| input.source_path().file_name().unwrap().to_owned())
         .collect();
     assert!(input_paths.contains(OsStr::new("#page.bst")));
     assert!(input_paths.contains(OsStr::new("intro.md")));
@@ -3356,12 +3362,12 @@ fn reachable_file_discovery_markdown_files_are_reachable_without_import_scanning
     let markdown_input = modules[0]
         .input_files
         .iter()
-        .find(|input| input.source_path.file_name() == Some(OsStr::new("intro.md")))
+        .find(|input| input.source_path().file_name() == Some(OsStr::new("intro.md")))
         .expect("intro.md should be in discovered inputs");
-    assert_eq!(
-        markdown_input.source_kind,
-        crate::builder_surface::SourceFileKind::PlainMarkdown
-    );
+    assert!(matches!(
+        markdown_input,
+        PreparedSourceInput::PlainMarkdown { .. }
+    ));
 
     fs::remove_dir_all(&root).expect("should remove temp root");
 }
@@ -3403,7 +3409,7 @@ fn reachable_file_discovery_markdown_does_not_queue_unrelated_module_root_file()
     let input_paths: HashSet<_> = modules[0]
         .input_files
         .iter()
-        .map(|input| input.source_path.file_name().unwrap().to_owned())
+        .map(|input| input.source_path().file_name().unwrap().to_owned())
         .collect();
     assert!(input_paths.contains(OsStr::new("#page.bst")));
     assert!(input_paths.contains(OsStr::new("intro.md")));
@@ -3412,12 +3418,12 @@ fn reachable_file_discovery_markdown_does_not_queue_unrelated_module_root_file()
     let markdown_input = modules[0]
         .input_files
         .iter()
-        .find(|input| input.source_path.file_name() == Some(OsStr::new("intro.md")))
+        .find(|input| input.source_path().file_name() == Some(OsStr::new("intro.md")))
         .expect("intro.md should be in discovered inputs");
-    assert_eq!(
-        markdown_input.source_kind,
-        crate::builder_surface::SourceFileKind::PlainMarkdown
-    );
+    assert!(matches!(
+        markdown_input,
+        PreparedSourceInput::PlainMarkdown { .. }
+    ));
 
     fs::remove_dir_all(&root).expect("should remove temp root");
 }
@@ -3456,13 +3462,13 @@ fn reachable_file_discovery_unimported_markdown_file_is_ignored() {
 
     assert_eq!(modules[0].input_files.len(), 1);
     assert_eq!(
-        modules[0].input_files[0].source_path.file_name().unwrap(),
+        modules[0].input_files[0].source_path().file_name().unwrap(),
         OsStr::new("#page.bst")
     );
-    assert_eq!(
-        modules[0].input_files[0].source_kind,
-        crate::builder_surface::SourceFileKind::Beanstalk
-    );
+    assert!(matches!(
+        modules[0].input_files[0],
+        PreparedSourceInput::Beanstalk { .. }
+    ));
 
     fs::remove_dir_all(&root).expect("should remove temp root");
 }
@@ -3610,6 +3616,9 @@ fn stage0_reuses_scanned_bst_source_when_assembling_input_files() {
     .expect("config should parse");
     let resolver = configured_resolver(&config);
 
+    let _counter_guard = SOURCE_READ_COUNTER_TEST_LOCK
+        .lock()
+        .expect("source read counter test lock poisoned");
     let canonical_root = fs::canonicalize(&root).expect("test root should canonicalize");
     super::source_loading::reset_source_read_count_for_test(&canonical_root);
     let modules = discover_modules_for_test(&config, &resolver, &style_directives)
@@ -3626,13 +3635,13 @@ fn stage0_reuses_scanned_bst_source_when_assembling_input_files() {
         modules[0]
             .input_files
             .iter()
-            .any(|input| input.source_code.contains("#[:entry]"))
+            .any(|input| input.source_code().contains("#[:entry]"))
     );
     assert!(
         modules[0]
             .input_files
             .iter()
-            .any(|input| input.source_code.contains("message #="))
+            .any(|input| input.source_code().contains("message #="))
     );
 
     fs::remove_dir_all(&root).expect("should remove temp root");
@@ -3678,7 +3687,7 @@ fn stage0_loads_asset_sources_and_preserves_deterministic_input_order() {
         .iter()
         .map(|input| {
             input
-                .source_path
+                .source_path()
                 .file_name()
                 .and_then(OsStr::to_str)
                 .unwrap_or_default()
@@ -3687,16 +3696,16 @@ fn stage0_loads_asset_sources_and_preserves_deterministic_input_order() {
         .collect::<Vec<_>>();
 
     assert_eq!(input_names, vec!["#page.bst", "intro.bd", "notes.md"]);
-    assert_eq!(
-        input_files[1].source_kind,
-        crate::builder_surface::SourceFileKind::Beandown
-    );
-    assert_eq!(input_files[1].source_code, "beandown body\n");
-    assert_eq!(
-        input_files[2].source_kind,
-        crate::builder_surface::SourceFileKind::PlainMarkdown
-    );
-    assert_eq!(input_files[2].source_code, "# Markdown body\n");
+    assert!(matches!(
+        input_files[1],
+        PreparedSourceInput::Beandown { .. }
+    ));
+    assert_eq!(input_files[1].source_code(), "beandown body\n");
+    assert!(matches!(
+        input_files[2],
+        PreparedSourceInput::PlainMarkdown { .. }
+    ));
+    assert_eq!(input_files[2].source_code(), "# Markdown body\n");
 
     fs::remove_dir_all(&root).expect("should remove temp root");
 }
@@ -3726,7 +3735,7 @@ fn stage0_parallel_missing_source_loading_preserves_input_order() {
         .iter()
         .map(|input| {
             input
-                .source_path
+                .source_path()
                 .file_name()
                 .and_then(OsStr::to_str)
                 .unwrap_or_default()
@@ -3740,11 +3749,11 @@ fn stage0_parallel_missing_source_loading_preserves_input_order() {
 
     assert_eq!(loaded_names, expected_names);
     for (index, input_file) in input_files.iter().enumerate() {
-        assert_eq!(input_file.source_code, format!("# Asset {index}\n"));
-        assert_eq!(
-            input_file.source_kind,
-            crate::builder_surface::SourceFileKind::PlainMarkdown
-        );
+        assert_eq!(input_file.source_code(), format!("# Asset {index}\n"));
+        assert!(matches!(
+            input_file,
+            PreparedSourceInput::PlainMarkdown { .. }
+        ));
     }
 
     fs::remove_dir_all(&root).expect("should remove temp root");
@@ -3820,7 +3829,7 @@ fn provider_backed_imports_are_resolved_without_becoming_source_inputs() {
     assert_eq!(calls.load(Ordering::Relaxed), 1);
     assert_eq!(modules[0].input_files.len(), 1);
     assert_eq!(
-        modules[0].input_files[0].source_path.file_name().unwrap(),
+        modules[0].input_files[0].source_path().file_name().unwrap(),
         OsStr::new("#page.bst")
     );
 
@@ -3866,6 +3875,9 @@ fn provider_free_multi_entry_discovery_is_deterministic_and_uses_parallel_path()
     .expect("config should parse");
     let resolver = configured_resolver(&config);
 
+    let _counter_guard = SOURCE_READ_COUNTER_TEST_LOCK
+        .lock()
+        .expect("source read counter test lock poisoned");
     let canonical_root = fs::canonicalize(&root).expect("test root should canonicalize");
     super::source_loading::reset_source_read_count_for_test(&canonical_root);
 
@@ -3899,7 +3911,7 @@ fn provider_free_multi_entry_discovery_is_deterministic_and_uses_parallel_path()
         .iter()
         .map(|input| {
             input
-                .source_path
+                .source_path()
                 .file_name()
                 .and_then(OsStr::to_str)
                 .unwrap_or_default()
@@ -3911,7 +3923,7 @@ fn provider_free_multi_entry_discovery_is_deterministic_and_uses_parallel_path()
         .iter()
         .map(|input| {
             input
-                .source_path
+                .source_path()
                 .file_name()
                 .and_then(OsStr::to_str)
                 .unwrap_or_default()
@@ -3939,6 +3951,7 @@ fn provider_backed_import_in_multi_entry_falls_back_to_serial_and_calls_provider
     let src = root.join("src");
     fs::create_dir_all(src.join("page_a")).expect("should create page_a module");
     fs::create_dir_all(src.join("page_b")).expect("should create page_b module");
+    fs::create_dir_all(src.join("shared")).expect("should create shared dir");
 
     fs::write(
         root.join(settings::CONFIG_FILE_NAME),
@@ -3987,9 +4000,106 @@ fn provider_backed_import_in_multi_entry_falls_back_to_serial_and_calls_provider
     assert_eq!(modules[0].input_files.len(), 1);
     assert_eq!(modules[1].input_files.len(), 1);
     assert_eq!(
-        modules[1].input_files[0].source_path.file_name().unwrap(),
+        modules[1].input_files[0].source_path().file_name().unwrap(),
         OsStr::new("#pageB.bst")
     );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn provider_required_replay_reuses_classification_cache_without_retokenizing() {
+    let root = temp_dir("provider_required_replay_cache");
+    let src = root.join("src");
+    fs::create_dir_all(src.join("page_a")).expect("should create page_a module");
+    fs::create_dir_all(src.join("page_b")).expect("should create page_b module");
+    fs::create_dir_all(src.join("shared")).expect("should create shared dir");
+
+    fs::write(
+        root.join(settings::CONFIG_FILE_NAME),
+        "entry_root #= \"src\"\n",
+    )
+    .expect("should write config");
+
+    // Entry A is provider-free; entry B imports a .js file backed by a registered provider.
+    fs::write(
+        src.join("page_a/#pageA.bst"),
+        "import @shared/helper\n#[:pageA]\n",
+    )
+    .expect("should write pageA");
+    fs::write(src.join("shared/helper.bst"), "helper #= 1\n").expect("should write shared helper");
+    fs::write(
+        src.join("page_b/#pageB.bst"),
+        "import @./drawing.js\n#[:pageB]\n",
+    )
+    .expect("should write pageB");
+    fs::write(src.join("page_b/drawing.js"), "export function draw() {}\n")
+        .expect("should write js");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config should parse");
+    let resolver = configured_resolver(&config);
+
+    let calls = Arc::new(AtomicUsize::new(0));
+    let mut providers = ExternalImportProviderRegistry::empty();
+    providers.register(Arc::new(CountingExternalImportProvider::new(Arc::clone(
+        &calls,
+    ))));
+
+    let _counter_guard = SOURCE_READ_COUNTER_TEST_LOCK
+        .lock()
+        .expect("source read counter test lock poisoned");
+    let canonical_root = fs::canonicalize(&root).expect("test root should canonicalize");
+    super::source_loading::reset_source_read_count_for_test(&canonical_root);
+
+    let modules =
+        discover_modules_for_test_with_providers(&config, &resolver, &style_directives, &providers)
+            .expect("provider-required replay should succeed");
+
+    // Three unique Beanstalk sources: #pageA.bst, shared/helper.bst, and #pageB.bst.
+    // Classification reads each once while completing the full local traversal. The serial
+    // provider-capable replay must reuse that retained cache, so each .bst is read exactly once
+    // and never re-tokenized.
+    assert_eq!(
+        super::source_loading::source_read_count_for_test(),
+        3,
+        "provider-required replay should reuse the classification cache without re-reading .bst files"
+    );
+
+    // The provider-backed import is handled exactly once during serial replay.
+    assert_eq!(
+        calls.load(Ordering::Relaxed),
+        1,
+        "provider should be called once during replay"
+    );
+    assert_eq!(modules.len(), 2);
+
+    // Every Beanstalk input carries its retained Stage 0 token stream by type, proving the
+    // replayed inputs consumed retained tokens rather than a second scan path.
+    for module in &modules {
+        for input in &module.input_files {
+            match input {
+                PreparedSourceInput::Beanstalk {
+                    source_path,
+                    tokens,
+                    ..
+                } => {
+                    assert!(
+                        !tokens.tokens.is_empty(),
+                        "replayed Beanstalk file {:?} should carry retained tokens",
+                        source_path.file_name(),
+                    );
+                }
+                _ => panic!("provider-required replay should only produce Beanstalk files"),
+            }
+        }
+    }
 
     fs::remove_dir_all(&root).expect("should remove temp root");
 }
@@ -4000,6 +4110,7 @@ fn unsupported_external_extension_in_multi_entry_preserves_diagnostic_shape() {
     let src = root.join("src");
     fs::create_dir_all(src.join("page_a")).expect("should create page_a module");
     fs::create_dir_all(src.join("page_b")).expect("should create page_b module");
+    fs::create_dir_all(src.join("shared")).expect("should create shared dir");
 
     fs::write(
         root.join(settings::CONFIG_FILE_NAME),
@@ -4103,7 +4214,7 @@ fn provider_free_parallel_preserves_cross_module_root_queuing() {
         .iter()
         .map(|input| {
             input
-                .source_path
+                .source_path()
                 .file_name()
                 .and_then(OsStr::to_str)
                 .unwrap_or_default()
@@ -4119,6 +4230,161 @@ fn provider_free_parallel_preserves_cross_module_root_queuing() {
         module_a_inputs.contains(&"impl.bst".to_string()),
         "module B impl should be reachable"
     );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn stage0_retains_beanstalk_tokens_and_leaves_non_tokenized_sources_without_tokens() {
+    let root = temp_dir("stage0_retained_tokens");
+    let src = root.join("src");
+    fs::create_dir_all(&src).expect("should create src dir");
+
+    fs::write(
+        root.join(settings::CONFIG_FILE_NAME),
+        "entry_root #= \"src\"\n",
+    )
+    .expect("should write config");
+    fs::write(
+        src.join("#page.bst"),
+        "import @./helper\nimport @./intro\n#[:entry]\n",
+    )
+    .expect("should write entry");
+    fs::write(src.join("helper.bst"), "value #= 42\n").expect("should write helper");
+    fs::write(src.join("intro.bd"), "beandown body\n").expect("should write beandown");
+    fs::write(src.join("notes.md"), "# Markdown body\n").expect("should write markdown");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config should parse");
+
+    let mut source_file_kinds = crate::builder_surface::SourceFileKindRegistry::new();
+    source_file_kinds.register("bd", crate::builder_surface::SourceFileKind::Beandown);
+    source_file_kinds.register("md", crate::builder_surface::SourceFileKind::PlainMarkdown);
+    let resolver = configured_resolver_with_source_file_kinds(&config, &source_file_kinds);
+
+    let modules = discover_modules_for_test(&config, &resolver, &style_directives)
+        .expect("retained-token discovery should pass");
+    let input_files = &modules[0].input_files;
+
+    // Every Beanstalk input carries the retained Stage 0 token stream by type; Beandown and
+    // PlainMarkdown variants cannot carry tokens, so the invalid state is unrepresentable.
+    for input in input_files.iter() {
+        match input {
+            PreparedSourceInput::Beanstalk {
+                source_path,
+                tokens,
+                ..
+            } => {
+                assert!(
+                    !tokens.tokens.is_empty(),
+                    "retained token stream for {:?} should not be empty",
+                    source_path.file_name(),
+                );
+            }
+            PreparedSourceInput::Beandown { source_path, .. }
+            | PreparedSourceInput::PlainMarkdown { source_path, .. } => {
+                // Non-Beanstalk sources have no retained token stream by construction.
+                let _ = source_path;
+            }
+        }
+    }
+
+    // The retained Beanstalk token for the entry file should contain the import path token,
+    // proving the Stage 0 lexical pass produced the tokens that header parsing will consume.
+    let entry_input = input_files
+        .iter()
+        .find(|input| match input {
+            PreparedSourceInput::Beanstalk { source_path, .. } => source_path
+                .file_name()
+                .is_some_and(|name| name == "#page.bst"),
+            _ => false,
+        })
+        .expect("entry file should be in the input set");
+    let entry_tokens = match entry_input {
+        PreparedSourceInput::Beanstalk { tokens, .. } => tokens,
+        _ => unreachable!("entry file should be a Beanstalk prepared input"),
+    };
+    assert!(
+        entry_tokens.tokens.iter().any(|token| matches!(
+            token.kind,
+            crate::compiler_frontend::tokenizer::tokens::TokenKind::Import
+        )),
+        "retained entry tokens should contain the Import token from Stage 0 lexing"
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn provider_free_parallel_retains_beanstalk_tokens_for_every_reachable_file() {
+    let root = temp_dir("provider_free_retained_tokens");
+    let src = root.join("src");
+    let module_a = src.join("module_a");
+    let module_b = src.join("module_b");
+    fs::create_dir_all(&module_a).expect("should create module_a");
+    fs::create_dir_all(&module_b).expect("should create module_b");
+
+    fs::write(
+        root.join(settings::CONFIG_FILE_NAME),
+        "entry_root #= \"src\"\n",
+    )
+    .expect("should write config");
+
+    // Two entry points exercise the provider-free parallel path. Each module imports a helper.
+    fs::write(
+        module_a.join("#pageA.bst"),
+        "import @./helperA\n#[:pageA]\n",
+    )
+    .expect("should write pageA");
+    fs::write(module_a.join("helperA.bst"), "a #= 1\n").expect("should write helperA");
+    fs::write(
+        module_b.join("#pageB.bst"),
+        "import @./helperB\n#[:pageB]\n",
+    )
+    .expect("should write pageB");
+    fs::write(module_b.join("helperB.bst"), "b #= 2\n").expect("should write helperB");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config should parse");
+    let resolver = configured_resolver(&config);
+
+    let modules = discover_modules_for_test(&config, &resolver, &style_directives)
+        .expect("provider-free parallel discovery should pass");
+
+    assert_eq!(modules.len(), 2);
+
+    // Every Beanstalk input in both modules must carry retained Stage 0 tokens by type,
+    // proving the provider-free parallel path reuses classification tokens without re-tokenizing.
+    for module in &modules {
+        for input in &module.input_files {
+            match input {
+                PreparedSourceInput::Beanstalk {
+                    source_path,
+                    tokens,
+                    ..
+                } => {
+                    assert!(
+                        !tokens.tokens.is_empty(),
+                        "retained tokens for {:?} should not be empty",
+                        source_path.file_name(),
+                    );
+                }
+                _ => panic!("test should only produce Beanstalk files"),
+            }
+        }
+    }
 
     fs::remove_dir_all(&root).expect("should remove temp root");
 }

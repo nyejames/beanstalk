@@ -52,7 +52,9 @@ pub(crate) mod paths;
 mod pipeline;
 
 pub use pipeline::CompilerFrontend;
-pub(crate) use pipeline::{FrontendFilePrepareContext, FrontendFilePrepareInput};
+pub(crate) use pipeline::{
+    FrontendFilePrepareContext, FrontendFilePrepareInput, FrontendFilePrepareSource,
+};
 
 /// Flags change the behavior of the core `compiler_frontend` pipeline.
 #[derive(PartialEq, Eq, Debug, Clone)]
