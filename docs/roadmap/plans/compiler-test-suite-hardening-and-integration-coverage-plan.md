@@ -29,32 +29,33 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 ## Current state
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
-STATUS: final review
-CURRENT_SLICE: final documentation and roadmap closure, then one-time worker-artifact cleanup
-LAST_ACCEPTED_COMMIT: `bc9bb4b06` (clean parent audit and expectation-identity comment alignment); concurrent Priya alignment accepted at `9518662e1`
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; temporary detached mutation worktree is clean at `d443c3a4f`; concurrent docs work was committed separately at `3451302ec`; only the parent-owned canonical-module-plan refresh remains modified
+STATUS: complete
+CURRENT_SLICE: all phases and final review accepted
+LAST_ACCEPTED_COMMIT: `0e6b1cf13` (clean final-audit and validation checkpoint); concurrent Priya alignment accepted at `9518662e1`
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; concurrent docs work was committed separately at `3451302ec`; final closure updates this plan, the roadmap and the successor plan only
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: testing, validation, contributor, index, progress and compiler diagnostic wording align; the queued canonical-module plan is refreshed and awaits this closure checkpoint
+- docs: testing, validation, contributor, index, progress and compiler diagnostic wording align; the canonical-module plan consumes the hardened suite and is active at the roadmap handoff
 - code: all audit corrections are accepted; failure expectations are truthful, canonical fixture roots are unique after resolution and every golden-tree symlink position is rejected explicitly
 ACCEPTANCE_CRITERIA:
-- rebuild the documentation release output from source
-- mark this plan complete, activate the queued canonical-module plan and update the roadmap once
-- remove this completed plan's worker tasks, logs, results and detached mutation worktree after the closure commit
+- all phase checklists and final acceptance criteria are complete
+- the final external and parent audits have no unresolved finding
+- the documentation release build and full code-bearing gate pass
+- the successor is activated against `0e6b1cf13`
 VALIDATION_STATE:
 - `just validate`: passed on the `bc9bb4b06` content; cross-target Clippy, 3,359 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
-- final audit: Codex CLI resolved findings 1, 2 and 4, identified the intermediate golden-parent symlink gap, and the parent audit accepted its `3c911fb49` correction with no remaining correctness, ownership, duplication, path-safety, test or docs findings
+- final audit: Codex CLI confirmed findings 1, 2 and 4 resolved, identified the intermediate golden-parent symlink gap, and the parent audit accepted its `3c911fb49` correction with no remaining correctness, ownership, duplication, path-safety, test or docs findings
 - Phase 14F inventory: passed; 1,647 canonical cases, 1,793 executions, zero hard findings, zero goldens, 13 acceptance-only blocks, 982 exact and 19 justified-contains failure blocks
 - Phase 14F timings: three equivalent unit runs median 1.74s; three equivalent integration runs median 9.79s; operational evidence only
 - Phase 14E mutation probes: all nine primary filtered owners passed at baseline, failed for the intended semantic defect, passed after restoration, and left the detached worktree clean; no mutation score claimed
 - Phase 14B audit: passed; zero hard findings; 66 backend-only and 15 adversarial-only primary-less contract advisories
 - Priya expectation alignment: accepted at `9518662e1`; renamed inputs and expectations match
-DOCS_IMPACT: no progress-matrix status change; successor plan guidance is refreshed and activation is the remaining roadmap edit
+DOCS_IMPACT: no progress-matrix status change; successor plan and roadmap handoff are complete
 BLOCKERS_OR_OPEN_DECISIONS: none; 81 contract families without a primary are intentionally 66 backend-only and 15 adversarial-only families, with no ordinary orphan family
-DELEGATION_DECISION: parent-direct — documentation/roadmap closure and artifact cleanup are parent-owned
+DELEGATION_DECISION: parent-direct — final documentation and roadmap closure
 NEXT_WORKER_ORDER: none
-STOP_REASON: none
-NEXT_RESUME_ACTION: commit this clean-audit checkpoint, then perform final documentation and roadmap closure
+STOP_REASON: active work source complete
+NEXT_RESUME_ACTION: begin Phase 1 of `docs/roadmap/plans/canonical-module-compilation-and-scoped-packages-plan.md`
 
 ---
 
@@ -1439,10 +1440,10 @@ correctness or performance improvement.
 - [x] Update `index.md` for moved/removed test modules.
 - [x] Update progress-matrix coverage statements.
 - [x] Update compiler diagnostic identity wording only if Phase 4 made reason keys durable.
-- [ ] Rebuild generated documentation.
-- [ ] Mark this plan complete and update `docs/roadmap/roadmap.md`.
+- [x] Rebuild generated documentation.
+- [x] Mark this plan complete and update `docs/roadmap/roadmap.md`.
 - [x] Refresh the canonical module plan against the final harness and test owners.
-- [ ] Set the next active plan and checkpoint.
+- [x] Set the next active plan and checkpoint.
 
 ## Phase 14 acceptance
 
@@ -1452,7 +1453,7 @@ correctness or performance improvement.
 - [x] Representative mutations are caught by primary owners.
 - [x] Documentation and roadmap are current.
 - [x] Full validation passes.
-- [ ] Canonical module work can begin against the hardened suite.
+- [x] Canonical module work can begin against the hardened suite.
 
 ---
 

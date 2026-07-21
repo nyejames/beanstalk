@@ -8,10 +8,11 @@ Replace entry-closure compilation with canonical project and package graphs, imm
 
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/canonical-module-compilation-and-scoped-packages-plan.md
-STATUS: queued
-CURRENT_SLICE: Phase 0 - refresh repository and freeze current owner maps
+STATUS: active
+CURRENT_SLICE: Phase 1 - refresh repository and freeze current owner maps
 LAST_GOOD_COMMIT: none until the first implementation slice is accepted
 POST_TIR_REVIEW_COMMIT: 1298da468
+TEST_SUITE_HARDENING_COMMIT: 0e6b1cf13
 BRANCH: main
 IMPLEMENTATION_SCOPE: compiler frontend, build system, backends
 ```
@@ -20,6 +21,7 @@ IMPLEMENTATION_SCOPE: compiler frontend, build system, backends
 
 - final TIR completion and its one-store, exact-view folding/handoff architecture are accepted at `1298da468`
 - the mandatory post-TIR roadmap review checkpoint is complete and recorded against `1298da468`
+- compiler test-suite hardening completed its final audit corrections, documentation build and full validation at `0e6b1cf13`
 - this plan must land before the HTML Wasm backend plan so backend work consumes a stable graph
 
 ## Required authority documents
@@ -171,7 +173,10 @@ Each phase must leave one coherent path and include focused tests. Reference the
 
 Context: this plan was authored while TIR was active and was refreshed against `1298da468` after
 the mandatory review. Phase 1 still rechecks current paths before code starts, but it must consume
-the accepted owners rather than redesign them.
+the accepted owners rather than redesign them. The hardened suite at `0e6b1cf13` has 1,647
+canonical cases, 1,793 backend executions, explicit role ownership, zero hard policy findings and
+3,359 focused Rust tests. New coverage must extend those owners rather than recreate whole-source
+unit substitutes.
 
 - Confirm the `1298da468` post-TIR review remains the current accepted anchor and no later accepted architecture change supersedes it.
 - Record `git rev-parse HEAD`, branch and `git status --short` in the context capsule.
@@ -179,6 +184,8 @@ the accepted owners rather than redesign them.
 - Preserve the final TIR handoff: exported const templates cross module interfaces only as folded owned facts or neutral owned runtime payloads, never TIR identities, views, overlays or preparation state.
 - Search current source for `DiscoveredModule`, reachable entry closures, `Vec<Module>` backend handoff, `package_folders`, `@./` and `@` import resolution.
 - Classify each old owner as replace, extend or delete. Record the result before code starts.
+- Reuse the canonical integration owners for check/build parity, imported-root suppression, facade effect summaries, diagnostic remapping and target reachability. Add a case only for a distinct graph or module-boundary contract.
+- Run `cargo run --quiet -- tests --audit` after fixture metadata changes and preserve the single role/contract/suite-policy owner.
 
 ### Phase 2: Introduce stable project, package, module and source identities
 
@@ -368,6 +375,11 @@ Cover:
 - a consuming project's CLI or programmatic input does not satisfy a dependency `#Import` contract
 - dependency contracts resolve only from the dependency's own config, defaults and compatible builder globals
 
+The canonical integration suite owns user-visible source, project and backend behavior. Focused
+Rust units remain appropriate for stable graph identities, deterministic scheduling, immutable
+artefact lanes, blocked-result policy and other hidden facts that integration output cannot expose.
+Do not duplicate an existing primary contract to exercise a new internal implementation path.
+
 ## Documentation and progress-matrix impact
 
 - update `docs/language-overview.md` with the final `#` and `+` root model
@@ -383,10 +395,10 @@ Each code-bearing phase runs:
 ```bash
 cargo fmt
 just validate
-just bench-check
 ```
 
-Run the documentation release build when source docs change.
+`just validate` already includes the non-recording benchmark sanity check. Run the documentation
+release build when source docs change.
 
 ## Final architecture audit
 
