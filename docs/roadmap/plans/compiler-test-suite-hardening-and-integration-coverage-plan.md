@@ -30,21 +30,21 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 14C14j project check and routing unit ownership review
-LAST_ACCEPTED_COMMIT: `f47fc6c50` (Phase 14C14i code)
+CURRENT_SLICE: Phase 14C14k project CLI parser unit ownership review
+LAST_ACCEPTED_COMMIT: `025c27554` (Phase 14C14j code)
 WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; accepted code is committed; concurrent example-name work remains separately committed
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: unit-test ownership, pruning, compiler-stage boundaries, and final governance rules govern the next slice
-- code: all 223 retained tests across the reviewed Stage 0, frontend, builder-surface, build-boundary, output-cleanup, and build-orchestration groups now have distinct owners; project check and routing policy are next
+- code: all 235 retained tests across the reviewed Stage 0, frontend, builder-surface, build-boundary, output-cleanup, build-orchestration, project-check, and routing groups now have distinct owners; project CLI parsing is next
 ACCEPTANCE_CRITERIA:
 - every remaining full-source unit has a distinct hidden invariant, parser fact, stage boundary, or policy owner
 - units superseded by a stronger canonical integration primary are deleted with replacement evidence
 - stale test-only helpers or production APIs are removed with their final caller
 - HIR, build-system, backend, and final TIR units keep only their owning semantic relationships and hidden facts
 VALIDATION_STATE:
-- `just validate`: passed; cross-target Clippy, 3,467 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
-- Phase 14C14i focused group: passed; 14 build-orchestration and output-writer tests
+- `just validate`: passed; cross-target Clippy, 3,464 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
+- Phase 14C14j focused groups: passed; three project-check and nine routing-policy tests
 - Phase 14B audit: passed; zero hard findings; 66 backend-only and 15 adversarial-only primary-less contract advisories
 - Priya expectation alignment: accepted at `6efac7012`; 13 stale Rust and integration expectation files now match renamed inputs
 DOCS_IMPACT: testing, validation, and contributor workflow aligned with final suite policy; progress matrix and index unchanged
@@ -52,7 +52,7 @@ BLOCKERS_OR_OPEN_DECISIONS: none; 81 contract families without a primary are int
 DELEGATION_DECISION: Ollama — bounded Phase 14 implementation slices
 NEXT_WORKER_ORDER: Ollama only; no provider substitution
 STOP_REASON: none
-NEXT_RESUME_ACTION: launch the project check and routing unit group through Ollama
+NEXT_RESUME_ACTION: launch the project CLI parser unit group through Ollama
 
 ---
 
@@ -242,6 +242,7 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 14C14g build import, directive, and infrastructure units | `fe30993ff` | Accepted | The positive HTML-builder directive smoke was removed in favor of the canonical `template_html_directives_html_project_success` artifact owner; all 10 import/glue/runtime/reachability/string-table tests, two unregistered-versus-frontend directive capability tests, and the poisoned-current-directory-mutex infrastructure test remain distinct; 3,474 Rust tests and 1,793 integration executions |
 | Phase 14C14h build output cleanup and manifest units | `176c0ea95` | Accepted | Four cosmetic stale-layout and limited-safe-mode scenarios were removed in favor of stronger same-file stale managed/byte-asset removal and missing/unsupported/extension-mismatch preservation owners; 19 manifest classification, normalization, safe-mode, containment, stale deletion, parent-pruning, disabled-cleanup, recovery, and deterministic writer policy owners remain; 3,470 Rust tests and 1,793 integration executions |
 | Phase 14C14i build orchestration units | `f47fc6c50` | Accepted | Three source-shaped directory, custom-entry-root, and backend-bool-shape scenarios were removed in favor of canonical project output, Stage 0 discovery/config-shape, and focused HTML builder owners; the retained invalid `page_url_style` build seam now asserts the exact typed key/value payload instead of rendered wording; 14 build/result, validation-order, writer, mtime, cleanup, remapping, output-root, and typed config-lane owners remain; 3,467 Rust tests and 1,793 integration executions |
+| Phase 14C14j project check and routing units | `025c27554` | Accepted | Three weak directory-check, warning-count, and clean-message smokes were consolidated into the retained single-file zero-message/no-artifact owner and Phase 10's exact directory check/build parity owner; all nine routing tests remain and invalid origin, URL-style, and redirect settings now assert exact typed keys, values, reasons, and expected domains; 12 command-overlay, summary-format, routing-policy, diagnostic-location, and pure path-transform owners remain; 3,464 Rust tests and 1,793 integration executions |
 
 ---
 
@@ -1440,6 +1441,9 @@ Do not present lower counts or faster time as proof of correctness.
 | `build_orchestration_tests::build_directory_project_respects_custom_entry_root` | Authored non-default entry roots select nested module outputs | `adversarial_entry_root_dot_segment_imports` proves full-build nested entry-root selection; `html_project_builder_tests::directory_build_supports_custom_entry_root_names` owns successful output mapping | config loading and entry-root containment remain Stage 0 focused facts | `f47fc6c50` |
 | `build_orchestration_tests::build_directory_project_rejects_invalid_redirect_index_html` | A string supplied to the backend Bool setting is rejected during full build | `create_project_modules_tests::rejects_backend_bool_key_with_string_value` plus the canonical config value-shape rejection family | routing parser units retain direct typed setting-value policy for already-typed configs | `f47fc6c50` |
 | `build_orchestration_tests::build_directory_project_rejects_invalid_page_url_style` → `build_project_routes_invalid_page_url_style_through_typed_config_diagnostic` | HTML routing validation is wired through the direct build seam | same retained test with exact `InvalidProjectSettingValue` key/value payload | `routing_tests::parser_rejects_invalid_page_url_style` owns expected-value policy | `f47fc6c50` |
+| `check_tests::check_compiles_directory_project_without_writing_artifacts` | Directory-project check succeeds without emitting backend outputs | `check_and_build_frontends_produce_identical_diagnostics_and_check_writes_no_artifacts` with exact `dev`/`release`/`index.html` absence and authored-file count | `check_compiles_single_file_without_writing_artifacts` retains the distinct single-file command mode | `025c27554` |
+| `check_tests::check_collects_frontend_warnings_on_success` | Successful check preserves frontend warnings | `check_and_build_frontends_produce_identical_diagnostics_and_check_writes_no_artifacts` with an exact ordered three-warning identity sequence | none | `025c27554` |
+| `check_tests::check_reports_empty_messages_for_warning_free_success` | Warning-free check success returns no errors or warnings | `check_compiles_single_file_without_writing_artifacts`, strengthened to assert zero warnings and zero written artifacts | none | `025c27554` |
 
 ### Coverage gap and handoff ledger
 
