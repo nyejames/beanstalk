@@ -179,31 +179,6 @@ fn mutates_nested_same_store_child_expression() {
 }
 
 #[test]
-fn structural_collection_includes_dynamic_and_branch_payloads() {
-    let mut store = TemplateIrStore::new();
-    let body = dynamic_node(&mut store, 2);
-    let selector_site_id = store.next_expression_site_id();
-    let branch = TemplateIrBranch::new(
-        TemplateBranchSelector::Bool(expression(1)),
-        body,
-        empty_location(),
-    )
-    .with_selector_site_id(selector_site_id);
-    let branch_root = store.push_node(TemplateIrNode::new(
-        TemplateIrNodeKind::BranchChain {
-            branches: vec![branch],
-            fallback: None,
-        },
-        empty_location(),
-    ));
-    let template = push_template(&mut store, branch_root, TemplateType::StringFunction);
-
-    let payloads = collect_tir_expression_overlay_payloads(&store, template)
-        .expect("structural collection should succeed");
-    assert_eq!(payloads.len(), 2);
-}
-
-#[test]
 fn structural_collection_ignores_child_expression_overlay() {
     let mut store = TemplateIrStore::new();
     let child_root = dynamic_node(&mut store, 1);
@@ -624,41 +599,6 @@ fn mutates_loop_header_body_and_aggregate_wrapper_expression() {
 }
 
 #[test]
-fn mutates_range_loop_header_expression_positions() {
-    let mut store = TemplateIrStore::new();
-    let body = store.push_node(TemplateIrNode::new(
-        TemplateIrNodeKind::Sequence { children: vec![] },
-        empty_location(),
-    ));
-    let header = TemplateLoopHeader::Range {
-        bindings: Box::new(LoopBindings {
-            item: None,
-            index: None,
-        }),
-        range: Box::new(RangeLoopSpec {
-            start: expression(1),
-            end: expression(10),
-            end_kind: RangeEndKind::Exclusive,
-            step: Some(expression(2)),
-        }),
-    };
-    let header_sites = store.allocate_loop_header_expression_sites(&header);
-    let root = store.push_node(TemplateIrNode::new(
-        TemplateIrNodeKind::Loop {
-            header,
-            header_sites,
-            body,
-            aggregate_wrapper: None,
-        },
-        empty_location(),
-    ));
-
-    let mutator = mutate_from_root(&mut store, root).expect("walk should succeed");
-
-    assert_eq!(mutator.count, 3);
-}
-
-#[test]
 fn mutates_child_template_and_nested_child_template_expression() {
     let mut store = TemplateIrStore::new();
     let grandchild_root = dynamic_node(&mut store, 3);
@@ -873,7 +813,7 @@ fn collects_dynamic_payloads_branch_selectors_and_loop_headers() {
 }
 
 #[test]
-fn collects_range_loop_header_payloads_by_allocated_site_ids() {
+fn range_loop_header_positions_are_visited_by_mutation_and_collected_by_site_id() {
     let mut store = TemplateIrStore::new();
     let body = store.push_node(TemplateIrNode::new(
         TemplateIrNodeKind::Sequence { children: vec![] },
@@ -911,27 +851,45 @@ fn collects_range_loop_header_payloads_by_allocated_site_ids() {
     ));
     let template_id = push_template(&mut store, root, TemplateType::StringFunction);
 
+    // Structural collection: the start, end and step payloads are returned
+    // keyed by their allocated expression-site IDs with exact payload values.
     let payloads = collect_tir_expression_overlay_payloads(&store, template_id)
         .expect("expression overlay collection should succeed");
-
     assert_eq!(payloads.len(), 3);
-    assert!(
-        payloads
-            .iter()
-            .any(|(site_id, expression)| *site_id == start_site_id
-                && matches!(expression.kind, ExpressionKind::Int(1)))
+    assert!(payloads.iter().any(|(site_id, expression)| {
+        *site_id == start_site_id && matches!(expression.kind, ExpressionKind::Int(1))
+    }));
+    assert!(payloads.iter().any(|(site_id, expression)| {
+        *site_id == end_site_id && matches!(expression.kind, ExpressionKind::Int(10))
+    }));
+    assert!(payloads.iter().any(|(site_id, expression)| {
+        *site_id == step_site_id && matches!(expression.kind, ExpressionKind::Int(2))
+    }));
+
+    // Mutation walker: the same three range header positions are visited in
+    // place, so the mutation and collection rows stay truly parallel.
+    let mutator = mutate_from_root(&mut store, root).expect("mutation walk should succeed");
+    assert_eq!(
+        mutator.count, 3,
+        "mutation should visit start, end and step"
     );
+
+    let node = store.get_node(root).expect("range loop root should exist");
+    let TemplateIrNodeKind::Loop {
+        header: TemplateLoopHeader::Range { range, .. },
+        ..
+    } = &node.kind
+    else {
+        panic!("expected range loop root");
+    };
+    assert!(range.start.contains_regular_division);
+    assert!(range.end.contains_regular_division);
     assert!(
-        payloads
-            .iter()
-            .any(|(site_id, expression)| *site_id == end_site_id
-                && matches!(expression.kind, ExpressionKind::Int(10)))
-    );
-    assert!(
-        payloads
-            .iter()
-            .any(|(site_id, expression)| *site_id == step_site_id
-                && matches!(expression.kind, ExpressionKind::Int(2)))
+        range
+            .step
+            .as_ref()
+            .expect("range step should remain present")
+            .contains_regular_division
     );
 }
 

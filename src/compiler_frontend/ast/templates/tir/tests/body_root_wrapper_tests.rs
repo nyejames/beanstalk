@@ -16,6 +16,7 @@ use super::super::store::TemplateIrStore;
 use super::super::summary::TemplateIrSummary;
 use super::super::view::TemplateTirPhase;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
+use crate::compiler_frontend::ast::templates::error::TemplateError;
 use crate::compiler_frontend::ast::templates::template::{
     SlotKey, Style, TemplateSegmentOrigin, TemplateType,
 };
@@ -307,34 +308,47 @@ fn body_root_leaves_slot_bearing_child_unwrapped() {
 // ---------------------
 
 #[test]
-fn apply_inherited_wrappers_rejects_missing_body_root_with_empty_wrappers() {
+fn apply_inherited_wrappers_rejects_malformed_body_roots() {
     let string_table = StringTable::new();
     let mut store = TemplateIrStore::new();
+
+    // Missing body root: the node id does not exist in the store, so the
+    // body-root authority check fails before the empty-wrapper short-circuit.
     let missing_root = TemplateIrNodeId::new(99);
-    let result =
-        apply_inherited_child_wrappers_to_body_root(missing_root, &[], &mut store, &string_table);
-
+    let missing_error =
+        apply_inherited_child_wrappers_to_body_root(missing_root, &[], &mut store, &string_table)
+            .expect_err("missing body root should be rejected even with empty wrappers");
+    let TemplateError::Infrastructure(missing_error) = missing_error else {
+        panic!("missing body root should fail as a compiler/infrastructure error");
+    };
     assert!(
-        result.is_err(),
-        "missing body root should be rejected even with empty wrappers"
+        missing_error.msg.contains("missing"),
+        "missing body root must report the missing-node invariant reason: {}",
+        missing_error.msg,
     );
-}
 
-#[test]
-fn apply_inherited_wrappers_rejects_non_sequence_body_root_with_empty_wrappers() {
-    let mut string_table = StringTable::new();
-    let mut store = TemplateIrStore::new();
-    let text = build_single_text_tir_template(&mut store, &mut string_table, "leaf");
-    // A bare template root node is a Text node, not a Sequence.
-    let result = apply_inherited_child_wrappers_to_body_root(
-        store.get_template(text).expect("template exists").root,
+    // Non-sequence body root: a bare template root is a Text node, so the
+    // Sequence authority check fails independently of the missing-node reason.
+    let mut non_sequence_store = TemplateIrStore::new();
+    let mut non_sequence_strings = StringTable::new();
+    let text =
+        build_single_text_tir_template(&mut non_sequence_store, &mut non_sequence_strings, "leaf");
+    let non_sequence_error = apply_inherited_child_wrappers_to_body_root(
+        non_sequence_store
+            .get_template(text)
+            .expect("template exists")
+            .root,
         &[],
-        &mut store,
-        &string_table,
-    );
-
+        &mut non_sequence_store,
+        &non_sequence_strings,
+    )
+    .expect_err("non-sequence body root should be rejected even with empty wrappers");
+    let TemplateError::Infrastructure(non_sequence_error) = non_sequence_error else {
+        panic!("non-sequence body root should fail as a compiler/infrastructure error");
+    };
     assert!(
-        result.is_err(),
-        "non-sequence body root should be rejected even with empty wrappers"
+        non_sequence_error.msg.contains("not a Sequence"),
+        "non-sequence body root must report the not-a-sequence invariant reason: {}",
+        non_sequence_error.msg,
     );
 }
