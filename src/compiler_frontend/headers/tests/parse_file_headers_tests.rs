@@ -2499,7 +2499,8 @@ fn import_only_file_contributes_file_imports_and_module_file_paths() {
     assert_eq!(helper_imports.len(), 1);
     assert_eq!(
         helper_imports[0]
-            .header_path
+            .provider
+            .path
             .to_portable_string(&string_table),
         "core/math"
     );
@@ -2525,7 +2526,8 @@ fn per_file_prepare_output_preserves_file_role_and_imports_on_output() {
     assert_eq!(output.file_imports.len(), 1);
     assert_eq!(
         output.file_imports[0]
-            .header_path
+            .provider
+            .path
             .to_portable_string(&string_table),
         "core/math"
     );
@@ -2655,7 +2657,8 @@ fn export_import_path_parsed_as_public_surface_import() {
     assert_eq!(output.file_imports[0].export_mode, HeaderExportMode::Public);
     assert_eq!(
         output.file_imports[0]
-            .header_path
+            .provider
+            .path
             .to_portable_string(&string_table),
         "src/button/Button"
     );

@@ -8,8 +8,9 @@ use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::headers::file_state::HeaderFileParseState;
 use crate::compiler_frontend::headers::imports::normalize_import_dependency_path;
 use crate::compiler_frontend::headers::types::{FileImport, HeaderExportMode, HeaderParseContext};
-use crate::compiler_frontend::paths::const_paths::parse_import_clause_items;
-use crate::compiler_frontend::symbols::interned_path::InternedPath;
+use crate::compiler_frontend::paths::const_paths::{
+    StructuralProviderReference, parse_import_clause_items,
+};
 use crate::compiler_frontend::symbols::string_interning::StringId;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation};
 
@@ -21,10 +22,9 @@ use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation};
 type FileImportResult<T> = Result<T, Box<CompilerDiagnostic>>;
 
 struct ImportItemRecord {
-    header_path: InternedPath,
+    provider: StructuralProviderReference,
     alias: Option<StringId>,
     location: SourceLocation,
-    path_location: SourceLocation,
     alias_location: Option<SourceLocation>,
     from_grouped: bool,
     export_mode: HeaderExportMode,
@@ -96,19 +96,21 @@ fn parse_and_record_import_clause(
 
     for item in items {
         let normalized_path = normalize_import_dependency_path(
-            &item.path,
+            &item.provider.path,
             &token_stream.src_path,
-            &item.path_location,
+            &item.provider.path_location,
             context.string_table,
         )?;
 
         record_import_item(
             state,
             ImportItemRecord {
-                header_path: normalized_path,
+                provider: StructuralProviderReference {
+                    path: normalized_path,
+                    path_location: item.provider.path_location,
+                },
                 alias: item.alias,
                 location: clause_location.clone(),
-                path_location: item.path_location,
                 alias_location: item.alias_location,
                 from_grouped: item.from_grouped,
                 export_mode,
@@ -128,24 +130,23 @@ fn parse_and_record_import_clause(
 /// WHY: a module root may repeat an import as a re-export, or import and re-export the same symbol
 /// under the same local name. Normalization avoids duplicate records while preserving visibility.
 fn record_import_item(state: &mut HeaderFileParseState, record: ImportItemRecord) {
-    let local_name = record.alias.or_else(|| record.header_path.name());
+    let local_name = record.alias.or_else(|| record.provider.path.name());
     if let Some(name) = local_name {
         state
             .encountered_symbols
             .insert(name, record.location.clone());
     }
 
-    let key = (record.header_path.to_owned(), record.alias);
+    let key = (record.provider.path.to_owned(), record.alias);
 
     if state.seen_imports.insert(key.clone()) {
         state
             .file_import_paths
-            .insert(record.header_path.to_owned());
+            .insert(record.provider.path.to_owned());
         state.file_imports.push(FileImport {
-            header_path: record.header_path,
+            provider: record.provider,
             alias: record.alias,
             location: record.location,
-            path_location: record.path_location,
             alias_location: record.alias_location,
             from_grouped: record.from_grouped,
             export_mode: record.export_mode,
@@ -154,7 +155,7 @@ fn record_import_item(state: &mut HeaderFileParseState, record: ImportItemRecord
         // Normalization: if any occurrence is public, upgrade the existing record to public.
         if record.export_mode.is_public() {
             for import in &mut state.file_imports {
-                if import.header_path == key.0 && import.alias == key.1 {
+                if import.provider.path == key.0 && import.alias == key.1 {
                     import.export_mode = HeaderExportMode::Public;
                     break;
                 }

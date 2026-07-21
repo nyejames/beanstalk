@@ -434,11 +434,14 @@ fn traverse_reachable_source_files(
             );
         }
 
-        let import_paths = scanned_source.import_paths;
-        imports_scanned += import_paths.len();
+        let import_references = scanned_source.imports;
+        imports_scanned += import_references.len();
         source_cache.insert(canonical_file.clone(), scanned_source.source_code);
 
-        for import_path in &import_paths {
+        for provider in &import_references {
+            // Stage 0 resolves reachability through the provider path today; the structural
+            // reference retains `path_location` for the graph boundary alongside that path.
+            let import_path = &provider.path;
             let action = policy.handle_import(
                 import_path,
                 &canonical_file,

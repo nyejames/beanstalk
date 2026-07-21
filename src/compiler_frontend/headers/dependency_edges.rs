@@ -62,10 +62,10 @@ pub(super) fn collect_named_type_dependency_edge(
     let edge = file_imports
         .iter()
         .find(|import| {
-            let local_name = import.alias.or_else(|| import.header_path.name());
+            let local_name = import.alias.or_else(|| import.provider.path.name());
             local_name == Some(type_name)
         })
-        .map(|import| import.header_path.clone());
+        .map(|import| import.provider.path.clone());
 
     // Virtual package imports are not source graph participants, so they must not
     // create dependency edges. Header import environment handles them during resolution.

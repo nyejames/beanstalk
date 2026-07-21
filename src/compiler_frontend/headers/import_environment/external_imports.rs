@@ -27,7 +27,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
     ) -> ExternalImportResult<()> {
         let local_name = self.derive_import_local_name(import)?;
 
-        if let Some(symbol_name) = import.header_path.name() {
+        if let Some(symbol_name) = import.provider.path.name() {
             self.emit_alias_case_warning_if_needed(import, symbol_name);
         }
 

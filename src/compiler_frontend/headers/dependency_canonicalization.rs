@@ -42,12 +42,12 @@ pub(super) fn canonicalize_header_dependencies(
         for dependency in header.dependencies.drain() {
             let matching_import = file_imports
                 .iter()
-                .find(|import| import.header_path == dependency);
+                .find(|import| import.provider.path == dependency);
 
             if let Some(import) = matching_import {
                 let local_name = match import.alias {
                     Some(alias) => alias,
-                    None => match import.header_path.name() {
+                    None => match import.provider.path.name() {
                         Some(name) => name,
                         None => {
                             canonical.insert(dependency);

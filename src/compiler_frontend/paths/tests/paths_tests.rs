@@ -105,10 +105,10 @@ fn collect_import_path_values(source: &str) -> Vec<String> {
     )
     .expect("tokenization should succeed");
 
-    collect_paths_from_tokens(&file_tokens.tokens)
+    collect_provider_references_from_tokens(&file_tokens.tokens)
         .expect("import collection should succeed")
         .iter()
-        .map(|path| path.to_portable_string(&string_table))
+        .map(|reference| reference.path.to_portable_string(&string_table))
         .collect()
 }
 
@@ -584,7 +584,7 @@ fn collect_import_paths_from_tokens_rejects_missing_path() {
     )
     .expect("tokenization should succeed");
 
-    let result = collect_paths_from_tokens(&file_tokens.tokens);
+    let result = collect_provider_references_from_tokens(&file_tokens.tokens);
     assert!(result.is_err(), "import without a path token should fail");
 }
 
@@ -623,7 +623,7 @@ fn parse_import_clause_items_reads_alias() {
 
     assert_eq!(items.len(), 1);
     assert_eq!(
-        items[0].path.to_portable_string(&string_table),
+        items[0].provider.path.to_portable_string(&string_table),
         "core/io/io"
     );
     assert_eq!(string_table.resolve(items[0].alias.unwrap()), "print");
@@ -826,4 +826,43 @@ fn collect_import_paths_from_tokens_ignores_exported_declarations() {
 fn collect_import_paths_from_tokens_ignores_bare_namespace_export() {
     let paths = collect_import_path_values("export @./layout\n");
     assert!(paths.is_empty());
+}
+
+#[test]
+fn collect_provider_references_retains_path_and_source_location() {
+    // WHAT: structural provider references carry both the resolved path and the exact source
+    // location of the path token, not just the path Stage 0 resolves today.
+    // WHY: the graph boundary needs the location retained across Stage 0 reachable discovery.
+    let mut string_table = StringTable::new();
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
+    let file_tokens = tokenize(
+        "import @docs/guides\n",
+        &source_path,
+        TokenizerEntryMode::SourceFile,
+        &style_directives,
+        &mut string_table,
+        None,
+    )
+    .expect("tokenization should succeed");
+
+    let references = collect_provider_references_from_tokens(&file_tokens.tokens)
+        .expect("import collection should succeed");
+
+    let expected_path_location = file_tokens
+        .tokens
+        .iter()
+        .find_map(|token| match &token.kind {
+            TokenKind::Path(items) => items.first().map(|item| item.path_location.clone()),
+            _ => None,
+        })
+        .expect("the import should contain a path token");
+
+    assert_eq!(references.len(), 1);
+    let reference = &references[0];
+    assert_eq!(
+        reference.path.to_portable_string(&string_table),
+        "docs/guides"
+    );
+    assert_eq!(reference.path_location, expected_path_location);
 }

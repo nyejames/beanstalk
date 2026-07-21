@@ -9,29 +9,29 @@ Replace entry-closure compilation with canonical project and package graphs, imm
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/canonical-module-compilation-and-scoped-packages-plan.md
 STATUS: active
-CURRENT_SLICE: Phase 4a accepted; checkpoint commit pending
-LAST_ACCEPTED_COMMIT: a4e343596 (Phase 3a canonical source inventory and OwnedSourceSet ownership)
-WORKTREE: main at a4e343596 with accepted Phase 4a code, tests and this plan update; unrelated user documentation work may appear and must be preserved
+CURRENT_SLICE: Phase 4b accepted; checkpoint commit pending
+LAST_ACCEPTED_COMMIT: 4ac575d8a (Phase 4a retained header syntax and explicit binding boundary)
+WORKTREE: main at 4ac575d8a with accepted Phase 4b code, focused tests and this plan update; unrelated user documentation work may appear and must be preserved
 REQUIRED_RELOADS: startup files, this plan, relevant language/import and borrow references, current frontend/header source and diff
 RELEVANT_CONTEXT_NOW:
 - docs: compiler-design-overview.md Stage 2 and build-system-design.md Prepared-source orchestration require retained syntax before provider binding with no reparse
-- code: parse_file_headers.rs::parse_headers currently combines provider-independent aggregation/symbol collection with public-surface resolution, import binding and dependency canonicalization; ModuleIdentityTable already supplies the structural graph foundation
+- code: const_paths/import_clauses.rs now owns StructuralProviderReference; Stage 0 scanning and retained FileImport shells consume it while current reachability and config callers project provider.path for resolution
 ACCEPTANCE_CRITERIA:
-- PreparedHeaderSyntax is the provider-independent module aggregation boundary and retains parsed header/import shells, order-independent symbols, root metadata and statistics
-- bind_module_headers consumes PreparedHeaderSyntax and produces BoundModuleHeaders without retokenizing or reparsing declaration syntax
-- production, config, direct Beandown, dependency sorting and tests use the two explicit current APIs; obsolete Headers/parse_headers names and entry point are removed
-- focused boundary tests protect pre-binding syntax retention and completed file visibility after binding
-- later provider scheduling, final structural provider references and SemanticSourceSet derivation remain subsequent coherent slices
+- one StructuralProviderReference type owns a parsed provider path and its source location at the shared import-clause syntax boundary
+- Stage 0 reachable discovery consumes StructuralProviderReference values rather than bare import paths
+- FileImport embeds the same structural reference while retaining alias/export metadata for symbol binding; obsolete parallel header_path/path_location fields are removed
+- remapping preserves the nested structural path/location and existing import diagnostics, reachability, aliases and deterministic order remain unchanged
+- the type is production-consumed by both current Stage 0 and retained header syntax, not an unused projection or compatibility wrapper
 VALIDATION_STATE:
-- Ollama focused gates: passed; 114 parse-file-header tests, 17 module-dependency tests, caller suites and cargo check --tests
-- parent focused gate after assertion corrections: passed; 114 parse-file-header tests
-- just validate: passed; cross-target Clippy, 3415 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases
-DOCS_IMPACT: current plan state refreshed; progress matrix unchanged for a behavior-preserving stage-boundary split
-BLOCKERS_OR_OPEN_DECISIONS: Phase 3b SemanticSourceSet cannot become the sole authority until retained syntax and structural provider edges can replace current per-entry reachability; this is a dependency-driven phase interleave, not a user blocker
+- Phase 4a just validate: passed; cross-target Clippy, 3415 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases
+- Phase 4b focused validation: passed; 63 path tests, 17 remap tests, 5 reachable-discovery tests and 114 header tests
+- Phase 4b just validate: passed; cross-target Clippy, 3416 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases
+DOCS_IMPACT: current plan state refreshed; progress matrix unchanged for a behavior-preserving structural-reference type split
+BLOCKERS_OR_OPEN_DECISIONS: the config source-set caller required a mechanical migration to the shared structural-reference scan and projects provider.path locally; temporal retention still requires replacing Stage 0's separate token scan with prepared syntax; no user blocker
 DELEGATION_DECISION: ollama - user requires Ollama for every worker slice
 NEXT_WORKER_ORDER: ollama only; no provider substitution for this run
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit Phase 4a, record its hash, then scope temporal retention and structural provider-reference extraction for the next Phase 4/5 prerequisite slice
+NEXT_RESUME_ACTION: commit Phase 4b, record its hash, then scope the next retained-syntax prerequisite slice
 ```
 
 ## Hard prerequisites
@@ -347,6 +347,20 @@ Accepted Phase 4a checkpoint:
 - the current production calls remain adjacent until Stage 0 retains prepared syntax across source
   provider scheduling. Structural source-provider references and their separation from local
   ordering hints remain the next prerequisite.
+
+Accepted Phase 4b checkpoint:
+
+- `StructuralProviderReference` is the shared import-clause syntax value for one normalized
+  provider path and its exact source location; both Stage 0 scanning and retained `FileImport`
+  shells consume it directly.
+- `FileImport` embeds the structural reference while keeping alias, clause, grouping and export
+  metadata separate for later binding; the parallel `header_path` and `path_location` fields and
+  the old path-only scan APIs were removed without wrappers.
+- reachable discovery currently resolves `provider.path` while retaining the location for the
+  graph boundary. The config source-set caller mechanically migrated to the same scan and projects
+  the path locally because preserving its former path-only API would duplicate the obsolete path.
+- exact path-location retention and nested string-ID remapping have focused coverage. Import
+  behavior, diagnostics, visibility and deterministic order are unchanged.
 
 ### Phase 5: Build deterministic project, package and provider graphs
 

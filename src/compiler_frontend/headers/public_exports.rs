@@ -431,10 +431,10 @@ fn public_export_name(
 ) -> PublicExportDataResult<StringId> {
     match import.alias {
         Some(alias) => Ok(alias),
-        None => match import.header_path.name() {
+        None => match import.provider.path.name() {
             Some(name) => Ok(name),
             None => Err(Box::new(CompilerDiagnostic::missing_import_target(
-                import.header_path.clone(),
+                import.provider.path.clone(),
                 import.location.clone(),
             ))),
         },
@@ -455,7 +455,7 @@ fn resolve_public_export_import(
 ) -> PublicExportDataResult<PublicExportTarget> {
     // 1. Try external package resolution first.
     match resolve_external_package_symbol(ExternalPackageSymbolResolutionInput {
-        import_path: &import.header_path,
+        import_path: &import.provider.path,
         external_package_registry,
         string_table,
     }) {
@@ -478,7 +478,7 @@ fn resolve_public_export_import(
     // 2. Try public export boundary resolution.
     let public_boundary_input = PublicExportResolutionInput {
         importer_file: root_file,
-        header_path: &import.header_path,
+        header_path: &import.provider.path,
         source_package_public_exports: &module_symbols.source_package_public_exports,
         file_package_membership: &module_symbols.file_package_membership,
         module_root_public_exports: &module_symbols.module_root_public_exports,
@@ -519,7 +519,7 @@ fn resolve_public_export_import(
                     };
                     return Err(Box::new(
                         CompilerDiagnostic::not_exported_by_public_surface(
-                            import.header_path.clone(),
+                            import.provider.path.clone(),
                             public_surface_name_id,
                             diagnostic_public_surface_type,
                             import.location.clone(),
@@ -535,7 +535,7 @@ fn resolve_public_export_import(
 
     // 3. Direct source resolution.
     let target = resolve_import_target(ImportTargetResolutionInput {
-        import_path: &import.header_path,
+        import_path: &import.provider.path,
         location: &import.location,
         module_file_paths: &module_symbols.module_file_paths,
         importable_symbol_paths: &module_symbols.importable_source_symbol_paths,
@@ -552,7 +552,7 @@ fn resolve_public_export_import(
                 check_source_package_boundary(SourcePackageBoundaryCheckInput {
                     importer_file: root_file,
                     target_file,
-                    requested_path: &import.header_path,
+                    requested_path: &import.provider.path,
                     location: import.location.clone(),
                     file_package_membership: &module_symbols.file_package_membership,
                     source_package_root_files: &module_symbols.source_package_root_files,

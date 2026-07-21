@@ -28,6 +28,7 @@ use crate::compiler_frontend::headers::types::{
     FileFrontendPrepareError, FileFrontendPrepareOutput, FileImport, FileRole, Header,
     HeaderExportMode, HeaderKind, TopLevelConstFragment,
 };
+use crate::compiler_frontend::paths::const_paths::StructuralProviderReference;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, Token, TokenKind};
@@ -124,10 +125,12 @@ fn file_import_remaps_all_fields_without_alias() {
     let path_location = make_location("test.bst", &mut local);
 
     let mut import = FileImport {
-        header_path,
+        provider: StructuralProviderReference {
+            path: header_path,
+            path_location,
+        },
         alias: None,
         location,
-        path_location,
         alias_location: None,
         from_grouped: false,
         export_mode: HeaderExportMode::Private,
@@ -136,10 +139,13 @@ fn file_import_remaps_all_fields_without_alias() {
     let remap = global.merge_from(&local);
     import.remap_string_ids(&remap);
 
-    assert_eq!(import.header_path.to_portable_string(&global), "@html/head");
+    assert_eq!(
+        import.provider.path.to_portable_string(&global),
+        "@html/head"
+    );
     assert!(import.alias.is_none());
     assert_location_resolves_to(&import.location, "test.bst", &global);
-    assert_location_resolves_to(&import.path_location, "test.bst", &global);
+    assert_location_resolves_to(&import.provider.path_location, "test.bst", &global);
     assert!(import.alias_location.is_none());
     assert_eq!(import.export_mode, HeaderExportMode::Private);
 }
@@ -156,10 +162,12 @@ fn file_import_remaps_all_fields_with_alias() {
     let alias_location = Some(make_location("test.bst", &mut local));
 
     let mut import = FileImport {
-        header_path,
+        provider: StructuralProviderReference {
+            path: header_path,
+            path_location,
+        },
         alias: Some(alias_name),
         location,
-        path_location,
         alias_location,
         from_grouped: false,
         export_mode: HeaderExportMode::Public,
@@ -168,10 +176,13 @@ fn file_import_remaps_all_fields_with_alias() {
     let remap = global.merge_from(&local);
     import.remap_string_ids(&remap);
 
-    assert_eq!(import.header_path.to_portable_string(&global), "@html/head");
+    assert_eq!(
+        import.provider.path.to_portable_string(&global),
+        "@html/head"
+    );
     assert_eq!(global.resolve(import.alias.unwrap()), "h");
     assert_location_resolves_to(&import.location, "test.bst", &global);
-    assert_location_resolves_to(&import.path_location, "test.bst", &global);
+    assert_location_resolves_to(&import.provider.path_location, "test.bst", &global);
     assert_location_resolves_to(&import.alias_location.unwrap(), "test.bst", &global);
     assert_eq!(import.export_mode, HeaderExportMode::Public);
 }
@@ -192,10 +203,12 @@ fn remap_preserves_correct_ids_when_global_has_preexisting_strings() {
     let alias_location = Some(make_location("file.bst", &mut local));
 
     let mut import = FileImport {
-        header_path,
+        provider: StructuralProviderReference {
+            path: header_path,
+            path_location,
+        },
         alias: Some(alias_name),
         location,
-        path_location,
         alias_location,
         from_grouped: false,
         export_mode: HeaderExportMode::Public,
@@ -216,7 +229,7 @@ fn remap_preserves_correct_ids_when_global_has_preexisting_strings() {
 
     // Verify the path resolves correctly.
     assert_eq!(
-        import.header_path.to_portable_string(&global),
+        import.provider.path.to_portable_string(&global),
         "@utils/helpers"
     );
 
@@ -225,7 +238,7 @@ fn remap_preserves_correct_ids_when_global_has_preexisting_strings() {
 
     // Verify all locations still resolve.
     assert_location_resolves_to(&import.location, "file.bst", &global);
-    assert_location_resolves_to(&import.path_location, "file.bst", &global);
+    assert_location_resolves_to(&import.provider.path_location, "file.bst", &global);
     assert_location_resolves_to(&import.alias_location.unwrap(), "file.bst", &global);
     assert_location_resolves_to(&fragment.location, "file.bst", &global);
 }
@@ -598,10 +611,12 @@ fn file_frontend_prepare_output_remaps_all_string_id_fields() {
     let warning = make_unknown_name_diagnostic("warn_name", &mut local);
 
     let import = FileImport {
-        header_path: InternedPath::from_single_str("@html/head", &mut local),
+        provider: StructuralProviderReference {
+            path: InternedPath::from_single_str("@html/head", &mut local),
+            path_location: make_location("test.bst", &mut local),
+        },
         alias: Some(local.intern("h")),
         location: make_location("test.bst", &mut local),
-        path_location: make_location("test.bst", &mut local),
         alias_location: Some(make_location("test.bst", &mut local)),
         from_grouped: false,
         export_mode: HeaderExportMode::Public,
@@ -664,7 +679,10 @@ fn file_frontend_prepare_output_remaps_all_string_id_fields() {
     // Per-file imports remapped.
     assert_eq!(output.file_imports.len(), 1);
     let import = &output.file_imports[0];
-    assert_eq!(import.header_path.to_portable_string(&global), "@html/head");
+    assert_eq!(
+        import.provider.path.to_portable_string(&global),
+        "@html/head"
+    );
     assert_eq!(global.resolve(import.alias.unwrap()), "h");
     assert_eq!(import.export_mode, HeaderExportMode::Public);
 

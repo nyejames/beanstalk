@@ -8,7 +8,7 @@
 //! constant folding and type checking, including imported package constants.
 
 use crate::build_system::create_project_modules::extract_source_code;
-use crate::build_system::create_project_modules::import_scanning::extract_import_paths;
+use crate::build_system::create_project_modules::import_scanning::extract_import_provider_references;
 use crate::build_system::create_project_modules::root_validation::validate_source_package_roots;
 use crate::build_system::create_project_modules::source_package_discovery::prepare_source_package_roots;
 use crate::build_system::project_config::ProjectConfigParseServices;
@@ -469,17 +469,21 @@ fn build_config_source_set(
 
         source_set.push(canonical_file.clone());
 
-        let import_paths =
-            match extract_import_paths(&canonical_file, services.style_directives, string_table) {
-                Ok(paths) => paths,
-                Err(_error) => {
-                    // Tokenization/import extraction errors for this file will be reported during
-                    // `prepare_one_config_file` instead, so skip duplicates here.
-                    continue;
-                }
-            };
+        let import_references = match extract_import_provider_references(
+            &canonical_file,
+            services.style_directives,
+            string_table,
+        ) {
+            Ok(references) => references,
+            Err(_error) => {
+                // Tokenization/import extraction errors for this file will be reported during
+                // `prepare_one_config_file` instead, so skip duplicates here.
+                continue;
+            }
+        };
 
-        for import_path in &import_paths {
+        for provider in &import_references {
+            let import_path = &provider.path;
             // Virtual package imports (e.g. @core/math) are allowed and need no file discovery.
             if services
                 .frontend_surface

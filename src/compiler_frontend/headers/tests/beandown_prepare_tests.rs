@@ -785,7 +785,8 @@ fn module_root_export_syntax_can_target_beandown_content() {
     );
     assert_eq!(
         root_output.file_imports[0]
-            .header_path
+            .provider
+            .path
             .to_portable_string(&string_table),
         "src/intro/content"
     );

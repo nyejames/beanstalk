@@ -547,7 +547,7 @@ fn generic_parameter_forbidden_names(context: &mut HeaderBuildContext<'_>) -> Fx
     let mut forbidden_names = FxHashSet::default();
 
     for import in context.file_import_entries {
-        if let Some(local_name) = import.alias.or_else(|| import.header_path.name()) {
+        if let Some(local_name) = import.alias.or_else(|| import.provider.path.name()) {
             forbidden_names.insert(local_name);
         }
     }

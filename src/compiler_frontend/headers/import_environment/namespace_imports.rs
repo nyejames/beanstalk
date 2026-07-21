@@ -339,7 +339,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         import: &FileImport,
         source_file: &InternedPath,
     ) -> Option<ResolvedNamespaceTarget> {
-        let components = import.header_path.as_components();
+        let components = import.provider.path.as_components();
         if components.is_empty() {
             return None;
         }
@@ -348,7 +348,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             return Some(target);
         }
 
-        self.resolve_module_root_public_export(&import.header_path, source_file)
+        self.resolve_module_root_public_export(&import.provider.path, source_file)
     }
 
     fn resolve_source_package_public_export(
@@ -466,7 +466,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
 
                 let public_surface_name_id = self.string_table.intern(&target_package);
                 return Err(Box::new(diagnostics::not_exported_by_public_surface(
-                    &import.header_path,
+                    &import.provider.path,
                     public_surface_name_id,
                     ImportPublicSurfaceType::SourcePackage,
                     import.location.clone(),
@@ -498,13 +498,13 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             .contains_key(target_root)
         {
             return Err(Box::new(diagnostics::cross_module_import_not_exported(
-                &import.header_path,
+                &import.provider.path,
                 import.location.clone(),
             )));
         }
 
         Err(Box::new(diagnostics::missing_module_root_public_surface(
-            &import.header_path,
+            &import.provider.path,
             import.location.clone(),
         )))
     }
@@ -526,7 +526,8 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             Some(alias) => Ok(alias),
             None => {
                 let stem = import
-                    .header_path
+                    .provider
+                    .path
                     .name()
                     .map(|n| self.string_table.resolve(n).to_owned())
                     .unwrap_or_default();
@@ -534,7 +535,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
                 if stem.is_empty() || !is_valid_identifier(stem) {
                     return Err(Box::new(
                         CompilerDiagnostic::invalid_namespace_default_name(
-                            import.header_path.clone(),
+                            import.provider.path.clone(),
                             import.location.clone(),
                         ),
                     ));

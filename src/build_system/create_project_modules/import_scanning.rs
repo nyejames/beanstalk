@@ -5,7 +5,9 @@
 // so syntax diagnostics and file/tooling failures stay typed until the Stage 0 boundary.
 
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::paths::const_paths::collect_paths_from_tokens;
+use crate::compiler_frontend::paths::const_paths::{
+    StructuralProviderReference, collect_provider_references_from_tokens,
+};
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::interned_path::{InternedPath, NonUtf8PathComponent};
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -19,11 +21,13 @@ use super::source_loading::extract_source_code;
 
 /// Import scan output that keeps the already-read source available to Stage 0.
 ///
-/// WHAT: pairs import paths with the Beanstalk source text used to discover them.
-/// WHY: reachable-file discovery can reuse the source when assembling `InputFile`
-///      values instead of reading each scanned `.bst` file again.
+/// WHAT: pairs structural provider references with the Beanstalk source text used to discover
+///      them.
+/// WHY: reachable-file discovery consumes the references directly, using `path` for current
+///      resolution while retaining `path_location` for the graph boundary, and reuses the source
+///      when assembling `InputFile` values instead of reading each scanned `.bst` file again.
 pub(super) struct ScannedImportSource {
-    pub(super) import_paths: Vec<InternedPath>,
+    pub(super) imports: Vec<StructuralProviderReference>,
     pub(super) source_code: String,
 }
 
@@ -31,12 +35,12 @@ pub(super) struct ScannedImportSource {
 //  Import Path Extraction
 // -------------------------
 
-pub(crate) fn extract_import_paths(
+pub(crate) fn extract_import_provider_references(
     file_path: &Path,
     style_directives: &StyleDirectiveRegistry,
     string_table: &mut StringTable,
-) -> Result<Vec<InternedPath>, SourceDiscoveryError> {
-    Ok(scan_imports_with_source(file_path, style_directives, string_table)?.import_paths)
+) -> Result<Vec<StructuralProviderReference>, SourceDiscoveryError> {
+    Ok(scan_imports_with_source(file_path, style_directives, string_table)?.imports)
 }
 
 pub(super) fn scan_imports_with_source(
@@ -82,11 +86,11 @@ pub(super) fn scan_imports_from_source(
     )
     .map_err(SourceDiscoveryError::Diagnostic)?;
 
-    let imports =
-        collect_paths_from_tokens(&tokens.tokens).map_err(SourceDiscoveryError::Diagnostic)?;
+    let imports = collect_provider_references_from_tokens(&tokens.tokens)
+        .map_err(SourceDiscoveryError::Diagnostic)?;
 
     Ok(ScannedImportSource {
-        import_paths: imports,
+        imports,
         source_code: source,
     })
 }

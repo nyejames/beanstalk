@@ -6,17 +6,44 @@
 
 use super::*;
 
+use crate::compiler_frontend::symbols::string_interning::StringIdRemap;
+
 /// Boxed diagnostic result for the connected import-clause family.
 ///
 /// Stage 0 import scanning and header import preparation share these parsers. One error shape lets
 /// header parsing propagate diagnostics directly while Stage 0 adapts once to its discovery error.
 type ImportClauseResult<T> = Result<T, Box<CompilerDiagnostic>>;
 
+/// WHAT: one parsed provider path paired with its exact source location.
+/// WHY: Stage 0 reachable discovery and retained header import shells both need the provider
+///      path and the source position that introduced it. Keeping them in one type-distinct value
+///      separates structural provider references from imported-symbol alias/export metadata at
+///      the shared import-clause syntax boundary, so Stage 0 can carry the graph boundary
+///      location alongside the path it resolves today.
+#[derive(Clone, Debug, PartialEq)]
+pub struct StructuralProviderReference {
+    pub path: InternedPath,
+    pub path_location: SourceLocation,
+}
+
+impl StructuralProviderReference {
+    /// Remap the interned path and source location into a merged string table.
+    ///
+    /// WHAT: shifts the `InternedPath` and `SourceLocation` string IDs after a string-table merge.
+    /// WHY: per-file frontend preparation uses local string tables; the nested reference remaps
+    ///      exactly once when its owning `FileImport` or `ScannedImportSource` is merged into the
+    ///      module or global table.
+    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
+        self.path.remap_string_ids(remap);
+        self.path_location.remap_string_ids(remap);
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct ParsedImportItem {
-    pub path: InternedPath,
+    /// Structural provider reference carrying the parsed path and its source location.
+    pub provider: StructuralProviderReference,
     pub alias: Option<StringId>,
-    pub path_location: SourceLocation,
     pub alias_location: Option<SourceLocation>,
     pub from_grouped: bool,
 }
@@ -132,9 +159,11 @@ fn parse_path_clause_items(
     let parsed_items = items
         .iter()
         .map(|item| ParsedImportItem {
-            path: item.path.clone(),
+            provider: StructuralProviderReference {
+                path: item.path.clone(),
+                path_location: item.path_location.clone(),
+            },
             alias: item.alias.or(trailing_alias),
-            path_location: item.path_location.clone(),
             alias_location: item
                 .alias_location
                 .clone()
@@ -146,43 +175,17 @@ fn parse_path_clause_items(
     Ok((parsed_items, index))
 }
 
-pub fn parse_import_clause_tokens(
+/// Collect structural provider references from every top-level import clause in a token stream.
+///
+/// WHAT: walks authored tokens, skips imports inside an `export:` block, and returns one
+/// `StructuralProviderReference` per parsed import path with its exact source location.
+/// WHY: Stage 0 reachable discovery consumes these values directly, using `path` for current
+///      resolution while retaining `path_location` for the graph boundary. Header import
+///      preparation uses `parse_import_clause_items` when it also needs alias metadata.
+pub fn collect_provider_references_from_tokens(
     tokens: &[Token],
-    start_index: usize,
-) -> ImportClauseResult<(Vec<InternedPath>, usize)> {
-    // WHAT: path-only import clause parsing for callers that do not need alias data.
-    // WHY: module reachability only needs canonical target paths; header import preparation is
-    // the owner for alias visibility and uses `parse_import_clause_items` directly.
-    let mut index = start_index;
-    while tokens
-        .get(index)
-        .is_some_and(|token| matches!(token.kind, TokenKind::Newline))
-    {
-        index += 1;
-    }
-
-    let Some(import_token) = tokens.get(index) else {
-        return Err(Box::new(CompilerDiagnostic::invalid_import_clause(
-            ImportClauseKind::Import,
-            InvalidImportClauseReason::MissingPath,
-            SourceLocation::default(),
-        )));
-    };
-    if !matches!(import_token.kind, TokenKind::Import) {
-        return Err(Box::new(CompilerDiagnostic::invalid_import_clause(
-            ImportClauseKind::Import,
-            InvalidImportClauseReason::ExpectedPath,
-            import_token.location.clone(),
-        )));
-    }
-    let string_table = StringTable::new();
-    let (items, next_index) = parse_import_clause_items(tokens, index, &string_table)?;
-    let paths = items.into_iter().map(|item| item.path).collect();
-    Ok((paths, next_index))
-}
-
-pub fn collect_paths_from_tokens(tokens: &[Token]) -> ImportClauseResult<Vec<InternedPath>> {
-    let mut parsed_paths = Vec::new();
+) -> ImportClauseResult<Vec<StructuralProviderReference>> {
+    let mut references = Vec::new();
     let mut index = 0usize;
 
     while index < tokens.len() {
@@ -197,8 +200,8 @@ pub fn collect_paths_from_tokens(tokens: &[Token]) -> ImportClauseResult<Vec<Int
                 continue;
             }
 
-            let (paths, next_index) = parse_import_clause_tokens(tokens, index)?;
-            parsed_paths.extend(paths);
+            let (items, next_index) = parse_path_clause_items(tokens, index)?;
+            references.extend(items.into_iter().map(|item| item.provider));
             index = next_index;
             continue;
         }
@@ -206,7 +209,7 @@ pub fn collect_paths_from_tokens(tokens: &[Token]) -> ImportClauseResult<Vec<Int
         index += 1;
     }
 
-    Ok(parsed_paths)
+    Ok(references)
 }
 
 fn previous_significant_token_kind(tokens: &[Token], index: usize) -> Option<&TokenKind> {

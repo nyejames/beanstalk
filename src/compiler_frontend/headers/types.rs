@@ -17,6 +17,7 @@ use crate::compiler_frontend::declaration_syntax::signature_members::{
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::headers::import_environment::HeaderImportEnvironment;
 use crate::compiler_frontend::headers::module_symbols::ModuleSymbols;
+use crate::compiler_frontend::paths::const_paths::StructuralProviderReference;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::symbols::identity::FileId;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
@@ -263,39 +264,21 @@ impl FileImport {
     ///
     /// WHY: per-file frontend preparation uses local string tables; merging them into the module
     /// table requires shifting every `StringId`, `InternedPath`, and `SourceLocation` so later
-    /// stages resolve names through the global table.
+    /// stages resolve names through the global table. The nested structural provider reference
+    /// remaps exactly once here alongside the alias and clause-location metadata.
     // Called when merging per-file frontend outputs into the module-wide compilation.
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        remap_import_like_header_fields(
-            &mut self.header_path,
-            &mut self.alias,
-            &mut self.location,
-            &mut self.path_location,
-            &mut self.alias_location,
-            remap,
-        );
-    }
-}
+        self.provider.remap_string_ids(remap);
 
-fn remap_import_like_header_fields(
-    header_path: &mut InternedPath,
-    alias: &mut Option<StringId>,
-    location: &mut SourceLocation,
-    path_location: &mut SourceLocation,
-    alias_location: &mut Option<SourceLocation>,
-    remap: &StringIdRemap,
-) {
-    header_path.remap_string_ids(remap);
+        if let Some(alias) = &mut self.alias {
+            *alias = remap.get(*alias);
+        }
 
-    if let Some(alias) = alias {
-        *alias = remap.get(*alias);
-    }
+        self.location.remap_string_ids(remap);
 
-    location.remap_string_ids(remap);
-    path_location.remap_string_ids(remap);
-
-    if let Some(alias_location) = alias_location {
-        alias_location.remap_string_ids(remap);
+        if let Some(alias_location) = &mut self.alias_location {
+            alias_location.remap_string_ids(remap);
+        }
     }
 }
 
@@ -428,10 +411,17 @@ impl Header {
 
 #[derive(Clone, Debug)]
 pub struct FileImport {
-    pub header_path: InternedPath,
+    /// Structural provider reference: the normalized import path and its exact source location.
+    ///
+    /// WHAT: carries the provider path Stage 0 resolves today plus the `path_location` retained
+    /// for the graph boundary, type-distinct from the alias/export metadata below.
+    /// WHY: structural provider references and imported-symbol bindings are separate data
+    /// classes; embedding the shared `StructuralProviderReference` keeps one authority for the
+    /// provider path and its location across Stage 0 scanning and retained import shells.
+    pub provider: StructuralProviderReference,
     pub alias: Option<StringId>,
+    /// Location of the `import` clause that introduced this record.
     pub location: SourceLocation,
-    pub path_location: SourceLocation,
     pub alias_location: Option<SourceLocation>,
     pub from_grouped: bool,
     /// Whether this import is part of the module public surface.

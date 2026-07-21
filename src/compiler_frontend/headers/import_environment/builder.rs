@@ -58,7 +58,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
     pub(super) fn derive_import_local_name(&self, import: &FileImport) -> BuilderResult<StringId> {
         match import.alias {
             Some(alias) => Ok(alias),
-            None => match import.header_path.name() {
+            None => match import.provider.path.name() {
                 Some(name) => Ok(name),
                 None => Err(Box::new(super::diagnostics::missing_import_target_no_path(
                     import.location.clone(),
@@ -78,7 +78,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         };
         if let Some(warning) = check_alias_case_warning(
             &import.alias_location,
-            &import.path_location,
+            &import.provider.path_location,
             alias,
             symbol_name,
             self.string_table,
@@ -248,16 +248,16 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             for import in imports {
                 // Reject direct imports of hash roots and canonical config files.
                 if import_path_references_hash_root_file(
-                    &import.header_path,
+                    &import.provider.path,
                     import.from_grouped,
                     self.string_table,
                 ) || import_path_references_config_file(
-                    &import.header_path,
+                    &import.provider.path,
                     import.from_grouped,
                     self.string_table,
                 ) {
                     return Err(Box::new(super::diagnostics::direct_special_file_import(
-                        &import.header_path,
+                        &import.provider.path,
                         import.location.clone(),
                     )));
                 }
@@ -613,7 +613,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         // Try public-surface resolution first.
         let public_export_input = PublicExportResolutionInput {
             importer_file: source_file,
-            header_path: &import.header_path,
+            header_path: &import.provider.path,
             source_package_public_exports: &self.module_symbols.source_package_public_exports,
             file_package_membership: &self.module_symbols.file_package_membership,
             module_root_public_exports: &self.module_symbols.module_root_public_exports,
@@ -659,7 +659,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
                     };
                     return Err(Box::new(
                         super::diagnostics::not_exported_by_public_surface(
-                            &import.header_path,
+                            &import.provider.path,
                             public_surface_name_id,
                             diagnostic_public_surface_type,
                             import.location.clone(),
@@ -674,7 +674,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
 
         // Normal target resolution.
         let target = resolve_import_target(ImportTargetResolutionInput {
-            import_path: &import.header_path,
+            import_path: &import.provider.path,
             location: &import.location,
             module_file_paths: &self.module_symbols.module_file_paths,
             importable_symbol_paths,
@@ -695,7 +695,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
                     check_source_package_boundary(SourcePackageBoundaryCheckInput {
                         importer_file: source_file,
                         target_file,
-                        requested_path: &import.header_path,
+                        requested_path: &import.provider.path,
                         location: import.location.clone(),
                         file_package_membership: &self.module_symbols.file_package_membership,
                         source_package_root_files: &self.module_symbols.source_package_root_files,
@@ -749,7 +749,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         }
 
         match resolve_external_package_symbol(ExternalPackageSymbolResolutionInput {
-            import_path: &import.header_path,
+            import_path: &import.provider.path,
             external_package_registry: self.external_package_registry,
             string_table: self.string_table,
         }) {
@@ -778,9 +778,9 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         importable_symbol_paths: &FxHashSet<InternedPath>,
     ) -> BuilderResult<()> {
         // Reject explicit `.bst` extension in import paths.
-        if has_explicit_bst_extension(&import.header_path, self.string_table) {
+        if has_explicit_bst_extension(&import.provider.path, self.string_table) {
             return Err(Box::new(CompilerDiagnostic::explicit_bst_extension(
-                import.header_path.clone(),
+                import.provider.path.clone(),
                 import.location.clone(),
             )));
         }
@@ -802,7 +802,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             .resolve_public_export_namespace_target(import, source_file)
             .or_else(|| {
                 resolve_namespace_target(NamespaceTargetResolutionInput {
-                    import_path: &import.header_path,
+                    import_path: &import.provider.path,
                     module_file_paths: &self.module_symbols.module_file_paths,
                     external_package_registry: self.external_package_registry,
                     string_table: self.string_table,
@@ -822,7 +822,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         // Namespace resolution failed. Try normal target resolution to detect
         // direct symbol-path imports that are now invalid.
         let target = resolve_import_target(ImportTargetResolutionInput {
-            import_path: &import.header_path,
+            import_path: &import.provider.path,
             location: &import.location,
             module_file_paths: &self.module_symbols.module_file_paths,
             importable_symbol_paths,
@@ -837,7 +837,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             )),
             ResolvedImportTarget::External { .. } => {
                 Err(Box::new(CompilerDiagnostic::direct_symbol_path_import(
-                    import.header_path.clone(),
+                    import.provider.path.clone(),
                     import.location.clone(),
                 )))
             }

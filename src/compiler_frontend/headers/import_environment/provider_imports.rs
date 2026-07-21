@@ -40,7 +40,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         source_file: &InternedPath,
     ) -> ProviderImportResult<Option<()>> {
         let Some((resolved, remaining)) =
-            self.find_provider_resolution_with_remaining(source_file, &import.header_path)
+            self.find_provider_resolution_with_remaining(source_file, &import.provider.path)
         else {
             return Ok(None);
         };
@@ -48,7 +48,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         // Grouped imports must name exactly one symbol within the provider package.
         if remaining.len() != 1 {
             return Err(Box::new(CompilerDiagnostic::direct_symbol_path_import(
-                import.header_path.clone(),
+                import.provider.path.clone(),
                 import.location.clone(),
             )));
         }
@@ -59,7 +59,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             .get_package_by_id(resolved.package_id);
         let Some(package) = package else {
             return Err(Box::new(super::diagnostics::missing_import_target(
-                &import.header_path,
+                &import.provider.path,
                 import.location.clone(),
             )));
         };
@@ -68,7 +68,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             .lookup_external_symbol_id_by_name(&package.path, symbol_name)
             .ok_or_else(|| {
                 Box::new(super::diagnostics::missing_import_target(
-                    &import.header_path,
+                    &import.provider.path,
                     import.location.clone(),
                 ))
             })?;
@@ -93,7 +93,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         source_file: &InternedPath,
     ) -> ProviderImportResult<Option<()>> {
         let Some((resolved, remaining)) =
-            self.find_provider_resolution_with_remaining(source_file, &import.header_path)
+            self.find_provider_resolution_with_remaining(source_file, &import.provider.path)
         else {
             return Ok(None);
         };
@@ -102,7 +102,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         // direct symbol-path import, which is invalid for bare imports.
         if !remaining.is_empty() {
             return Err(Box::new(CompilerDiagnostic::direct_symbol_path_import(
-                import.header_path.clone(),
+                import.provider.path.clone(),
                 import.location.clone(),
             )));
         }
@@ -112,7 +112,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             .get_package_by_id(resolved.package_id);
         let Some(package) = package else {
             return Err(Box::new(super::diagnostics::missing_import_target(
-                &import.header_path,
+                &import.provider.path,
                 import.location.clone(),
             )));
         };
