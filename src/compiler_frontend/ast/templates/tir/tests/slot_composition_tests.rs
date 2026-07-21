@@ -861,87 +861,118 @@ fn skipped_node_kinds_do_not_contribute_to_schema() {
 //  Routing Tests
 // -------------------------
 
+/// Exercises every explicit-insert target branch and its exact routed bucket.
 #[test]
-fn route_explicit_insert_to_named_slot() {
+fn route_explicit_insert_to_each_target_slot_key() {
     let mut string_table = StringTable::new();
     let name = string_table.intern("title");
-
     let mut store = TemplateIrStore::new();
-    let wrapper = build_single_slot_template(&mut store, SlotKey::Named(name));
-    let insert_template =
-        build_slot_insert_template(&mut store, SlotKey::Named(name), &mut string_table);
 
-    let mut builder = TemplateIrBuilder::new(&mut store);
-    let insert_node = builder.push_insert_contribution_node(insert_template, empty_location());
-    let fill = build_fill_template(&mut store, vec![insert_node]);
+    // Named target: the body node fills the named bucket and leaves the
+    // default and positional buckets untouched.
+    {
+        let wrapper = build_single_slot_template(&mut store, SlotKey::Named(name));
+        let insert_template =
+            build_slot_insert_template(&mut store, SlotKey::Named(name), &mut string_table);
+        let insert_node = {
+            let mut builder = TemplateIrBuilder::new(&mut store);
+            builder.push_insert_contribution_node(insert_template, empty_location())
+        };
+        let fill = build_fill_template(&mut store, vec![insert_node]);
 
-    // TIR slot routing expands the InsertContribution marker and routes the
-    // insert helper's body content to the target slot.
-    let routed = route_tir_slot_contributions(&store, wrapper, fill, &string_table)
-        .expect("routing should succeed");
+        let routed = route_tir_slot_contributions(&store, wrapper, fill, &string_table)
+            .expect("named-target routing should succeed");
 
-    let insert_body_node = template_root_node_id(insert_template, &store);
-    assert_eq!(
-        routed.contributions.nodes_for_slot(&SlotKey::Named(name)),
-        &[insert_body_node]
-    );
-    assert!(
-        routed
-            .contributions
-            .nodes_for_slot(&SlotKey::Default)
-            .is_empty()
-    );
-    assert!(routed.schema.accepts_target(&SlotKey::Named(name)));
-}
+        let insert_body_node = template_root_node_id(insert_template, &store);
+        assert_eq!(
+            routed.contributions.nodes_for_slot(&SlotKey::Named(name)),
+            &[insert_body_node]
+        );
+        assert!(
+            routed
+                .contributions
+                .nodes_for_slot(&SlotKey::Default)
+                .is_empty(),
+            "named insert must not spill into the default bucket"
+        );
+        assert!(
+            routed
+                .contributions
+                .nodes_for_slot(&SlotKey::Positional(0))
+                .is_empty(),
+            "named insert must not spill into a positional bucket"
+        );
+        assert_eq!(routed.schema.named_slots, [name].into_iter().collect());
+        assert!(routed.schema.positional_slots.is_empty());
+        assert!(!routed.schema.accepts_target(&SlotKey::Default));
+        assert!(!routed.schema.has_default_slot);
+    }
 
-#[test]
-fn route_explicit_insert_to_default_slot() {
-    let mut string_table = StringTable::new();
+    // Default target: the body node fills the default bucket and leaves the
+    // named and positional buckets untouched.
+    {
+        let wrapper = build_single_slot_template(&mut store, SlotKey::Default);
+        let insert_template =
+            build_slot_insert_template(&mut store, SlotKey::Default, &mut string_table);
+        let insert_node = {
+            let mut builder = TemplateIrBuilder::new(&mut store);
+            builder.push_insert_contribution_node(insert_template, empty_location())
+        };
+        let fill = build_fill_template(&mut store, vec![insert_node]);
 
-    let mut store = TemplateIrStore::new();
-    let wrapper = build_single_slot_template(&mut store, SlotKey::Default);
-    let insert_template =
-        build_slot_insert_template(&mut store, SlotKey::Default, &mut string_table);
+        let routed = route_tir_slot_contributions(&store, wrapper, fill, &string_table)
+            .expect("default-target routing should succeed");
 
-    let mut builder = TemplateIrBuilder::new(&mut store);
-    let insert_node = builder.push_insert_contribution_node(insert_template, empty_location());
-    let fill = build_fill_template(&mut store, vec![insert_node]);
+        let insert_body_node = template_root_node_id(insert_template, &store);
+        assert_eq!(
+            routed.contributions.nodes_for_slot(&SlotKey::Default),
+            &[insert_body_node]
+        );
+        assert!(
+            routed.contributions.named_nodes.is_empty(),
+            "default insert must not spill into a named bucket"
+        );
+        assert!(
+            routed.contributions.positional_nodes.is_empty(),
+            "default insert must not spill into a positional bucket"
+        );
+        assert!(routed.schema.has_default_slot);
+        assert!(routed.schema.named_slots.is_empty());
+        assert!(routed.schema.positional_slots.is_empty());
+    }
 
-    // TIR slot routing expands the InsertContribution marker and routes the
-    // insert helper's body content to the target slot.
-    let routed = route_tir_slot_contributions(&store, wrapper, fill, &string_table)
-        .expect("routing should succeed");
+    // Positional target: the body node fills positional slot 0 and leaves the
+    // default bucket untouched. Positional slot 1 is not declared by this
+    // wrapper, so it rejects that target.
+    {
+        let wrapper = build_single_slot_template(&mut store, SlotKey::Positional(0));
+        let insert_template =
+            build_slot_insert_template(&mut store, SlotKey::Positional(0), &mut string_table);
+        let insert_node = {
+            let mut builder = TemplateIrBuilder::new(&mut store);
+            builder.push_insert_contribution_node(insert_template, empty_location())
+        };
+        let fill = build_fill_template(&mut store, vec![insert_node]);
 
-    let insert_body_node = template_root_node_id(insert_template, &store);
-    assert_eq!(
-        routed.contributions.nodes_for_slot(&SlotKey::Default),
-        &[insert_body_node]
-    );
-}
+        let routed = route_tir_slot_contributions(&store, wrapper, fill, &string_table)
+            .expect("positional-target routing should succeed");
 
-#[test]
-fn route_explicit_insert_to_positional_slot() {
-    let mut string_table = StringTable::new();
-
-    let mut store = TemplateIrStore::new();
-    let wrapper = build_single_slot_template(&mut store, SlotKey::Positional(0));
-    let insert_template =
-        build_slot_insert_template(&mut store, SlotKey::Positional(0), &mut string_table);
-
-    let mut builder = TemplateIrBuilder::new(&mut store);
-    let insert_node = builder.push_insert_contribution_node(insert_template, empty_location());
-    let fill = build_fill_template(&mut store, vec![insert_node]);
-
-    // TIR slot routing expands the InsertContribution marker and routes the
-    // insert helper's body content to the target slot.
-    let routed = route_tir_slot_contributions(&store, wrapper, fill, &string_table)
-        .expect("routing should succeed");
-
-    let insert_body_node = template_root_node_id(insert_template, &store);
-    assert_eq!(
-        routed.contributions.nodes_for_slot(&SlotKey::Positional(0)),
-        &[insert_body_node]
-    );
+        let insert_body_node = template_root_node_id(insert_template, &store);
+        assert_eq!(
+            routed.contributions.nodes_for_slot(&SlotKey::Positional(0)),
+            &[insert_body_node]
+        );
+        assert!(
+            routed
+                .contributions
+                .nodes_for_slot(&SlotKey::Default)
+                .is_empty(),
+            "positional insert must not spill into the default bucket"
+        );
+        assert!(!routed.schema.has_default_slot);
+        assert!(routed.schema.named_slots.is_empty());
+        assert_eq!(routed.schema.positional_slots, [0].into_iter().collect());
+    }
 }
 
 #[test]
@@ -1014,6 +1045,9 @@ fn route_loose_content_to_positional_slots() {
     let routed = route_tir_slot_contributions(&store, wrapper, fill, &string_table)
         .expect("routing should succeed");
 
+    // Two authored child contributions fill two positional slots in authored
+    // order. The default and named buckets stay empty because the wrapper
+    // declares only positional slots.
     assert_eq!(
         routed.contributions.nodes_for_slot(&SlotKey::Positional(0)),
         &[first_child]
@@ -1022,6 +1056,16 @@ fn route_loose_content_to_positional_slots() {
         routed.contributions.nodes_for_slot(&SlotKey::Positional(1)),
         &[second_child]
     );
+    assert!(
+        routed
+            .contributions
+            .nodes_for_slot(&SlotKey::Default)
+            .is_empty(),
+        "a positional-only wrapper has no default bucket"
+    );
+    assert!(routed.contributions.named_nodes.is_empty());
+    assert!(!routed.schema.has_default_slot);
+    assert_eq!(routed.schema.positional_slots, [0, 1].into_iter().collect());
 }
 
 #[test]
@@ -1050,6 +1094,8 @@ fn route_loose_content_to_default_slot_after_positional_exhaustion() {
     let routed = route_tir_slot_contributions(&store, wrapper, fill, &string_table)
         .expect("routing should succeed");
 
+    // Positional slots fill first in authored order; once they are exhausted
+    // the remaining chunks flow into the default slot, preserving order.
     assert_eq!(
         routed.contributions.nodes_for_slot(&SlotKey::Positional(0)),
         &[leading_text]
@@ -1058,6 +1104,9 @@ fn route_loose_content_to_default_slot_after_positional_exhaustion() {
         routed.contributions.nodes_for_slot(&SlotKey::Default),
         &[child, trailing_text]
     );
+    assert!(routed.contributions.named_nodes.is_empty());
+    assert!(routed.schema.has_default_slot);
+    assert_eq!(routed.schema.positional_slots, [0].into_iter().collect());
 }
 
 #[test]
@@ -1086,6 +1135,9 @@ fn route_loose_whitespace_after_head_fill_to_next_child_contribution() {
     let routed = route_tir_slot_contributions(&store, wrapper, fill, &string_table)
         .expect("routing should succeed");
 
+    // A head-origin contribution opens a new positional chunk, so a following
+    // body whitespace separator is carried with the next body contribution and
+    // never absorbed as trailing positional content.
     assert_eq!(
         routed.contributions.nodes_for_slot(&SlotKey::Positional(0)),
         &[head_fill],
@@ -1096,6 +1148,9 @@ fn route_loose_whitespace_after_head_fill_to_next_child_contribution() {
         &[separator, child],
         "the separator before the body child belongs to the body contribution"
     );
+    assert!(routed.schema.has_default_slot);
+    assert!(routed.schema.named_slots.is_empty());
+    assert_eq!(routed.schema.positional_slots, [0].into_iter().collect());
 }
 
 #[test]
@@ -1117,10 +1172,19 @@ fn route_loose_content_to_default_slot_only() {
     let routed = route_tir_slot_contributions(&store, wrapper, fill, &string_table)
         .expect("routing should succeed");
 
+    // With only a default slot, every authored loose chunk flows straight into
+    // the default bucket in authored order.
     assert_eq!(
         routed.contributions.nodes_for_slot(&SlotKey::Default),
         &[text, child]
     );
+    assert!(
+        routed.contributions.positional_nodes.is_empty(),
+        "a default-only wrapper has no positional buckets"
+    );
+    assert!(routed.contributions.named_nodes.is_empty());
+    assert!(routed.schema.has_default_slot);
+    assert!(routed.schema.positional_slots.is_empty());
 }
 
 #[test]
@@ -1137,6 +1201,8 @@ fn unknown_insert_target_produces_diagnostic() {
     let insert_node = builder.push_insert_contribution_node(insert_template, empty_location());
     let fill = build_fill_template(&mut store, vec![insert_node]);
 
+    // The wrapper has a valid default slot, so only the unknown insert target
+    // can own this rejection.
     let error = route_tir_slot_contributions(&store, wrapper, fill, &string_table)
         .expect_err("unknown insert target should produce an error");
 
@@ -1162,6 +1228,8 @@ fn loose_content_without_default_or_positional_slots_produces_diagnostic() {
     );
     let fill = build_fill_template(&mut store, vec![text]);
 
+    // Meaningful loose content with no default or positional target is a
+    // diagnostic rather than discardable formatting whitespace.
     let error = route_tir_slot_contributions(&store, wrapper, fill, &string_table)
         .expect_err("loose content with no default slot should produce an error");
 
@@ -1203,6 +1271,8 @@ fn named_only_slots_discard_loose_whitespace_around_insert_contributions() {
     let routed = route_tir_slot_contributions(&store, wrapper, fill, &string_table)
         .expect("formatting whitespace should not require a default slot");
 
+    // A named-only wrapper discards formatting whitespace around an explicit
+    // insert and routes only the insert body, without needing a default slot.
     let insert_body_node = template_root_node_id(insert_template, &store);
     assert_eq!(
         routed.contributions.nodes_for_slot(&SlotKey::Named(name)),
@@ -1212,8 +1282,19 @@ fn named_only_slots_discard_loose_whitespace_around_insert_contributions() {
         routed
             .contributions
             .nodes_for_slot(&SlotKey::Default)
-            .is_empty()
+            .is_empty(),
+        "the discarded whitespace must not create a default bucket"
     );
+    assert!(
+        routed
+            .contributions
+            .nodes_for_slot(&SlotKey::Positional(0))
+            .is_empty(),
+        "the discarded whitespace must not create a positional bucket"
+    );
+    assert!(!routed.schema.has_default_slot);
+    assert_eq!(routed.schema.named_slots, [name].into_iter().collect());
+    assert!(routed.schema.positional_slots.is_empty());
 }
 
 #[test]
@@ -1227,56 +1308,14 @@ fn extra_loose_content_beyond_positional_capacity_produces_diagnostic() {
     let second_child = build_child_template_node(&mut store, &mut string_table);
     let fill = build_fill_template(&mut store, vec![first_child, second_child]);
 
+    // One positional slot accepts the first chunk, leaving the second chunk
+    // without a target or default fallback.
     let error = route_tir_slot_contributions(&store, wrapper, fill, &string_table)
         .expect_err("extra loose content should produce an error");
 
     assert_invalid_template_slot_reason(
         &error,
         InvalidTemplateSlotReason::ExtraLooseContentWithoutDefaultSlot,
-    );
-}
-
-#[test]
-fn nodes_for_slot_returns_correct_nodes() {
-    let mut string_table = StringTable::new();
-    let name = string_table.intern("title");
-
-    let mut store = TemplateIrStore::new();
-    let wrapper =
-        build_wrapper_with_slots(&mut store, vec![SlotKey::Named(name), SlotKey::Default]);
-
-    let insert_template =
-        build_slot_insert_template(&mut store, SlotKey::Named(name), &mut string_table);
-
-    let mut builder = TemplateIrBuilder::new(&mut store);
-    let insert_node = builder.push_insert_contribution_node(insert_template, empty_location());
-    let loose_text = build_text_node(
-        &mut store,
-        &mut string_table,
-        "body",
-        TemplateSegmentOrigin::Body,
-    );
-    let fill = build_fill_template(&mut store, vec![insert_node, loose_text]);
-
-    // TIR slot routing expands the InsertContribution marker and routes the
-    // insert helper's body content to the target slot.
-    let routed = route_tir_slot_contributions(&store, wrapper, fill, &string_table)
-        .expect("routing should succeed");
-
-    let insert_body_node = template_root_node_id(insert_template, &store);
-    assert_eq!(
-        routed.contributions.nodes_for_slot(&SlotKey::Named(name)),
-        &[insert_body_node]
-    );
-    assert_eq!(
-        routed.contributions.nodes_for_slot(&SlotKey::Default),
-        &[loose_text]
-    );
-    assert!(
-        routed
-            .contributions
-            .nodes_for_slot(&SlotKey::Positional(0))
-            .is_empty()
     );
 }
 
@@ -1291,7 +1330,11 @@ fn empty_fill_template_with_slots_wrapper_routes_to_empty_contributions() {
     let routed = route_tir_slot_contributions(&store, wrapper, fill, &string_table)
         .expect("routing should succeed");
 
+    // An empty fill against a default-slot wrapper discovers the slot schema
+    // and routes nothing into every bucket.
     assert!(routed.schema.has_default_slot);
+    assert!(routed.schema.named_slots.is_empty());
+    assert!(routed.schema.positional_slots.is_empty());
     assert!(
         routed
             .contributions
@@ -1325,8 +1368,9 @@ fn mixed_explicit_inserts_and_loose_content_are_bucketed() {
     let loose_child = build_child_template_node(&mut store, &mut string_table);
     let fill = build_fill_template(&mut store, vec![insert_node, loose_text, loose_child]);
 
-    // TIR slot routing expands the InsertContribution marker and routes the
-    // insert helper's body content to the target slot.
+    // Explicit inserts and loose content in one fill are routed to disjoint
+    // buckets: the insert body fills its named target, and authored loose
+    // content fills the default slot in authored order.
     let routed = route_tir_slot_contributions(&store, wrapper, fill, &string_table)
         .expect("routing should succeed");
 
@@ -1339,6 +1383,13 @@ fn mixed_explicit_inserts_and_loose_content_are_bucketed() {
         routed.contributions.nodes_for_slot(&SlotKey::Default),
         &[loose_text, loose_child]
     );
+    assert!(
+        routed.contributions.positional_nodes.is_empty(),
+        "a named+default wrapper has no positional buckets"
+    );
+    assert!(routed.schema.has_default_slot);
+    assert_eq!(routed.schema.named_slots, [name].into_iter().collect());
+    assert!(routed.schema.positional_slots.is_empty());
 }
 
 // -------------------------
