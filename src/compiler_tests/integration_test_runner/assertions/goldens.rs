@@ -45,6 +45,31 @@ pub(crate) fn discover_golden_expectation(
 ///      cannot follow an authored link outside its owning backend or inventory the same
 ///      file twice.
 fn discover_golden_files(root: &Path) -> Result<GoldenFileInventory, String> {
+    // The direct golden parent (e.g. case/golden) must not be a symlink. Without
+    // this guard, a symlinked parent whose target contains the backend directory
+    // would bypass the backend-root symlink rejection below and let outside files
+    // be inventoried. Inspect the parent without following links before the
+    // backend-directory absence handling, so the rejection still fires when the
+    // symlink target lacks that backend.
+    if let Some(parent) = root.parent() {
+        match fs::symlink_metadata(parent) {
+            Ok(parent_metadata) if parent_metadata.file_type().is_symlink() => {
+                return Err(format!(
+                    "Golden parent '{}' is a symlink. Golden trees must live inside the owning fixture.",
+                    parent.display()
+                ));
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(format!(
+                    "Failed to inspect golden parent '{}': {error}",
+                    parent.display()
+                ));
+            }
+        }
+    }
+
     let root_metadata = match fs::symlink_metadata(root) {
         Ok(metadata) => metadata,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
