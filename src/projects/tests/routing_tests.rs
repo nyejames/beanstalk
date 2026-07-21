@@ -5,9 +5,49 @@ use super::{
 };
 use crate::compiler_frontend::compiler_messages::{DiagnosticPayload, InvalidConfigReason};
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
-use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::projects::settings::Config;
+use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
+use crate::projects::settings::{Config, ProjectConfigError};
 use std::path::PathBuf;
+
+/// Extract the typed `InvalidConfig` payload from a config parse error.
+///
+/// WHAT: returns the setting key and reason carried by the rejection diagnostic.
+/// WHY: routing rejection tests assert exact typed key/value facts rather than rendered prose.
+fn invalid_config_payload(error: &ProjectConfigError) -> (&Option<StringId>, &InvalidConfigReason) {
+    let diagnostic = error.diagnostic().expect("config error should be typed");
+    match &diagnostic.payload {
+        DiagnosticPayload::InvalidConfig { key, reason } => (key, reason),
+        _ => panic!("expected InvalidConfig payload"),
+    }
+}
+
+/// Assert that parsing `config` rejects `origin` with a typed value diagnostic.
+///
+/// WHAT: confirms the rejection carries the authored key and the exact invalid value.
+/// WHY: origin validation reports the offending input through `InvalidProjectSettingValue`.
+fn assert_origin_value_rejection(
+    config: &Config,
+    string_table: &mut StringTable,
+    invalid_value: &str,
+) {
+    let error =
+        parse_html_site_config(config, string_table).expect_err("invalid origin should fail");
+    let (key, reason) = invalid_config_payload(&error);
+    assert_eq!(
+        string_table.resolve(key.expect("origin key should be present")),
+        "origin",
+    );
+    match reason {
+        InvalidConfigReason::InvalidProjectSettingValue { value, .. } => {
+            assert_eq!(
+                string_table.resolve(*value),
+                invalid_value,
+                "origin rejection should report the exact invalid value",
+            );
+        }
+        _ => panic!("expected InvalidProjectSettingValue for invalid origin"),
+    }
+}
 
 #[test]
 fn defaults_are_applied_when_settings_are_missing() {
@@ -46,29 +86,39 @@ fn parser_rejects_invalid_origin() {
     let mut config = Config::new(PathBuf::from("project"));
     let mut string_table = StringTable::new();
 
-    // No leading slash
+    // No leading slash.
     config
         .settings
         .insert(String::from("origin"), String::from("beanstalk"));
-    assert!(parse_html_site_config(&config, &mut string_table).is_err());
+    assert_origin_value_rejection(&config, &mut string_table, "beanstalk");
 
-    // Trailing slash (not root)
+    // Trailing slash on a non-root prefix.
     config
         .settings
         .insert(String::from("origin"), String::from("/beanstalk/"));
-    assert!(parse_html_site_config(&config, &mut string_table).is_err());
+    assert_origin_value_rejection(&config, &mut string_table, "/beanstalk/");
 
-    // Empty
+    // Empty origin is a separate empty-setting reason.
     config
         .settings
         .insert(String::from("origin"), String::from(""));
-    assert!(parse_html_site_config(&config, &mut string_table).is_err());
+    let empty_error =
+        parse_html_site_config(&config, &mut string_table).expect_err("empty origin should fail");
+    let (key, reason) = invalid_config_payload(&empty_error);
+    assert_eq!(
+        string_table.resolve(key.expect("origin key should be present")),
+        "origin",
+    );
+    assert!(
+        matches!(reason, InvalidConfigReason::EmptyProjectSetting),
+        "empty origin should report EmptyProjectSetting",
+    );
 
-    // Query string
+    // Query or fragment characters are rejected as non-path content.
     config
         .settings
         .insert(String::from("origin"), String::from("/?x=1"));
-    assert!(parse_html_site_config(&config, &mut string_table).is_err());
+    assert_origin_value_rejection(&config, &mut string_table, "/?x=1");
 }
 
 #[test]
@@ -81,14 +131,19 @@ fn parser_rejects_invalid_page_url_style() {
     let mut string_table = StringTable::new();
     let error =
         parse_html_site_config(&config, &mut string_table).expect_err("invalid value should fail");
-    let diagnostic = error.diagnostic().expect("config error should be typed");
-    let DiagnosticPayload::InvalidConfig {
-        reason: InvalidConfigReason::InvalidProjectSettingValue { expected, .. },
-        ..
-    } = &diagnostic.payload
-    else {
-        panic!("expected invalid project setting diagnostic");
+    let (key, reason) = invalid_config_payload(&error);
+    assert_eq!(
+        string_table.resolve(key.expect("page_url_style key should be present")),
+        "page_url_style",
+    );
+    let InvalidConfigReason::InvalidProjectSettingValue { value, expected } = reason else {
+        panic!("expected InvalidProjectSettingValue for invalid page_url_style");
     };
+    assert_eq!(
+        string_table.resolve(*value),
+        "slashy",
+        "page_url_style rejection should report the exact invalid value",
+    );
     let expected_values = string_table.resolve(*expected);
     assert!(expected_values.contains("trailing_slash"));
     assert!(expected_values.contains("no_trailing_slash"));
@@ -105,14 +160,22 @@ fn parser_rejects_invalid_redirect_index_html() {
     let mut string_table = StringTable::new();
     let error =
         parse_html_site_config(&config, &mut string_table).expect_err("invalid value should fail");
-    let diagnostic = error.diagnostic().expect("config error should be typed");
-    assert!(matches!(
-        diagnostic.payload,
-        DiagnosticPayload::InvalidConfig {
-            reason: InvalidConfigReason::InvalidProjectSettingValue { .. },
-            ..
-        }
-    ));
+    let (key, reason) = invalid_config_payload(&error);
+    assert_eq!(
+        string_table.resolve(key.expect("redirect_index_html key should be present")),
+        "redirect_index_html",
+    );
+    let InvalidConfigReason::InvalidProjectSettingValue { value, expected } = reason else {
+        panic!("expected InvalidProjectSettingValue for invalid redirect_index_html");
+    };
+    assert_eq!(
+        string_table.resolve(*value),
+        "yes",
+        "redirect_index_html rejection should report the exact invalid value",
+    );
+    let expected_values = string_table.resolve(*expected);
+    assert!(expected_values.contains("true"));
+    assert!(expected_values.contains("false"));
 }
 
 #[test]
