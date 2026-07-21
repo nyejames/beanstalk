@@ -30,21 +30,20 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: final review
-CURRENT_SLICE: final audit correction cycle for canonical fixture and golden path containment
-LAST_ACCEPTED_COMMIT: `fe932ab0b` (failure-diagnostic and invalid-expectation correction); concurrent Priya alignment accepted at `9518662e1`
+CURRENT_SLICE: focused Codex CLI re-audit followed by the parent final audit
+LAST_ACCEPTED_COMMIT: `418379e3c` (canonical fixture and golden path containment); concurrent Priya alignment accepted at `9518662e1`
 WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; temporary detached mutation worktree is clean at `d443c3a4f`; concurrent generated `docs/release/docs/errors/index.html` output is separately owned and preserved
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: testing, validation, contributor, index, progress, compiler diagnostic wording and canonical-module-plan ownership have been reviewed; successor activation is held until audit corrections pass
-- code: failure diagnostics now select only errors, warning policy is independent, invalid code identities and exact-warning shapes are rejected, and failure goldens are rejected; canonical fixture/golden containment remains
+- code: both audit-correction slices are accepted; failure expectations are truthful, canonical fixture roots are unique after resolution and golden symlinks are rejected explicitly
 ACCEPTANCE_CRITERIA:
-- keep failure diagnostics error-only while warning policy remains independently exact, ignored or forbidden
-- reject blank diagnostic/warning identities, empty exact-warning multisets and failure goldens
-- enforce canonical fixture-root uniqueness and contained unique golden files, including symlink paths
+- receive a findings-oriented focused re-audit with no unresolved code or test-harness corrections
+- complete the parent architecture, ownership, duplication and test-gap audit
 - run the documentation release build and the final full code-bearing gate
 - mark the plan complete only after audit findings, validation, roadmap handoff, and artifact cleanup are accepted
 VALIDATION_STATE:
-- `just validate`: passed at `fe932ab0b`; cross-target Clippy, 3,353 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
+- `just validate`: passed at `418379e3c`; cross-target Clippy, 3,358 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
 - Phase 14F inventory: passed; 1,647 canonical cases, 1,793 executions, zero hard findings, zero goldens, 13 acceptance-only blocks, 982 exact and 19 justified-contains failure blocks
 - Phase 14F timings: three equivalent unit runs median 1.74s; three equivalent integration runs median 9.79s; operational evidence only
 - Phase 14E mutation probes: all nine primary filtered owners passed at baseline, failed for the intended semantic defect, passed after restoration, and left the detached worktree clean; no mutation score claimed
@@ -52,10 +51,10 @@ VALIDATION_STATE:
 - Priya expectation alignment: accepted at `9518662e1`; renamed inputs and expectations match
 DOCS_IMPACT: testing, validation, contributor workflow, index, progress matrix and compiler diagnostic wording already align; successor plan guidance is refreshed but activation remains queued until the correction cycle closes
 BLOCKERS_OR_OPEN_DECISIONS: none; 81 contract families without a primary are intentionally 66 backend-only and 15 adversarial-only families, with no ordinary orphan family
-DELEGATION_DECISION: Ollama — two bounded final-audit implementation correction slices, followed by a focused Codex CLI re-audit and parent audit
-NEXT_WORKER_ORDER: Ollama only for implementation corrections; Codex CLI then parent-audit for review
+DELEGATION_DECISION: Codex CLI — focused read-only re-audit; parent-audit follows if clean
+NEXT_WORKER_ORDER: Codex CLI, then parent-audit
 STOP_REASON: none
-NEXT_RESUME_ACTION: launch canonical fixture-root uniqueness and golden containment through Ollama
+NEXT_RESUME_ACTION: launch the focused final-correction re-audit through Codex CLI
 
 ---
 
@@ -273,6 +272,7 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 14E targeted semantic mutation probes | no code change after `d443c3a4f` | Accepted | Nine temporary production defects were caught by their intended primary owners across mutable-call classification, map and return aliases, fixed-capacity identity, exhaustiveness, numeric failure mode, imported roots, target reachability, and reactive invalidation; every defect was restored in a detached worktree; no mutation score is claimed |
 | Phase 14F final measurements | `d92c3cdd2` | Accepted | Final inventory and three-run timing evidence recorded at `425a4248e`; 3,344 Rust tests, 1,647 cases, 1,793 executions, zero hard findings and no correctness or performance claim |
 | Final audit correction 1 | `fe932ab0b` | Accepted | Failure diagnostics are error-only, warnings remain independent, blank code identities and empty exact warnings are rejected, failure goldens cannot be discarded, and the full gate passes with 3,353 Rust tests and 1,793 integration executions |
+| Final audit correction 2 | `418379e3c` | Accepted | Canonical fixture roots are unique after resolution with both conflicting manifest identities retained; golden file, directory and backend-root symlinks are rejected explicitly; the full gate passes with 3,358 Rust tests and 1,793 integration executions |
 
 ---
 
@@ -1449,7 +1449,7 @@ correctness or performance improvement.
 - [x] Every removed test has replacement evidence.
 - [x] Representative mutations are caught by primary owners.
 - [x] Documentation and roadmap are current.
-- [ ] Full validation passes.
+- [x] Full validation passes.
 - [ ] Canonical module work can begin against the hardened suite.
 
 ---
