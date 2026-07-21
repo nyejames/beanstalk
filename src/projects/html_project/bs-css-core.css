@@ -28,14 +28,14 @@
   --bst-spacing-small: 0.5rem;
 
   /* Code block colours */
-  --comment: #838c86;
-  --keyword: #ea943e;
-  --string: #4fba11;
-  --number: #96b5ed;
+  --comment: #8e8e8e;
+  --keyword: #fa3f3f;
+  --string: #64d721;
+  --number: #c09eea;
   --operator: #9ec1ff;
-  --struct: #a17fbd;
-  --type: #3691e0;
-  --parenthesis: #bcac52;
+  --struct: #f293dc;
+  --type: #42a0f3;
+  --parenthesis: #d5c56d;
 }
 
 /* where: is used here for less specificity, allowing easier overriding */
