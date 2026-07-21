@@ -9,27 +9,28 @@ Replace entry-closure compilation with canonical project and package graphs, imm
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/canonical-module-compilation-and-scoped-packages-plan.md
 STATUS: active
-CURRENT_SLICE: Phase 2c accepted; checkpoint commit pending
-LAST_ACCEPTED_COMMIT: 37b1312cf (Phase 2b stable package and module origins)
-WORKTREE: main at 37b1312cf with accepted Phase 2c code, focused tests, index owner-map update and this plan update; unrelated user documentation work may appear and must be preserved
+CURRENT_SLICE: Phase 3a accepted; checkpoint commit pending
+LAST_ACCEPTED_COMMIT: d33a72788 (Phase 2c stable exported declaration origins)
+WORKTREE: main at d33a72788 with accepted Phase 3a code, tests, index owner-map update and this plan update; unrelated user documentation work may appear and must be preserved
 REQUIRED_RELOADS: startup files, this plan, relevant language/import and borrow references, current source and diff
 RELEVANT_CONTEXT_NOW:
-- docs: compiler-design-overview.md origin identities/export bindings and cross-build stability
-- code: compiler_frontend/semantic_identity.rs owns portable package/module values and stable exported declaration origins; Stage 0 retains dense ModuleId assignment and topology
+- docs: build-system-design.md Source indexing and source sets; the later source-data-layout plan retains final dense SourceId/SourceDatabase ownership
+- code: source_tree_index.rs now inventories selected source kinds during its existing walk and classifies deterministic OwnedSourceSet/unrooted facts from ModuleIdentityTable
 ACCEPTANCE_CRITERIA:
-- Phase 2c diff and architecture audit are accepted with one compiler-semantic value owner and no compatibility re-export
-- function receiver identity uses one enum state, so inconsistent function-origin states are unrepresentable
-- reusable evidence identity remains deliberately coupled to canonical target-type and trait/evidence semantics in Phase 7
-- progress matrix remains unchanged because no user-visible support changed
+- Phase 3a diff and architecture audit are accepted with one traversal, one candidate inventory and one nearest-module classifier
+- StableOwnedSourceIdentity contains module origin plus validated non-empty portable module-relative source path, never absolute paths or dense SourceId
+- selected .bst/.bd/.md policy reuses SourceFileKindRegistry recognition; unknown, mismatched and unselected kinds stay excluded
+- deterministic OwnedSourceSet values include exact-once project-facade ownership; unrooted candidates retain portable logical ordering
+- SemanticSourceSet, check-only units and strict entry_root/package migration remain subsequent Phase 3 slices
 VALIDATION_STATE:
-- Ollama focused gate: passed; 10 semantic identity tests and cargo check --tests
-- just validate: passed; cross-target Clippy, 3393 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases
-DOCS_IMPACT: index.md owner map updated; progress matrix unchanged
+- Ollama focused gates: passed; 18 semantic identity tests, 40 Stage 0 filesystem identity tests and cargo check --tests
+- just validate: passed after one mechanical Clippy correction; cross-target Clippy, 3413 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases
+DOCS_IMPACT: index.md owner map updated; progress matrix unchanged because production import/compilation behavior did not change
 BLOCKERS_OR_OPEN_DECISIONS: none
 DELEGATION_DECISION: ollama - user requires Ollama for every worker slice
 NEXT_WORKER_ORDER: ollama only; no provider substitution for this run
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit Phase 2c, record its hash, then scope the first canonical source-index slice
+NEXT_RESUME_ACTION: commit Phase 3a, record its hash, then scope SemanticSourceSet derivation against current reachability owners
 ```
 
 ## Hard prerequisites
@@ -305,6 +306,20 @@ See `docs/build-system-design.md` "Source indexing and source sets" for the full
 - Build `OwnedSourceSet` (every recognised source file whose nearest root is that module) and `SemanticSourceSet` (root file, reachable `.bst` files, builder-supported assets like `.bd` or `.md`).
 - Build check-only orphan source units for `check` (owned `.bst` files not in the semantic source set).
 - Reject `package_folders` and default `/lib` scanning. Project-local source packages are structural `+*.bst` packages or the optional project-root facade.
+
+Accepted Phase 3a checkpoint:
+
+- the existing `SourceTreeIndex::discover` walk inventories `.bst` plus selected builder-supported
+  `.bd`/`.md` candidates; it does not add a second filesystem traversal.
+- `StableOwnedSourceIdentity` combines stable module origin with a validated, non-empty portable
+  module-relative source path while leaving final dense `SourceId`/`SourceDatabase` ownership to the
+  later source-data-layout plan.
+- one post-discovery classifier builds deterministic `OwnedSourceSet` values by nearest normal or
+  support root, transfers nested-module files to the nested owner and assigns the project facade root
+  exactly once, including the temporary project-root-equals-entry-root compatibility case.
+- supported candidates without a containing module remain explicit portable, deterministically
+  ordered facts. Phase 3a adds no orphan diagnostic and changes no resolver, import, reachability or
+  compilation behavior.
 
 ### Phase 4: Split syntax preparation from interface binding
 

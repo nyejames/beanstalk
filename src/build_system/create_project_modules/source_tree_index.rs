@@ -9,13 +9,16 @@
 //! module inventory, and collision validators from repeating the same expensive walk.
 
 use super::module_identity::{
-    ModuleIdentityRecord, ModuleIdentityTable, module_root_role_for_file_name,
+    ModuleId, ModuleIdentityRecord, ModuleIdentityTable, module_root_role_for_file_name,
 };
-use crate::builder_surface::SourcePackageRegistry;
+use crate::builder_surface::{SourceFileKind, SourceFileKindRegistry, SourcePackageRegistry};
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_messages::InvalidConfigReason;
 use crate::compiler_frontend::paths::module_roots::ModuleRootTable;
-use crate::compiler_frontend::semantic_identity::{ModuleRootRole, StablePackageIdentity};
+use crate::compiler_frontend::semantic_identity::{
+    ModuleRootRole, StableOwnedSourceIdentity, StablePackageIdentity,
+    portable_relative_logical_path_from,
+};
 use crate::compiler_frontend::source_packages::root_file::{
     file_name_is_hash_root_file, file_name_is_module_root_file, file_name_is_support_root_file,
 };
@@ -104,6 +107,104 @@ struct DiscoveredDirectoryRoot {
     role: ModuleRootRole,
 }
 
+/// One supported source file candidate discovered by the Stage 0 traversal, before ownership
+/// classification.
+///
+/// WHAT: pairs the canonical physical path of a builder-supported source file with its source
+/// kind and its entry-root-relative portable logical candidate path. The canonical path is the
+/// physical handle; the logical candidate path is the portable entry-root-relative spelling kept
+/// separately so physical lookup and portable identity never share a field.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct DiscoveredSourceCandidate {
+    canonical_path: PathBuf,
+    kind: SourceFileKind,
+    logical_candidate_path: String,
+}
+
+impl DiscoveredSourceCandidate {
+    #[allow(dead_code)]
+    pub(crate) fn canonical_path(&self) -> &Path {
+        &self.canonical_path
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn kind(&self) -> SourceFileKind {
+        self.kind
+    }
+
+    /// The entry-root-relative portable logical candidate path (forward-slash spelling).
+    #[allow(dead_code)]
+    pub(crate) fn logical_candidate_path(&self) -> &str {
+        &self.logical_candidate_path
+    }
+}
+
+/// One owned supported source file with its canonical physical path, source kind and portable
+/// stable identity.
+///
+/// WHAT: the owned-source record stored inside a module's [`OwnedSourceSet`]. The canonical path
+/// is the physical handle; `stable_identity` is the cross-build logical identity rooted in the
+/// owning module origin plus the module-relative source file path.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct OwnedSourceEntry {
+    canonical_path: PathBuf,
+    kind: SourceFileKind,
+    stable_identity: StableOwnedSourceIdentity,
+}
+
+impl OwnedSourceEntry {
+    #[allow(dead_code)]
+    pub(crate) fn canonical_path(&self) -> &Path {
+        &self.canonical_path
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn kind(&self) -> SourceFileKind {
+        self.kind
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn stable_identity(&self) -> &StableOwnedSourceIdentity {
+        &self.stable_identity
+    }
+}
+
+/// Deterministic set of owned supported sources for one canonical module.
+///
+/// WHAT: every supported source file whose nearest containing normal or support root is this
+/// module, plus the project package facade's root file. Entries are sorted by their portable
+/// module-relative source path so ordering is independent of traversal and checkout root.
+/// WHY: ownership determines legal filesystem boundaries, collision scope, diagnostic
+/// attribution and deterministic inventory identity for later Phase 3 semantic-source-set and
+/// check-only slices.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct OwnedSourceSet {
+    module_id: ModuleId,
+    entries: Vec<OwnedSourceEntry>,
+}
+
+impl OwnedSourceSet {
+    #[allow(dead_code)]
+    pub(crate) fn module_id(&self) -> ModuleId {
+        self.module_id
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn entries(&self) -> &[OwnedSourceEntry] {
+        &self.entries
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn len(&self) -> usize {
+        self.entries.len()
+    }
+}
+
 /// Canonical module identities, root entry candidates and traversal evidence for one directory
 /// build.
 ///
@@ -115,6 +216,8 @@ pub(crate) struct SourceTreeIndex {
     module_identities: ModuleIdentityTable,
     module_roots: ModuleRootTable,
     entry_candidates: Vec<PathBuf>,
+    owned_source_sets: Vec<OwnedSourceSet>,
+    unrooted_candidates: Vec<DiscoveredSourceCandidate>,
     stats: SourceTreeDiscoveryStats,
 }
 
@@ -132,11 +235,21 @@ impl SourceTreeIndex {
     /// diagnostic lane. Only normal roots become entry candidates. The optional project-root
     /// `+*.bst` facade beside `config.bst` is discovered as a separate `ProjectPackageFacade`
     /// node outside the entry-root containment tree and is never an entry candidate.
+    ///
+    /// The same traversal inventories every builder-supported source candidate (`.bst` always,
+    /// plus the `.bd`/`.md` kinds the selected builder registered). Unknown extensions and
+    /// known-but-unselected kinds never enter owned source sets. After deterministic
+    /// `ModuleIdentityTable` construction, each supported candidate is classified under its
+    /// nearest containing normal or support root into one [`OwnedSourceSet`] per module; the
+    /// optional project facade owns its root file even though it sits outside entry-root
+    /// containment. Supported candidates with no enclosing module root remain explicit
+    /// `unrooted_candidates` facts rather than being silently discarded.
     pub(super) fn discover(
         entry_root: PathBuf,
         project_root: &Path,
         config: &Config,
         source_packages: &SourcePackageRegistry,
+        source_file_kinds: &SourceFileKindRegistry,
         string_table: &mut StringTable,
     ) -> Result<Self, CompilerMessages> {
         let discovery_start = crate::timing::start_pipeline_timing();
@@ -151,9 +264,11 @@ impl SourceTreeIndex {
         let mut queue = VecDeque::from([entry_root.clone()]);
         let mut records = Vec::new();
         let mut entry_candidates = Vec::new();
+        let mut supported_candidates: Vec<DiscoveredSourceCandidate> = Vec::new();
 
         let facade_root_file =
             discover_project_package_facade(project_root, &mut stats, string_table)?;
+        let facade_file_for_inventory = facade_root_file.clone();
 
         while let Some(directory) = queue.pop_front() {
             stats.dirs_visited += 1;
@@ -222,7 +337,12 @@ impl SourceTreeIndex {
                     bst_file_stems.insert(stem.to_owned());
                 }
 
-                if !file_name_is_module_root_file(file_name) {
+                let is_module_root = file_name_is_module_root_file(file_name);
+                let source_kind = source_kind_for_file(file_name, source_file_kinds);
+
+                // A file that is neither a module root nor a builder-supported source needs no
+                // canonical path and contributes no inventory fact.
+                if !is_module_root && source_kind.is_none() {
                     continue;
                 }
 
@@ -230,17 +350,41 @@ impl SourceTreeIndex {
                     .map_err(|error| {
                         CompilerError::file_error(
                             &path,
-                            format!("Failed to canonicalize module root path: {error}"),
+                            format!("Failed to canonicalize source path: {error}"),
                             string_table,
                         )
                     })
                     .map_err(|error| CompilerMessages::from_error_ref(error, string_table))?;
 
+                if let Some(kind) = source_kind {
+                    // When the project root equals the entry root (the current compatibility
+                    // case), the facade root file is reached by the traversal. It is owned only
+                    // by the facade module through the direct facade assignment below, so it must
+                    // not also enter the ordinary supported-candidate list. The accepted future
+                    // strict-entry-root design never reaches the facade during traversal.
+                    let is_facade_file = Some(&canonical_path) == facade_root_file.as_ref();
+                    if !is_facade_file {
+                        let logical_candidate_path =
+                            entry_root_relative_logical_path(&path, &entry_root, string_table)?;
+                        supported_candidates.push(DiscoveredSourceCandidate {
+                            canonical_path: canonical_path.clone(),
+                            kind,
+                            logical_candidate_path,
+                        });
+                    }
+                }
+
+                if !is_module_root {
+                    continue;
+                }
+
                 // The project package facade is discovered beside config.bst at the project root
                 // and classified as a separate node. Skip it here so a directory shared with the
                 // facade does not also classify it as a support root or trigger mixed-root
-                // rejection.
-                if Some(&canonical_path) == facade_root_file.as_ref() {
+                // rejection. This also prevents the facade file from entering directory root
+                // classification when it lies inside the traversal.
+                let is_facade_file = Some(&canonical_path) == facade_root_file.as_ref();
+                if is_facade_file {
                     continue;
                 }
 
@@ -359,12 +503,23 @@ impl SourceTreeIndex {
 
         let module_identities = ModuleIdentityTable::from_records(records);
         let module_roots = module_identities.derive_module_root_table();
+        let module_count = module_identities.module_ids().count();
+
+        let (owned_source_sets, unrooted_candidates) = classify_owned_sources(
+            &module_identities,
+            module_count,
+            supported_candidates,
+            facade_file_for_inventory,
+            string_table,
+        )?;
 
         Ok(Self {
             entry_root,
             module_identities,
             module_roots,
             entry_candidates,
+            owned_source_sets,
+            unrooted_candidates,
             stats,
         })
     }
@@ -377,6 +532,7 @@ impl SourceTreeIndex {
         entry_file: &Path,
         config: &Config,
         source_packages: &SourcePackageRegistry,
+        source_file_kinds: &SourceFileKindRegistry,
         string_table: &mut StringTable,
     ) -> Result<ModuleRootTable, CompilerMessages> {
         let file_name = entry_file
@@ -407,6 +563,7 @@ impl SourceTreeIndex {
             &canonical_root,
             config,
             source_packages,
+            source_file_kinds,
             string_table,
         )
         .map(|index| index.module_roots)
@@ -432,6 +589,34 @@ impl SourceTreeIndex {
 
     pub(crate) fn entry_candidates(&self) -> &[PathBuf] {
         &self.entry_candidates
+    }
+
+    /// One deterministic [`OwnedSourceSet`] per canonical module, indexed by `ModuleId`.
+    ///
+    /// WHAT: the Stage 0 owned supported-source inventory for every module in the project graph,
+    /// including the optional project package facade. Each set is sorted by portable
+    /// module-relative source path so ordering is independent of traversal and checkout root.
+    /// WHY: later Phase 3 slices consume this as the ownership authority for semantic source
+    /// sets, check-only orphan units and source attribution.
+    #[allow(dead_code)]
+    pub(crate) fn owned_source_sets(&self) -> &[OwnedSourceSet] {
+        &self.owned_source_sets
+    }
+
+    /// The owned supported-source set for one module.
+    #[allow(dead_code)]
+    pub(crate) fn owned_source_set(&self, module_id: ModuleId) -> &OwnedSourceSet {
+        &self.owned_source_sets[module_id.index()]
+    }
+
+    /// Supported source candidates with no enclosing module root.
+    ///
+    /// WHAT: explicit deterministic Stage 0 facts for files that sit outside any normal or
+    /// support module root. They are not silently discarded; later phases decide whether they
+    /// become check-only orphan units or are rejected. This slice invents no orphan diagnostic.
+    #[allow(dead_code)]
+    pub(crate) fn unrooted_candidates(&self) -> &[DiscoveredSourceCandidate] {
+        &self.unrooted_candidates
     }
 
     #[cfg(test)]
@@ -621,6 +806,208 @@ fn bst_stem_from_file_name(file_name: &str) -> Option<&str> {
         return None;
     }
     path.file_stem().and_then(|stem| stem.to_str())
+}
+
+/// Resolve the builder-supported source kind for one validated UTF-8 file name.
+///
+/// `.bst` is always the compiler-owned `Beanstalk` kind. Other extensions enter the inventory
+/// only when they are compiler-recognized (via `SourceFileKind::from_extension`) and the selected
+/// builder registered them with the correct extension-to-kind mapping (via
+/// `supports_recognized_extension`). An arbitrary registered unknown extension (for example
+/// `txt -> Beandown`) and a mismatched known mapping (for example `bd -> PlainMarkdown`) both
+/// return `None` and stay out of owned source sets, so Stage 0 never duplicates the registry's
+/// recognition policy.
+fn source_kind_for_file(
+    file_name: &str,
+    source_file_kinds: &SourceFileKindRegistry,
+) -> Option<SourceFileKind> {
+    let extension = Path::new(file_name)
+        .extension()
+        .and_then(|extension| extension.to_str())?;
+    let kind = SourceFileKind::from_extension(extension)?;
+    if source_file_kinds.supports_recognized_extension(extension) {
+        Some(kind)
+    } else {
+        None
+    }
+}
+
+/// Compute the module-relative logical source path for one owned source file.
+///
+/// `file_path` is the canonical physical source path and `module_root_directory` is its owning
+/// module's canonical root directory, so a `strip_prefix` failure is a proven internal
+/// invariant: it means ownership classification assigned a file to a module that does not
+/// contain it. Rather than silently falling back to an absolute path, surface it as an internal
+/// compiler error so the failure is never hidden.
+fn relative_source_path_from(
+    file_path: &Path,
+    module_root_directory: &Path,
+    string_table: &mut StringTable,
+) -> Result<PathBuf, CompilerMessages> {
+    file_path
+        .strip_prefix(module_root_directory)
+        .map(PathBuf::from)
+        .map_err(|_| {
+            CompilerMessages::from_error_ref(
+                CompilerError::compiler_error(format!(
+                    "Owned source {file_path:?} is not under its nearest module root \
+                     {module_root_directory:?}; module-relative source path cannot fall back to \
+                     an absolute path"
+                )),
+                string_table,
+            )
+        })
+}
+
+/// Compute the entry-root-relative portable logical candidate path for one traversal source.
+///
+/// `traversal_path` is the non-canonicalized path built by joining entry-root descendants during
+/// the walk, so stripping `entry_root` yields the entry-root-relative path without an
+/// absolute-path fallback. Components are validated through the shared portable-path helper so
+/// non-UTF-8 or invalid components surface through the existing error lanes.
+fn entry_root_relative_logical_path(
+    traversal_path: &Path,
+    entry_root: &Path,
+    string_table: &mut StringTable,
+) -> Result<String, CompilerMessages> {
+    let relative_path = traversal_path
+        .strip_prefix(entry_root)
+        .map(PathBuf::from)
+        .map_err(|_| {
+            CompilerMessages::from_error_ref(
+                CompilerError::compiler_error(format!(
+                    "Discovered source candidate {traversal_path:?} is not under the entry root \
+                     {entry_root:?}; logical candidate path cannot fall back to an absolute path"
+                )),
+                string_table,
+            )
+        })?;
+    portable_relative_logical_path_from(&relative_path)
+        .map_err(|error| CompilerMessages::from_error_ref(error, string_table))
+}
+
+/// Build one deterministic [`OwnedSourceSet`] per module and the explicit unrooted candidate
+/// list from the supported candidates discovered during traversal.
+///
+/// WHAT: classifies every supported candidate under its nearest containing normal or support
+/// root by walking parent directories through the identity table. A nested module root and all
+/// files beneath it transfer to the nested module because the nearest-module walk finds it
+/// first. Unrooted internal subdirectories stay owned by their nearest ancestor module. The
+/// optional project facade owns its root file even though it sits outside entry-root
+/// containment, so it is added directly to the facade module's owned set. Supported candidates
+/// with no enclosing module root become explicit deterministic `unrooted_candidates` facts.
+/// WHY: one authoritative classification feeds later Phase 3 semantic-source-set and
+/// check-only slices. Owned entries are sorted by their portable module-relative source path so
+/// ordering is independent of traversal and checkout root; unrooted candidates are sorted by
+/// their portable entry-root-relative logical candidate path so the fact list is stable across
+/// checkout roots and creation order.
+fn classify_owned_sources(
+    module_identities: &ModuleIdentityTable,
+    module_count: usize,
+    supported_candidates: Vec<DiscoveredSourceCandidate>,
+    facade_file_for_inventory: Option<PathBuf>,
+    string_table: &mut StringTable,
+) -> Result<(Vec<OwnedSourceSet>, Vec<DiscoveredSourceCandidate>), CompilerMessages> {
+    let mut owned_buckets: Vec<Vec<OwnedSourceEntry>> =
+        (0..module_count).map(|_| Vec::new()).collect();
+    let mut unrooted_candidates = Vec::new();
+
+    for candidate in supported_candidates {
+        let Some(parent_directory) = candidate.canonical_path.parent() else {
+            unrooted_candidates.push(candidate);
+            continue;
+        };
+
+        let Some(module_id) = module_identities.nearest_module_for_directory(parent_directory)
+        else {
+            unrooted_candidates.push(candidate);
+            continue;
+        };
+
+        let record = module_identities.record(module_id);
+        let relative_path = relative_source_path_from(
+            &candidate.canonical_path,
+            record.root_directory(),
+            string_table,
+        )?;
+        let stable_identity = StableOwnedSourceIdentity::from_relative_source_path(
+            record.stable_origin().clone(),
+            &relative_path,
+        )
+        .map_err(|error| CompilerMessages::from_error_ref(error, string_table))?;
+
+        owned_buckets[module_id.index()].push(OwnedSourceEntry {
+            canonical_path: candidate.canonical_path,
+            kind: candidate.kind,
+            stable_identity,
+        });
+    }
+
+    // The optional project package facade root file lives beside config.bst, outside entry-root
+    // containment. When the project root equals the entry root (the current compatibility case)
+    // the facade file is reached by the traversal but excluded from the supported-candidate list
+    // so it appears exactly once, owned only by the facade module. Assign it directly to the
+    // facade module's owned set.
+    if let Some(facade_file) = facade_file_for_inventory {
+        let facade_module_id = module_identities.module_ids().find(|module_id| {
+            module_identities.record(*module_id).role() == ModuleRootRole::ProjectPackageFacade
+        });
+
+        let facade_module_id = facade_module_id.ok_or_else(|| {
+            CompilerMessages::from_error_ref(
+                CompilerError::compiler_error(format!(
+                    "A project package facade file {facade_file:?} was discovered but no matching \
+                     facade module record exists; the facade source must not be silently skipped"
+                )),
+                string_table,
+            )
+        })?;
+        let record = module_identities.record(facade_module_id);
+        let relative_path =
+            relative_source_path_from(&facade_file, record.root_directory(), string_table)?;
+        let stable_identity = StableOwnedSourceIdentity::from_relative_source_path(
+            record.stable_origin().clone(),
+            &relative_path,
+        )
+        .map_err(|error| CompilerMessages::from_error_ref(error, string_table))?;
+
+        owned_buckets[facade_module_id.index()].push(OwnedSourceEntry {
+            canonical_path: facade_file,
+            kind: SourceFileKind::Beanstalk,
+            stable_identity,
+        });
+    }
+
+    let mut owned_source_sets = Vec::with_capacity(module_count);
+    for (module_id, bucket) in module_identities.module_ids().zip(owned_buckets) {
+        owned_source_sets.push(build_owned_source_set(module_id, bucket));
+    }
+
+    // Sort unrooted candidates by their portable entry-root-relative logical candidate path so
+    // the fact list is stable across checkout roots and creation order. The canonical physical
+    // path is a narrow tie-breaker for safety, though distinct files cannot share one
+    // entry-root-relative path.
+    unrooted_candidates.sort_by(|left, right| {
+        left.logical_candidate_path
+            .cmp(&right.logical_candidate_path)
+            .then_with(|| left.canonical_path.cmp(&right.canonical_path))
+    });
+
+    Ok((owned_source_sets, unrooted_candidates))
+}
+
+/// Sort one module's owned entries by their portable module-relative source path and wrap them
+/// in an [`OwnedSourceSet`].
+fn build_owned_source_set(
+    module_id: ModuleId,
+    mut entries: Vec<OwnedSourceEntry>,
+) -> OwnedSourceSet {
+    entries.sort_by(|left, right| {
+        left.stable_identity
+            .relative_source_path()
+            .cmp(right.stable_identity.relative_source_path())
+    });
+    OwnedSourceSet { module_id, entries }
 }
 
 fn record_discovery_metrics(

@@ -7,13 +7,15 @@
 //! WHY: these are pure value invariants owned by `compiler_frontend::semantic_identity`, so they
 //!      own a focused test beside the module rather than an end-to-end case.
 
+use crate::compiler_frontend::compiler_errors::ErrorType;
 use crate::compiler_frontend::semantic_identity::{
     FunctionOriginKind, ModuleRootRole, OriginConstantId, OriginDeclarationId, OriginFunctionId,
     OriginTraitId, OriginTypeCategory, OriginTypeId, StableModuleOriginIdentity,
-    StablePackageIdentity,
+    StableOwnedSourceIdentity, StablePackageIdentity,
 };
 
 use std::collections::HashSet;
+use std::path::Path;
 
 fn module_origin(logical_path: &str) -> StableModuleOriginIdentity {
     StableModuleOriginIdentity::from_portable_path(
@@ -262,5 +264,133 @@ fn distinct_projects_do_not_share_type_identity() {
     assert_ne!(
         project_button, other_project_button,
         "the same logical path and name in different projects must differ"
+    );
+}
+
+// ---- Phase 3a: stable owned-source identity ----
+
+fn owned_source_identity(
+    logical_module_path: &str,
+    relative_source_path: &str,
+) -> StableOwnedSourceIdentity {
+    StableOwnedSourceIdentity::from_relative_source_path(
+        module_origin(logical_module_path),
+        Path::new(relative_source_path),
+    )
+    .expect("a valid module-relative source path must build a stable owned-source identity")
+}
+
+#[test]
+fn owned_source_identity_is_equal_for_equal_module_origin_and_relative_path() {
+    let first = owned_source_identity("ui/button", "#page.bst");
+    let second = owned_source_identity("ui/button", "#page.bst");
+
+    assert_eq!(
+        first, second,
+        "equal origin and relative path must yield equal identity"
+    );
+    let mut set = HashSet::new();
+    set.insert(first.clone());
+    assert!(
+        set.contains(&second),
+        "equal identity must hash to the same slot"
+    );
+}
+
+#[test]
+fn owned_source_identity_carries_no_absolute_path_or_source_file_field() {
+    let identity = owned_source_identity("ui/button", "#page.bst");
+    let debug = format!("{identity:?}");
+
+    assert!(
+        !debug.contains("ui/button/#page.bst"),
+        "the canonical physical source path must not be embedded in the stable identity: {debug}"
+    );
+    assert_eq!(identity.relative_source_path(), "#page.bst");
+    assert_eq!(identity.module_origin().logical_module_path(), "ui/button");
+}
+
+#[test]
+fn changing_module_origin_changes_owned_source_identity() {
+    let button = owned_source_identity("ui/button", "#page.bst");
+    let card = owned_source_identity("ui/card", "#page.bst");
+
+    assert_ne!(
+        button, card,
+        "moving a source file between modules must change its owned-source identity"
+    );
+}
+
+#[test]
+fn changing_relative_source_path_changes_owned_source_identity() {
+    let root_file = owned_source_identity("ui/button", "#page.bst");
+    let nested_file = owned_source_identity("ui/button", "internal/renderer.bst");
+
+    assert_ne!(
+        root_file, nested_file,
+        "changing the module-relative source path must change identity"
+    );
+    assert_eq!(root_file.relative_source_path(), "#page.bst");
+    assert_eq!(nested_file.relative_source_path(), "internal/renderer.bst");
+}
+
+#[test]
+fn owned_source_identity_distinguishes_same_name_in_different_modules() {
+    let alpha = owned_source_identity("alpha", "#page.bst");
+    let inner = owned_source_identity("alpha/inner", "#page.bst");
+
+    assert_ne!(
+        alpha, inner,
+        "two root files named #page.bst in different modules must keep distinct identities"
+    );
+}
+
+#[test]
+fn owned_source_identity_rejects_invalid_relative_path_components() {
+    let result = StableOwnedSourceIdentity::from_relative_source_path(
+        module_origin("ui/button"),
+        Path::new("../escape.bst"),
+    );
+    let error = result.expect_err("an invalid relative source path component must be rejected");
+    assert_eq!(
+        error.error_type,
+        ErrorType::Compiler,
+        "an invalid relative source path must use the internal compiler-error lane"
+    );
+    assert!(
+        error.msg.contains("invalid component"),
+        "internal error should mention the invalid component: {}",
+        error.msg
+    );
+}
+
+#[test]
+fn owned_source_identity_rejects_absolute_relative_path() {
+    let result = StableOwnedSourceIdentity::from_relative_source_path(
+        module_origin("ui/button"),
+        Path::new("/abs/#page.bst"),
+    );
+    assert!(
+        matches!(result, Err(ref e) if e.error_type == ErrorType::Compiler && e.msg.contains("invalid component")),
+        "an absolute relative source path must be rejected through the compiler-error lane"
+    );
+}
+
+#[test]
+fn owned_source_identity_rejects_empty_relative_source_path() {
+    let result = StableOwnedSourceIdentity::from_relative_source_path(
+        module_origin("ui/button"),
+        Path::new(""),
+    );
+    let error = result.expect_err("an empty relative source path must be rejected");
+    assert_eq!(
+        error.error_type,
+        ErrorType::Compiler,
+        "an empty relative source path must use the internal compiler-error lane"
+    );
+    assert!(
+        error.msg.contains("empty relative source path"),
+        "internal error should mention the empty path: {}",
+        error.msg
     );
 }

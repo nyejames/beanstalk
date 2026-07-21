@@ -113,7 +113,7 @@ impl StableModuleOriginIdentity {
     ) -> Result<Self, CompilerError> {
         Ok(Self {
             package,
-            logical_module_path: portable_logical_module_path_from(relative_logical_path)?,
+            logical_module_path: portable_relative_logical_path_from(relative_logical_path)?,
             role,
         })
     }
@@ -156,24 +156,27 @@ impl StableModuleOriginIdentity {
     }
 }
 
-/// Convert a base-relative logical module path into a portable forward-slash logical spelling.
+/// Convert a base-relative logical path into a portable forward-slash spelling.
 ///
-/// The entry-root module yields the empty string; deeper normal components are joined with `/`.
-/// Only normal relative components are accepted. `CurDir`, `ParentDir`, `RootDir` and `Prefix`
-/// components are rejected through an internal `CompilerError` so two invalid inputs cannot
-/// collapse to the same stable identity. Stage 0 traversal already rejects non-UTF-8 module path
-/// components through structured diagnostics, so a non-UTF-8 normal component here is a proven
-/// internal invariant; it is still surfaced as an explicit `CompilerError` rather than a panic.
-fn portable_logical_module_path_from(relative: &Path) -> Result<String, CompilerError> {
+/// The empty path yields the empty string (valid for the entry-root module origin); deeper
+/// normal components are joined with `/`. Only normal relative components are accepted.
+/// `CurDir`, `ParentDir`, `RootDir` and `Prefix` components are rejected through an internal
+/// `CompilerError` so two invalid inputs cannot collapse to the same stable identity. Stage 0
+/// traversal already rejects non-UTF-8 path components through structured diagnostics, so a
+/// non-UTF-8 normal component here is a proven internal invariant; it is still surfaced as an
+/// explicit `CompilerError` rather than a panic.
+pub(crate) fn portable_relative_logical_path_from(
+    relative: &Path,
+) -> Result<String, CompilerError> {
     let mut spelling = String::new();
     for component in relative.components() {
         match component {
             Component::Normal(name) => {
                 let name = name.to_str().ok_or_else(|| {
                     CompilerError::compiler_error(format!(
-                        "stable logical module path component {name:?} in {relative:?} is not \
-                         UTF-8; Stage 0 rejects non-UTF-8 module path components before identity \
-                         construction, so this is an internal invariant violation"
+                        "stable relative logical path component {name:?} in {relative:?} is not \
+                        UTF-8; Stage 0 rejects non-UTF-8 path components before identity \
+                        construction, so this is an internal invariant violation"
                     ))
                 })?;
                 if !spelling.is_empty() {
@@ -186,7 +189,7 @@ fn portable_logical_module_path_from(relative: &Path) -> Result<String, Compiler
             | Component::RootDir
             | Component::Prefix(_) => {
                 return Err(CompilerError::compiler_error(format!(
-                    "stable logical module path {relative:?} contains an invalid component \
+                    "stable logical path {relative:?} contains an invalid component \
                      {component:?}; only normal relative components are permitted, so two invalid \
                      inputs cannot collapse to the same stable identity"
                 )));
@@ -194,6 +197,71 @@ fn portable_logical_module_path_from(relative: &Path) -> Result<String, Compiler
         }
     }
     Ok(spelling)
+}
+
+/// Owned, hashable, cross-build identity for one owned supported source file.
+///
+/// WHAT: derives a stable owned-source identity from the owning module's
+/// [`StableModuleOriginIdentity`] and the module-relative logical source file path (portable
+/// forward-slash spelling, including the root filename). It stores no `PathBuf`, `StringId`,
+/// `InternedPath`, dense `SourceId`, traversal index, `SourceDatabase` or absolute filesystem path,
+/// so identity is stable across checkout roots and traversal order. The module-relative source
+/// path intentionally includes the actual root filename, so renaming the root file (for example
+/// `#page.bst` to `#pages.bst`) changes the owned-source identity even though the module origin
+/// remains stable.
+/// WHY: later Phase 3 slices consume this identity as the canonical logical source identity for
+/// semantic source sets, check-only orphan units and source attribution. Keeping the dense
+/// build-local handles and absolute paths out prevents process-local indexes from leaking across
+/// module boundaries or into persistent artefacts. Identity changes when the module origin or the
+/// module-relative source file path changes, and is otherwise independent of checkout root.
+#[allow(dead_code)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct StableOwnedSourceIdentity {
+    module_origin: StableModuleOriginIdentity,
+    relative_source_path: String,
+}
+
+impl StableOwnedSourceIdentity {
+    /// Build the cross-build owned-source identity from a module-relative logical source path.
+    ///
+    /// `relative_source_path` is the path of the source file relative to its owning module root
+    /// directory, including the root filename. It is validated by the same portable-component
+    /// rules as the module origin path: only normal relative UTF-8 components are accepted, so
+    /// `CurDir`, `ParentDir`, `RootDir`, `Prefix` and non-UTF-8 components surface as an internal
+    /// `CompilerError` rather than panicking or collapsing two invalid inputs to one identity.
+    /// Stage 0 traversal already rejects non-UTF-8 source names through structured diagnostics,
+    /// so a non-UTF-8 component here is an internal invariant violation surfaced explicitly.
+    /// An owned source identity always includes a filename, so an empty relative source path is
+    /// rejected through an internal `CompilerError` rather than collapsing to the entry-root
+    /// module's empty path spelling.
+    pub(crate) fn from_relative_source_path(
+        module_origin: StableModuleOriginIdentity,
+        relative_source_path: &Path,
+    ) -> Result<Self, CompilerError> {
+        if relative_source_path.as_os_str().is_empty() {
+            return Err(CompilerError::compiler_error(
+                "stable owned-source identity cannot be constructed from an empty relative source \
+                 path; an owned source identity always includes a filename",
+            ));
+        }
+        Ok(Self {
+            module_origin,
+            relative_source_path: portable_relative_logical_path_from(relative_source_path)?,
+        })
+    }
+
+    /// The owning module origin identity.
+    #[allow(dead_code)]
+    pub(crate) fn module_origin(&self) -> &StableModuleOriginIdentity {
+        &self.module_origin
+    }
+
+    /// The canonical portable module-relative source file path spelling (forward slashes,
+    /// including the root filename).
+    #[allow(dead_code)]
+    pub(crate) fn relative_source_path(&self) -> &str {
+        &self.relative_source_path
+    }
 }
 
 /// The semantic category of one exported source type that receives a stable origin identity.

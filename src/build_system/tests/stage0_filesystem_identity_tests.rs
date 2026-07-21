@@ -59,6 +59,7 @@ mod non_utf8_filesystem_identity {
             &canonical_root,
             &config,
             &crate::builder_surface::SourcePackageRegistry::default(),
+            &crate::builder_surface::SourceFileKindRegistry::default(),
             &mut string_table,
         )
         .expect_err("non-UTF-8 file name should be rejected");
@@ -90,6 +91,7 @@ mod non_utf8_filesystem_identity {
             &canonical_root,
             &config,
             &crate::builder_surface::SourcePackageRegistry::default(),
+            &crate::builder_surface::SourceFileKindRegistry::default(),
             &mut string_table,
         )
         .expect_err("non-UTF-8 folder name should be rejected");
@@ -123,6 +125,7 @@ mod non_utf8_filesystem_identity {
             &canonical_root,
             &config,
             &crate::builder_surface::SourcePackageRegistry::default(),
+            &crate::builder_surface::SourceFileKindRegistry::default(),
             &mut string_table,
         )
         .expect_err("non-UTF-8 project-root child should be rejected during facade discovery");
@@ -606,6 +609,7 @@ mod module_identity_tests {
             &canonical_root,
             &config,
             &SourcePackageRegistry::default(),
+            &crate::builder_surface::SourceFileKindRegistry::default(),
             &mut string_table,
         )
         .expect("source tree index should build");
@@ -940,6 +944,7 @@ mod module_identity_tests {
             &missing_project_root,
             &config,
             &SourcePackageRegistry::default(),
+            &crate::builder_surface::SourceFileKindRegistry::default(),
             &mut string_table,
         )
         .expect_err("missing project root should surface a file error, not a missing facade");
@@ -976,6 +981,7 @@ mod module_identity_tests {
             &canonical_root,
             &config,
             &SourcePackageRegistry::default(),
+            &crate::builder_surface::SourceFileKindRegistry::default(),
             &mut string_table,
         )
         .expect_err("unreadable project root should surface a file error, not a missing facade");
@@ -1055,6 +1061,7 @@ mod module_identity_tests {
             &canonical_root,
             &config,
             &SourcePackageRegistry::default(),
+            &crate::builder_surface::SourceFileKindRegistry::default(),
             &mut string_table,
         )
         .expect_err("multiple hash roots should be rejected");
@@ -1085,6 +1092,7 @@ mod module_identity_tests {
             &canonical_root,
             &config,
             &SourcePackageRegistry::default(),
+            &crate::builder_surface::SourceFileKindRegistry::default(),
             &mut string_table,
         )
         .expect_err("mixed normal and support roots should be rejected");
@@ -1115,6 +1123,7 @@ mod module_identity_tests {
             &canonical_root,
             &config,
             &SourcePackageRegistry::default(),
+            &crate::builder_surface::SourceFileKindRegistry::default(),
             &mut string_table,
         )
         .expect_err("multiple support roots should be rejected");
@@ -1155,6 +1164,7 @@ mod module_identity_tests {
             &canonical_root,
             &config,
             &SourcePackageRegistry::default(),
+            &crate::builder_surface::SourceFileKindRegistry::default(),
             &mut string_table,
         )
         .expect("source tree index should build");
@@ -1459,5 +1469,597 @@ mod module_identity_tests {
             .next()
             .expect("expected at least one typed error diagnostic");
         diagnostic.kind.code().to_owned()
+    }
+}
+mod owned_source_inventory_tests {
+    use super::module_identity::ModuleId;
+    use super::source_tree_index::SourceTreeIndex;
+    use super::*;
+    use crate::builder_surface::{SourceFileKind, SourceFileKindRegistry, SourcePackageRegistry};
+    use crate::compiler_frontend::semantic_identity::ModuleRootRole;
+    use crate::compiler_frontend::symbols::string_interning::StringTable;
+    use std::path::{Path, PathBuf};
+
+    /// Discover the source tree index for one checkout root with a selected source-kind
+    /// registry and configured project name.
+    fn discover_index_with_kinds(
+        root: &Path,
+        entry_root_relative: &str,
+        project_name: &str,
+        source_file_kinds: &SourceFileKindRegistry,
+    ) -> SourceTreeIndex {
+        let entry_root = root.join(entry_root_relative);
+        fs::create_dir_all(&entry_root).expect("should create entry root");
+
+        let mut config = Config::new(root.to_path_buf());
+        config.entry_root = PathBuf::from(entry_root_relative);
+        config.project_name = String::from(project_name);
+
+        let canonical_root = fs::canonicalize(root).expect("project root should canonicalize");
+        let canonical_entry_root =
+            fs::canonicalize(&entry_root).expect("entry root should canonicalize");
+        let mut string_table = StringTable::new();
+
+        SourceTreeIndex::discover(
+            canonical_entry_root,
+            &canonical_root,
+            &config,
+            &SourcePackageRegistry::default(),
+            source_file_kinds,
+            &mut string_table,
+        )
+        .expect("source tree index should build")
+    }
+
+    fn html_source_file_kinds() -> SourceFileKindRegistry {
+        let mut kinds = SourceFileKindRegistry::new();
+        kinds.register("bd", SourceFileKind::Beandown);
+        kinds.register("md", SourceFileKind::PlainMarkdown);
+        kinds
+    }
+
+    fn owned_relative_paths(index: &SourceTreeIndex, module_id: ModuleId) -> Vec<String> {
+        index
+            .owned_source_set(module_id)
+            .entries()
+            .iter()
+            .map(|entry| entry.stable_identity().relative_source_path().to_owned())
+            .collect()
+    }
+
+    /// Build a two-module tree: an entry-root module plus a nested `alpha` module with a deeper
+    /// `alpha/inner` module.
+    fn build_nested_module_tree(root: &Path) {
+        let src = root.join("src");
+        fs::create_dir_all(src.join("alpha/inner")).expect("should create nested module dirs");
+        fs::write(src.join("#page.bst"), "").expect("should write entry root file");
+        fs::write(src.join("accounts.bst"), "").expect("should write entry module ordinary file");
+        fs::write(src.join("alpha/#mod.bst"), "").expect("should write alpha root file");
+        fs::write(src.join("alpha/helper.bst"), "").expect("should write alpha ordinary file");
+        fs::write(src.join("alpha/inner/#page.bst"), "").expect("should write inner root file");
+        fs::write(src.join("alpha/inner/deep.bst"), "").expect("should write inner ordinary file");
+    }
+
+    #[test]
+    fn root_and_nested_files_receive_correct_nearest_owner() {
+        let root = temp_dir("owned_source_nearest_owner");
+        build_nested_module_tree(&root);
+
+        let index =
+            discover_index_with_kinds(&root, "src", "my-project", &html_source_file_kinds());
+        let table = index.module_identities();
+
+        let entry_id = table
+            .module_ids()
+            .find(|id| {
+                table
+                    .record(*id)
+                    .logical_module_path()
+                    .as_os_str()
+                    .is_empty()
+            })
+            .expect("entry root module should exist");
+        let alpha_id = table
+            .module_ids()
+            .find(|id| table.record(*id).logical_module_path() == Path::new("alpha"))
+            .expect("alpha module should exist");
+        let inner_id = table
+            .module_ids()
+            .find(|id| table.record(*id).logical_module_path() == Path::new("alpha/inner"))
+            .expect("inner module should exist");
+
+        assert_eq!(
+            owned_relative_paths(&index, entry_id),
+            vec!["#page.bst", "accounts.bst"],
+            "entry root module owns its root file and same-module ordinary file"
+        );
+        assert_eq!(
+            owned_relative_paths(&index, alpha_id),
+            vec!["#mod.bst", "helper.bst"],
+            "alpha module owns its root file and same-module ordinary file"
+        );
+        assert_eq!(
+            owned_relative_paths(&index, inner_id),
+            vec!["#page.bst", "deep.bst"],
+            "inner module owns its root file and the file beneath it, not alpha"
+        );
+
+        // The inner root file and a same-named entry root file keep distinct stable identities.
+        let entry_root_identity = index
+            .owned_source_set(entry_id)
+            .entries()
+            .iter()
+            .find(|entry| entry.stable_identity().relative_source_path() == "#page.bst")
+            .expect("entry root owned source should exist")
+            .stable_identity();
+        let inner_root_identity = index
+            .owned_source_set(inner_id)
+            .entries()
+            .iter()
+            .find(|entry| entry.stable_identity().relative_source_path() == "#page.bst")
+            .expect("inner root owned source should exist")
+            .stable_identity();
+        assert_ne!(
+            entry_root_identity, inner_root_identity,
+            "two #page.bst root files in different modules must keep distinct identities"
+        );
+
+        fs::remove_dir_all(&root).expect("should remove temp root");
+    }
+
+    #[test]
+    fn nested_module_files_transfer_to_nested_module_not_ancestor() {
+        let root = temp_dir("owned_source_nested_transfer");
+        build_nested_module_tree(&root);
+
+        let index =
+            discover_index_with_kinds(&root, "src", "my-project", &html_source_file_kinds());
+        let table = index.module_identities();
+
+        let alpha_id = table
+            .module_ids()
+            .find(|id| table.record(*id).logical_module_path() == Path::new("alpha"))
+            .expect("alpha module should exist");
+
+        // `alpha/inner/deep.bst` is beneath alpha on the filesystem but belongs to inner because
+        // the nearest-module walk finds the inner root first.
+        let alpha_paths = owned_relative_paths(&index, alpha_id);
+        assert!(
+            !alpha_paths.contains(&"inner/deep.bst".to_owned())
+                && !alpha_paths.contains(&"deep.bst".to_owned()),
+            "files beneath a nested module root must transfer to the nested module: {alpha_paths:?}"
+        );
+
+        fs::remove_dir_all(&root).expect("should remove temp root");
+    }
+
+    #[test]
+    fn registered_bd_and_md_kinds_are_included() {
+        let root = temp_dir("owned_source_registered_kinds");
+        let src = root.join("src");
+        fs::create_dir_all(&src).expect("should create entry root");
+        fs::write(src.join("#page.bst"), "").expect("should write root file");
+        fs::write(src.join("page.bd"), "").expect("should write beandown file");
+        fs::write(src.join("content.md"), "").expect("should write markdown file");
+
+        let index =
+            discover_index_with_kinds(&root, "src", "my-project", &html_source_file_kinds());
+        let table = index.module_identities();
+        let entry_id = table
+            .module_ids()
+            .find(|id| {
+                table
+                    .record(*id)
+                    .logical_module_path()
+                    .as_os_str()
+                    .is_empty()
+            })
+            .expect("entry root module should exist");
+
+        let kinds: Vec<SourceFileKind> = index
+            .owned_source_set(entry_id)
+            .entries()
+            .iter()
+            .map(|entry| entry.kind())
+            .collect();
+        assert!(
+            kinds.contains(&SourceFileKind::Beandown),
+            "registered .bd files must enter the owned source set: {kinds:?}"
+        );
+        assert!(
+            kinds.contains(&SourceFileKind::PlainMarkdown),
+            "registered .md files must enter the owned source set: {kinds:?}"
+        );
+        assert_eq!(
+            owned_relative_paths(&index, entry_id),
+            vec!["#page.bst", "content.md", "page.bd"],
+            "registered builder-supported kinds are owned and sorted by relative path"
+        );
+
+        fs::remove_dir_all(&root).expect("should remove temp root");
+    }
+
+    #[test]
+    fn known_but_unselected_and_unknown_extensions_are_excluded() {
+        let root = temp_dir("owned_source_excluded_kinds");
+        let src = root.join("src");
+        fs::create_dir_all(&src).expect("should create entry root");
+        fs::write(src.join("#page.bst"), "").expect("should write root file");
+        fs::write(src.join("page.bd"), "").expect("should write unselected beandown file");
+        fs::write(src.join("content.md"), "").expect("should write unselected markdown file");
+        fs::write(src.join("notes.txt"), "").expect("should write unknown-extension file");
+
+        // Empty registry: .bst only. .bd and .md are known-but-unselected; .txt is unknown.
+        let index =
+            discover_index_with_kinds(&root, "src", "my-project", &SourceFileKindRegistry::new());
+        let table = index.module_identities();
+        let entry_id = table
+            .module_ids()
+            .find(|id| {
+                table
+                    .record(*id)
+                    .logical_module_path()
+                    .as_os_str()
+                    .is_empty()
+            })
+            .expect("entry root module should exist");
+
+        assert_eq!(
+            owned_relative_paths(&index, entry_id),
+            vec!["#page.bst"],
+            "known-but-unselected and unknown extensions must stay out of owned source sets"
+        );
+        assert!(
+            index.unrooted_candidates().is_empty(),
+            "excluded files are not unrooted facts"
+        );
+
+        fs::remove_dir_all(&root).expect("should remove temp root");
+    }
+
+    #[test]
+    fn owned_entries_have_deterministic_logical_order_independent_of_creation() {
+        let root = temp_dir("owned_source_deterministic_order");
+        let src = root.join("src");
+        fs::create_dir_all(src.join("internal")).expect("should create internal dir");
+        fs::write(src.join("#page.bst"), "").expect("should write root file");
+        // Create files in reverse-sorted order so traversal order would differ from logical order.
+        fs::write(src.join("zeta.bst"), "").expect("should write zeta");
+        fs::write(src.join("alpha.bst"), "").expect("should write alpha");
+        fs::write(src.join("internal/whisker.bst"), "").expect("should write whisker");
+        fs::write(src.join("internal/beta.bst"), "").expect("should write beta");
+
+        let index =
+            discover_index_with_kinds(&root, "src", "my-project", &html_source_file_kinds());
+        let table = index.module_identities();
+        let entry_id = table
+            .module_ids()
+            .find(|id| {
+                table
+                    .record(*id)
+                    .logical_module_path()
+                    .as_os_str()
+                    .is_empty()
+            })
+            .expect("entry root module should exist");
+
+        assert_eq!(
+            owned_relative_paths(&index, entry_id),
+            vec![
+                "#page.bst",
+                "alpha.bst",
+                "internal/beta.bst",
+                "internal/whisker.bst",
+                "zeta.bst"
+            ],
+            "owned entries must be sorted by portable module-relative path, not creation order"
+        );
+
+        fs::remove_dir_all(&root).expect("should remove temp root");
+    }
+
+    #[test]
+    fn project_facade_owns_its_root_source() {
+        let root = temp_dir("owned_source_facade_root");
+        let src = root.join("src");
+        fs::create_dir_all(&src).expect("should create entry root");
+        fs::write(src.join("#page.bst"), "").expect("should write entry root file");
+        fs::write(root.join("+package.bst"), "").expect("should write facade root file");
+
+        let index =
+            discover_index_with_kinds(&root, "src", "my-project", &html_source_file_kinds());
+        let table = index.module_identities();
+        let facade_id = table
+            .module_ids()
+            .find(|id| table.record(*id).role() == ModuleRootRole::ProjectPackageFacade)
+            .expect("project package facade should exist");
+
+        let facade_entries = index.owned_source_set(facade_id).entries();
+        assert_eq!(
+            facade_entries.len(),
+            1,
+            "facade module owns exactly its root source file"
+        );
+        assert_eq!(
+            facade_entries[0].stable_identity().relative_source_path(),
+            "+package.bst",
+            "facade root file identity is module-relative to the facade root directory"
+        );
+        assert_eq!(facade_entries[0].kind(), SourceFileKind::Beanstalk);
+
+        fs::remove_dir_all(&root).expect("should remove temp root");
+    }
+
+    #[test]
+    fn unrooted_supported_candidates_remain_explicit_facts() {
+        let root = temp_dir("owned_source_unrooted");
+        let src = root.join("src");
+        fs::create_dir_all(&src).expect("should create entry root");
+        // No module root file in the entry root: the .bst files are unrooted.
+        fs::write(src.join("orphan.bst"), "").expect("should write orphan source");
+        fs::write(src.join("page.bd"), "").expect("should write orphan beandown");
+
+        let index =
+            discover_index_with_kinds(&root, "src", "my-project", &html_source_file_kinds());
+
+        // No modules were discovered, so no owned source sets and no silent discard.
+        assert!(
+            index.owned_source_sets().is_empty(),
+            "unrooted candidates must not be assigned to a module"
+        );
+        let unrooted = index.unrooted_candidates();
+        assert_eq!(
+            unrooted.len(),
+            2,
+            "both supported unrooted files must remain explicit facts"
+        );
+        // Unrooted candidates are sorted by portable logical candidate path.
+        assert!(
+            unrooted[0].logical_candidate_path() < unrooted[1].logical_candidate_path(),
+            "unrooted candidates must sort by portable logical path"
+        );
+        assert_eq!(
+            unrooted[0].logical_candidate_path(),
+            "orphan.bst",
+            "the logical candidate path is entry-root-relative and portable"
+        );
+
+        fs::remove_dir_all(&root).expect("should remove temp root");
+    }
+
+    #[test]
+    fn owned_source_identity_is_independent_of_checkout_root() {
+        let root_a = temp_dir("owned_source_checkout_a");
+        let root_b = temp_dir("owned_source_checkout_b");
+        for root in [&root_a, &root_b] {
+            build_nested_module_tree(root);
+        }
+
+        let index_a =
+            discover_index_with_kinds(&root_a, "src", "my-project", &html_source_file_kinds());
+        let index_b =
+            discover_index_with_kinds(&root_b, "src", "my-project", &html_source_file_kinds());
+        let table_a = index_a.module_identities();
+        let table_b = index_b.module_identities();
+
+        let alpha_a = table_a
+            .module_ids()
+            .find(|id| table_a.record(*id).logical_module_path() == Path::new("alpha"))
+            .expect("alpha module should exist in tree a");
+        let alpha_b = table_b
+            .module_ids()
+            .find(|id| table_b.record(*id).logical_module_path() == Path::new("alpha"))
+            .expect("alpha module should exist in tree b");
+
+        let helper_a = index_a
+            .owned_source_set(alpha_a)
+            .entries()
+            .iter()
+            .find(|entry| entry.stable_identity().relative_source_path() == "helper.bst")
+            .expect("alpha helper owned source should exist in tree a");
+        let helper_b = index_b
+            .owned_source_set(alpha_b)
+            .entries()
+            .iter()
+            .find(|entry| entry.stable_identity().relative_source_path() == "helper.bst")
+            .expect("alpha helper owned source should exist in tree b");
+
+        assert_eq!(
+            helper_a.stable_identity(),
+            helper_b.stable_identity(),
+            "owned-source identity must be equal across distinct checkout roots"
+        );
+        // The identity debug representation must not embed either absolute checkout root.
+        let debug = format!("{:?}", helper_a.stable_identity());
+        assert!(
+            !debug.contains(root_a.to_str().expect("root_a is UTF-8"))
+                && !debug.contains(root_b.to_str().expect("root_b is UTF-8")),
+            "owned-source identity must not embed an absolute checkout root: {debug}"
+        );
+
+        fs::remove_dir_all(&root_a).expect("should remove root a");
+        fs::remove_dir_all(&root_b).expect("should remove root b");
+    }
+
+    #[test]
+    fn unknown_registered_extension_is_excluded() {
+        let root = temp_dir("owned_source_unknown_registered_extension");
+        let src = root.join("src");
+        fs::create_dir_all(&src).expect("should create entry root");
+        fs::write(src.join("#page.bst"), "").expect("should write root file");
+        fs::write(src.join("notes.txt"), "").expect("should write unknown-extension file");
+
+        // Registering txt -> Beandown must not admit .txt: it is not a compiler-recognized
+        // extension, so it stays out of owned source sets regardless of the registry entry.
+        let mut kinds = SourceFileKindRegistry::new();
+        kinds.register("txt", SourceFileKind::Beandown);
+        let index = discover_index_with_kinds(&root, "src", "my-project", &kinds);
+        let table = index.module_identities();
+        let entry_id = table
+            .module_ids()
+            .find(|id| {
+                table
+                    .record(*id)
+                    .logical_module_path()
+                    .as_os_str()
+                    .is_empty()
+            })
+            .expect("entry root module should exist");
+
+        assert_eq!(
+            owned_relative_paths(&index, entry_id),
+            vec!["#page.bst"],
+            "an arbitrary registered unknown extension must not enter owned source sets"
+        );
+        assert!(
+            index.unrooted_candidates().is_empty(),
+            "an excluded unknown registered extension is not an unrooted fact"
+        );
+
+        fs::remove_dir_all(&root).expect("should remove temp root");
+    }
+
+    #[test]
+    fn mismatched_known_extension_mapping_is_excluded() {
+        let root = temp_dir("owned_source_mismatched_mapping");
+        let src = root.join("src");
+        fs::create_dir_all(&src).expect("should create entry root");
+        fs::write(src.join("#page.bst"), "").expect("should write root file");
+        fs::write(src.join("page.bd"), "").expect("should write beandown-extension file");
+
+        // Registering bd -> PlainMarkdown mismatches the compiler-recognized mapping (bd ->
+        // Beandown), so .bd must stay out of owned source sets.
+        let mut kinds = SourceFileKindRegistry::new();
+        kinds.register("bd", SourceFileKind::PlainMarkdown);
+        let index = discover_index_with_kinds(&root, "src", "my-project", &kinds);
+        let table = index.module_identities();
+        let entry_id = table
+            .module_ids()
+            .find(|id| {
+                table
+                    .record(*id)
+                    .logical_module_path()
+                    .as_os_str()
+                    .is_empty()
+            })
+            .expect("entry root module should exist");
+
+        assert_eq!(
+            owned_relative_paths(&index, entry_id),
+            vec!["#page.bst"],
+            "a mismatched known extension mapping must not enter owned source sets"
+        );
+        assert!(
+            index.unrooted_candidates().is_empty(),
+            "an excluded mismatched mapping is not an unrooted fact"
+        );
+
+        fs::remove_dir_all(&root).expect("should remove temp root");
+    }
+
+    #[test]
+    fn unrooted_candidates_are_ordered_by_portable_logical_path_across_roots() {
+        // Two distinct checkout roots with unrooted files created in reverse-logical order.
+        // The unrooted candidate list must sort by portable entry-root-relative logical path,
+        // not by absolute checkout path or creation order.
+        let root_a = temp_dir("unrooted_logical_order_a");
+        let root_b = temp_dir("unrooted_logical_order_b");
+
+        let build_tree = |root: &Path| {
+            let src = root.join("src");
+            fs::create_dir_all(src.join("zebra")).expect("should create zebra dir");
+            fs::create_dir_all(src.join("alpha")).expect("should create alpha dir");
+            // No module root: all files are unrooted. Create in reverse-logical order.
+            fs::write(src.join("zebra/orphan.bst"), "").expect("should write zebra orphan");
+            fs::write(src.join("alpha/orphan.bst"), "").expect("should write alpha orphan");
+            fs::write(src.join("mismatch.bst"), "").expect("should write mismatch orphan");
+        };
+        build_tree(&root_a);
+        build_tree(&root_b);
+
+        let index_a =
+            discover_index_with_kinds(&root_a, "src", "my-project", &html_source_file_kinds());
+        let index_b =
+            discover_index_with_kinds(&root_b, "src", "my-project", &html_source_file_kinds());
+
+        let paths_a: Vec<&str> = index_a
+            .unrooted_candidates()
+            .iter()
+            .map(|candidate| candidate.logical_candidate_path())
+            .collect();
+        let paths_b: Vec<&str> = index_b
+            .unrooted_candidates()
+            .iter()
+            .map(|candidate| candidate.logical_candidate_path())
+            .collect();
+
+        assert_eq!(
+            paths_a,
+            vec!["alpha/orphan.bst", "mismatch.bst", "zebra/orphan.bst"],
+            "unrooted candidates must sort by portable logical path, not creation order"
+        );
+        assert_eq!(
+            paths_a, paths_b,
+            "unrooted logical ordering must be identical across distinct checkout roots"
+        );
+
+        fs::remove_dir_all(&root_a).expect("should remove root a");
+        fs::remove_dir_all(&root_b).expect("should remove root b");
+    }
+
+    #[test]
+    fn facade_file_inside_entry_root_is_owned_exactly_once_by_facade() {
+        // The current compatibility case: project root equals entry root, so the facade root
+        // file lies inside the traversal. It must appear exactly once, owned only by the facade
+        // module, and must not also appear in the entry-root module's owned source set.
+        let root = temp_dir("facade_exact_once_same_root");
+        fs::create_dir_all(&root).expect("should create entry root");
+        fs::write(root.join("#page.bst"), "").expect("should write entry root file");
+        fs::write(root.join("+package.bst"), "").expect("should write facade root file");
+
+        let index = discover_index_with_kinds(&root, ".", "my-project", &html_source_file_kinds());
+        let table = index.module_identities();
+
+        let facade_id = table
+            .module_ids()
+            .find(|id| table.record(*id).role() == ModuleRootRole::ProjectPackageFacade)
+            .expect("project package facade should exist");
+        let entry_id = table
+            .module_ids()
+            .find(|id| {
+                table.record(*id).role() == ModuleRootRole::Normal
+                    && table
+                        .record(*id)
+                        .logical_module_path()
+                        .as_os_str()
+                        .is_empty()
+            })
+            .expect("entry root normal module should exist");
+
+        let facade_entries = index.owned_source_set(facade_id).entries();
+        assert_eq!(
+            facade_entries.len(),
+            1,
+            "facade module owns exactly its root source file"
+        );
+        assert_eq!(
+            facade_entries[0].stable_identity().relative_source_path(),
+            "+package.bst",
+            "facade root file identity is module-relative to the facade root directory"
+        );
+
+        let entry_paths = owned_relative_paths(&index, entry_id);
+        assert!(
+            !entry_paths.contains(&"+package.bst".to_owned()),
+            "the facade file must not appear in the entry-root normal module's owned set: \
+             {entry_paths:?}"
+        );
+        assert_eq!(
+            entry_paths,
+            vec!["#page.bst"],
+            "entry-root normal module owns only its own root file"
+        );
+
+        fs::remove_dir_all(&root).expect("should remove temp root");
     }
 }

@@ -51,6 +51,7 @@ fn configured_resolver_with_source_file_kinds(
         &project_root,
         config,
         &crate::builder_surface::SourcePackageRegistry::default(),
+        &crate::builder_surface::SourceFileKindRegistry::default(),
         &mut index_string_table,
     )
     .expect("source tree index should build");
@@ -127,6 +128,7 @@ fn discover_modules_for_test(
         &project_root,
         config,
         &crate::builder_surface::SourcePackageRegistry::default(),
+        &crate::builder_surface::SourceFileKindRegistry::default(),
         &mut string_table,
     )?;
     let mut external_packages = ExternalPackageRegistry::new();
@@ -168,6 +170,7 @@ fn discover_modules_for_test_with_providers(
         &project_root,
         config,
         &crate::builder_surface::SourcePackageRegistry::default(),
+        &crate::builder_surface::SourceFileKindRegistry::default(),
         &mut string_table,
     )?;
     let mut external_packages = ExternalPackageRegistry::new();
@@ -285,6 +288,7 @@ fn source_tree_index_collects_one_scan_and_applies_skip_policy() {
         &canonical_root,
         &config,
         &crate::builder_surface::SourcePackageRegistry::default(),
+        &crate::builder_surface::SourceFileKindRegistry::default(),
         &mut string_table,
     )
     .expect("source tree index should build");
@@ -344,6 +348,7 @@ fn source_tree_index_ignores_collision_in_fixed_skipped_directory() {
         &canonical_root,
         &config,
         &crate::builder_surface::SourcePackageRegistry::default(),
+        &crate::builder_surface::SourceFileKindRegistry::default(),
         &mut string_table,
     )
     .expect("fixed-skipped collision-shaped inputs must not trigger collision diagnostics");
@@ -384,6 +389,7 @@ fn source_tree_index_ignores_package_prefix_collision_in_skipped_directory() {
         &canonical_root,
         &config,
         &source_packages,
+        &crate::builder_surface::SourceFileKindRegistry::default(),
         &mut string_table,
     )
     .expect("skipped folder matching a package prefix must not trigger prefix collision");
@@ -411,6 +417,7 @@ fn source_tree_index_detects_collision_in_non_skipped_directory() {
         &canonical_root,
         &config,
         &crate::builder_surface::SourcePackageRegistry::default(),
+        &crate::builder_surface::SourceFileKindRegistry::default(),
         &mut string_table,
     )
     .expect_err("non-skipped bst/folder collision should be rejected");
@@ -447,6 +454,7 @@ fn bounded_module_roots_for_single_file_indexes_nested_roots_with_ignored_direct
             &entry_file,
             &config,
             &crate::builder_surface::SourcePackageRegistry::default(),
+            &crate::builder_surface::SourceFileKindRegistry::default(),
             &mut string_table,
         )
         .expect("single-file hash root should index its tree without collision errors");
@@ -479,6 +487,7 @@ fn bounded_module_roots_for_single_file_rejects_import_name_collisions() {
         &entry_file,
         &config,
         &crate::builder_surface::SourcePackageRegistry::default(),
+        &crate::builder_surface::SourceFileKindRegistry::default(),
         &mut string_table,
     )
     .expect_err("single-file hash roots should reject real import-name collisions");
@@ -509,6 +518,7 @@ fn source_tree_index_rejects_duplicate_hash_root_files() {
         &canonical_root,
         &config,
         &crate::builder_surface::SourcePackageRegistry::default(),
+        &crate::builder_surface::SourceFileKindRegistry::default(),
         &mut string_table,
     )
     .expect_err("a module directory may contain only one hash root");

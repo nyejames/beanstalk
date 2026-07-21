@@ -190,6 +190,7 @@ pub(crate) fn compile_single_file_frontend(
             &entry_path,
             config,
             &builder_surface.source_packages,
+            &builder_surface.source_file_kinds,
             string_table,
         ) {
             Ok(module_roots) => module_roots,

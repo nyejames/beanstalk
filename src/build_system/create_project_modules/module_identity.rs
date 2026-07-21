@@ -40,6 +40,18 @@ use std::path::{Path, PathBuf};
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub(crate) struct ModuleId(usize);
 
+impl ModuleId {
+    /// The build-local table slot index for this module.
+    ///
+    /// WHAT: lets Stage 0 owned-source classification and other co-owners index parallel arrays
+    /// that are kept in `ModuleId` order. It is a build-local handle, not a persistent semantic
+    /// identity, so it must not cross build boundaries.
+    #[allow(dead_code)]
+    pub(crate) fn index(self) -> usize {
+        self.0
+    }
+}
+
 /// The root role implied by a canonical root filename, or `None` for non-root files.
 ///
 /// WHAT: maps the filename marker to a root role. A `+*.bst` filename maps to `Support`; Stage 0
@@ -228,6 +240,36 @@ impl ModuleIdentityTable {
     #[allow(dead_code)]
     pub(crate) fn module_id_for_directory(&self, directory: &Path) -> Option<ModuleId> {
         self.by_root_directory.get(directory).copied()
+    }
+
+    /// The nearest enclosing non-facade module for an arbitrary directory, by walking parent
+    /// directories.
+    ///
+    /// WHAT: classifies a directory (typically a source file's parent) under the nearest normal
+    /// or support root that contains it. The project package facade is excluded because it sits
+    /// outside entry-root containment and owns only its explicitly discovered root file, so a
+    /// file under the entry root can never be owned by the facade even though the project root
+    /// is its filesystem ancestor.
+    /// WHY: Stage 0 owned-source classification needs one nearest-module lookup shared with the
+    /// existing non-facade ancestry map. Returns `None` for a directory with no enclosing
+    /// non-facade module root, which makes unrooted supported candidates explicit.
+    #[allow(dead_code)]
+    pub(crate) fn nearest_module_for_directory(&self, directory: &Path) -> Option<ModuleId> {
+        let mut current = Some(directory);
+        while let Some(candidate) = current {
+            if let Some(&module_id) = self.by_root_directory.get(candidate) {
+                // The facade shares the project root directory only when no non-facade root
+                // claims it, so it never owns contained source files: a file under the entry
+                // root always finds its real module first, and a file with no enclosing
+                // non-facade root returns `None` rather than being silently owned by the
+                // facade.
+                if self.records[module_id.0].role != ModuleRootRole::ProjectPackageFacade {
+                    return Some(module_id);
+                }
+            }
+            current = candidate.parent();
+        }
+        None
     }
 
     /// The nearest enclosing non-facade module by directory containment, or `None` for the entry

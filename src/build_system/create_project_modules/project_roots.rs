@@ -84,6 +84,7 @@ pub(super) fn build_project_path_resolver_with_index(
         &roots.project_root,
         config,
         &merged_packages,
+        source_file_kinds,
         string_table,
     )?;
 
