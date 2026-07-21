@@ -29,31 +29,33 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 ## Current state
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
-STATUS: active
-CURRENT_SLICE: Phase 14F documentation and roadmap closure
-LAST_ACCEPTED_COMMIT: `425a4248e` (Phase 14E mutation-probe checkpoint); concurrent Priya alignment accepted at `9518662e1`
+STATUS: final review
+CURRENT_SLICE: final audit correction cycle for canonical fixture and golden path containment
+LAST_ACCEPTED_COMMIT: `fe932ab0b` (failure-diagnostic and invalid-expectation correction); concurrent Priya alignment accepted at `9518662e1`
 WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; temporary detached mutation worktree is clean at `d443c3a4f`; concurrent generated `docs/release/docs/errors/index.html` output is separately owned and preserved
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: workflow, progress, roadmap, and next-plan closure rules govern the next slice; final measurements are recorded below
-- code: all nine representative semantic mutations were caught by their intended primary integration or focused hidden-fact owners and fully restored; final static inventories and three-run timings are complete
+- docs: testing, validation, contributor, index, progress, compiler diagnostic wording and canonical-module-plan ownership have been reviewed; successor activation is held until audit corrections pass
+- code: failure diagnostics now select only errors, warning policy is independent, invalid code identities and exact-warning shapes are rejected, and failure goldens are rejected; canonical fixture/golden containment remains
 ACCEPTANCE_CRITERIA:
-- review and finalize authorized testing, validation, contributor, index, progress, roadmap, and next-plan state without inventing status changes
-- rebuild documentation when source documentation changes and preserve separately owned generated output
-- advance to the required final review only after closure evidence is complete
+- keep failure diagnostics error-only while warning policy remains independently exact, ignored or forbidden
+- reject blank diagnostic/warning identities, empty exact-warning multisets and failure goldens
+- enforce canonical fixture-root uniqueness and contained unique golden files, including symlink paths
+- run the documentation release build and the final full code-bearing gate
+- mark the plan complete only after audit findings, validation, roadmap handoff, and artifact cleanup are accepted
 VALIDATION_STATE:
-- `just validate`: passed; cross-target Clippy, 3,344 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
+- `just validate`: passed at `fe932ab0b`; cross-target Clippy, 3,353 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
 - Phase 14F inventory: passed; 1,647 canonical cases, 1,793 executions, zero hard findings, zero goldens, 13 acceptance-only blocks, 982 exact and 19 justified-contains failure blocks
 - Phase 14F timings: three equivalent unit runs median 1.74s; three equivalent integration runs median 9.79s; operational evidence only
 - Phase 14E mutation probes: all nine primary filtered owners passed at baseline, failed for the intended semantic defect, passed after restoration, and left the detached worktree clean; no mutation score claimed
 - Phase 14B audit: passed; zero hard findings; 66 backend-only and 15 adversarial-only primary-less contract advisories
 - Priya expectation alignment: accepted at `9518662e1`; renamed inputs and expectations match
-DOCS_IMPACT: testing, validation, and contributor workflow aligned with final suite policy; progress matrix and index unchanged
+DOCS_IMPACT: testing, validation, contributor workflow, index, progress matrix and compiler diagnostic wording already align; successor plan guidance is refreshed but activation remains queued until the correction cycle closes
 BLOCKERS_OR_OPEN_DECISIONS: none; 81 contract families without a primary are intentionally 66 backend-only and 15 adversarial-only families, with no ordinary orphan family
-DELEGATION_DECISION: Ollama — bounded Phase 14 implementation slices
-NEXT_WORKER_ORDER: Ollama only; no provider substitution
+DELEGATION_DECISION: Ollama — two bounded final-audit implementation correction slices, followed by a focused Codex CLI re-audit and parent audit
+NEXT_WORKER_ORDER: Ollama only for implementation corrections; Codex CLI then parent-audit for review
 STOP_REASON: none
-NEXT_RESUME_ACTION: review and finalize the authorized workflow, progress, roadmap, and canonical-module-plan closure documents
+NEXT_RESUME_ACTION: launch canonical fixture-root uniqueness and golden containment through Ollama
 
 ---
 
@@ -269,6 +271,8 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 14C15q TIR production head-chain overlay units | `493571e42` | Accepted | The single-receiver owner now proves the exact composed node tree and the exact occurrence/key/kind/source overlay against the same fill node with only the slot-resolution context dimension set; the no-slots owner retains the original-root plus `None` fast path; a trivial source-node non-mutation test and child-count-only structural parity test were removed with their dead explicit-reference helper/import; two production boundary owners and 54 slot-composition tests remain; 3,344 Rust tests and 1,793 integration executions |
 | Phase 14D final source-shaped-unit inventory and stale-helper closure | `d112011f3` | Accepted | All 3,344 current Rust tests were re-enumerated and cross-checked against the accepted AST, HIR, borrow, build, backend, and TIR ownership slices; retained source-shaped units protect parser/stage shape, semantic relationships, identities, side tables, policy, ABI, malformed invariants, or exact handoff facts; a public test-seam occurrence scan found one definition-only dev-server renderer wrapper, which was removed with its allowance/import while the exact context-aware test and production renderer remain; zero source-shaped units remain unclassified; 1,793 integration executions remain |
 | Phase 14E targeted semantic mutation probes | no code change after `d443c3a4f` | Accepted | Nine temporary production defects were caught by their intended primary owners across mutable-call classification, map and return aliases, fixed-capacity identity, exhaustiveness, numeric failure mode, imported roots, target reachability, and reactive invalidation; every defect was restored in a detached worktree; no mutation score is claimed |
+| Phase 14F final measurements | `d92c3cdd2` | Accepted | Final inventory and three-run timing evidence recorded at `425a4248e`; 3,344 Rust tests, 1,647 cases, 1,793 executions, zero hard findings and no correctness or performance claim |
+| Final audit correction 1 | `fe932ab0b` | Accepted | Failure diagnostics are error-only, warnings remain independent, blank code identities and empty exact warnings are rejected, failure goldens cannot be discarded, and the full gate passes with 3,353 Rust tests and 1,793 integration executions |
 
 ---
 
@@ -1429,22 +1433,22 @@ correctness or performance improvement.
 
 ## Documentation and roadmap closure
 
-- [ ] Finalize `testing.bd`, `validation.bd`, and `CONTRIBUTING.md`.
-- [ ] Update `index.md` for moved/removed test modules.
-- [ ] Update progress-matrix coverage statements.
-- [ ] Update compiler diagnostic identity wording only if Phase 4 made reason keys durable.
+- [x] Finalize `testing.bd`, `validation.bd`, and `CONTRIBUTING.md`.
+- [x] Update `index.md` for moved/removed test modules.
+- [x] Update progress-matrix coverage statements.
+- [x] Update compiler diagnostic identity wording only if Phase 4 made reason keys durable.
 - [ ] Rebuild generated documentation.
 - [ ] Mark this plan complete and update `docs/roadmap/roadmap.md`.
-- [ ] Refresh the canonical module plan against the final harness and test owners.
+- [x] Refresh the canonical module plan against the final harness and test owners.
 - [ ] Set the next active plan and checkpoint.
 
 ## Phase 14 acceptance
 
-- [ ] Audit hard findings are zero.
-- [ ] Every canonical case has explicit ownership.
-- [ ] Every removed test has replacement evidence.
-- [ ] Representative mutations are caught by primary owners.
-- [ ] Documentation and roadmap are current.
+- [x] Audit hard findings are zero.
+- [x] Every canonical case has explicit ownership.
+- [x] Every removed test has replacement evidence.
+- [x] Representative mutations are caught by primary owners.
+- [x] Documentation and roadmap are current.
 - [ ] Full validation passes.
 - [ ] Canonical module work can begin against the hardened suite.
 
