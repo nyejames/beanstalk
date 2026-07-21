@@ -30,21 +30,21 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 14C15i TIR HIR-handoff ownership review
-LAST_ACCEPTED_COMMIT: `e0d71bb7f` (Phase 14C15h code)
+CURRENT_SLICE: Phase 14C15j TIR slot-schema ownership review
+LAST_ACCEPTED_COMMIT: `8588af791` (Phase 14C15i code)
 WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; accepted code is committed; concurrent example-name work remains separately committed
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: unit-test ownership, pruning, compiler-stage boundaries, and final governance rules govern the next slice
-- code: all 584 retained tests across the reviewed Stage 0, frontend, build-system, project, CLI, dev-server, new-project, and final-TIR data/store/overlay/summary/builder/exact-view/expression-walker/body-root/wrapper-context/classification/preparation/validation/fold-cache/final-view/render-unit groups have distinct owners; TIR HIR-handoff tests are next
+- code: all 601 retained tests across the reviewed Stage 0, frontend, build-system, project, CLI, dev-server, new-project, and final-TIR groups through HIR handoff have distinct owners; the 13 TIR slot-schema tests are next, followed by routing, expansion, head-chain, child-wrapper, and overlay groups
 ACCEPTANCE_CRITERIA:
 - every remaining full-source unit has a distinct hidden invariant, parser fact, stage boundary, or policy owner
 - units superseded by a stronger canonical integration primary are deleted with replacement evidence
 - stale test-only helpers or production APIs are removed with their final caller
 - HIR, build-system, backend, and final TIR units keep only their owning semantic relationships and hidden facts
 VALIDATION_STATE:
-- `just validate`: passed; cross-target Clippy, 3,366 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
-- Phase 14C15h focused groups: passed; 16 compiled fold-cache tests plus one platform-gated source test, 12 final-view tests, and six render-unit tests
+- `just validate`: passed; cross-target Clippy, 3,365 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
+- Phase 14C15i focused group: passed; 17 TIR HIR-handoff tests
 - Phase 14B audit: passed; zero hard findings; 66 backend-only and 15 adversarial-only primary-less contract advisories
 - Priya expectation alignment: accepted at `6efac7012`; 13 stale Rust and integration expectation files now match renamed inputs
 DOCS_IMPACT: testing, validation, and contributor workflow aligned with final suite policy; progress matrix and index unchanged
@@ -52,7 +52,7 @@ BLOCKERS_OR_OPEN_DECISIONS: none; 81 contract families without a primary are int
 DELEGATION_DECISION: Ollama — bounded Phase 14 implementation slices
 NEXT_WORKER_ORDER: Ollama only; no provider substitution
 STOP_REASON: none
-NEXT_RESUME_ACTION: launch the TIR HIR-handoff group through Ollama
+NEXT_RESUME_ACTION: launch the 13-test TIR slot-schema group through Ollama
 
 ---
 
@@ -257,6 +257,7 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 14C15f TIR classification and preparation units | `19596e84c` | Accepted | One broad unresolved-slot classification smoke was removed in favor of the stronger effective-view owner; absent and allocated-empty slot overlays now share one labelled exact kind/unresolved-flag matrix; all 14 preparation identity, mode, transition, cycle, runtime-plan, wrapper-set, and malformed-authority owners remain distinct; 21 classification and 14 preparation owners remain; 3,380 Rust tests and 1,793 integration executions |
 | Phase 14C15g TIR validation units | `93d89ab97` | Accepted | Text, sequence, and aggregate-output valid roots now share one labelled multi-template store owner; unique slot-occurrence, child-occurrence, and expression-site spaces share one labelled reachable-root owner; all malformed typed-reference branches, duplicate identity scopes, unreachable-history, separate-root, loop-wrapper, runtime-slot, and wrapper-set owners remain distinct; 22 validation owners remain; 3,376 Rust tests and 1,793 integration executions |
 | Phase 14C15h TIR fold-cache, final-view, and render units | `e0d71bb7f` | Accepted | Exact cache-key equality/dimensions, empty-versus-active binding policy, and resolved-versus-missing slot output now use labelled owners; a byte-identical child-cycle preparation duplicate was removed; break/continue preserve distinct exact outputs in one owner; the false aggregate fold-error assertion now owns exact runtime classification; render-unit malformed branches are labelled and assert stable infrastructure reasons; 35 source owners remain; 3,366 Rust tests and 1,793 integration executions |
+| Phase 14C15i TIR HIR-handoff units | `8588af791` | Accepted | The duplicate missing-root `TirView` constructor test was removed in favor of the exact-view owner; resolved-slot, child-boundary, and runtime-reference tests now inspect only owned handoff text/expression payloads rather than incidental occurrence IDs or source-store existence; all wrapper, overlay, slot, structural-child, schema-error, and infrastructure-lane owners remain distinct; 17 handoff owners remain; 3,365 Rust tests and 1,793 integration executions |
 
 ---
 
@@ -1489,6 +1490,7 @@ Do not present lower counts or faster time as proof of correctness.
 | `fold_cache_tests::child_template_cycle_is_rejected` | Exact child-view cycles classify as runtime during preparation | `preparation_tests::preparation_classifies_exact_child_cycle_as_runtime`, which used the identical fixture and exact `ChildTemplateCycle` reason | direct fold-cache node-cycle and nested-value cycle owners remain separate | `e0d71bb7f` |
 | `fold_final_view_tests::{final_view_fold_loop_preserves_output_before_break,final_view_fold_loop_preserves_output_before_continue}` consolidated; aggregate-output fold-error smoke corrected | Break and continue preserve distinct output; standalone aggregate-output is runtime rather than foldable | `fold_final_view_tests::{final_view_fold_loop_preserves_output_before_break_and_continue,final_view_aggregate_output_outside_wrapper_classifies_as_runtime}` with exact `.`, `...`, and `AggregateOutput` assertions | aggregate-wrapper placement and malformed-wrapper authority owners remain separate | `e0d71bb7f` |
 | Render-unit missing-context/template, sequence-root, head-prefix, and whitespace-trim branch tests consolidated in Phase 14C15h | Same-store wrapper/reference normalization and every malformed render-unit authority branch | Six retained render-unit owners with labelled branches and stable infrastructure-message fragments | parser structural-child reuse and same-store ID preservation remain separate | `e0d71bb7f` |
+| `hir_handoff_tests::missing_view_context_is_rejected_before_handoff` | A missing root is rejected before HIR handoff materialization | `view_tests::new_fails_for_missing_root_template`, which calls the same `TirView::new` constructor and asserts the same missing-root error | 17 handoff tests retain owned vocabulary, exact structural relationships, overlays, wrappers, slot outcomes, and malformed-authority propagation | `8588af791` |
 
 ### Coverage gap and handoff ledger
 
