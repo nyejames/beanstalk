@@ -30,21 +30,21 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 14C15f TIR classification and preparation unit ownership review
-LAST_ACCEPTED_COMMIT: `149d312f7` (Phase 14C15e code)
+CURRENT_SLICE: Phase 14C15g TIR validation unit ownership review
+LAST_ACCEPTED_COMMIT: `19596e84c` (Phase 14C15f code)
 WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; accepted code is committed; concurrent example-name work remains separately committed
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: unit-test ownership, pruning, compiler-stage boundaries, and final governance rules govern the next slice
-- code: all 492 retained tests across the reviewed Stage 0, frontend, build-system, project, CLI, dev-server, new-project, and final-TIR data/store/overlay/summary/builder/exact-view/expression-walker/body-root/wrapper-context groups have distinct owners; classification and preparation units are next
+- code: all 527 retained tests across the reviewed Stage 0, frontend, build-system, project, CLI, dev-server, new-project, and final-TIR data/store/overlay/summary/builder/exact-view/expression-walker/body-root/wrapper-context/classification/preparation groups have distinct owners; TIR validation units are next
 ACCEPTANCE_CRITERIA:
 - every remaining full-source unit has a distinct hidden invariant, parser fact, stage boundary, or policy owner
 - units superseded by a stronger canonical integration primary are deleted with replacement evidence
 - stale test-only helpers or production APIs are removed with their final caller
 - HIR, build-system, backend, and final TIR units keep only their owning semantic relationships and hidden facts
 VALIDATION_STATE:
-- `just validate`: passed; cross-target Clippy, 3,382 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
-- Phase 14C15e focused groups: passed; seven wrapper-context construction tests and 17 wrapper-context fold/preparation/handoff tests
+- `just validate`: passed; cross-target Clippy, 3,380 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
+- Phase 14C15f focused groups: passed; 21 TIR classification tests and 14 preparation tests
 - Phase 14B audit: passed; zero hard findings; 66 backend-only and 15 adversarial-only primary-less contract advisories
 - Priya expectation alignment: accepted at `6efac7012`; 13 stale Rust and integration expectation files now match renamed inputs
 DOCS_IMPACT: testing, validation, and contributor workflow aligned with final suite policy; progress matrix and index unchanged
@@ -52,7 +52,7 @@ BLOCKERS_OR_OPEN_DECISIONS: none; 81 contract families without a primary are int
 DELEGATION_DECISION: Ollama — bounded Phase 14 implementation slices
 NEXT_WORKER_ORDER: Ollama only; no provider substitution
 STOP_REASON: none
-NEXT_RESUME_ACTION: launch the TIR classification and preparation unit group through Ollama
+NEXT_RESUME_ACTION: launch the TIR validation unit group through Ollama
 
 ---
 
@@ -254,6 +254,7 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 14C15c TIR exact-view units | `86cc84bfb` | Accepted | Parallel phase, effective-resolution, constructor-accessor, overlay-dimension, and source-location families were consolidated without merging named transition authority; one duplicate missing-expression-overlay constructor test was removed; exact nonzero overlay entry identity was strengthened; 26 phase, construction, invariant-error, resolution, transition, overlay, and location owners remain; 3,387 Rust tests and 1,793 integration executions |
 | Phase 14C15d TIR expression-payload walker and body-root wrapper units | `5d679061a` | Accepted | A count-only branch/dynamic collector duplicate was removed in favor of the exact five-position structural owner; range-header structural collection and mutation were consolidated while preserving site/value identity and proving all three expressions mutate; missing and non-sequence body roots now share one labelled owner with distinct infrastructure reasons; 26 walker and five body-root owners remain; 3,384 Rust tests and 1,793 integration executions |
 | Phase 14C15e TIR wrapper-context construction and fold units | `149d312f7` | Accepted | All seven construction owners remain distinct; emitting and structurally silent `IfChildEmits` fold variants now share one labelled exact-output/no-output owner; const and runtime outer expression overrides share one classification matrix that preserves exact folded output, runtime preparation, and owned-handoff expression identity; 17 fold/preparation/handoff owners remain; 3,382 Rust tests and 1,793 integration executions |
+| Phase 14C15f TIR classification and preparation units | `19596e84c` | Accepted | One broad unresolved-slot classification smoke was removed in favor of the stronger effective-view owner; absent and allocated-empty slot overlays now share one labelled exact kind/unresolved-flag matrix; all 14 preparation identity, mode, transition, cycle, runtime-plan, wrapper-set, and malformed-authority owners remain distinct; 21 classification and 14 preparation owners remain; 3,380 Rust tests and 1,793 integration executions |
 
 ---
 
@@ -1478,6 +1479,8 @@ Do not present lower counts or faster time as proof of correctness.
 | `body_root_wrapper_tests::{apply_inherited_wrappers_rejects_missing_body_root_with_empty_wrappers,apply_inherited_wrappers_rejects_non_sequence_body_root_with_empty_wrappers}` consolidated | Body-root authority rejects missing and non-sequence roots before empty-wrapper short-circuiting | `body_root_wrapper_tests::apply_inherited_wrappers_rejects_malformed_body_roots`, with labelled infrastructure-variant and distinct reason assertions | none | `5d679061a` |
 | `wrapper_context_fold_tests::{prepared_fold_applies_if_child_emits_wrapper_when_child_outputs,prepared_fold_skips_if_child_emits_wrapper_when_child_has_no_output}` consolidated | `IfChildEmits` wrappers apply only when the child structurally emits output | `wrapper_context_fold_tests::prepared_fold_applies_if_child_emits_only_when_the_child_emits_output`, with exact `beforechildafter` and `NoOutput` rows | none | `149d312f7` |
 | `wrapper_context_fold_tests::{preparation_folds_const_outer_override_over_runtime_wrapper_expression,preparation_preserves_outer_runtime_expression_override_in_handoff}` consolidated | Outer expression-overlay authority determines const folding versus runtime preparation and handoff | `wrapper_context_fold_tests::preparation_classifies_outer_override_by_const_vs_runtime_expression`, with exact const output, runtime classification, and handoff `Reference` expression assertions | none | `149d312f7` |
+| `classification_tests::tir_view_classification_unresolved_slot_returns_renderable_string` | A structural unresolved slot classifies as a renderable string | `classification_tests::unresolved_slot_is_renderable_with_absent_or_empty_overlay`, which also asserts the unresolved-slot flag | `classification_tests::composed_tir_view_classification_accepts_slot_resolution_overlay` retains the distinct Composed-phase overlay owner | `19596e84c` |
+| `classification_tests::{effective_view_classification_unresolved_slot_with_no_overlay_returns_renderable_string,effective_view_classification_unresolved_slot_with_empty_overlay_returns_renderable_string}` consolidated | An unresolved structural slot remains renderable with an absent or allocated-empty slot overlay | `classification_tests::unresolved_slot_is_renderable_with_absent_or_empty_overlay`, with exact kind and unresolved-slot flag assertions for both contexts | none | `19596e84c` |
 
 ### Coverage gap and handoff ledger
 
