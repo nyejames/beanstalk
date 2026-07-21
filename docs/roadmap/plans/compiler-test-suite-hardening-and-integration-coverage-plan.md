@@ -30,31 +30,31 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: final review
-CURRENT_SLICE: focused Codex CLI re-audit followed by the parent final audit
-LAST_ACCEPTED_COMMIT: `418379e3c` (canonical fixture and golden path containment); concurrent Priya alignment accepted at `9518662e1`
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; temporary detached mutation worktree is clean at `d443c3a4f`; concurrent generated `docs/release/docs/errors/index.html` output is separately owned and preserved
+CURRENT_SLICE: final documentation and roadmap closure, then one-time worker-artifact cleanup
+LAST_ACCEPTED_COMMIT: `bc9bb4b06` (clean parent audit and expectation-identity comment alignment); concurrent Priya alignment accepted at `9518662e1`
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; temporary detached mutation worktree is clean at `d443c3a4f`; concurrent docs work was committed separately at `3451302ec`; only the parent-owned canonical-module-plan refresh remains modified
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: testing, validation, contributor, index, progress, compiler diagnostic wording and canonical-module-plan ownership have been reviewed; successor activation is held until audit corrections pass
-- code: both audit-correction slices are accepted; failure expectations are truthful, canonical fixture roots are unique after resolution and golden symlinks are rejected explicitly
+- docs: testing, validation, contributor, index, progress and compiler diagnostic wording align; the queued canonical-module plan is refreshed and awaits this closure checkpoint
+- code: all audit corrections are accepted; failure expectations are truthful, canonical fixture roots are unique after resolution and every golden-tree symlink position is rejected explicitly
 ACCEPTANCE_CRITERIA:
-- receive a findings-oriented focused re-audit with no unresolved code or test-harness corrections
-- complete the parent architecture, ownership, duplication and test-gap audit
-- run the documentation release build and the final full code-bearing gate
-- mark the plan complete only after audit findings, validation, roadmap handoff, and artifact cleanup are accepted
+- rebuild the documentation release output from source
+- mark this plan complete, activate the queued canonical-module plan and update the roadmap once
+- remove this completed plan's worker tasks, logs, results and detached mutation worktree after the closure commit
 VALIDATION_STATE:
-- `just validate`: passed at `418379e3c`; cross-target Clippy, 3,358 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
+- `just validate`: passed on the `bc9bb4b06` content; cross-target Clippy, 3,359 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
+- final audit: Codex CLI resolved findings 1, 2 and 4, identified the intermediate golden-parent symlink gap, and the parent audit accepted its `3c911fb49` correction with no remaining correctness, ownership, duplication, path-safety, test or docs findings
 - Phase 14F inventory: passed; 1,647 canonical cases, 1,793 executions, zero hard findings, zero goldens, 13 acceptance-only blocks, 982 exact and 19 justified-contains failure blocks
 - Phase 14F timings: three equivalent unit runs median 1.74s; three equivalent integration runs median 9.79s; operational evidence only
 - Phase 14E mutation probes: all nine primary filtered owners passed at baseline, failed for the intended semantic defect, passed after restoration, and left the detached worktree clean; no mutation score claimed
 - Phase 14B audit: passed; zero hard findings; 66 backend-only and 15 adversarial-only primary-less contract advisories
 - Priya expectation alignment: accepted at `9518662e1`; renamed inputs and expectations match
-DOCS_IMPACT: testing, validation, contributor workflow, index, progress matrix and compiler diagnostic wording already align; successor plan guidance is refreshed but activation remains queued until the correction cycle closes
+DOCS_IMPACT: no progress-matrix status change; successor plan guidance is refreshed and activation is the remaining roadmap edit
 BLOCKERS_OR_OPEN_DECISIONS: none; 81 contract families without a primary are intentionally 66 backend-only and 15 adversarial-only families, with no ordinary orphan family
-DELEGATION_DECISION: Codex CLI — focused read-only re-audit; parent-audit follows if clean
-NEXT_WORKER_ORDER: Codex CLI, then parent-audit
+DELEGATION_DECISION: parent-direct — documentation/roadmap closure and artifact cleanup are parent-owned
+NEXT_WORKER_ORDER: none
 STOP_REASON: none
-NEXT_RESUME_ACTION: launch the focused final-correction re-audit through Codex CLI
+NEXT_RESUME_ACTION: commit this clean-audit checkpoint, then perform final documentation and roadmap closure
 
 ---
 
@@ -273,6 +273,8 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 14F final measurements | `d92c3cdd2` | Accepted | Final inventory and three-run timing evidence recorded at `425a4248e`; 3,344 Rust tests, 1,647 cases, 1,793 executions, zero hard findings and no correctness or performance claim |
 | Final audit correction 1 | `fe932ab0b` | Accepted | Failure diagnostics are error-only, warnings remain independent, blank code identities and empty exact warnings are rejected, failure goldens cannot be discarded, and the full gate passes with 3,353 Rust tests and 1,793 integration executions |
 | Final audit correction 2 | `418379e3c` | Accepted | Canonical fixture roots are unique after resolution with both conflicting manifest identities retained; golden file, directory and backend-root symlinks are rejected explicitly; the full gate passes with 3,358 Rust tests and 1,793 integration executions |
+| Final audit correction 3 | `3c911fb49` | Accepted | The intermediate `case/golden` parent is checked before backend absence handling, closing the last symlink escape; the full gate passes with 3,359 Rust tests and 1,793 integration executions |
+| Parent final audit polish | `bc9bb4b06` | Accepted | No correctness, ownership, duplication, path-safety, test or docs finding remains; the shared diagnostic/warning identity validator comment names its full owner and the final full gate passes |
 
 ---
 
@@ -1022,7 +1024,7 @@ Add end-to-end owners before pruning source-shaped borrow/map units.
 - [x] Lookup keys are borrowed, not consumed.
 - [x] Inserted non-copy keys/values follow current consumption rules.
 - [x] Explicit-copy success exists where independence is required.
-- [ ] Reuse the existing runtime map ordering case rather than duplicate it.
+- [x] Reuse the existing runtime map ordering case rather than duplicate it.
 
 ### Backend matrix
 
@@ -1616,42 +1618,42 @@ correctness or performance improvement.
 
 ### Harness
 
-- [ ] IDs, tags, contracts, and roles are retained and canonical.
-- [ ] Case/tag/contract/backend filtering, list, and audit work.
-- [ ] Canonical expectations and contained paths are mandatory.
-- [ ] Acceptance-only intent is explicit and truthfully reported beside the backend baseline.
-- [ ] Goldens are file-backed and consistently inventoried.
-- [ ] Diagnostic and warning codes are exact by default.
-- [ ] Structured diagnostic reasons and locations are supported.
-- [ ] Runtime exact/order/exact-once assertions are supported.
-- [ ] One suite-policy evaluator is part of normal validation.
+- [x] IDs, tags, contracts, and roles are retained and canonical.
+- [x] Case/tag/contract/backend filtering, list, and audit work.
+- [x] Canonical expectations and contained paths are mandatory.
+- [x] Acceptance-only intent is explicit and truthfully reported beside the backend baseline.
+- [x] Goldens are file-backed and consistently inventoried.
+- [x] Diagnostic and warning codes are exact by default.
+- [x] Structured diagnostic reasons and locations are supported.
+- [x] Runtime exact/order/exact-once assertions are supported.
+- [x] One suite-policy evaluator is part of normal validation.
 
 ### Coverage
 
-- [ ] Hashmap access/ownership semantics have integration owners.
-- [ ] Cross-module effects have current owners or explicit deferred handoffs.
-- [ ] Reactive post-subscription mutation/update has HTML-JS integration ownership.
-- [ ] `check`/build frontend parity is covered.
-- [ ] Root activation and fragment ordering are strongly asserted.
-- [ ] Diagnostic source remapping is covered.
-- [ ] Cross-backend cases share one input with intended backend-local contracts.
+- [x] Hashmap access/ownership semantics have integration owners.
+- [x] Cross-module effects have current owners or explicit deferred handoffs.
+- [x] Reactive post-subscription mutation/update has HTML-JS integration ownership.
+- [x] `check`/build frontend parity is covered.
+- [x] Root activation and fragment ordering are strongly asserted.
+- [x] Diagnostic source remapping is covered.
+- [x] Cross-backend cases share one input with intended backend-local contracts.
 
 ### Pruning
 
-- [ ] Source-shaped borrow/map duplicates are removed.
-- [ ] Whole-source call/type/generic duplicates are removed.
-- [ ] Backend semantic substitutes are removed.
-- [ ] Positive micro-fixtures are consolidated only where one contract permits it.
-- [ ] Retained goldens are deliberate.
-- [ ] Hidden facts, malformed HIR, canonical identity, transfer, and backend ABI tests remain.
+- [x] Source-shaped borrow/map duplicates are removed.
+- [x] Whole-source call/type/generic duplicates are removed.
+- [x] Backend semantic substitutes are removed.
+- [x] Positive micro-fixtures are consolidated only where one contract permits it.
+- [x] Retained goldens are deliberate.
+- [x] Hidden facts, malformed HIR, canonical identity, transfer, and backend ABI tests remain.
 
 ### Governance
 
-- [ ] Every canonical case has one role.
-- [ ] Every primary case has one contract.
-- [ ] No contract has multiple primary owners.
-- [ ] Contains-mode diagnostics are justified.
-- [ ] Pruning and coverage ledgers are complete.
-- [ ] Representative mutation probes fail as expected.
-- [ ] Documentation and roadmap are current.
-- [ ] `just validate` passes.
+- [x] Every canonical case has one role.
+- [x] Every primary case has one contract.
+- [x] No contract has multiple primary owners.
+- [x] Contains-mode diagnostics are justified.
+- [x] Pruning and coverage ledgers are complete.
+- [x] Representative mutation probes fail as expected.
+- [x] Documentation and roadmap are current.
+- [x] `just validate` passes.
