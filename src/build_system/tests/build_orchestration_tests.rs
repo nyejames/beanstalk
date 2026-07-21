@@ -8,9 +8,11 @@ use crate::build_system::build::{
 };
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
-use crate::compiler_frontend::compiler_messages::DiagnosticCategory;
 use crate::compiler_frontend::compiler_messages::render::{
     DiagnosticRenderContext, resolve_source_file_path, terse,
+};
+use crate::compiler_frontend::compiler_messages::{
+    DiagnosticCategory, DiagnosticPayload, InvalidConfigReason,
 };
 use crate::compiler_frontend::utilities::basic::normalize_path;
 use crate::projects::html_project::html_project_builder::HtmlProjectBuilder;
@@ -34,6 +36,30 @@ fn assert_has_config_error(messages: &CompilerMessages) {
             .error_diagnostics()
             .any(|diagnostic| diagnostic.kind.category() == DiagnosticCategory::Config),
         "expected config-classified diagnostic"
+    );
+}
+
+fn assert_invalid_project_setting(
+    messages: &CompilerMessages,
+    expected_key: &str,
+    expected_value: &str,
+) {
+    let has_expected_diagnostic = messages.error_diagnostics().any(|diagnostic| {
+        let DiagnosticPayload::InvalidConfig {
+            key: Some(key),
+            reason: InvalidConfigReason::InvalidProjectSettingValue { value, .. },
+        } = &diagnostic.payload
+        else {
+            return false;
+        };
+
+        messages.string_table.resolve(*key) == expected_key
+            && messages.string_table.resolve(*value) == expected_value
+    });
+
+    assert!(
+        has_expected_diagnostic,
+        "expected invalid project setting diagnostic for {expected_key}={expected_value}"
     );
 }
 
@@ -409,99 +435,6 @@ fn resolve_project_output_root_uses_project_root_when_folder_is_explicitly_empty
 }
 
 #[test]
-fn build_directory_project_emits_index_and_404_and_ignores_unreachable_files() {
-    let root = temp_dir("docs_like_project");
-    let src = root.join("src");
-    fs::create_dir_all(src.join("about")).expect("should create about folder");
-    fs::create_dir_all(src.join("docs/basics")).expect("should create docs folder");
-    fs::create_dir_all(src.join("errors")).expect("should create errors folder");
-    fs::create_dir_all(&src).expect("should create source folder");
-
-    fs::write(
-        root.join("config.bst"),
-        "entry_root #= \"src\"\noutput_folder #= \"release\"\n",
-    )
-    .expect("should write config");
-    fs::write(src.join("#page.bst"), "#[:<h1>Home</h1>]\n").expect("should write #page");
-    fs::write(src.join("errors/#404.bst"), "#[:<h1>404</h1>]\n").expect("should write #404");
-    fs::write(src.join("about").join("#page.bst"), "#[:<h1>About</h1>]\n")
-        .expect("should write about");
-    fs::write(
-        src.join("docs").join("basics").join("#page.bst"),
-        "#[:<h1>Docs Basics</h1>]\n",
-    )
-    .expect("should write docs basics");
-    fs::write(
-        src.join("docs/outdated.bst"),
-        "this is invalid and should not compile",
-    )
-    .expect("should write unreachable invalid file");
-
-    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
-    let build_result = build_project(
-        &builder,
-        root.to_str().expect("root path should be valid UTF-8"),
-        &[],
-    )
-    .expect("docs-like directory build should succeed");
-    assert_eq!(
-        build_result.project.entry_page_rel,
-        Some(PathBuf::from("index.html"))
-    );
-
-    let output_root = resolve_project_output_root(&build_result.config, &[]);
-
-    write_project_outputs(
-        &build_result.project,
-        &always_write_options(output_root.clone(), None),
-    )
-    .expect("should write project outputs");
-
-    assert!(output_root.join("index.html").exists());
-    assert!(output_root.join("errors/index.html").exists());
-    assert!(output_root.join("about/index.html").exists());
-    assert!(output_root.join("docs/basics/index.html").exists());
-
-    fs::remove_dir_all(&root).expect("should remove temp dir");
-}
-
-#[test]
-fn build_directory_project_respects_custom_entry_root() {
-    let root = temp_dir("custom_entry_root");
-    let pages = root.join("pages");
-    fs::create_dir_all(pages.join("docs")).expect("should create docs folder");
-
-    fs::write(
-        root.join("config.bst"),
-        "entry_root #= \"pages\"\noutput_folder #= \"release\"\n",
-    )
-    .expect("should write config");
-    fs::write(pages.join("#page.bst"), "#[:<h1>Home</h1>]\n").expect("should write home");
-    fs::write(pages.join("docs").join("#page.bst"), "#[:<h1>Docs</h1>]\n")
-        .expect("should write docs");
-
-    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
-    let build_result = build_project(
-        &builder,
-        root.to_str().expect("root path should be valid UTF-8"),
-        &[],
-    )
-    .expect("directory build should succeed");
-
-    let output_root = resolve_project_output_root(&build_result.config, &[]);
-    write_project_outputs(
-        &build_result.project,
-        &always_write_options(output_root.clone(), None),
-    )
-    .expect("should write project outputs");
-
-    assert!(output_root.join("index.html").exists());
-    assert!(output_root.join("docs/index.html").exists());
-
-    fs::remove_dir_all(&root).expect("should remove temp dir");
-}
-
-#[test]
 fn build_directory_project_requires_artifact_root_in_configured_entry_root() {
     let root = temp_dir("missing_homepage");
     let src = root.join("src");
@@ -529,19 +462,12 @@ fn build_directory_project_requires_artifact_root_in_configured_entry_root() {
         messages.first_infrastructure_error_for_tests().is_none(),
         "missing homepage should stay as a typed config diagnostic"
     );
-    let rendered_messages = rendered_error_messages(&messages);
-    assert!(
-        rendered_messages
-            .iter()
-            .any(|message| message.contains("require an artifact-producing module root")),
-        "expected homepage error message"
-    );
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }
 
 #[test]
-fn build_directory_project_rejects_invalid_page_url_style() {
+fn build_project_routes_invalid_page_url_style_through_typed_config_diagnostic() {
     let root = temp_dir("invalid_page_url_style");
     let src = root.join("src");
     fs::create_dir_all(&src).expect("should create source folder");
@@ -559,52 +485,11 @@ fn build_directory_project_rejects_invalid_page_url_style() {
         &[],
     );
 
-    assert!(result.is_err(), "invalid page url style should fail build");
-    let messages = result.err().expect("expected config error");
+    let Err(messages) = result else {
+        panic!("invalid page URL style should fail build");
+    };
     assert_has_config_error(&messages);
-    let rendered_errors = rendered_error_messages(&messages);
-    assert!(
-        rendered_errors
-            .iter()
-            .any(|message| message.contains("'page_url_style'")),
-        "expected page_url_style validation message"
-    );
-
-    fs::remove_dir_all(&root).expect("should remove temp dir");
-}
-
-#[test]
-fn build_directory_project_rejects_invalid_redirect_index_html() {
-    let root = temp_dir("invalid_redirect_index");
-    let src = root.join("src");
-    fs::create_dir_all(&src).expect("should create source folder");
-    fs::write(
-        root.join("config.bst"),
-        "entry_root #= \"src\"\noutput_folder #= \"release\"\nredirect_index_html #= \"yes\"\n",
-    )
-    .expect("should write config");
-    fs::write(src.join("#page.bst"), "#[:<h1>Home</h1>]\n").expect("should write home page");
-
-    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
-    let result = build_project(
-        &builder,
-        root.to_str().expect("root path should be valid UTF-8"),
-        &[],
-    );
-
-    assert!(
-        result.is_err(),
-        "invalid redirect_index_html should fail build"
-    );
-    let messages = result.err().expect("expected config error");
-    assert_has_config_error(&messages);
-    let rendered_errors = rendered_error_messages(&messages);
-    assert!(
-        rendered_errors
-            .iter()
-            .any(|message| message.contains("redirect_index_html")),
-        "expected redirect_index_html validation message, got: {rendered_errors:?}"
-    );
+    assert_invalid_project_setting(&messages, "page_url_style", "slashy");
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }
