@@ -140,15 +140,10 @@ pub(super) fn build_slot_resolution_entries(
 /// WHAT: returns a minimal one-dimension view context whose `slot_resolution`
 ///       field carries `slot_resolution_overlay_id`, leaving the expression and
 ///       wrapper-context dimensions unset.
-/// WHY: this is the second Phase 6 overlay-composition step. After
-///      `materialize_tir_slot_resolution_overlay` converts routed contributions
-///      into a store-owned overlay, consumers need a single
-///      `TemplateViewContext` to thread that overlay through `TirView` and
-///      later composition paths. Keeping the join between
-///      slot routing and the view read API in the slot-composition owner, so
-///      callers never assemble view contexts ad hoc. Production structural
-///      expansion remains unchanged until the overlay-backed composition path is
-///      explicitly wired.
+/// WHY: overlay allocation produces a store-owned ID, while `TirView` and
+///      later composition paths consume one complete value-carried context.
+///      Keeping that join in the slot-composition owner prevents callers from
+///      assembling partial view contexts ad hoc.
 pub(crate) fn view_context_from_slot_resolution_overlay(
     slot_resolution_overlay_id: TirSlotResolutionOverlayId,
 ) -> TemplateViewContext {
@@ -157,44 +152,6 @@ pub(crate) fn view_context_from_slot_resolution_overlay(
         slot_resolution: Some(slot_resolution_overlay_id),
         wrapper_context: None,
     }
-}
-
-/// Test-only composition of the slot-resolution view context for one
-/// wrapper/fill pair on one module-local store.
-///
-/// WHAT: routes fill contributions against the wrapper's slot schema,
-///       materializes a `TirSlotResolutionOverlay`, and builds a value-carried
-///       `TemplateViewContext` from its ID. The caller passes store identity
-///       instead of holding a separate store borrow.
-/// WHY: focused tests compare the bundled route/materialize/context sequence
-///      against manual overlay construction. Production callers use
-///      `compose_tir_head_chain_with_overlays`, which collects all
-///      wrapper/fill pairs (via `wrap_tir_node_in_wrappers_into`) and
-///      constructs one merged value context.
-///
-/// Structural expansion (`expand_tir_slot_placeholders`) is intentionally left
-/// on its existing store-local path. This helper allocates only the overlay
-/// payload so tests can inspect the resulting context through `TirView`.
-#[cfg(test)]
-pub(crate) fn compose_tir_slot_resolution_context(
-    store: &mut TemplateIrStore,
-    wrapper_reference: TemplateTirChildReference,
-    fill_reference: TemplateIrId,
-    string_table: &StringTable,
-) -> SlotCompositionResult<TemplateViewContext> {
-    let wrapper_template_id = wrapper_reference.root;
-    let fill_template_id = fill_reference;
-
-    // Route read-only through the module-store borrow. The borrow is
-    // scoped so it is dropped before `materialize_tir_slot_resolution_overlay`
-    // re-borrows the same store mutably through the store.
-    let routed = {
-        route_tir_slot_contributions(store, wrapper_template_id, fill_template_id, string_table)?
-    };
-
-    let overlay_id = materialize_tir_slot_resolution_overlay(store, wrapper_reference, &routed)?;
-
-    Ok(view_context_from_slot_resolution_overlay(overlay_id))
 }
 
 /// Constructs one non-empty slot-resolution view context from collected

@@ -50,8 +50,7 @@ pub(crate) use contributions::route_tir_slot_contributions;
 pub(crate) use contributions::{RoutedTirSlotContributions, TirSlotContributions};
 #[cfg(test)]
 pub(crate) use overlays::{
-    compose_tir_slot_resolution_context, materialize_tir_slot_resolution_overlay,
-    view_context_from_slot_resolution_overlay,
+    materialize_tir_slot_resolution_overlay, view_context_from_slot_resolution_overlay,
 };
 #[cfg(test)]
 pub(crate) use schema::expand_tir_slot_placeholders;
