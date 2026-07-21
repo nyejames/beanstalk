@@ -2028,95 +2028,12 @@ fn expand_preserves_non_slot_nodes() {
 //  Head-Chain Composition Tests
 // -------------------------
 
+/// A single receiver routes both head-origin and body-origin fill into its
+/// default slot, preserving cross-origin authored order (head fill before body
+/// fill). Proves the head-children and body-children routing branches of
+/// `build_tir_chain_graph` in one labelled tree.
 #[test]
-fn no_head_atoms_returns_original_root() {
-    let mut string_table = StringTable::new();
-    let mut store = TemplateIrStore::new();
-
-    let body_text = build_text_node(
-        &mut store,
-        &mut string_table,
-        "body",
-        TemplateSegmentOrigin::Body,
-    );
-    let template_id = build_template_with_children(&mut store, vec![body_text]);
-    let original_root = template_root_node_id(template_id, &store);
-
-    let composed_root = compose_tir_head_chain(&mut store, template_id, &string_table, false)
-        .expect("composition should succeed");
-
-    assert_eq!(
-        composed_root, original_root,
-        "template with only body children should return the original root unchanged"
-    );
-}
-
-#[test]
-fn head_atoms_but_no_receivers_returns_original_root() {
-    let mut string_table = StringTable::new();
-    let mut store = TemplateIrStore::new();
-
-    let head_text = build_text_node(
-        &mut store,
-        &mut string_table,
-        "head",
-        TemplateSegmentOrigin::Head,
-    );
-    let body_text = build_text_node(
-        &mut store,
-        &mut string_table,
-        "body",
-        TemplateSegmentOrigin::Body,
-    );
-    let template_id = build_template_with_children(&mut store, vec![head_text, body_text]);
-    let original_root = template_root_node_id(template_id, &store);
-
-    let composed_root = compose_tir_head_chain(&mut store, template_id, &string_table, false)
-        .expect("composition should succeed");
-
-    assert_eq!(
-        composed_root, original_root,
-        "template with head atoms but no receivers should return the original root unchanged"
-    );
-}
-
-#[test]
-fn single_receiver_with_body_fill() {
-    let mut string_table = StringTable::new();
-    let mut store = TemplateIrStore::new();
-
-    let wrapper = build_wrapper_with_slot_sequence(&mut store, vec![SlotKey::Default]);
-    let wrapper_node = build_child_template_node_for_template(&mut store, wrapper);
-    let body_text = build_text_node(
-        &mut store,
-        &mut string_table,
-        "body fill",
-        TemplateSegmentOrigin::Body,
-    );
-
-    let template_id = build_template_with_children(&mut store, vec![wrapper_node, body_text]);
-
-    let composed_root = compose_tir_head_chain(&mut store, template_id, &string_table, false)
-        .expect("composition should succeed");
-
-    let composed_children = root_child_node_ids_for_node(composed_root, &store);
-    assert_eq!(
-        composed_children.len(),
-        1,
-        "composed root should contain the resolved wrapper"
-    );
-
-    let resolved_wrapper_template_id = expect_child_template_id(composed_children[0], &store);
-    let resolved_wrapper_children = root_child_node_ids(resolved_wrapper_template_id, &store);
-    assert_eq!(resolved_wrapper_children.len(), 1);
-    assert_eq!(
-        text_node_text(resolved_wrapper_children[0], &store, &string_table),
-        Some("body fill".to_owned())
-    );
-}
-
-#[test]
-fn single_receiver_with_head_fill() {
+fn single_receiver_routes_head_and_body_fill_in_authored_order() {
     let mut string_table = StringTable::new();
     let mut store = TemplateIrStore::new();
 
@@ -2128,26 +2045,52 @@ fn single_receiver_with_head_fill() {
         "head fill",
         TemplateSegmentOrigin::Head,
     );
+    let body_fill = build_text_node(
+        &mut store,
+        &mut string_table,
+        "body fill",
+        TemplateSegmentOrigin::Body,
+    );
 
-    let template_id = build_template_with_children(&mut store, vec![wrapper_node, head_fill]);
+    let template_id =
+        build_template_with_children(&mut store, vec![wrapper_node, head_fill, body_fill]);
 
     let composed_root = compose_tir_head_chain(&mut store, template_id, &string_table, false)
         .expect("composition should succeed");
 
     let composed_children = root_child_node_ids_for_node(composed_root, &store);
-    assert_eq!(composed_children.len(), 1);
+    assert_eq!(
+        composed_children.len(),
+        1,
+        "composed root should contain only the resolved wrapper"
+    );
 
     let resolved_wrapper_template_id = expect_child_template_id(composed_children[0], &store);
     let resolved_wrapper_children = root_child_node_ids(resolved_wrapper_template_id, &store);
-    assert_eq!(resolved_wrapper_children.len(), 1);
+    assert_eq!(
+        resolved_wrapper_children,
+        vec![head_fill, body_fill],
+        "wrapper default slot should receive the exact head and body fill nodes in authored order"
+    );
     assert_eq!(
         text_node_text(resolved_wrapper_children[0], &store, &string_table),
-        Some("head fill".to_owned())
+        Some("head fill".to_owned()),
+        "head-origin fill is routed through the head-children loop into the active receiver"
+    );
+    assert_eq!(
+        text_node_text(resolved_wrapper_children[1], &store, &string_table),
+        Some("body fill".to_owned()),
+        "body-origin fill is routed through the body-children loop into the deepest active receiver"
     );
 }
 
+/// Nested head-origin receivers resolve bottom-up: the inner receiver resolves
+/// first and becomes the outer receiver's fill, landing at the outer's slot
+/// between its surrounding text. Multiple body fills accumulate in the deepest
+/// active layer in authored order. Proves the complete nested/multiple receiver
+/// chain-order matrix in one labelled tree.
 #[test]
-fn nested_receivers() {
+fn nested_receivers_route_multiple_fills_in_chain_order() {
     let mut string_table = StringTable::new();
     let mut store = TemplateIrStore::new();
 
@@ -2156,18 +2099,30 @@ fn nested_receivers() {
 
     let outer_wrapper =
         build_text_slot_text_wrapper(&mut store, &mut string_table, SlotKey::Default);
+    let outer_wrapper_children = root_child_node_ids(outer_wrapper, &store);
     let outer_wrapper_node = build_child_template_node_for_template(&mut store, outer_wrapper);
 
-    let body_text = build_text_node(
+    let first_fill = build_text_node(
         &mut store,
         &mut string_table,
-        "nested body",
+        "first fill",
+        TemplateSegmentOrigin::Body,
+    );
+    let second_fill = build_text_node(
+        &mut store,
+        &mut string_table,
+        "second fill",
         TemplateSegmentOrigin::Body,
     );
 
     let template_id = build_template_with_children(
         &mut store,
-        vec![outer_wrapper_node, inner_wrapper_node, body_text],
+        vec![
+            outer_wrapper_node,
+            inner_wrapper_node,
+            first_fill,
+            second_fill,
+        ],
     );
 
     let composed_root = compose_tir_head_chain(&mut store, template_id, &string_table, false)
@@ -2185,15 +2140,33 @@ fn nested_receivers() {
     assert_eq!(
         outer_children.len(),
         3,
-        "outer wrapper should keep before/after text around the slot"
+        "outer wrapper should keep before/after text around the slot holding the resolved inner"
+    );
+    assert_eq!(
+        outer_children[0], outer_wrapper_children[0],
+        "outer wrapper preserves its exact leading text node"
+    );
+    let inner_resolved_id = expect_child_template_id(outer_children[1], &store);
+    assert_eq!(
+        outer_children[2], outer_wrapper_children[2],
+        "outer wrapper preserves its exact trailing text node"
     );
 
-    let inner_resolved_id = expect_child_template_id(outer_children[1], &store);
     let inner_children = root_child_node_ids(inner_resolved_id, &store);
-    assert_eq!(inner_children.len(), 1);
+    assert_eq!(
+        inner_children,
+        vec![first_fill, second_fill],
+        "inner receiver collects the exact body fill nodes in authored order"
+    );
     assert_eq!(
         text_node_text(inner_children[0], &store, &string_table),
-        Some("nested body".to_owned())
+        Some("first fill".to_owned()),
+        "body fills keep authored order in the deepest receiver"
+    );
+    assert_eq!(
+        text_node_text(inner_children[1], &store, &string_table),
+        Some("second fill".to_owned()),
+        "body fills keep authored order in the deepest receiver"
     );
 }
 
@@ -2229,6 +2202,7 @@ fn receiver_with_named_slots() {
 
     let insert_template =
         build_slot_insert_template(&mut store, SlotKey::Named(name), &mut string_table);
+    let insert_body = template_root_node_id(insert_template, &store);
     let mut builder = TemplateIrBuilder::new(&mut store);
     let insert_node = builder.push_insert_contribution_node(insert_template, empty_location());
 
@@ -2242,12 +2216,16 @@ fn receiver_with_named_slots() {
 
     let resolved_wrapper_template_id = expect_child_template_id(composed_children[0], &store);
     let resolved_wrapper_children = root_child_node_ids(resolved_wrapper_template_id, &store);
-    assert_eq!(resolved_wrapper_children.len(), 1);
+    assert_eq!(
+        resolved_wrapper_children,
+        vec![insert_body],
+        "named-slot routing should splice the exact insert body node"
+    );
 
     // Slot expansion places the insert helper's body content directly into the
     // wrapper's slot; the InsertContribution marker is resolved during routing.
     assert_eq!(
-        text_node_text(resolved_wrapper_children[0], &store, &string_table),
+        text_node_text(insert_body, &store, &string_table),
         Some("insert".to_owned())
     );
 }
@@ -2288,89 +2266,21 @@ fn mixed_head_text_and_receiver() {
     );
 
     assert_eq!(
-        text_node_text(composed_children[0], &store, &string_table),
-        Some("head text".to_owned()),
-        "head text should appear before the resolved wrapper"
+        composed_children[0], head_text,
+        "the exact head text node should appear before the resolved wrapper"
     );
 
     let resolved_wrapper_template_id = expect_child_template_id(composed_children[1], &store);
     let resolved_wrapper_children = root_child_node_ids(resolved_wrapper_template_id, &store);
-    assert_eq!(resolved_wrapper_children.len(), 1);
     assert_eq!(
-        text_node_text(resolved_wrapper_children[0], &store, &string_table),
-        Some("body fill".to_owned())
+        resolved_wrapper_children,
+        vec![body_text],
+        "the exact body node should fill the wrapper after the root head text"
     );
 }
 
 #[test]
-fn multiple_receivers_in_sequence() {
-    let mut string_table = StringTable::new();
-    let mut store = TemplateIrStore::new();
-
-    let first_wrapper = build_wrapper_with_slot_sequence(&mut store, vec![SlotKey::Default]);
-    let first_wrapper_node = build_child_template_node_for_template(&mut store, first_wrapper);
-    let first_fill = build_text_node(
-        &mut store,
-        &mut string_table,
-        "first fill",
-        TemplateSegmentOrigin::Body,
-    );
-
-    let second_wrapper = build_wrapper_with_slot_sequence(&mut store, vec![SlotKey::Default]);
-    let second_wrapper_node = build_child_template_node_for_template(&mut store, second_wrapper);
-    let second_fill = build_text_node(
-        &mut store,
-        &mut string_table,
-        "second fill",
-        TemplateSegmentOrigin::Body,
-    );
-
-    // Both wrappers are head-origin, so they appear before any body fill in
-    // parser emission order. Body fill flows to the deepest active receiver,
-    // which means the second wrapper is nested inside the first.
-    let template_id = build_template_with_children(
-        &mut store,
-        vec![
-            first_wrapper_node,
-            second_wrapper_node,
-            first_fill,
-            second_fill,
-        ],
-    );
-
-    let composed_root = compose_tir_head_chain(&mut store, template_id, &string_table, false)
-        .expect("composition should succeed");
-
-    let composed_children = root_child_node_ids_for_node(composed_root, &store);
-    assert_eq!(
-        composed_children.len(),
-        1,
-        "outer wrapper should be the only root child"
-    );
-
-    let outer_resolved_id = expect_child_template_id(composed_children[0], &store);
-    let outer_children = root_child_node_ids(outer_resolved_id, &store);
-    assert_eq!(
-        outer_children.len(),
-        1,
-        "outer wrapper should contain the resolved inner wrapper"
-    );
-
-    let inner_resolved_id = expect_child_template_id(outer_children[0], &store);
-    let inner_children = root_child_node_ids(inner_resolved_id, &store);
-    assert_eq!(inner_children.len(), 2);
-    assert_eq!(
-        text_node_text(inner_children[0], &store, &string_table),
-        Some("first fill".to_owned())
-    );
-    assert_eq!(
-        text_node_text(inner_children[1], &store, &string_table),
-        Some("second fill".to_owned())
-    );
-}
-
-#[test]
-fn body_content_without_active_receiver_goes_to_root() {
+fn no_receiver_returns_original_root_with_head_and_body_in_order() {
     let mut string_table = StringTable::new();
     let mut store = TemplateIrStore::new();
 
@@ -2388,19 +2298,21 @@ fn body_content_without_active_receiver_goes_to_root() {
     );
 
     let template_id = build_template_with_children(&mut store, vec![head_text, body_text]);
+    let original_root = template_root_node_id(template_id, &store);
 
     let composed_root = compose_tir_head_chain(&mut store, template_id, &string_table, false)
         .expect("composition should succeed");
 
-    let composed_children = root_child_node_ids_for_node(composed_root, &store);
-    assert_eq!(composed_children.len(), 2);
     assert_eq!(
-        text_node_text(composed_children[0], &store, &string_table),
-        Some("head text".to_owned())
+        composed_root, original_root,
+        "a template without child references should keep its original root"
     );
+
+    let composed_children = root_child_node_ids_for_node(composed_root, &store);
     assert_eq!(
-        text_node_text(composed_children[1], &store, &string_table),
-        Some("body text".to_owned())
+        composed_children,
+        vec![head_text, body_text],
+        "head and body nodes should remain at the root in authored order"
     );
 }
 
@@ -2419,22 +2331,27 @@ fn compose_preserves_non_receiver_head_child_templates() {
     );
 
     let template_id = build_template_with_children(&mut store, vec![non_receiver_node, body_text]);
+    let original_root = template_root_node_id(template_id, &store);
 
     let composed_root = compose_tir_head_chain(&mut store, template_id, &string_table, false)
         .expect("composition should succeed");
 
+    assert_eq!(
+        composed_root, original_root,
+        "a slot-less head child should keep the original root"
+    );
+
     let composed_children = root_child_node_ids_for_node(composed_root, &store);
-    assert_eq!(composed_children.len(), 2);
+    assert_eq!(
+        composed_children,
+        vec![non_receiver_node, body_text],
+        "the receiver scan fast path should preserve both child node identities"
+    );
 
     let preserved_child_id = expect_child_template_id(composed_children[0], &store);
     assert_eq!(
         preserved_child_id, non_receiver,
         "non-receiver head child template should keep its original template ID"
-    );
-
-    assert_eq!(
-        text_node_text(composed_children[1], &store, &string_table),
-        Some("body text".to_owned())
     );
 }
 
