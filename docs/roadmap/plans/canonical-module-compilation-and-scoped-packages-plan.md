@@ -4,17 +4,33 @@
 
 Replace entry-closure compilation with canonical project and package graphs, immutable module artefacts, stable public interfaces, generated sidecars and explicit entry or package assemblies. Each physical module is semantically compiled once inside its project or package boundary.
 
-## Current-state capsule
+## Current state
 
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/canonical-module-compilation-and-scoped-packages-plan.md
 STATUS: active
-CURRENT_SLICE: Phase 1 - refresh repository and freeze current owner maps
-LAST_GOOD_COMMIT: none until the first implementation slice is accepted
-POST_TIR_REVIEW_COMMIT: 1298da468
-TEST_SUITE_HARDENING_COMMIT: 0e6b1cf13
-BRANCH: main
-IMPLEMENTATION_SCOPE: compiler frontend, build system, backends
+CURRENT_SLICE: Phase 2a - deterministic module identities, root roles and structural ancestry
+LAST_ACCEPTED_COMMIT: none
+WORKTREE: main at 3be652bd230dd5c64d90d63fa2348651ceea4b4b; clean before this plan refresh; unrelated user documentation work may appear and must be preserved
+REQUIRED_RELOADS: startup files, this plan, relevant language/import and borrow references, current source and diff
+RELEVANT_CONTEXT_NOW:
+- docs: compiler-design-overview.md stable identities; build-system-design.md source indexing and topology
+- code: source_tree_index.rs, paths/module_roots.rs and project_roots.rs own current root discovery and lookup
+ACCEPTANCE_CRITERIA:
+- deterministic ModuleId assignment uses canonical logical path order and ignores cosmetic root suffixes
+- normal, support and project-facade root roles are explicit
+- nearest structural parent and direct-child relationships are represented and tested
+- no entry-closure, package-scope or backend migration is pulled into this slice
+VALIDATION_STATE:
+- cargo fmt: not run; no Rust changes yet
+- just validate: not run; first code-bearing slice pending
+- cargo run --quiet -- build docs --release: passed after the Phase 1 plan refresh
+DOCS_IMPACT: plan state only; progress matrix unchanged
+BLOCKERS_OR_OPEN_DECISIONS: none
+DELEGATION_DECISION: ollama - user requires Ollama for every worker slice
+NEXT_WORKER_ORDER: ollama only; no provider substitution for this run
+STOP_REASON: none
+NEXT_RESUME_ACTION: launch the Phase 2a implementation slice through the reviewed Ollama wrapper
 ```
 
 ## Hard prerequisites
@@ -131,6 +147,51 @@ Current owners to audit:
 - check-only diagnostics: `src/projects/check.rs`
 - output writing: HTML project builder output owners
 - dev rebuild retention: `src/projects/dev_server/`
+
+### Phase 1 refreshed owner map
+
+The accepted post-TIR anchor `1298da468` and hardened-suite anchor `0e6b1cf13` are ancestors of
+`3be652bd230dd5c64d90d63fa2348651ceea4b4b`. No later accepted compiler or build-system authority
+change supersedes them.
+
+- **Replace** `DiscoveredModule`, `module_inventory.rs` and the per-entry closure compilation in
+  `compilation.rs` with graph nodes, owned/semantic source sets and dependency-ordered jobs.
+- **Extend then consolidate** `source_tree_index.rs` as the single Stage 0 traversal. Its current
+  index records only `#*.bst` roots and entry candidates, so it must add `+*.bst` roles, canonical
+  module identities, file ownership, structural ancestry, project-facade discovery and namespace
+  facts without adding another filesystem scan.
+- **Replace** the current `ModuleRootTable` identity model in
+  `compiler_frontend/paths/module_roots.rs`. Keep its prepared nearest-root lookup behaviour, but
+  move durable project/module identity and topology ownership to Stage 0.
+- **Replace** `ProjectPathResolver` fallback semantics while reusing narrow path normalisation,
+  source-kind candidate and diagnostic helpers. The current resolver still selects importing-file
+  relative paths for `@./`, falls back to `entry_root` and discovers module public surfaces by
+  walking resolved filesystem paths.
+- **Delete** configured project-local package scanning in `source_package_discovery.rs`, the
+  `package_folders` config surface and default package-folder assumptions. **Extend**
+  `SourcePackageRegistry` only for builder/Core/dependency source package capability definitions;
+  scoped project support packages belong to the project graph.
+- **Split and extend** `frontend_orchestration.rs` and `headers/`: retain the one token/header
+  preparation path, deterministic string-table merge and local declaration parsing, but separate
+  provider-independent prepared syntax from later interface binding. Remove broad `Config` and
+  mutable project resolver ownership from `CompilerFrontend` inputs as the new boundaries land.
+- **Extend** `module_dependencies.rs` as the Stage 3 local-order owner. Imported provider symbols
+  must leave its graph once bound interfaces replace the current combined header environment.
+- **Replace** `build.rs::Module`, `CompiledModuleResult` and
+  `BackendBuilder::build_backend(Vec<Module>, ...)` with explicit module outcomes, immutable
+  artefact lanes, graph outcomes and `ProjectCompilation`.
+- **Reshape** AST/HIR/borrow handoff behind immutable artefacts. Current `HirModule` still owns a
+  mandatory `start_function`, warnings, documentation fragments and rendered-path usages. API-only
+  roots need no sentinel start, and non-executable metadata must move to `ModuleCompilerMetadata`
+  or `ModuleLinkFacts`.
+- **Replace** consumer-local generic instance emission in
+  `ast/generic_functions/` and `module_ast/emission/emitter.rs` with stable requests, project-owned
+  generated sidecars and a fixed-point worklist.
+- **Replace** `projects/check.rs`'s all-or-error `Vec<Module>` path with graph outcome inspection and
+  check-only orphan units. **Extend** output writing as the central manifest owner.
+- **Replace** HTML's flat module loop and whole-module reachability assumptions with entry
+  assemblies and graph link plans. **Replace** dev's compile-everything rebuild path with successful
+  artefact retention after fingerprints exist.
 
 ## Known implementation migrations
 
