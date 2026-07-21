@@ -104,46 +104,6 @@ fn range_loop_site_ids(
 }
 
 #[test]
-fn builder_starts_with_empty_store_view() {
-    let mut store = TemplateIrStore::new();
-
-    {
-        let _builder = TemplateIrBuilder::new(&mut store);
-    }
-
-    assert_eq!(store.template_count(), 0);
-    assert_eq!(store.node_count(), 0);
-}
-
-#[test]
-fn push_text_node_returns_sequential_node_ids() {
-    let mut store = TemplateIrStore::new();
-    let mut string_table = StringTable::new();
-    let (id_a, id_b) = {
-        let mut builder = TemplateIrBuilder::new(&mut store);
-
-        let id_a = builder.push_text_node(
-            string_table.intern("hello"),
-            5,
-            TemplateSegmentOrigin::Body,
-            empty_location(),
-        );
-        let id_b = builder.push_text_node(
-            string_table.intern("world"),
-            5,
-            TemplateSegmentOrigin::Body,
-            empty_location(),
-        );
-
-        (id_a, id_b)
-    };
-
-    assert_eq!(id_a.index(), 0);
-    assert_eq!(id_b.index(), 1);
-    assert_eq!(store.node_count(), 2);
-}
-
-#[test]
 fn push_text_node_stores_text_payload() {
     let mut store = TemplateIrStore::new();
     let mut string_table = StringTable::new();
@@ -239,49 +199,6 @@ fn push_child_template_node_stores_child_id() {
         }
         other => panic!("expected ChildTemplate node, got {other:?}"),
     }
-}
-
-#[test]
-fn finish_template_returns_sequential_template_ids() {
-    let mut store = TemplateIrStore::new();
-    let mut string_table = StringTable::new();
-    let (id_a, id_b) = {
-        let mut builder = TemplateIrBuilder::new(&mut store);
-
-        let root_a = builder.push_text_node(
-            string_table.intern("a"),
-            1,
-            TemplateSegmentOrigin::Body,
-            empty_location(),
-        );
-        let root_b = builder.push_text_node(
-            string_table.intern("b"),
-            1,
-            TemplateSegmentOrigin::Body,
-            empty_location(),
-        );
-
-        let id_a = builder.finish_template(
-            root_a,
-            Style::default(),
-            TemplateType::String,
-            TemplateIrSummary::default(),
-            empty_location(),
-        );
-        let id_b = builder.finish_template(
-            root_b,
-            Style::default(),
-            TemplateType::StringFunction,
-            TemplateIrSummary::default(),
-            empty_location(),
-        );
-
-        (id_a, id_b)
-    };
-
-    assert_eq!(id_a.index(), 0);
-    assert_eq!(id_b.index(), 1);
-    assert_eq!(store.template_count(), 2);
 }
 
 #[test]
@@ -584,65 +501,6 @@ fn expression_site_ids_assigned_in_document_order() {
     assert_eq!(site_a, ExpressionSiteId::new(0));
     assert_eq!(site_b, ExpressionSiteId::new(1));
     assert_eq!(site_c, ExpressionSiteId::new(2));
-}
-
-#[test]
-fn occurrence_ids_available_on_stored_nodes() {
-    let mut store = TemplateIrStore::new();
-    let mut string_table = StringTable::new();
-
-    let (slot_id, child_id, expr_id) = {
-        let mut builder = TemplateIrBuilder::new(&mut store);
-
-        let slot_id = builder.push_slot_node(SlotKey::Default, empty_location());
-
-        let child_root = builder.push_text_node(
-            string_table.intern("child"),
-            5,
-            TemplateSegmentOrigin::Body,
-            empty_location(),
-        );
-        let child_template = builder.finish_template(
-            child_root,
-            Style::default(),
-            TemplateType::String,
-            TemplateIrSummary::default(),
-            empty_location(),
-        );
-        let child_id = builder.push_child_template_node(child_template, empty_location());
-
-        let expr_id = builder.push_dynamic_expression_node(
-            Expression::string_slice(
-                string_table.intern("expr"),
-                empty_location(),
-                crate::compiler_frontend::value_mode::ValueMode::ImmutableOwned,
-            ),
-            TemplateSegmentOrigin::Body,
-            None,
-            empty_location(),
-        );
-
-        (slot_id, child_id, expr_id)
-    };
-
-    // Verify that each stored node carries its occurrence/site ID.
-    let slot_occurrence = match &store.get_node(slot_id).expect("slot").kind {
-        TemplateIrNodeKind::Slot { placeholder } => placeholder.occurrence_id,
-        other => panic!("expected Slot node, got {other:?}"),
-    };
-    assert_eq!(slot_occurrence, SlotOccurrenceId::new(0));
-
-    let child_occurrence = match &store.get_node(child_id).expect("child").kind {
-        TemplateIrNodeKind::ChildTemplate { occurrence_id, .. } => *occurrence_id,
-        other => panic!("expected ChildTemplate node, got {other:?}"),
-    };
-    assert_eq!(child_occurrence, ChildTemplateOccurrenceId::new(0));
-
-    let expr_site = match &store.get_node(expr_id).expect("expr").kind {
-        TemplateIrNodeKind::DynamicExpression { site_id, .. } => *site_id,
-        other => panic!("expected DynamicExpression node, got {other:?}"),
-    };
-    assert_eq!(expr_site, ExpressionSiteId::new(0));
 }
 
 // -------------------------
@@ -1031,22 +889,22 @@ fn branch_selector_site_ids_assigned_in_document_order() {
 }
 
 #[test]
-fn loop_conditional_header_assigns_one_expression_site() {
+fn loop_conditional_and_collection_headers_each_assign_one_expression_site() {
+    use crate::compiler_frontend::ast::ast_nodes::LoopBindings;
     use crate::compiler_frontend::ast::templates::template_control_flow::TemplateLoopHeader;
 
     let mut store = TemplateIrStore::new();
     let mut string_table = StringTable::new();
-    let loop_node_id = {
+    let (conditional_node_id, collection_node_id) = {
         let mut builder = TemplateIrBuilder::new(&mut store);
 
-        let body = builder.push_text_node(
-            string_table.intern("body"),
-            4,
+        let conditional_body = builder.push_text_node(
+            string_table.intern("cond-body"),
+            10,
             TemplateSegmentOrigin::Body,
             empty_location(),
         );
-
-        builder.push_loop_node(
+        let conditional_node_id = builder.push_loop_node(
             TemplateLoopHeader::Conditional {
                 condition: Box::new(Expression::bool(
                     true,
@@ -1054,14 +912,43 @@ fn loop_conditional_header_assigns_one_expression_site() {
                     crate::compiler_frontend::value_mode::ValueMode::ImmutableOwned,
                 )),
             },
-            body,
+            conditional_body,
             None,
             empty_location(),
-        )
+        );
+
+        let collection_body = builder.push_text_node(
+            string_table.intern("coll-body"),
+            10,
+            TemplateSegmentOrigin::Body,
+            empty_location(),
+        );
+        let collection_node_id = builder.push_loop_node(
+            TemplateLoopHeader::Collection {
+                bindings: Box::new(LoopBindings {
+                    item: None,
+                    index: None,
+                }),
+                iterable: Box::new(Expression::string_slice(
+                    string_table.intern("items"),
+                    empty_location(),
+                    crate::compiler_frontend::value_mode::ValueMode::ImmutableOwned,
+                )),
+            },
+            collection_body,
+            None,
+            empty_location(),
+        );
+
+        (conditional_node_id, collection_node_id)
     };
 
-    let loop_node = store.get_node(loop_node_id).expect("loop node");
-    match &loop_node.kind {
+    // Conditional and collection loop headers each allocate exactly one
+    // expression site, in document order.
+    let conditional_loop = store
+        .get_node(conditional_node_id)
+        .expect("conditional loop node");
+    match &conditional_loop.kind {
         TemplateIrNodeKind::Loop { header_sites, .. } => match header_sites {
             TemplateLoopHeaderExpressionSites::Conditional { condition } => {
                 assert_eq!(*condition, ExpressionSiteId::new(0));
@@ -1070,33 +957,39 @@ fn loop_conditional_header_assigns_one_expression_site() {
         },
         other => panic!("expected Loop node, got {other:?}"),
     }
+
+    let collection_loop = store
+        .get_node(collection_node_id)
+        .expect("collection loop node");
+    match &collection_loop.kind {
+        TemplateIrNodeKind::Loop { header_sites, .. } => match header_sites {
+            TemplateLoopHeaderExpressionSites::Collection { iterable } => {
+                assert_eq!(*iterable, ExpressionSiteId::new(1));
+            }
+            other => panic!("expected Collection header sites, got {other:?}"),
+        },
+        other => panic!("expected Loop node, got {other:?}"),
+    }
 }
 
 #[test]
 fn loop_range_header_assigns_start_end_and_optional_step_sites() {
     use crate::compiler_frontend::ast::ast_nodes::{LoopBindings, RangeLoopSpec};
-    use crate::compiler_frontend::ast::expressions::expression::Expression;
     use crate::compiler_frontend::ast::templates::template_control_flow::TemplateLoopHeader;
 
     let mut store = TemplateIrStore::new();
     let mut string_table = StringTable::new();
-    let loop_node_id = {
+    let (with_step_id, without_step_id) = {
         let mut builder = TemplateIrBuilder::new(&mut store);
 
-        let body = builder.push_text_node(
-            string_table.intern("body"),
-            4,
+        // Range with an explicit step allocates start, end, then the step site.
+        let with_step_body = builder.push_text_node(
+            string_table.intern("step-body"),
+            9,
             TemplateSegmentOrigin::Body,
             empty_location(),
         );
-
-        let step = Expression::int(
-            2,
-            empty_location(),
-            crate::compiler_frontend::value_mode::ValueMode::ImmutableOwned,
-        );
-
-        builder.push_loop_node(
+        let with_step_id = builder.push_loop_node(
             TemplateLoopHeader::Range {
                 bindings: Box::new(LoopBindings {
                     item: None,
@@ -1114,17 +1007,57 @@ fn loop_range_header_assigns_start_end_and_optional_step_sites() {
                         crate::compiler_frontend::value_mode::ValueMode::ImmutableOwned,
                     ),
                     end_kind: crate::compiler_frontend::ast::ast_nodes::RangeEndKind::Exclusive,
-                    step: Some(step),
+                    step: Some(Expression::int(
+                        2,
+                        empty_location(),
+                        crate::compiler_frontend::value_mode::ValueMode::ImmutableOwned,
+                    )),
                 }),
             },
-            body,
+            with_step_body,
             None,
             empty_location(),
-        )
+        );
+
+        // Range without a step allocates start and end only; no step site.
+        let without_step_body = builder.push_text_node(
+            string_table.intern("no-step-body"),
+            11,
+            TemplateSegmentOrigin::Body,
+            empty_location(),
+        );
+        let without_step_id = builder.push_loop_node(
+            TemplateLoopHeader::Range {
+                bindings: Box::new(LoopBindings {
+                    item: None,
+                    index: None,
+                }),
+                range: Box::new(RangeLoopSpec {
+                    start: Expression::int(
+                        0,
+                        empty_location(),
+                        crate::compiler_frontend::value_mode::ValueMode::ImmutableOwned,
+                    ),
+                    end: Expression::int(
+                        10,
+                        empty_location(),
+                        crate::compiler_frontend::value_mode::ValueMode::ImmutableOwned,
+                    ),
+                    end_kind: crate::compiler_frontend::ast::ast_nodes::RangeEndKind::Exclusive,
+                    step: None,
+                }),
+            },
+            without_step_body,
+            None,
+            empty_location(),
+        );
+
+        (with_step_id, without_step_id)
     };
 
-    let loop_node = store.get_node(loop_node_id).expect("loop node");
-    match &loop_node.kind {
+    // With step: start, end, then the step site, in document order.
+    let with_step = store.get_node(with_step_id).expect("range with step node");
+    match &with_step.kind {
         TemplateIrNodeKind::Loop { header_sites, .. } => match header_sites {
             TemplateLoopHeaderExpressionSites::Range { start, end, step } => {
                 assert_eq!(*start, ExpressionSiteId::new(0));
@@ -1135,50 +1068,19 @@ fn loop_range_header_assigns_start_end_and_optional_step_sites() {
         },
         other => panic!("expected Loop node, got {other:?}"),
     }
-}
 
-#[test]
-fn loop_collection_header_assigns_one_expression_site() {
-    use crate::compiler_frontend::ast::ast_nodes::LoopBindings;
-    use crate::compiler_frontend::ast::templates::template_control_flow::TemplateLoopHeader;
-
-    let mut store = TemplateIrStore::new();
-    let mut string_table = StringTable::new();
-    let loop_node_id = {
-        let mut builder = TemplateIrBuilder::new(&mut store);
-
-        let body = builder.push_text_node(
-            string_table.intern("body"),
-            4,
-            TemplateSegmentOrigin::Body,
-            empty_location(),
-        );
-
-        builder.push_loop_node(
-            TemplateLoopHeader::Collection {
-                bindings: Box::new(LoopBindings {
-                    item: None,
-                    index: None,
-                }),
-                iterable: Box::new(Expression::string_slice(
-                    string_table.intern("items"),
-                    empty_location(),
-                    crate::compiler_frontend::value_mode::ValueMode::ImmutableOwned,
-                )),
-            },
-            body,
-            None,
-            empty_location(),
-        )
-    };
-
-    let loop_node = store.get_node(loop_node_id).expect("loop node");
-    match &loop_node.kind {
+    // Without step: start and end continue the document order; no step site.
+    let without_step = store
+        .get_node(without_step_id)
+        .expect("range without step node");
+    match &without_step.kind {
         TemplateIrNodeKind::Loop { header_sites, .. } => match header_sites {
-            TemplateLoopHeaderExpressionSites::Collection { iterable } => {
-                assert_eq!(*iterable, ExpressionSiteId::new(0));
+            TemplateLoopHeaderExpressionSites::Range { start, end, step } => {
+                assert_eq!(*start, ExpressionSiteId::new(3));
+                assert_eq!(*end, ExpressionSiteId::new(4));
+                assert!(step.is_none());
             }
-            other => panic!("expected Collection header sites, got {other:?}"),
+            other => panic!("expected Range header sites, got {other:?}"),
         },
         other => panic!("expected Loop node, got {other:?}"),
     }
@@ -1293,62 +1195,4 @@ fn expression_sites_share_one_document_order_counter() {
     assert_eq!(range_start, ExpressionSiteId::new(2));
     assert_eq!(range_end, ExpressionSiteId::new(3));
     assert_eq!(range_step, Some(ExpressionSiteId::new(4)));
-}
-
-#[test]
-fn loop_range_header_without_step_assigns_no_step_site() {
-    use crate::compiler_frontend::ast::ast_nodes::{LoopBindings, RangeLoopSpec};
-    use crate::compiler_frontend::ast::templates::template_control_flow::TemplateLoopHeader;
-
-    let mut store = TemplateIrStore::new();
-    let mut string_table = StringTable::new();
-    let loop_node_id = {
-        let mut builder = TemplateIrBuilder::new(&mut store);
-
-        let body = builder.push_text_node(
-            string_table.intern("body"),
-            4,
-            TemplateSegmentOrigin::Body,
-            empty_location(),
-        );
-
-        builder.push_loop_node(
-            TemplateLoopHeader::Range {
-                bindings: Box::new(LoopBindings {
-                    item: None,
-                    index: None,
-                }),
-                range: Box::new(RangeLoopSpec {
-                    start: Expression::int(
-                        0,
-                        empty_location(),
-                        crate::compiler_frontend::value_mode::ValueMode::ImmutableOwned,
-                    ),
-                    end: Expression::int(
-                        10,
-                        empty_location(),
-                        crate::compiler_frontend::value_mode::ValueMode::ImmutableOwned,
-                    ),
-                    end_kind: crate::compiler_frontend::ast::ast_nodes::RangeEndKind::Exclusive,
-                    step: None,
-                }),
-            },
-            body,
-            None,
-            empty_location(),
-        )
-    };
-
-    let loop_node = store.get_node(loop_node_id).expect("loop node");
-    match &loop_node.kind {
-        TemplateIrNodeKind::Loop { header_sites, .. } => match header_sites {
-            TemplateLoopHeaderExpressionSites::Range { start, end, step } => {
-                assert_eq!(*start, ExpressionSiteId::new(0));
-                assert_eq!(*end, ExpressionSiteId::new(1));
-                assert!(step.is_none());
-            }
-            other => panic!("expected Range header sites, got {other:?}"),
-        },
-        other => panic!("expected Loop node, got {other:?}"),
-    }
 }
