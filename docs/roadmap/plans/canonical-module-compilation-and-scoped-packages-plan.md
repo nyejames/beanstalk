@@ -9,26 +9,27 @@ Replace entry-closure compilation with canonical project and package graphs, imm
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/canonical-module-compilation-and-scoped-packages-plan.md
 STATUS: active
-CURRENT_SLICE: Phase 2b accepted; checkpoint commit pending
-LAST_ACCEPTED_COMMIT: 5d4a6b1cd (Phase 2a deterministic module identities and topology)
-WORKTREE: main at 5d4a6b1cd with the accepted Phase 2b code, tests and this plan update; unrelated user documentation work may appear and must be preserved
+CURRENT_SLICE: Phase 2c accepted; checkpoint commit pending
+LAST_ACCEPTED_COMMIT: 37b1312cf (Phase 2b stable package and module origins)
+WORKTREE: main at 37b1312cf with accepted Phase 2c code, focused tests, index owner-map update and this plan update; unrelated user documentation work may appear and must be preserved
 REQUIRED_RELOADS: startup files, this plan, relevant language/import and borrow references, current source and diff
 RELEVANT_CONTEXT_NOW:
-- docs: compiler-design-overview.md cross-build stability; build-system-design.md project identity and package topology
-- code: module_identity.rs distinguishes dense ModuleId from StablePackageIdentity and StableModuleOriginIdentity; source_tree_index.rs constructs one project package identity from Config.project_name
+- docs: compiler-design-overview.md origin identities/export bindings and cross-build stability
+- code: compiler_frontend/semantic_identity.rs owns portable package/module values and stable exported declaration origins; Stage 0 retains dense ModuleId assignment and topology
 ACCEPTANCE_CRITERIA:
-- Phase 2b diff and architecture audit are accepted
+- Phase 2c diff and architecture audit are accepted with one compiler-semantic value owner and no compatibility re-export
+- function receiver identity uses one enum state, so inconsistent function-origin states are unrepresentable
+- reusable evidence identity remains deliberately coupled to canonical target-type and trait/evidence semantics in Phase 7
 - progress matrix remains unchanged because no user-visible support changed
-- stage only the three Phase 2b code/test files and this plan update
 VALIDATION_STATE:
-- cargo fmt and 23 focused module identity tests: passed
-- just validate: passed; cross-target Clippy, 3383 Rust tests, 1793 integration cases, docs check and 28/28 benchmark cases
-DOCS_IMPACT: plan state only; progress matrix unchanged
+- Ollama focused gate: passed; 10 semantic identity tests and cargo check --tests
+- just validate: passed; cross-target Clippy, 3393 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases
+DOCS_IMPACT: index.md owner map updated; progress matrix unchanged
 BLOCKERS_OR_OPEN_DECISIONS: none
 DELEGATION_DECISION: ollama - user requires Ollama for every worker slice
 NEXT_WORKER_ORDER: ollama only; no provider substitution for this run
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit Phase 2b, record its hash, then scope stable exported declaration identities
+NEXT_RESUME_ACTION: commit Phase 2c, record its hash, then scope the first canonical source-index slice
 ```
 
 ## Hard prerequisites
@@ -279,6 +280,18 @@ Accepted Phase 2b checkpoint:
 - invalid, absolute, parent and non-UTF-8 logical paths return internal compiler errors rather than
   panicking or collapsing into another identity.
 - stable exported declaration identities remain for Phase 2c.
+
+Accepted Phase 2c checkpoint:
+
+- `compiler_frontend::semantic_identity` is the single compiler-semantic owner of portable package,
+  module and exported declaration origin values; Stage 0 imports those values while retaining dense
+  `ModuleId` assignment, discovery and topology ownership.
+- stable exported origin IDs cover free functions, receiver methods, structs, choices, transparent
+  aliases, constants and traits without source files, declaration order, export aliases or local IDs.
+- receiver methods embed their stable receiver type in one `FunctionOriginKind` state, so invalid
+  free/receiver combinations are unrepresentable.
+- reusable evidence identity is intentionally deferred to Phase 7, where canonical target types and
+  trait/evidence semantics exist; Phase 2 does not introduce a string or placeholder identity.
 
 ### Phase 3: Build canonical source indexes and owned or semantic source sets
 

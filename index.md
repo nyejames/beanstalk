@@ -31,7 +31,8 @@ Flow: [projects](src/projects/) → [build_system](src/build_system/) → [compi
         - [frontend_orchestration.rs](src/build_system/create_project_modules/frontend_orchestration.rs): per-module frontend pipeline.
         - [module_inventory.rs](src/build_system/create_project_modules/module_inventory.rs), [reachable_file_discovery.rs](src/build_system/create_project_modules/reachable_file_discovery.rs), [import_scanning.rs](src/build_system/create_project_modules/import_scanning.rs): module graph.
         - [source_package_discovery.rs](src/build_system/create_project_modules/source_package_discovery.rs), [module_root_validation.rs](src/build_system/create_project_modules/module_root_validation.rs): package roots and module roots.
-        - [source_tree_index.rs](src/build_system/create_project_modules/source_tree_index.rs), [source_loading.rs](src/build_system/create_project_modules/source_loading.rs), [compilation.rs](src/build_system/create_project_modules/compilation.rs): entry roots and source load.
+        - [source_tree_index.rs](src/build_system/create_project_modules/source_tree_index.rs), [module_identity.rs](src/build_system/create_project_modules/module_identity.rs): canonical source traversal, deterministic dense module assignment and structural ancestry.
+        - [source_loading.rs](src/build_system/create_project_modules/source_loading.rs), [compilation.rs](src/build_system/create_project_modules/compilation.rs): source load and current per-entry compilation.
         - [collision_detection.rs](src/build_system/create_project_modules/collision_detection.rs), [project_structure_diagnostics.rs](src/build_system/create_project_modules/project_structure_diagnostics.rs): layout/name conflicts.
         - [project_roots.rs](src/build_system/create_project_modules/project_roots.rs): project/entry roots.
         - [source_discovery_error.rs](src/build_system/create_project_modules/source_discovery_error.rs): diagnostic boundary.
@@ -51,6 +52,7 @@ Flow: [projects](src/projects/) → [build_system](src/build_system/) → [compi
 - [symbols](src/compiler_frontend/symbols/): StringId, InternedPath, compiler symbols, naming policy.
 - [paths](src/compiler_frontend/paths/): import/path normalization/format/resolution. kw: @imports, source roots.
 - [source_packages](src/compiler_frontend/source_packages/): package-root registration and public import boundaries.
+- [semantic_identity.rs](src/compiler_frontend/semantic_identity.rs): stable package, module and exported declaration origin identities shared across compiler/build stages.
 - [external_packages](src/compiler_frontend/external_packages/): virtual package registry, external IDs. kw: @core, @web, opaque.
 - [builtins](src/compiler_frontend/builtins/): compiler-owned types/ops/casts/runtime error metadata.
 - [style_directives](src/compiler_frontend/style_directives/): frontend+builder template directive registry.

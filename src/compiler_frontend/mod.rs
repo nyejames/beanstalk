@@ -16,6 +16,7 @@ pub(crate) mod tokenizer;
 pub(crate) mod builtins;
 pub(crate) mod instrumentation;
 pub(crate) mod keywords;
+pub(crate) mod semantic_identity;
 pub(crate) mod traits;
 
 pub(crate) mod compiler_messages;
@@ -75,5 +76,6 @@ pub(crate) mod tests {
     mod keyword_tests;
     pub(crate) mod parse_support;
     mod plain_markdown_tests;
+    mod semantic_identity_tests;
     pub(crate) mod type_id_fixture_support;
 }

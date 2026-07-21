@@ -9,13 +9,13 @@
 //! module inventory, and collision validators from repeating the same expensive walk.
 
 use super::module_identity::{
-    ModuleIdentityRecord, ModuleIdentityTable, ModuleRootRole, StablePackageIdentity,
-    module_root_role_for_file_name,
+    ModuleIdentityRecord, ModuleIdentityTable, module_root_role_for_file_name,
 };
 use crate::builder_surface::SourcePackageRegistry;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_messages::InvalidConfigReason;
 use crate::compiler_frontend::paths::module_roots::ModuleRootTable;
+use crate::compiler_frontend::semantic_identity::{ModuleRootRole, StablePackageIdentity};
 use crate::compiler_frontend::source_packages::root_file::{
     file_name_is_hash_root_file, file_name_is_module_root_file, file_name_is_support_root_file,
 };

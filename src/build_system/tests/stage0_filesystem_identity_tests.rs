@@ -573,14 +573,14 @@ mod non_utf8_hash_root_candidate_tests {
 /// deterministic `ModuleId` ordering by canonical logical path, cosmetic root-filename
 /// independence, explicit root roles, structural ancestry and project package facade separation.
 mod module_identity_tests {
-    use super::module_identity::{
-        ModuleIdentityTable, ModuleRootRole, StableModuleOriginIdentity, StablePackageIdentity,
-        module_root_role_for_file_name,
-    };
+    use super::module_identity::{ModuleIdentityTable, module_root_role_for_file_name};
     use super::*;
     use crate::builder_surface::PackageOrigin;
     use crate::builder_surface::SourcePackageRegistry;
     use crate::compiler_frontend::compiler_errors::ErrorType;
+    use crate::compiler_frontend::semantic_identity::{
+        ModuleRootRole, StableModuleOriginIdentity, StablePackageIdentity,
+    };
     use std::path::{Path, PathBuf};
 
     fn discover_index(
