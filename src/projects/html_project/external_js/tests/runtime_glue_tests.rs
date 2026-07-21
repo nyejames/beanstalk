@@ -79,9 +79,8 @@ fn generate_module_glue_returns_empty_when_no_external_exports() {
 fn generate_module_glue_empty_when_export_registered_but_not_referenced() {
     let mut string_table = StringTable::new();
     let mut module = create_test_module(PathBuf::from("#page.bst"), &mut string_table);
-    module
-        .module_external_imports
-        .push(crate::build_system::build::ModuleExternalImport {
+    module.link_facts.module_external_imports.push(
+        crate::build_system::build::ModuleExternalImport {
             package_id: ExternalPackageId(0),
             runtime_asset: Some(
                 crate::builder_surface::external_import_providers::provider::RuntimeAssetIdentity {
@@ -90,10 +89,11 @@ fn generate_module_glue_empty_when_export_registered_but_not_referenced() {
                 },
             ),
             required_runtime_imports: Vec::new(),
-        });
+        },
+    );
 
     let (registry, _function_id, package_id) = create_registry_with_export("get_value", "getValue");
-    module.module_external_imports[0].package_id = package_id;
+    module.link_facts.module_external_imports[0].package_id = package_id;
 
     // Export is registered but not referenced by emitted JS.
     let referenced = HashSet::new();
@@ -116,9 +116,8 @@ fn generate_module_glue_empty_when_export_registered_but_not_referenced() {
 fn generate_module_glue_emits_glue_file_for_referenced_export() {
     let mut string_table = StringTable::new();
     let mut module = create_test_module(PathBuf::from("#page.bst"), &mut string_table);
-    module
-        .module_external_imports
-        .push(crate::build_system::build::ModuleExternalImport {
+    module.link_facts.module_external_imports.push(
+        crate::build_system::build::ModuleExternalImport {
             package_id: ExternalPackageId(0),
             runtime_asset: Some(
                 crate::builder_surface::external_import_providers::provider::RuntimeAssetIdentity {
@@ -127,10 +126,11 @@ fn generate_module_glue_emits_glue_file_for_referenced_export() {
                 },
             ),
             required_runtime_imports: Vec::new(),
-        });
+        },
+    );
 
     let (registry, function_id, package_id) = create_registry_with_export("get_value", "getValue");
-    module.module_external_imports[0].package_id = package_id;
+    module.link_facts.module_external_imports[0].package_id = package_id;
     let referenced = HashSet::from([function_id]);
 
     let result = generate_module_glue(
@@ -171,9 +171,8 @@ fn generate_module_glue_emits_glue_file_for_referenced_export() {
 fn generate_module_glue_nested_html_output_path() {
     let mut string_table = StringTable::new();
     let mut module = create_test_module(PathBuf::from("#page.bst"), &mut string_table);
-    module
-        .module_external_imports
-        .push(crate::build_system::build::ModuleExternalImport {
+    module.link_facts.module_external_imports.push(
+        crate::build_system::build::ModuleExternalImport {
             package_id: ExternalPackageId(0),
             runtime_asset: Some(
                 crate::builder_surface::external_import_providers::provider::RuntimeAssetIdentity {
@@ -182,10 +181,11 @@ fn generate_module_glue_nested_html_output_path() {
                 },
             ),
             required_runtime_imports: Vec::new(),
-        });
+        },
+    );
 
     let (registry, function_id, package_id) = create_registry_with_export("get_value", "getValue");
-    module.module_external_imports[0].package_id = package_id;
+    module.link_facts.module_external_imports[0].package_id = package_id;
     let referenced = HashSet::from([function_id]);
 
     let result = generate_module_glue(
@@ -209,9 +209,8 @@ fn generate_module_glue_nested_html_output_path() {
 fn generate_module_glue_asset_import_relative_to_glue_module() {
     let mut string_table = StringTable::new();
     let mut module = create_test_module(PathBuf::from("#page.bst"), &mut string_table);
-    module
-        .module_external_imports
-        .push(crate::build_system::build::ModuleExternalImport {
+    module.link_facts.module_external_imports.push(
+        crate::build_system::build::ModuleExternalImport {
             package_id: ExternalPackageId(0),
             runtime_asset: Some(
                 crate::builder_surface::external_import_providers::provider::RuntimeAssetIdentity {
@@ -220,10 +219,11 @@ fn generate_module_glue_asset_import_relative_to_glue_module() {
                 },
             ),
             required_runtime_imports: Vec::new(),
-        });
+        },
+    );
 
     let (registry, function_id, package_id) = create_registry_with_export("get_value", "getValue");
-    module.module_external_imports[0].package_id = package_id;
+    module.link_facts.module_external_imports[0].package_id = package_id;
     let referenced = HashSet::from([function_id]);
 
     let result = generate_module_glue(
@@ -250,9 +250,8 @@ fn generate_module_glue_asset_import_relative_to_glue_module() {
 fn generate_module_glue_fallible_wrapper_validates_result_shape() {
     let mut string_table = StringTable::new();
     let mut module = create_test_module(PathBuf::from("#page.bst"), &mut string_table);
-    module
-        .module_external_imports
-        .push(crate::build_system::build::ModuleExternalImport {
+    module.link_facts.module_external_imports.push(
+        crate::build_system::build::ModuleExternalImport {
             package_id: ExternalPackageId(0),
             runtime_asset: Some(
                 crate::builder_surface::external_import_providers::provider::RuntimeAssetIdentity {
@@ -261,11 +260,12 @@ fn generate_module_glue_fallible_wrapper_validates_result_shape() {
                 },
             ),
             required_runtime_imports: Vec::new(),
-        });
+        },
+    );
 
     let (registry, function_id, package_id) =
         create_registry_with_fallible_export("risky", "riskyOp");
-    module.module_external_imports[0].package_id = package_id;
+    module.link_facts.module_external_imports[0].package_id = package_id;
     let referenced = HashSet::from([function_id]);
 
     let result = generate_module_glue(
@@ -347,7 +347,7 @@ fn emit_build_runtime_modules_dedupes_by_specifier() {
 #[test]
 fn emit_build_runtime_modules_rejects_unregistered_specifier() {
     let mut module = create_module_with_runtime_requirement();
-    module.module_external_imports[0].required_runtime_imports[0].module_name =
+    module.link_facts.module_external_imports[0].required_runtime_imports[0].module_name =
         "@beanstalk/missing".to_owned();
 
     let plan = HtmlExternalRuntimeEmissionPlan::from_modules(&[module]);
@@ -382,9 +382,8 @@ fn build_import_map_html_includes_beanstalk_runtime() {
 #[test]
 fn build_import_map_html_deduplicates_by_specifier() {
     let mut module = create_module_with_runtime_requirement();
-    module
-        .module_external_imports
-        .push(crate::build_system::build::ModuleExternalImport {
+    module.link_facts.module_external_imports.push(
+        crate::build_system::build::ModuleExternalImport {
             package_id: ExternalPackageId(1),
             runtime_asset: None,
             required_runtime_imports: vec![
@@ -393,7 +392,8 @@ fn build_import_map_html_deduplicates_by_specifier() {
                     imported_names: vec!["bstOk".to_owned()],
                 },
             ],
-        });
+        },
+    );
 
     let html = build_import_map_html(&module, &PathBuf::from("index.html"));
     assert!(html.is_some());
@@ -411,9 +411,8 @@ fn build_import_map_html_deduplicates_by_specifier() {
 fn create_module_with_runtime_requirement() -> Module {
     let mut string_table = StringTable::new();
     let mut module = create_test_module(PathBuf::from("#page.bst"), &mut string_table);
-    module
-        .module_external_imports
-        .push(crate::build_system::build::ModuleExternalImport {
+    module.link_facts.module_external_imports.push(
+        crate::build_system::build::ModuleExternalImport {
             package_id: ExternalPackageId(0),
             runtime_asset: None,
             required_runtime_imports: vec![
@@ -422,7 +421,8 @@ fn create_module_with_runtime_requirement() -> Module {
                     imported_names: vec!["bstOk".to_owned(), "bstErr".to_owned()],
                 },
             ],
-        });
+        },
+    );
     module
 }
 

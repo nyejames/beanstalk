@@ -107,7 +107,7 @@ fn build_package_asset_path_map(module: &Module) -> HashMap<ExternalPackageId, S
     let mut map = HashMap::new();
     let glue_output_path = paths::glue_module_output_path(module);
 
-    for external_import in &module.module_external_imports {
+    for external_import in &module.link_facts.module_external_imports {
         let Some(asset) = &external_import.runtime_asset else {
             continue;
         };

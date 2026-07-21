@@ -5,7 +5,8 @@
 //! borrow checking.
 
 use crate::build_system::build::{
-    CompiledModuleResult, Module, ModuleCompilerMetadata, ModuleRootActivity, ResolvedConstFragment,
+    CompiledModuleResult, Module, ModuleCompilerMetadata, ModuleExecutable, ModuleLinkFacts,
+    ModuleRootActivity, ResolvedConstFragment,
 };
 
 use crate::builder_surface::external_import_providers::provider::BuilderRuntimePackageMetadata;
@@ -817,18 +818,22 @@ impl FrontendModuleBuildContext<'_> {
             module_external_imports.dedup_by_key(|import| import.package_id);
 
             Ok(Module {
-                entry_point: entry_file_path.to_path_buf(),
-                hir: hir_module,
-                type_environment,
-                borrow_analysis,
+                executable: ModuleExecutable {
+                    hir: hir_module,
+                    type_environment,
+                    borrow_analysis,
+                },
+                link_facts: ModuleLinkFacts {
+                    external_package_registry: Arc::clone(&compiler.external_package_registry),
+                    module_external_imports,
+                },
                 metadata: ModuleCompilerMetadata::from_hir_lowering(
+                    entry_file_path.to_path_buf(),
                     warnings,
                     lowering_metadata,
                     const_top_level_fragments,
                     root_activity,
                 ),
-                external_package_registry: Arc::clone(&compiler.external_package_registry),
-                module_external_imports,
             })
         })();
 

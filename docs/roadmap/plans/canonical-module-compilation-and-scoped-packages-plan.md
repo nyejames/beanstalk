@@ -9,19 +9,19 @@ Replace entry-closure compilation with canonical project and package graphs, imm
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/canonical-module-compilation-and-scoped-packages-plan.md
 STATUS: active
-CURRENT_SLICE: Phase 6a accepted; checkpoint commit pending
-LAST_ACCEPTED_COMMIT: a8f652780 (Phase 5b retained structural provider edges)
-WORKTREE: main at a8f652780 with accepted Phase 6a source, tests, index and this plan update; unrelated user documentation work may appear and must be preserved
+CURRENT_SLICE: Phase 6b accepted; checkpoint commit pending
+LAST_ACCEPTED_COMMIT: c7b96d7e8 (Phase 6a non-HIR module metadata lane)
+WORKTREE: main at c7b96d7e8 with accepted Phase 6b source, tests, index and this plan update; unrelated user documentation work may appear and must be preserved
 REQUIRED_RELOADS: startup files, this plan, relevant language/import and borrow references, current module payload, HIR lowering/validation and backend consumer source plus diff
 RELEVANT_CONTEXT_NOW:
 - docs: build-system-design.md Project and package topology plus Deterministic scheduling define canonical graph nodes, strict support scope, facade placement and deterministic waves
-- code: module_metadata.rs owns the named HIR-lowering result plus resolved documentation/rendered-path extraction; build.rs::ModuleCompilerMetadata owns successful warnings, const fragments, root activity, documentation and rendered-path remapping/consumption
+- code: build.rs::Module is now a three-lane container; ModuleExecutable owns HIR/type/borrow, ModuleLinkFacts owns current external registry/import facts and ModuleCompilerMetadata owns entry/root/compiler metadata
 ACCEPTANCE_CRITERIA:
-- accepted: warnings, resolved documentation fragments and rendered-path usages no longer live in HirModule; no compatibility fields or duplicate successful-warning lane remains
-- accepted: HirLoweringResult names the executable, type and extracted-metadata boundary while existing broad test helpers preserve their narrower two-value contract
-- accepted: ModuleCompilerMetadata is the single assembled metadata/remap owner and HTML warning, fragment, root-activity and tracked-asset consumers use it
-- accepted: executable HIR validation no longer validates documentation metadata; extracted metadata validation uses CompilerError before successful Module construction and retains authored locations
-- accepted: mandatory start, flat backend handoff, diagnostics, output and user-visible behavior are unchanged; focused HIR, orchestration and HTML tests cover the moved ownership
+- accepted: ModuleExecutable is the sole HIR/type/borrow owner and remaps HIR/type identities once while borrow facts remain HIR-ID-only
+- accepted: ModuleLinkFacts is the sole external-registry/import owner and explicitly marks the complete registry as a current dependency for Phase 7 narrowing
+- accepted: the canonical entry path is root-local ModuleCompilerMetadata and Module contains exactly executable, link_facts and metadata without accessors, deref or compatibility fields
+- accepted: frontend construction, HTML validation/lowering, runtime glue and tests consume the owning lane explicitly; mandatory start, backend APIs, diagnostics, output and behavior are unchanged
+- accepted: one focused module-lane remap invariant test protects lane boundaries without duplicating integration behavior
 VALIDATION_STATE:
 - Phase 4d just validate: passed; cross-target Clippy, 3419 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases
 - Phase 4e focused validation: passed; 2 import-scanning, 5 reachability, 178 module-discovery, 19 orchestration, 5 token-remap and 116 header tests plus cargo check --tests and git diff --check
@@ -34,12 +34,14 @@ VALIDATION_STATE:
 - Phase 5b just validate: passed; cross-target Clippy, 3437 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases (-1ms average)
 - Phase 6a focused validation: passed; 210 HIR, 20 frontend-orchestration and 226 HTML-project tests plus cargo check --tests, cargo clippy --tests -D warnings, formatting and git diff --check
 - Phase 6a just validate: passed; cross-target Clippy, 3437 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases (+1ms average)
-DOCS_IMPACT: index.md now names the non-HIR metadata and executable-HIR validation owners; progress matrix unchanged for this internal ownership refactor
-BLOCKERS_OR_OPEN_DECISIONS: true dependency-wave semantic compilation requires immutable source-provider interfaces from Phase 7, so Phase 5 structural scheduling is complete enough to proceed without adding a non-canonical wave loop
+- Phase 6b focused validation: passed; 1 lane invariant, 20 frontend-orchestration, 25 project-frontend, 226 HTML-project and 227 backend tests plus cargo check --tests, cargo clippy --tests -D warnings, formatting and git diff --check
+- Phase 6b just validate: passed; cross-target Clippy, 3438 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases (+1ms average)
+DOCS_IMPACT: index.md now names the three current module payload lanes; progress matrix unchanged for this internal payload refactor
+BLOCKERS_OR_OPEN_DECISIONS: the complete effective external package registry may remain inside ModuleLinkFacts only as an explicitly current dependency; Phase 7 must replace it with immutable binding/interface and per-function link facts
 DELEGATION_DECISION: ollama - user requires Ollama for every worker slice
 NEXT_WORKER_ORDER: ollama only; no provider substitution for this run
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit Phase 6a, record its hash, then scope the smallest explicit executable/link lane or module-outcome slice through Ollama
+NEXT_RESUME_ACTION: commit Phase 6b, record its hash, then scope the smallest module compilation outcome/diagnostic boundary slice through Ollama
 ```
 
 ## Hard prerequisites
@@ -189,10 +191,10 @@ change supersedes them.
 - **Replace** `build.rs::Module`, `CompiledModuleResult` and
   `BackendBuilder::build_backend(Vec<Module>, ...)` with explicit module outcomes, immutable
   artefact lanes, graph outcomes and `ProjectCompilation`.
-- **Reshape** AST/HIR/borrow handoff behind immutable artefacts. Current `HirModule` still owns a
-  mandatory `start_function`, warnings, documentation fragments and rendered-path usages. API-only
-  roots need no sentinel start, and non-executable metadata must move to `ModuleCompilerMetadata`
-  or `ModuleLinkFacts`.
+- **Reshape** AST/HIR/borrow handoff behind immutable artefacts. `HirModule` now retains only its
+  mandatory `start_function` among the previously mixed concerns; warnings, documentation
+  fragments and rendered-path usages have moved to `ModuleCompilerMetadata`, while API-only roots
+  still need the sentinel start removed.
 - **Replace** consumer-local generic instance emission in
   `ast/generic_functions/` and `module_ast/emission/emitter.rs` with stable requests, project-owned
   generated sidecars and a fixed-point worklist.
@@ -499,6 +501,20 @@ Accepted Phase 6a checkpoint:
   consumers read the metadata lane without changing output behavior.
 - explicit executable/link lanes, immutable interfaces, fingerprints and module/graph outcomes
   remain later Phase 6 slices; mandatory start and the flat backend handoff are unchanged here.
+
+Accepted Phase 6b checkpoint:
+
+- the current `Module` payload contains exactly `ModuleExecutable`, `ModuleLinkFacts` and
+  `ModuleCompilerMetadata`; the prior flat entry, HIR, type, borrow, registry and import fields were
+  removed without compatibility accessors or deref behavior.
+- `ModuleExecutable` owns the validated HIR, paired type environment and borrow facts, including
+  the sole executable string-ID remap path. Root-local entry identity now lives in compiler
+  metadata.
+- `ModuleLinkFacts` owns provider-resolved external imports and the current effective external
+  registry. The complete registry is explicitly a temporary dependency until Phase 7 supplies
+  immutable binding interfaces and per-function link facts.
+- frontend construction, backend validation/lowering, runtime glue and test fixtures consume the
+  owning lanes without changing the flat `BackendBuilder` API, mandatory start or output behavior.
 
 ### Phase 7: Add stable public interfaces, cross-module calls and effect summaries
 

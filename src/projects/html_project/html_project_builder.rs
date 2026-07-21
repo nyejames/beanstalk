@@ -132,7 +132,7 @@ impl BackendBuilder for HtmlProjectBuilder {
                 // Derive the canonical page route once. Both JS-only and HTML+Wasm output modes
                 // consume this same path — downstream code must not re-derive route semantics.
                 let logical_html_output_path = html_output_path(
-                    &module.entry_point,
+                    &module.metadata.entry_point,
                     entry_paths.resolved_entry_root.as_deref(),
                     string_table,
                 )
@@ -153,19 +153,20 @@ impl BackendBuilder for HtmlProjectBuilder {
                     let output_path = output_file.relative_output_path().to_path_buf();
                     if let Some(existing_entry_point) = output_path_owners.get(&output_path) {
                         return Err(duplicate_output_path_error(
-                            &module.entry_point,
+                            &module.metadata.entry_point,
                             existing_entry_point,
                             &output_path,
                             string_table,
                         ));
                     }
                     output_paths.insert(output_path.clone());
-                    output_path_owners.insert(output_path.clone(), module.entry_point.clone());
+                    output_path_owners
+                        .insert(output_path.clone(), module.metadata.entry_point.clone());
                     output_files.push(output_file);
                 }
                 compiled_html_output_paths.push((module, html_output_path.clone()));
 
-                if entry_paths.is_homepage_entry(&module.entry_point) {
+                if entry_paths.is_homepage_entry(&module.metadata.entry_point) {
                     has_directory_homepage = true;
                     entry_page_rel = Some(html_output_path.clone());
                 } else if !entry_paths.is_directory_build() && entry_page_rel.is_none() {
@@ -362,8 +363,8 @@ impl HtmlProjectBuilder {
             BackendTarget::Js
         };
         validate_hir_external_package_support(
-            &module.hir,
-            module.external_package_registry.as_ref(),
+            &module.executable.hir,
+            module.link_facts.external_package_registry.as_ref(),
             backend_target,
             string_table,
         )
@@ -379,7 +380,7 @@ impl HtmlProjectBuilder {
         let backend_validation_root = if wasm_enabled {
             // HTML-Wasm validates from the functions exported by the builder so dead helper bodies
             // do not surface backend diagnostics for code the page never executes.
-            let export_plan = build_html_wasm_export_plan(&module.hir)
+            let export_plan = build_html_wasm_export_plan(&module.executable.hir)
                 .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
             BackendFeatureValidationRoot::ExplicitRoots(
                 export_plan
@@ -394,17 +395,19 @@ impl HtmlProjectBuilder {
 
         validate_hir_backend_feature_support(
             BackendFeatureValidationInput {
-                hir: &module.hir,
+                hir: &module.executable.hir,
                 target: backend_target,
                 root: backend_validation_root,
-                type_environment: Some(&module.type_environment),
+                type_environment: Some(&module.executable.type_environment),
             },
             string_table,
         )
         .map_err(|error| match error {
             BackendFeatureValidationError::Diagnostic(diagnostic) => {
                 CompilerMessages::from_diagnostic_ref(*diagnostic, string_table)
-                    .with_type_context_for_all_diagnostics(module.type_environment.clone())
+                    .with_type_context_for_all_diagnostics(
+                        module.executable.type_environment.clone(),
+                    )
             }
             BackendFeatureValidationError::Infrastructure(error) => {
                 CompilerMessages::from_error_ref(*error, string_table)
@@ -412,15 +415,15 @@ impl HtmlProjectBuilder {
         })?;
 
         let compile_input = HtmlModuleCompileInput {
-            hir_module: &module.hir,
-            type_environment: &module.type_environment,
+            hir_module: &module.executable.hir,
+            type_environment: &module.executable.type_environment,
             const_fragments: &module.metadata.const_top_level_fragments,
-            borrow_analysis: &module.borrow_analysis,
+            borrow_analysis: &module.executable.borrow_analysis,
             project_name,
             document_config,
             release_build,
             root_activity: &module.metadata.root_activity,
-            external_package_registry: Arc::clone(&module.external_package_registry),
+            external_package_registry: Arc::clone(&module.link_facts.external_package_registry),
         };
         if wasm_enabled {
             let compiled_wasm =

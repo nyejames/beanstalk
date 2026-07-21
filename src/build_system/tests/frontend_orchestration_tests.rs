@@ -535,7 +535,7 @@ fn prepare_module_retains_header_syntax_for_semantic_compilation() {
         .expect("semantic compilation should succeed");
 
     assert_eq!(
-        compiled.module.entry_point, canonical_entry,
+        compiled.module.metadata.entry_point, canonical_entry,
         "semantic compilation should preserve the module entry point"
     );
     assert!(

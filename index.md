@@ -23,7 +23,7 @@ Flow: [projects](src/projects/) → [build_system](src/build_system/) → [compi
     - [dev_server](src/projects/dev_server/): HTTP/SSE/watch rebuild loop. kw: serve, hot reload.
     - [html_project](src/projects/html_project/): HTML builder and HTML-Wasm integration. kw: shell, assets, wasm.
 - [builder boundary above frontend](src/build_system/): kw — config, modules, artifacts, cleanup.
-    - [build.rs](src/build_system/build.rs): build_project, BuildResult, current module payload and its non-HIR compiler-metadata lane, output writing.
+    - [build.rs](src/build_system/build.rs): build_project, BuildResult, current `Module` container with explicit executable, link-fact and compiler-metadata lanes, output writing.
     - [project_config.rs](src/build_system/project_config.rs) + [project_config/](src/build_system/project_config/): config.bst parse/validate through frontend+AST.
     - [path_validation.rs](src/build_system/path_validation.rs): project path policy checks.
     - [utils.rs](src/build_system/utils.rs): shared builder helpers.

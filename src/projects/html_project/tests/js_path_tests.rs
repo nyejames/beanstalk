@@ -69,11 +69,14 @@ fn render_entry_fragments_preserves_runtime_slot_order() {
 fn no_runtime_fragments_still_emits_start_call() {
     let mut string_table = StringTable::new();
     let module = create_test_module(std::path::PathBuf::from("#page.bst"), &mut string_table);
-    let function_names = HashMap::from([(module.hir.start_function, String::from("start_entry"))]);
+    let function_names = HashMap::from([(
+        module.executable.hir.start_function,
+        String::from("start_entry"),
+    )]);
 
     let html = render_html_document(
         &mut crate::projects::html_project::js_path::HtmlDocumentRenderInput {
-            hir_module: &module.hir,
+            hir_module: &module.executable.hir,
             const_fragments: &[],
             string_table: &mut string_table,
             document_config: &HtmlDocumentConfig::default(),

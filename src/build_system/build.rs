@@ -93,14 +93,68 @@ impl ModuleRootActivity {
     }
 }
 
+/// Module-local executable semantic state: validated HIR, paired type environment and borrow
+/// facts.
+///
+/// WHAT: the sole owner of the typed HIR, its paired `TypeEnvironment` and the
+///       `BorrowCheckReport` produced by borrow validation.
+/// WHY: keeping these together in one executable lane makes the HIR/type/borrow pairing obvious
+///      at every backend call site and lets string-ID remapping touch HIR and type identity
+///      exactly once. Borrow facts carry only HIR IDs and need no string remap.
+pub(crate) struct ModuleExecutable {
+    pub(crate) hir: HirModule,
+    pub(crate) type_environment: TypeEnvironment,
+    pub(crate) borrow_analysis: BorrowCheckReport,
+}
+
+impl ModuleExecutable {
+    /// Remap interned string IDs after string-table merging.
+    ///
+    /// WHY: HIR and type identity remap exactly once here. `BorrowCheckReport` carries only HIR
+    ///      IDs (no `StringId`s), so it is intentionally not remapped.
+    pub(crate) fn remap_string_ids(&mut self, remap: &StringIdRemap) {
+        self.hir.remap_string_ids(remap);
+        self.type_environment.remap_string_ids(remap);
+    }
+}
+
+/// Backend-neutral link facts for one compiled module.
+///
+/// WHAT: owns the deduplicated provider-resolved external imports and the effective external
+///       package registry the frontend resolved this module against.
+/// WHY: backends consume one flat list of runtime assets and required imports to emit glue and
+///      copy assets, and validate against the same symbols the frontend resolved. The complete
+///      effective registry is a current dependency carried here until Phase 7 replaces it with
+///      immutable binding interfaces and per-function link facts; it is not itself a per-function
+///      link fact.
+pub(crate) struct ModuleLinkFacts {
+    /// Effective external package registry after provider resolution for this module.
+    ///
+    /// WHY: provider-backed import discovery mutates the registry during Stage 0; the module
+    ///      must carry the effective registry so backends validate and lower against the same
+    ///      symbols the frontend resolved, rather than reconstructing a fresh registry that
+    ///      loses provider-created packages. This is a temporary current dependency; Phase 7
+    ///      narrows it to immutable binding interfaces and per-function link facts.
+    pub(crate) external_package_registry: Arc<ExternalPackageRegistry>,
+    /// Provider-resolved external imports used by this module, deduplicated.
+    ///
+    /// WHY: backends need a flat list of runtime assets and required imports to emit glue
+    ///      and copy assets, without carrying the full per-source-file resolution table.
+    pub(crate) module_external_imports: Vec<ModuleExternalImport>,
+}
+
 /// Non-HIR compiler and builder-facing metadata for one compiled module.
 ///
-/// WHAT: owns the module warnings, resolved const top-level fragments, header-derived root
-///       activity, resolved documentation fragments, and rendered-path usages.
-/// WHY: these are compiler-metadata lanes, not executable HIR state. Consolidating them into one
-///      owned lane on the `Module` payload keeps HIR limited to executable/semantic IR and gives
-///      string-ID remapping, warning collection, and tracked-asset planning a single owner.
+/// WHAT: owns the resolved root-local entry path, module warnings, resolved const top-level
+///       fragments, header-derived root activity, resolved documentation fragments, and
+///       rendered-path usages.
+/// WHY: these are compiler-metadata lanes, not executable HIR state or link facts. Consolidating
+///      them into one owned lane on the `Module` payload keeps HIR limited to executable/semantic
+///      IR and gives string-ID remapping, warning collection, and tracked-asset planning a single
+///      owner. The architecture assigns resolved root-local entry metadata to this lane.
 pub(crate) struct ModuleCompilerMetadata {
+    /// Canonical entry file for the compiled module.
+    pub(crate) entry_point: PathBuf,
     pub(crate) warnings: Vec<CompilerDiagnostic>,
     pub(crate) const_top_level_fragments: Vec<ResolvedConstFragment>,
     pub(crate) root_activity: ModuleRootActivity,
@@ -110,12 +164,14 @@ pub(crate) struct ModuleCompilerMetadata {
 
 impl ModuleCompilerMetadata {
     pub(crate) fn from_hir_lowering(
+        entry_point: PathBuf,
         warnings: Vec<CompilerDiagnostic>,
         lowering_metadata: HirLoweringMetadata,
         const_top_level_fragments: Vec<ResolvedConstFragment>,
         root_activity: ModuleRootActivity,
     ) -> Self {
         Self {
+            entry_point,
             warnings,
             doc_fragments: lowering_metadata.doc_fragments,
             rendered_path_usages: lowering_metadata.rendered_path_usages,
@@ -127,8 +183,8 @@ impl ModuleCompilerMetadata {
     /// Remap interned string IDs after string-table merging.
     ///
     /// WHY: warnings, documentation locations, and rendered-path interned fields must all remap
-    ///      exactly once. Const fragment rendered text is already a resolved `String` and root
-    ///      activity carries no interned fields.
+    ///      exactly once. Const fragment rendered text is already a resolved `String`, root
+    ///      activity carries no interned fields, and the entry path is a `PathBuf`.
     pub(crate) fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         for warning in &mut self.warnings {
             warning.remap_string_ids(remap);
@@ -149,41 +205,27 @@ impl ModuleCompilerMetadata {
 
 /// Frontend output for one module root ready for backend lowering.
 ///
-/// WHAT: bundles typed HIR plus borrow-analysis facts and warnings for a module entry file.
-/// WHY: backends consume one stable module payload shape regardless of project type.
+/// WHAT: a lane container with exactly an executable lane (typed HIR, paired type environment
+///       and borrow facts), a link-facts lane (external imports and the effective registry), and
+///       a compiler-metadata lane (entry path, warnings, fragments, root activity, docs and
+///       rendered paths).
+/// WHY: backends consume one stable module payload shape regardless of project type, with
+///      explicit ownership keeping HIR/type/borrow pairing obvious at call sites.
 pub struct Module {
-    pub(crate) entry_point: PathBuf, // Canonical entry file for the compiled module
-    pub(crate) hir: HirModule,
-    pub(crate) type_environment: TypeEnvironment,
-    pub(crate) borrow_analysis: BorrowCheckReport,
-    /// Non-HIR compiler and builder-facing metadata lane.
+    pub(crate) executable: ModuleExecutable,
+    pub(crate) link_facts: ModuleLinkFacts,
     pub(crate) metadata: ModuleCompilerMetadata,
-    /// Effective external package registry after provider resolution for this module.
-    ///
-    /// WHY: provider-backed import discovery mutates the registry during Stage 0; the module
-    ///      must carry the effective registry so backends validate and lower against the same
-    ///      symbols the frontend resolved, rather than reconstructing a fresh registry that
-    ///      loses provider-created packages.
-    pub(crate) external_package_registry: Arc<ExternalPackageRegistry>,
-    /// Provider-resolved external imports used by this module, deduplicated.
-    ///
-    /// WHY: backends need a flat list of runtime assets and required imports to emit glue
-    ///      and copy assets, without carrying the full per-source-file resolution table.
-    pub(crate) module_external_imports: Vec<ModuleExternalImport>,
 }
 
 impl Module {
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         increment_frontend_counter(FrontendCounter::ModuleRemapStringIdsCalls);
 
-        self.hir.remap_string_ids(remap);
-        self.type_environment.remap_string_ids(remap);
-
+        self.executable.remap_string_ids(remap);
         self.metadata.remap_string_ids(remap);
 
-        // BorrowCheckReport contains only HIR IDs (no StringIds).
-        // ResolvedConstFragment.rendered_text is already a String.
-        // entry_point is a PathBuf.
+        // Link facts carry no interned StringIds: external import metadata uses resolved
+        // runtime asset identities and package IDs.
     }
 }
 

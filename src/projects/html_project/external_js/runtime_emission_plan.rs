@@ -2,7 +2,7 @@
 //!
 //! WHAT: collects all JS runtime assets and required runtime module specifiers from
 //!       a compiled module slice in a single deterministic pass.
-//! WHY: avoids repeated scans of `Module::module_external_imports` across separate
+//! WHY: avoids repeated scans of `Module::link_facts.module_external_imports` across separate
 //!      emission helpers, and gives `HtmlProjectBuilder` a named build-level plan step
 //!      that stays separate from per-module glue generation.
 //!
@@ -33,7 +33,7 @@ pub(crate) struct HtmlExternalRuntimeEmissionPlan {
 impl HtmlExternalRuntimeEmissionPlan {
     /// Build an emission plan from the compiled modules selected for artifact emission.
     ///
-    /// WHAT: scans each module's `module_external_imports` once to collect:
+    /// WHAT: scans each module's link-facts `module_external_imports` once to collect:
     ///       - JS runtime assets by canonical source path;
     ///       - runtime module specifiers from `required_runtime_imports`.
     /// WHY: deterministic deduplication in one pass avoids redundant iteration later.
@@ -42,7 +42,7 @@ impl HtmlExternalRuntimeEmissionPlan {
         let mut runtime_module_specifiers = BTreeSet::new();
 
         for module in modules {
-            for external_import in &module.module_external_imports {
+            for external_import in &module.link_facts.module_external_imports {
                 if let Some(asset) = &external_import.runtime_asset
                     && asset.asset_kind == "js"
                 {

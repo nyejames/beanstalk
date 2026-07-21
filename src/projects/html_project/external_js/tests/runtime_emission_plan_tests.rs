@@ -14,7 +14,7 @@ use std::path::PathBuf;
 fn plan_collects_js_assets_by_canonical_path() {
     let mut string_table = StringTable::new();
     let mut module = create_test_module(PathBuf::from("#page.bst"), &mut string_table);
-    module.module_external_imports = vec![ModuleExternalImport {
+    module.link_facts.module_external_imports = vec![ModuleExternalImport {
         package_id: ExternalPackageId(1),
         runtime_asset: Some(RuntimeAssetIdentity {
             canonical_source_path: PathBuf::from("/project/lib.js"),
@@ -36,7 +36,7 @@ fn plan_collects_js_assets_by_canonical_path() {
 fn plan_ignores_non_js_assets() {
     let mut string_table = StringTable::new();
     let mut module = create_test_module(PathBuf::from("#page.bst"), &mut string_table);
-    module.module_external_imports = vec![ModuleExternalImport {
+    module.link_facts.module_external_imports = vec![ModuleExternalImport {
         package_id: ExternalPackageId(1),
         runtime_asset: Some(RuntimeAssetIdentity {
             canonical_source_path: PathBuf::from("/project/lib.css"),
@@ -54,7 +54,7 @@ fn plan_ignores_non_js_assets() {
 fn plan_collects_runtime_module_specifiers() {
     let mut string_table = StringTable::new();
     let mut module = create_test_module(PathBuf::from("#page.bst"), &mut string_table);
-    module.module_external_imports = vec![ModuleExternalImport {
+    module.link_facts.module_external_imports = vec![ModuleExternalImport {
         package_id: ExternalPackageId(1),
         runtime_asset: None,
         required_runtime_imports: vec![RequiredRuntimeImport {
@@ -76,7 +76,7 @@ fn plan_collects_runtime_module_specifiers() {
 fn plan_dedupes_js_assets_across_modules() {
     let mut string_table = StringTable::new();
     let mut module_a = create_test_module(PathBuf::from("#page.bst"), &mut string_table);
-    module_a.module_external_imports = vec![ModuleExternalImport {
+    module_a.link_facts.module_external_imports = vec![ModuleExternalImport {
         package_id: ExternalPackageId(1),
         runtime_asset: Some(RuntimeAssetIdentity {
             canonical_source_path: PathBuf::from("/project/lib.js"),
@@ -86,7 +86,7 @@ fn plan_dedupes_js_assets_across_modules() {
     }];
 
     let mut module_b = create_test_module(PathBuf::from("docs/#page.bst"), &mut string_table);
-    module_b.module_external_imports = vec![ModuleExternalImport {
+    module_b.link_facts.module_external_imports = vec![ModuleExternalImport {
         package_id: ExternalPackageId(2),
         runtime_asset: Some(RuntimeAssetIdentity {
             canonical_source_path: PathBuf::from("/project/lib.js"),
@@ -104,7 +104,7 @@ fn plan_dedupes_js_assets_across_modules() {
 fn plan_dedupes_runtime_specifiers_across_modules() {
     let mut string_table = StringTable::new();
     let mut module_a = create_test_module(PathBuf::from("#page.bst"), &mut string_table);
-    module_a.module_external_imports = vec![ModuleExternalImport {
+    module_a.link_facts.module_external_imports = vec![ModuleExternalImport {
         package_id: ExternalPackageId(1),
         runtime_asset: None,
         required_runtime_imports: vec![RequiredRuntimeImport {
@@ -114,7 +114,7 @@ fn plan_dedupes_runtime_specifiers_across_modules() {
     }];
 
     let mut module_b = create_test_module(PathBuf::from("docs/#page.bst"), &mut string_table);
-    module_b.module_external_imports = vec![ModuleExternalImport {
+    module_b.link_facts.module_external_imports = vec![ModuleExternalImport {
         package_id: ExternalPackageId(2),
         runtime_asset: None,
         required_runtime_imports: vec![RequiredRuntimeImport {

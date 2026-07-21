@@ -21,7 +21,7 @@ use std::path::Path;
 pub(super) fn build_import_map_html(module: &Module, html_output_path: &Path) -> Option<String> {
     let mut entries: Vec<(String, String)> = Vec::new();
 
-    for external_import in &module.module_external_imports {
+    for external_import in &module.link_facts.module_external_imports {
         for runtime_import in &external_import.required_runtime_imports {
             let runtime_path = runtime_module_output_path(&runtime_import.module_name);
             let relative = relative_url_path(html_output_path, &runtime_path);

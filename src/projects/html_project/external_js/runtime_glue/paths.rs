@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 
 /// Deterministic output path for a module's glue ES module.
 pub(super) fn glue_module_output_path(module: &Module) -> PathBuf {
-    let entry_hash = stable_path_hash_hex(&module.entry_point);
+    let entry_hash = stable_path_hash_hex(&module.metadata.entry_point);
     PathBuf::from("_beanstalk/js/glue").join(format!("module-{entry_hash}.js"))
 }
 

@@ -6,7 +6,8 @@
 //!      live in one place instead of being redefined in every test file.
 
 use crate::build_system::build::{
-    FileKind, Module, ModuleCompilerMetadata, ModuleRootActivity, OutputFile,
+    FileKind, Module, ModuleCompilerMetadata, ModuleExecutable, ModuleLinkFacts,
+    ModuleRootActivity, OutputFile,
 };
 use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
@@ -74,11 +75,17 @@ pub(crate) fn create_test_module(entry_point: PathBuf, string_table: &mut String
     );
 
     Module {
-        entry_point,
-        hir: hir_module,
-        type_environment: TypeEnvironment::new(),
-        borrow_analysis: BorrowCheckReport::default(),
+        executable: ModuleExecutable {
+            hir: hir_module,
+            type_environment: TypeEnvironment::new(),
+            borrow_analysis: BorrowCheckReport::default(),
+        },
+        link_facts: ModuleLinkFacts {
+            external_package_registry: Arc::new(ExternalPackageRegistry::new()),
+            module_external_imports: vec![],
+        },
         metadata: ModuleCompilerMetadata {
+            entry_point,
             warnings: vec![],
             const_top_level_fragments: vec![],
             // Most builder fixtures represent active page roots. API-only modules opt into the
@@ -90,8 +97,6 @@ pub(crate) fn create_test_module(entry_point: PathBuf, string_table: &mut String
             doc_fragments: vec![],
             rendered_path_usages: vec![],
         },
-        external_package_registry: Arc::new(ExternalPackageRegistry::new()),
-        module_external_imports: vec![],
     }
 }
 

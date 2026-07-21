@@ -309,21 +309,21 @@ impl BackendBuilder for MultiModuleDiagnosticBuilder {
     ) -> Result<Project, CompilerMessages> {
         let homepage = modules
             .iter()
-            .find(|module| module.entry_point.ends_with("src/#page.bst"))
+            .find(|module| module.metadata.entry_point.ends_with("src/#page.bst"))
             .expect("directory build should discover homepage module");
         let docs_page = modules
             .iter()
-            .find(|module| module.entry_point.ends_with("src/docs/#page.bst"))
+            .find(|module| module.metadata.entry_point.ends_with("src/docs/#page.bst"))
             .expect("directory build should discover docs module");
 
         let warning = unused_variable_warning(
             string_table.get_or_intern("x".to_string()),
-            SourceLocation::from_path(&docs_page.entry_point, string_table),
+            SourceLocation::from_path(&docs_page.metadata.entry_point, string_table),
         );
         let error = unknown_name_error(
             string_table.get_or_intern("homepage diagnostic".to_string()),
             NameNamespace::Value,
-            SourceLocation::from_path(&homepage.entry_point, string_table),
+            SourceLocation::from_path(&homepage.metadata.entry_point, string_table),
         );
 
         Err(CompilerMessages::from_diagnostics(
@@ -354,3 +354,4 @@ mod build_directive_tests;
 mod build_import_tests;
 mod build_infrastructure_tests;
 mod build_orchestration_tests;
+mod module_lane_tests;

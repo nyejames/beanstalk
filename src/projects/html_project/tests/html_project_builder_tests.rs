@@ -288,7 +288,7 @@ fn js_runtime_asset_emitted_verbatim() {
     let mut string_table = StringTable::new();
 
     let mut module = create_test_module(canonical_root.join("#page.bst"), &mut string_table);
-    module.module_external_imports = vec![ModuleExternalImport {
+    module.link_facts.module_external_imports = vec![ModuleExternalImport {
         package_id: ExternalPackageId(1),
         runtime_asset: Some(RuntimeAssetIdentity {
             canonical_source_path: canonical_root.join("src/lib.js"),
@@ -330,7 +330,7 @@ fn js_runtime_asset_deduped_across_modules() {
     let mut string_table = StringTable::new();
 
     let mut module_a = create_test_module(canonical_root.join("#page.bst"), &mut string_table);
-    module_a.module_external_imports = vec![ModuleExternalImport {
+    module_a.link_facts.module_external_imports = vec![ModuleExternalImport {
         package_id: ExternalPackageId(1),
         runtime_asset: Some(RuntimeAssetIdentity {
             canonical_source_path: canonical_root.join("src/lib.js"),
@@ -340,7 +340,7 @@ fn js_runtime_asset_deduped_across_modules() {
     }];
 
     let mut module_b = create_test_module(canonical_root.join("docs/#page.bst"), &mut string_table);
-    module_b.module_external_imports = vec![ModuleExternalImport {
+    module_b.link_facts.module_external_imports = vec![ModuleExternalImport {
         package_id: ExternalPackageId(1),
         runtime_asset: Some(RuntimeAssetIdentity {
             canonical_source_path: canonical_root.join("src/lib.js"),
@@ -379,7 +379,7 @@ fn js_runtime_assets_with_same_stem_get_distinct_output_paths() {
     let mut string_table = StringTable::new();
 
     let mut module = create_test_module(canonical_root.join("#page.bst"), &mut string_table);
-    module.module_external_imports = vec![
+    module.link_facts.module_external_imports = vec![
         ModuleExternalImport {
             package_id: ExternalPackageId(1),
             runtime_asset: Some(RuntimeAssetIdentity {
@@ -428,7 +428,7 @@ fn non_js_runtime_asset_is_ignored() {
     let mut string_table = StringTable::new();
 
     let mut module = create_test_module(canonical_root.join("#page.bst"), &mut string_table);
-    module.module_external_imports = vec![ModuleExternalImport {
+    module.link_facts.module_external_imports = vec![ModuleExternalImport {
         package_id: ExternalPackageId(1),
         runtime_asset: Some(RuntimeAssetIdentity {
             canonical_source_path: canonical_root.join("src/lib.css"),
@@ -531,7 +531,7 @@ fn directory_build_skips_api_only_sibling_from_all_artifact_planning() {
     let homepage = create_test_module(entry_root.join("#home.bst"), &mut string_table);
     let mut api_only = create_test_module(entry_root.join("api/#api.bst"), &mut string_table);
     api_only.metadata.root_activity = ModuleRootActivity::default();
-    api_only.module_external_imports = vec![ModuleExternalImport {
+    api_only.link_facts.module_external_imports = vec![ModuleExternalImport {
         package_id: ExternalPackageId(1),
         runtime_asset: Some(RuntimeAssetIdentity {
             canonical_source_path: entry_root.join("missing-runtime.js"),

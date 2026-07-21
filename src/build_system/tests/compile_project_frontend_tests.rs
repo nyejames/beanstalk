@@ -209,7 +209,7 @@ fn builder_surface_with_dummy_js_provider(calls: Arc<AtomicUsize>) -> BuilderSur
 }
 
 fn module_contains_external_call(module: &crate::build_system::build::Module) -> bool {
-    module.hir.blocks.iter().any(|block| {
+    module.executable.hir.blocks.iter().any(|block| {
         block.statements.iter().any(|statement| {
             matches!(
                 &statement.kind,
@@ -226,7 +226,7 @@ fn module_contains_external_module_export(
     module: &crate::build_system::build::Module,
     export_name: &str,
 ) -> bool {
-    module.hir.blocks.iter().any(|block| {
+    module.executable.hir.blocks.iter().any(|block| {
         block.statements.iter().any(|statement| {
             let HirStatementKind::Call {
                 target: CallTarget::ExternalFunction(function_id),
@@ -237,6 +237,7 @@ fn module_contains_external_module_export(
             };
 
             module
+                .link_facts
                 .external_package_registry
                 .get_function_by_id(*function_id)
                 .and_then(|definition| definition.lowerings.js.as_ref())
@@ -378,12 +379,13 @@ fn provider_created_package_registry_survives_into_module() {
     let module = modules.into_iter().next().expect("expected one module");
 
     assert!(
-        !module.module_external_imports.is_empty(),
+        !module.link_facts.module_external_imports.is_empty(),
         "module should carry provider external imports"
     );
 
-    for import in &module.module_external_imports {
+    for import in &module.link_facts.module_external_imports {
         let package = module
+            .link_facts
             .external_package_registry
             .get_package_by_id(import.package_id)
             .expect(
@@ -442,12 +444,14 @@ fn provider_runtime_assets_deduped_for_repeated_imports() {
         "same canonical JS file should be resolved through the provider cache once"
     );
     assert_eq!(
-        module.module_external_imports.len(),
+        module.link_facts.module_external_imports.len(),
         1,
         "same JS file imported twice should produce one deduped module external import"
     );
     assert!(
-        module.module_external_imports[0].runtime_asset.is_some(),
+        module.link_facts.module_external_imports[0]
+            .runtime_asset
+            .is_some(),
         "deduped import should carry runtime asset"
     );
 
@@ -495,7 +499,7 @@ fn provider_runtime_metadata_ignores_unreachable_external_calls() {
         "HIR should keep the unreachable function body and provider package metadata"
     );
     assert!(
-        module.module_external_imports.is_empty(),
+        module.link_facts.module_external_imports.is_empty(),
         "module runtime metadata should ignore provider packages reached only by unreachable calls"
     );
 
@@ -536,6 +540,7 @@ fn builder_runtime_metadata_ignores_unreachable_source_package_wrappers() {
     let module = modules.into_iter().next().expect("expected one module");
     assert!(
         module
+            .link_facts
             .external_package_registry
             .get_package_by_id(canvas_package_id)
             .is_some(),
@@ -543,6 +548,7 @@ fn builder_runtime_metadata_ignores_unreachable_source_package_wrappers() {
     );
     assert!(
         module
+            .link_facts
             .module_external_imports
             .iter()
             .all(|import| import.package_id != canvas_package_id),
@@ -622,26 +628,37 @@ fn single_file_remaps_module_type_environment_nominal_fields() {
     let point_path = InternedPath::from_single_str("test.bst", &mut string_table)
         .join_str("Point", &mut string_table);
     let nominal_id = module
+        .executable
         .type_environment
         .nominal_id_for_path(&point_path)
         .expect("Point nominal path should be remapped into build string table");
     let point_type_id = module
+        .executable
         .type_environment
         .type_id_for_nominal_id(nominal_id)
         .expect("Point nominal type id should be registered");
 
     assert_eq!(
-        display_type(point_type_id, &module.type_environment, &string_table),
+        display_type(
+            point_type_id,
+            &module.executable.type_environment,
+            &string_table
+        ),
         "Point"
     );
     let fields = module
+        .executable
         .type_environment
         .fields_for(point_type_id)
         .expect("Point fields should resolve through remapped TypeEnvironment");
     assert_eq!(fields.len(), 1);
     assert_eq!(fields[0].name.name_str(&string_table), Some("value"));
     assert_eq!(
-        display_type(fields[0].type_id, &module.type_environment, &string_table),
+        display_type(
+            fields[0].type_id,
+            &module.executable.type_environment,
+            &string_table
+        ),
         "Int"
     );
 
@@ -822,6 +839,7 @@ fn directory_project_remaps_delta_collisions_across_modules() {
         .iter()
         .find(|module| {
             module
+                .metadata
                 .entry_point
                 .file_name()
                 .and_then(|name| name.to_str())
@@ -833,14 +851,17 @@ fn directory_project_remaps_delta_collisions_across_modules() {
             .expect("test path should be UTF-8")
             .join_str("Item", &mut string_table);
     let nominal_id = second_module
+        .executable
         .type_environment
         .nominal_id_for_path(&item_path)
         .expect("Item nominal path should be remapped for the second module");
     let item_type_id = second_module
+        .executable
         .type_environment
         .type_id_for_nominal_id(nominal_id)
         .expect("Item nominal type should be registered");
     let fields = second_module
+        .executable
         .type_environment
         .fields_for(item_type_id)
         .expect("Item fields should resolve through remapped TypeEnvironment");
@@ -850,7 +871,11 @@ fn directory_project_remaps_delta_collisions_across_modules() {
         .collect::<Vec<_>>();
 
     assert_eq!(
-        display_type(item_type_id, &second_module.type_environment, &string_table),
+        display_type(
+            item_type_id,
+            &second_module.executable.type_environment,
+            &string_table
+        ),
         "Item"
     );
     assert_eq!(field_names, vec![Some("shared"), Some("second_only")]);
@@ -1335,7 +1360,7 @@ fn html_js_provider_repeated_imports_reuse_cache() {
     let module = modules.into_iter().next().expect("expected one module");
 
     assert_eq!(
-        module.module_external_imports.len(),
+        module.link_facts.module_external_imports.len(),
         1,
         "same JS file imported twice should produce one deduped module external import"
     );

@@ -3,7 +3,9 @@
 //! WHAT: runs full frontend entrypoints and asserts borrow-check failures surface through them.
 //! WHY: the borrow checker is only useful if orchestration preserves and reports its diagnostics.
 
-use crate::build_system::build::{Module, ModuleCompilerMetadata, ModuleRootActivity};
+use crate::build_system::build::{
+    Module, ModuleCompilerMetadata, ModuleExecutable, ModuleLinkFacts, ModuleRootActivity,
+};
 use crate::compiler_frontend::CompilerFrontend;
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
@@ -136,24 +138,57 @@ fn successful_borrow_report_can_be_stored_on_module() {
         .expect("borrow checking should pass");
 
     let module = Module {
-        entry_point: std::path::PathBuf::from("main.bst"),
-        hir,
-        type_environment: crate::compiler_frontend::datatypes::environment::TypeEnvironment::new(),
-        borrow_analysis,
+        executable: ModuleExecutable {
+            hir,
+            type_environment:
+                crate::compiler_frontend::datatypes::environment::TypeEnvironment::new(),
+            borrow_analysis,
+        },
+        link_facts: ModuleLinkFacts {
+            external_package_registry: Arc::clone(&external_package_registry),
+            module_external_imports: Vec::new(),
+        },
         metadata: ModuleCompilerMetadata {
+            entry_point: std::path::PathBuf::from("main.bst"),
             warnings: Vec::new(),
             const_top_level_fragments: Vec::new(),
             root_activity: ModuleRootActivity::default(),
             doc_fragments: Vec::new(),
             rendered_path_usages: Vec::new(),
         },
-        external_package_registry: Arc::clone(&external_package_registry),
-        module_external_imports: Vec::new(),
     };
 
-    assert!(module.borrow_analysis.stats.functions_analyzed >= 1);
-    assert!(module.borrow_analysis.analysis.total_state_snapshots() >= 1);
-    assert!(!module.borrow_analysis.analysis.statement_facts.is_empty());
-    assert!(!module.borrow_analysis.analysis.terminator_facts.is_empty());
-    assert!(!module.borrow_analysis.analysis.value_facts.is_empty());
+    assert!(module.executable.borrow_analysis.stats.functions_analyzed >= 1);
+    assert!(
+        module
+            .executable
+            .borrow_analysis
+            .analysis
+            .total_state_snapshots()
+            >= 1
+    );
+    assert!(
+        !module
+            .executable
+            .borrow_analysis
+            .analysis
+            .statement_facts
+            .is_empty()
+    );
+    assert!(
+        !module
+            .executable
+            .borrow_analysis
+            .analysis
+            .terminator_facts
+            .is_empty()
+    );
+    assert!(
+        !module
+            .executable
+            .borrow_analysis
+            .analysis
+            .value_facts
+            .is_empty()
+    );
 }
