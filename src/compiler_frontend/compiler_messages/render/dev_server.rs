@@ -80,19 +80,6 @@ fn render_source_frame(
 }
 
 #[cfg(test)]
-use crate::compiler_frontend::symbols::string_interning::StringTable;
-#[cfg(test)]
-#[allow(dead_code)]
-pub(crate) fn render_diagnostics_html(
-    diagnostics: &[CompilerDiagnostic],
-    project_root: &Path,
-    string_table: &StringTable,
-) -> String {
-    let context = DiagnosticRenderContext::new(string_table);
-    render_diagnostics_html_with_context(diagnostics, project_root, context)
-}
-
-#[cfg(test)]
 pub(crate) fn render_diagnostics_html_with_context(
     diagnostics: &[CompilerDiagnostic],
     project_root: &Path,
