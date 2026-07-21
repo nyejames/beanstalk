@@ -140,6 +140,8 @@ fn discover_modules_for_test(
         &crate::builder_surface::SourceFileKindRegistry::default(),
         &mut string_table,
     )?;
+    let project_module_graph =
+        super::project_module_graph::ProjectModuleGraph::from_source_tree_index(&source_tree_index);
     let mut external_packages = ExternalPackageRegistry::new();
     let external_import_providers =
         crate::builder_surface::external_import_providers::registry::ExternalImportProviderRegistry::empty();
@@ -157,7 +159,7 @@ fn discover_modules_for_test(
     discover_all_modules_in_project(
         config,
         resolver,
-        &source_tree_index,
+        &project_module_graph,
         style_directives,
         &mut external_imports,
         &mut string_table,
@@ -182,6 +184,8 @@ fn discover_modules_for_test_with_providers(
         &crate::builder_surface::SourceFileKindRegistry::default(),
         &mut string_table,
     )?;
+    let project_module_graph =
+        super::project_module_graph::ProjectModuleGraph::from_source_tree_index(&source_tree_index);
     let mut external_packages = ExternalPackageRegistry::new();
     let mut external_import_cache =
         crate::builder_surface::external_import_providers::cache::ExternalImportProviderCache::new(
@@ -198,7 +202,7 @@ fn discover_modules_for_test_with_providers(
     discover_all_modules_in_project(
         config,
         resolver,
-        &source_tree_index,
+        &project_module_graph,
         style_directives,
         &mut external_imports,
         &mut string_table,
@@ -303,8 +307,14 @@ fn source_tree_index_collects_one_scan_and_applies_skip_policy() {
     .expect("source tree index should build");
 
     assert_eq!(index.entry_root(), canonical_entry_root);
-    assert_eq!(index.entry_candidates().len(), 2);
-    assert!(index.entry_candidates()[0].ends_with("#home.bst"));
+    let graph = super::project_module_graph::ProjectModuleGraph::from_source_tree_index(&index);
+    let entry_root_files: Vec<PathBuf> = graph
+        .entry_modules()
+        .iter()
+        .map(|module_id| graph.node(*module_id).root_file().to_path_buf())
+        .collect();
+    assert_eq!(entry_root_files.len(), 2);
+    assert!(entry_root_files[0].ends_with("#home.bst"));
     assert_eq!(index.stats().dirs_visited, 2);
     assert_eq!(index.stats().dirs_skipped, 10);
     assert_eq!(index.stats().files_seen, 3);
@@ -362,7 +372,8 @@ fn source_tree_index_ignores_collision_in_fixed_skipped_directory() {
     )
     .expect("fixed-skipped collision-shaped inputs must not trigger collision diagnostics");
 
-    assert_eq!(index.entry_candidates().len(), 2);
+    let graph = super::project_module_graph::ProjectModuleGraph::from_source_tree_index(&index);
+    assert_eq!(graph.entry_modules().len(), 2);
     assert_eq!(index.stats().dirs_skipped, 1);
 
     fs::remove_dir_all(&root).expect("should remove temp root");

@@ -7,6 +7,7 @@
 //! - `root_validation`          — source-backed package generic hash-root preflight
 //! - `source_tree_index`        — one directory-project source-tree traversal with collision checks
 //! - `module_identity`          — Stage 0 durable module identity and structural topology
+//! - `project_module_graph`      — canonical structural project module graph and compile order
 //! - `module_inventory`         — project-level module assembly
 //! - `prepared_source`          — state-safe retained source and token inputs
 //! - `prepared_module`          — retained module-preparation payload handed to semantic compilation
@@ -27,6 +28,7 @@ mod module_identity;
 mod module_inventory;
 mod prepared_module;
 mod prepared_source;
+mod project_module_graph;
 mod project_roots;
 mod project_structure_diagnostics;
 mod reachable_file_discovery;

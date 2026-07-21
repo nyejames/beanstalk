@@ -205,17 +205,16 @@ impl OwnedSourceSet {
     }
 }
 
-/// Canonical module identities, root entry candidates and traversal evidence for one directory
-/// build.
+/// Canonical module identities and traversal evidence for one directory build.
 ///
-/// `module_identities` is the Stage 0 durable identity and topology table. `module_roots` is the
-/// narrow frontend normal-root lookup table derived from it for current resolver consumers.
+/// `module_identities` is the Stage 0 durable identity and topology table; the project module
+/// graph built from it owns normal entry classification and compile-wave scheduling. `module_roots`
+/// is the narrow frontend normal-root lookup table derived from it for current resolver consumers.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct SourceTreeIndex {
     entry_root: PathBuf,
     module_identities: ModuleIdentityTable,
     module_roots: ModuleRootTable,
-    entry_candidates: Vec<PathBuf>,
     owned_source_sets: Vec<OwnedSourceSet>,
     unrooted_candidates: Vec<DiscoveredSourceCandidate>,
     stats: SourceTreeDiscoveryStats,
@@ -232,9 +231,10 @@ impl SourceTreeIndex {
     ///
     /// Each source directory may contain one `#*.bst` normal root or one `+*.bst` support root.
     /// Multiple or mixed roots in one directory are rejected through the existing structured config
-    /// diagnostic lane. Only normal roots become entry candidates. The optional project-root
-    /// `+*.bst` facade beside `config.bst` is discovered as a separate `ProjectPackageFacade`
-    /// node outside the entry-root containment tree and is never an entry candidate.
+    /// diagnostic lane. Normal roots carry the `Normal` role used by the project module graph to
+    /// classify entry modules; the graph, not this index, owns entry selection. The optional
+    /// project-root `+*.bst` facade beside `config.bst` is discovered as a separate
+    /// `ProjectPackageFacade` node outside the entry-root containment tree and is never an entry.
     ///
     /// The same traversal inventories every builder-supported source candidate (`.bst` always,
     /// plus the `.bd`/`.md` kinds the selected builder registered). Unknown extensions and
@@ -263,7 +263,6 @@ impl SourceTreeIndex {
         let mut stats = SourceTreeDiscoveryStats::default();
         let mut queue = VecDeque::from([entry_root.clone()]);
         let mut records = Vec::new();
-        let mut entry_candidates = Vec::new();
         let mut supported_candidates: Vec<DiscoveredSourceCandidate> = Vec::new();
 
         let facade_root_file =
@@ -454,10 +453,6 @@ impl SourceTreeIndex {
                 let logical_module_path =
                     logical_module_path_from(&canonical_root_directory, &entry_root, string_table)?;
 
-                if root.role == ModuleRootRole::Normal {
-                    entry_candidates.push(root.root_file.clone());
-                }
-
                 stats.module_roots_found += 1;
                 records.push(
                     ModuleIdentityRecord::new(
@@ -499,7 +494,6 @@ impl SourceTreeIndex {
         }
 
         record_discovery_metrics(&stats, discovery_start);
-        entry_candidates.sort();
 
         let module_identities = ModuleIdentityTable::from_records(records);
         let module_roots = module_identities.derive_module_root_table();
@@ -517,7 +511,6 @@ impl SourceTreeIndex {
             entry_root,
             module_identities,
             module_roots,
-            entry_candidates,
             owned_source_sets,
             unrooted_candidates,
             stats,
@@ -580,15 +573,10 @@ impl SourceTreeIndex {
 
     /// The Stage 0 durable module identity and topology table.
     ///
-    /// Consumed by later graph-construction phases (Phase 5) and by focused tests; the narrow
-    /// frontend lookup table is available through [`SourceTreeIndex::module_roots`].
-    #[allow(dead_code)]
+    /// Consumed by the project module graph (built in `project_roots`) and by focused tests; the
+    /// narrow frontend lookup table is available through [`SourceTreeIndex::module_roots`].
     pub(crate) fn module_identities(&self) -> &ModuleIdentityTable {
         &self.module_identities
-    }
-
-    pub(crate) fn entry_candidates(&self) -> &[PathBuf] {
-        &self.entry_candidates
     }
 
     /// One deterministic [`OwnedSourceSet`] per canonical module, indexed by `ModuleId`.
@@ -604,7 +592,8 @@ impl SourceTreeIndex {
     }
 
     /// The owned supported-source set for one module.
-    #[allow(dead_code)]
+    ///
+    /// Consumed by the project module graph (built in `project_roots`) and by focused tests.
     pub(crate) fn owned_source_set(&self, module_id: ModuleId) -> &OwnedSourceSet {
         &self.owned_source_sets[module_id.index()]
     }

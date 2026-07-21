@@ -498,7 +498,7 @@ pub(crate) fn compile_directory_frontend(
     let discovered_modules = match module_inventory::discover_all_modules_in_project(
         config,
         &project_path_resolver,
-        &project_setup.source_tree_index,
+        &project_setup.project_module_graph,
         style_directives,
         &mut external_imports,
         string_table,

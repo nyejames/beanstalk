@@ -1,9 +1,13 @@
 //! Project root and path-resolver setup for Stage 0.
 //!
 //! WHAT: interprets config paths, canonicalizes the project/entry roots, wires source-backed package
-//! discovery, and constructs the shared `ProjectPathResolver`.
+//! discovery, constructs the shared `ProjectPathResolver`, and builds the canonical
+//! `ProjectModuleGraph` that owns entry classification and compile-wave scheduling for the rest
+//! of Stage 0.
 //! WHY: config path interpretation is build-system input preparation, while the frontend path
-//! resolver should focus on resolving already-established project roots.
+//! resolver should focus on resolving already-established project roots. The graph is built once
+//! from the single source-tree traversal so entry classification and dependency ordering have one
+//! structural owner instead of a parallel entry-candidate path.
 
 use crate::builder_surface::{SourceFileKindRegistry, SourcePackageRegistry};
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
@@ -16,6 +20,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use super::collision_detection::validate_source_package_tree_collisions;
+use super::project_module_graph::ProjectModuleGraph;
 use super::project_structure_diagnostics::{config_diagnostic_messages, path_id};
 use super::root_validation::validate_source_package_roots;
 use super::source_package_discovery::{
@@ -29,10 +34,15 @@ pub(super) struct ProjectRootResolution {
     pub(super) entry_root: PathBuf,
 }
 
-/// Canonical directory-project roots plus the one Stage 0 source-tree index built from them.
+/// Canonical directory-project roots plus the canonical project module graph built from the
+/// single Stage 0 source-tree traversal.
+///
+/// The `SourceTreeIndex` is consumed to build the resolver's module-root table and the graph, then
+/// dropped. The graph is retained as the structural owner of entry classification and compile-wave
+/// scheduling so later Stage 0 steps do not keep a parallel entry-candidate path.
 pub(super) struct ProjectPathResolverSetup {
     pub(super) resolver: ProjectPathResolver,
-    pub(super) source_tree_index: SourceTreeIndex,
+    pub(super) project_module_graph: ProjectModuleGraph,
 }
 
 /// Build only the resolver for callers that don't need the directory module inventory.
@@ -99,9 +109,15 @@ pub(super) fn build_project_path_resolver_with_index(
 
     validate_source_package_tree_collisions(&merged_packages, string_table)?;
 
+    // Build the canonical project module graph directly from the single source-tree traversal.
+    // The graph consumes the index's identity table and owned source sets rather than recomputing
+    // them, so the index can be dropped after this point: later Stage 0 steps retain the graph as
+    // the structural owner of entry classification and compile-wave scheduling.
+    let project_module_graph = ProjectModuleGraph::from_source_tree_index(&source_tree_index);
+
     Ok(ProjectPathResolverSetup {
         resolver,
-        source_tree_index,
+        project_module_graph,
     })
 }
 

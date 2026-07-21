@@ -9,32 +9,33 @@ Replace entry-closure compilation with canonical project and package graphs, imm
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/canonical-module-compilation-and-scoped-packages-plan.md
 STATUS: active
-CURRENT_SLICE: Phase 4f accepted; checkpoint commit pending
-LAST_ACCEPTED_COMMIT: 278a1ce21 (Phase 4e retained Stage 0 token streams)
-WORKTREE: main at 278a1ce21 with accepted Phase 4f code, tests, index update and this parent-owned plan update; unrelated user documentation work may appear and must be preserved
+CURRENT_SLICE: Phase 5a accepted; checkpoint commit pending
+LAST_ACCEPTED_COMMIT: c80821e13 (Phase 4f provider-independent retained module syntax)
+WORKTREE: main at c80821e13 with accepted Phase 5a code, tests, index update and this parent-owned plan update; unrelated user documentation work may appear and must be preserved
 REQUIRED_RELOADS: startup files, this plan, relevant language/import and borrow references, current frontend/header source and diff
 RELEVANT_CONTEXT_NOW:
-- docs: compiler-design-overview.md Stage 2 and build-system-design.md Prepared-source orchestration require retained syntax before provider binding with no reparse
-- code: ModulePreparationContext prepares source and produces PreparedModule without provider-interface values; FrontendModuleBuildContext consumes that retained syntax and starts at bind_module_headers
+- docs: build-system-design.md Project and package topology plus Deterministic scheduling define canonical graph nodes, strict support scope, facade placement and deterministic waves
+- code: ProjectModuleGraph is built once from SourceTreeIndex and now owns deterministic nodes, normal entry classification, strict support scopes, dependency edges and compile waves; module inventory consumes its entry/wave order
 ACCEPTANCE_CRITERIA:
-- directory and single-file orchestration run source-file preparation and module-wide prepare_header_syntax before semantic module compilation, then retain the resulting PreparedHeaderSyntax with its deterministic string-table context
-- semantic compilation receives retained PreparedHeaderSyntax and begins with provider-dependent bind_module_headers; it does not receive raw PreparedSourceInput or rerun file preparation
-- warnings, diagnostics, source identities, frontend counters and serial/parallel deterministic merge order remain unchanged
-- config and direct Beandown service keep their appropriate local adjacent preparation/binding paths; no broad compatibility wrapper or duplicate module-preparation path remains
-- the retained shape is suitable for Phase 5 dependency-ordered provider scheduling without introducing the graph early
-- focused tests prove syntax preparation occurs once and binding consumes retained syntax without source/token inputs
+- accepted: one ProjectModuleGraph is built from SourceTreeIndex without another traversal or identity table and retains deterministic identity, topology and source-set facts
+- accepted: normal entries, support roots and the optional facade are classified explicitly; module inventory consumes graph wave order rather than a parallel entry-candidate list
+- accepted: strict support visibility covers the owner, normal sibling branches and strictly outer support scopes while rejecting private descendants, same-scope support siblings and outside modules
+- accepted: dependency insertion is validated and idempotent, compile waves are deterministic and defensive cycles surface as internal graph failures without fake facade edges
+- accepted: focused hidden-invariant tests cover nodes, entries, facade separation, scope boundaries, wave order, duplicate/invalid edges and cycles
 VALIDATION_STATE:
 - Phase 4d just validate: passed; cross-target Clippy, 3419 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases
 - Phase 4e focused validation: passed; 2 import-scanning, 5 reachability, 178 module-discovery, 19 orchestration, 5 token-remap and 116 header tests plus cargo check --tests and git diff --check
 - Phase 4e just validate: passed; cross-target Clippy, 3423 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases (-1ms average)
 - Phase 4f focused validation: passed; 20 orchestration, 25 frontend-compilation, 179 module-discovery and 116 header tests plus cargo check --tests, cargo clippy --tests -D warnings and git diff --check
 - Phase 4f just validate: passed; cross-target Clippy, 3424 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases (-1ms average)
-DOCS_IMPACT: index.md names prepared_module.rs; progress matrix unchanged because support and behavior did not change
-BLOCKERS_OR_OPEN_DECISIONS: none; provider-independent module preparation and retained syntax handoff are accepted
+- Phase 5a focused validation: passed; 9 graph and 188 create-project-modules tests plus cargo check --tests, cargo clippy --tests -D warnings, formatting and git diff --check
+- Phase 5a just validate: passed; cross-target Clippy, 3433 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases (-1ms average)
+DOCS_IMPACT: index.md names ProjectModuleGraph; progress matrix unchanged because provider-edge resolution and canonical module compilation have not landed
+BLOCKERS_OR_OPEN_DECISIONS: none; Phase 5a graph structure and scope semantics are accepted
 DELEGATION_DECISION: ollama - user requires Ollama for every worker slice
 NEXT_WORKER_ORDER: ollama only; no provider substitution for this run
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit Phase 4f, record its hash, then scope Phase 5a deterministic project graph structure and edges
+NEXT_RESUME_ACTION: commit Phase 5a, record its hash, then scope Phase 5b retained provider-reference edge resolution through Ollama
 ```
 
 ## Hard prerequisites
@@ -435,6 +436,22 @@ See `docs/build-system-design.md` "Project and package topology" and "Determinis
 - Validate structural dependency edges and add a defensive cycle validator.
 - Compile support private subtrees before their facade, normal child and support dependencies before consumers, and the project-root facade last.
 - Keep independent branches available for parallel scheduling with deterministic ID assignment, string-table delta merge and diagnostic ordering.
+
+Accepted Phase 5a checkpoint:
+
+- `ProjectModuleGraph` is the canonical Stage 0 structural owner built once from
+  `SourceTreeIndex`; it retains deterministic `ModuleId` nodes, stable origins, root roles and
+  files, nearest ancestry, direct children and owned source sets without another traversal or
+  identity table.
+- normal entry classification, optional facade identity, scoped-support visibility, validated
+  provider-before-consumer edge insertion and deterministic compile waves live on that graph.
+  Strict support scope permits imports from a strictly outer support scope while rejecting
+  private descendants, same-scope support siblings and modules outside the owning normal subtree.
+- module inventory consumes graph entry and wave order, and the old `SourceTreeIndex`
+  `entry_candidates` path was removed. Import-derived edges and dependency-ordered semantic jobs
+  remain Phase 5b.
+- focused graph tests own hidden topology, visibility, ordering and defensive-failure invariants;
+  existing discovery tests consume the production graph entry owner.
 
 ### Phase 6: Add graph outcomes and immutable module artefact lanes
 

@@ -43,12 +43,20 @@ pub(crate) struct ModuleId(usize);
 impl ModuleId {
     /// The build-local table slot index for this module.
     ///
-    /// WHAT: lets Stage 0 owned-source classification and other co-owners index parallel arrays
-    /// that are kept in `ModuleId` order. It is a build-local handle, not a persistent semantic
-    /// identity, so it must not cross build boundaries.
-    #[allow(dead_code)]
+    /// WHAT: lets Stage 0 owned-source classification, the project module graph and other
+    /// co-owners index parallel arrays that are kept in `ModuleId` order. It is a build-local
+    /// handle, not a persistent semantic identity, so it must not cross build boundaries.
     pub(crate) fn index(self) -> usize {
         self.0
+    }
+
+    /// Construct a `ModuleId` from a raw table slot index for focused tests.
+    ///
+    /// WHAT: lets graph tests build out-of-range identities to exercise defensive edge
+    /// validation. Production code receives `ModuleId` values only from the identity table.
+    #[cfg(test)]
+    pub(crate) fn from_index(index: usize) -> ModuleId {
+        ModuleId(index)
     }
 }
 
@@ -108,19 +116,16 @@ impl ModuleIdentityRecord {
         })
     }
 
-    // Phase 2 identity accessors. Consumed by later source-set and graph phases and exercised by
-    // focused tests; allowed dead until the first production consumer lands.
-    #[allow(dead_code)]
+    // Identity accessors consumed by the project module graph (built in `project_roots`), by
+    // owned-source classification and by focused tests.
     pub(crate) fn root_directory(&self) -> &Path {
         &self.root_directory
     }
 
-    #[allow(dead_code)]
     pub(crate) fn root_file(&self) -> &Path {
         &self.root_file
     }
 
-    #[allow(dead_code)]
     pub(crate) fn role(&self) -> ModuleRootRole {
         self.role
     }
@@ -131,7 +136,6 @@ impl ModuleIdentityRecord {
     }
 
     /// The owned cross-build origin identity for this module.
-    #[allow(dead_code)]
     pub(crate) fn stable_origin(&self) -> &StableModuleOriginIdentity {
         &self.stable_origin
     }
@@ -225,13 +229,11 @@ impl ModuleIdentityTable {
     }
 
     /// All module identities in deterministic canonical logical path order.
-    #[allow(dead_code)]
     pub(crate) fn module_ids(&self) -> impl Iterator<Item = ModuleId> + '_ {
         (0..self.records.len()).map(ModuleId)
     }
 
     /// The canonical record for one module identity.
-    #[allow(dead_code)]
     pub(crate) fn record(&self, module_id: ModuleId) -> &ModuleIdentityRecord {
         &self.records[module_id.0]
     }
@@ -274,13 +276,15 @@ impl ModuleIdentityTable {
 
     /// The nearest enclosing non-facade module by directory containment, or `None` for the entry
     /// root or the project package facade.
-    #[allow(dead_code)]
+    ///
+    /// Consumed by the project module graph (built in `project_roots`) and by focused tests.
     pub(crate) fn nearest_ancestor_module(&self, module_id: ModuleId) -> Option<ModuleId> {
         self.nearest_ancestor[module_id.0]
     }
 
     /// Direct child modules whose nearest ancestor is `module_id`, in deterministic order.
-    #[allow(dead_code)]
+    ///
+    /// Consumed by the project module graph (built in `project_roots`) and by focused tests.
     pub(crate) fn direct_child_modules(&self, module_id: ModuleId) -> &[ModuleId] {
         &self.direct_children[module_id.0]
     }

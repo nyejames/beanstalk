@@ -1,9 +1,11 @@
 //! Directory-project module inventory assembly.
 //!
-//! WHAT: turns discovered root entry files into `DiscoveredModule` records containing all
-//! transitively reachable input files.
-//! WHY: module inventory is the Stage 0 bridge between filesystem discovery and parallel
-//! frontend compilation; root setup and source-backed package validation live in sibling modules.
+//! WHAT: turns the canonical project module graph's normal entry modules into `DiscoveredModule`
+//! records containing all transitively reachable input files.
+//! WHY: module inventory is the Stage 0 bridge between the structural graph and parallel frontend
+//! compilation. Entry root paths and deterministic entry order come from the graph's compile
+//! waves so entry classification has one owner; root setup and source-backed package validation
+//! live in sibling modules.
 
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_messages::InvalidConfigReason;
@@ -15,17 +17,19 @@ use crate::projects::settings::Config;
 use rayon::prelude::*;
 use rustc_hash::FxHashMap;
 
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use super::import_scanning::ScannedImportSource;
+use super::module_identity::ModuleId;
 use super::prepared_source::PreparedSourceInput;
+use super::project_module_graph::ProjectModuleGraph;
 use super::project_structure_diagnostics::{config_diagnostic_messages, path_id};
 use super::reachable_file_discovery::{
     ExternalImportDiscoveryState, ProviderFreeDiscoveryFailed, ProviderFreeProjectInventory,
     ReachableSourceInventory, assemble_input_files_from_inventory, classify_provider_free_project,
     collect_reachable_input_files, discover_reachable_source_files_provider_free,
 };
-use super::source_tree_index::SourceTreeIndex;
 
 /// Minimum number of entry modules before the provider-free path uses Rayon.
 ///
@@ -39,16 +43,23 @@ pub(crate) struct DiscoveredModule {
     pub(crate) input_files: Vec<PreparedSourceInput>,
 }
 
-/// Scans the directory project for all root entry files and their reachable dependencies.
+/// Discovers every normal entry module in the directory project and its reachable dependencies.
+///
+/// Entry root paths and deterministic entry order are derived from the project module graph's
+/// compile waves, filtered to normal entry modules. Support roots and the project package facade
+/// are never entries. With no dependency edges inserted yet, compile waves collapse to a single
+/// wave in deterministic `ModuleId` order, so entry order matches the prior path-sorted
+/// entry-candidate order. A defensive graph cycle surfaces through the existing
+/// `CompilerMessages`/string-table diagnostic boundary without panicking.
 pub(crate) fn discover_all_modules_in_project(
     config: &Config,
     project_path_resolver: &ProjectPathResolver,
-    source_tree_index: &SourceTreeIndex,
+    project_module_graph: &ProjectModuleGraph,
     style_directives: &StyleDirectiveRegistry,
     external_imports: &mut ExternalImportDiscoveryState<'_>,
     string_table: &mut StringTable,
 ) -> Result<Vec<DiscoveredModule>, CompilerMessages> {
-    let entry_points = source_tree_index.entry_candidates().to_vec();
+    let entry_points = normal_entry_root_paths_from_graph(project_module_graph, string_table)?;
 
     if entry_points.is_empty() {
         return Err(config_diagnostic_messages(
@@ -121,6 +132,39 @@ pub(crate) fn discover_all_modules_in_project(
         Some(&provider_free_inventory.source_cache),
         string_table,
     )
+}
+
+/// Deterministic normal entry root paths from the project module graph's compile waves.
+///
+/// Flattens the graph's compile waves in dependency order and keeps only normal entry modules,
+/// mapping each to its canonical root file. Support roots and the project package facade are
+/// excluded because they never appear in `entry_modules`. A graph cycle is an internal compiler
+/// failure and is surfaced through the `CompilerMessages`/string-table boundary without panicking.
+fn normal_entry_root_paths_from_graph(
+    project_module_graph: &ProjectModuleGraph,
+    string_table: &mut StringTable,
+) -> Result<Vec<PathBuf>, CompilerMessages> {
+    let waves = project_module_graph
+        .compile_waves()
+        .map_err(|error| CompilerMessages::from_error_ref(error, string_table))?;
+
+    let entry_modules: BTreeSet<ModuleId> = project_module_graph
+        .entry_modules()
+        .iter()
+        .copied()
+        .collect();
+
+    Ok(waves
+        .iter()
+        .flat_map(|wave| wave.iter().copied())
+        .filter(|module_id| entry_modules.contains(module_id))
+        .map(|module_id| {
+            project_module_graph
+                .node(module_id)
+                .root_file()
+                .to_path_buf()
+        })
+        .collect())
 }
 
 /// Serial provider-capable fallback.

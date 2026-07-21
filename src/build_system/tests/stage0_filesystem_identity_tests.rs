@@ -577,6 +577,7 @@ mod non_utf8_hash_root_candidate_tests {
 /// independence, explicit root roles, structural ancestry and project package facade separation.
 mod module_identity_tests {
     use super::module_identity::{ModuleIdentityTable, module_root_role_for_file_name};
+    use super::project_module_graph::ProjectModuleGraph;
     use super::*;
     use crate::builder_surface::PackageOrigin;
     use crate::builder_surface::SourcePackageRegistry;
@@ -763,24 +764,26 @@ mod module_identity_tests {
         assert_eq!(table.record(page_id).role(), ModuleRootRole::Normal);
         assert_eq!(table.record(support_id).role(), ModuleRootRole::Support);
 
-        // Only normal roots are entry candidates. Assert against the canonical root-file paths
-        // so the support-root exclusion is genuinely protected, not just a filename-stem check.
+        // Only normal roots are entry modules. Assert against the canonical root-file paths via
+        // the project module graph (the production entry-classification owner) so the
+        // support-root exclusion is genuinely protected, not just a filename-stem check.
         let page_root_file = fs::canonicalize(src.join("page/#page.bst"))
             .expect("page root file should canonicalize");
         let support_root_file = fs::canonicalize(src.join("components/+ui.bst"))
             .expect("support root file should canonicalize");
-        let entry_candidates: Vec<&std::path::Path> = index
-            .entry_candidates()
+        let graph = ProjectModuleGraph::from_source_tree_index(&index);
+        let entry_root_files: Vec<&std::path::Path> = graph
+            .entry_modules()
             .iter()
-            .map(std::path::Path::new)
+            .map(|module_id| graph.node(*module_id).root_file())
             .collect();
         assert!(
-            entry_candidates.contains(&page_root_file.as_path()),
-            "normal root {page_root_file:?} should be an entry candidate: {entry_candidates:?}"
+            entry_root_files.contains(&page_root_file.as_path()),
+            "normal root {page_root_file:?} should be an entry module: {entry_root_files:?}"
         );
         assert!(
-            !entry_candidates.contains(&support_root_file.as_path()),
-            "support root {support_root_file:?} must not be an entry candidate: {entry_candidates:?}"
+            !entry_root_files.contains(&support_root_file.as_path()),
+            "support root {support_root_file:?} must not be an entry module: {entry_root_files:?}"
         );
 
         fs::remove_dir_all(&root).expect("should remove temp root");
@@ -897,24 +900,26 @@ mod module_identity_tests {
             "facade must have no children"
         );
 
-        // The facade is not an entry candidate. Assert against the canonical facade and entry
-        // root-file paths so the exclusion is genuinely protected, not just a filename-stem check.
+        // The facade is not an entry module. Assert against the canonical facade and entry
+        // root-file paths via the project module graph (the production entry-classification
+        // owner) so the exclusion is genuinely protected, not just a filename-stem check.
         let facade_root_file = fs::canonicalize(root.join("+package.bst"))
             .expect("facade root file should canonicalize");
         let entry_root_file =
             fs::canonicalize(src.join("#page.bst")).expect("entry root file should canonicalize");
-        let entry_candidates: Vec<&std::path::Path> = index
-            .entry_candidates()
+        let graph = ProjectModuleGraph::from_source_tree_index(&index);
+        let entry_root_files: Vec<&std::path::Path> = graph
+            .entry_modules()
             .iter()
-            .map(std::path::Path::new)
+            .map(|module_id| graph.node(*module_id).root_file())
             .collect();
         assert!(
-            entry_candidates.contains(&entry_root_file.as_path()),
-            "entry module {entry_root_file:?} should be an entry candidate: {entry_candidates:?}"
+            entry_root_files.contains(&entry_root_file.as_path()),
+            "entry module {entry_root_file:?} should be an entry module: {entry_root_files:?}"
         );
         assert!(
-            !entry_candidates.contains(&facade_root_file.as_path()),
-            "facade {facade_root_file:?} must not be an entry candidate: {entry_candidates:?}"
+            !entry_root_files.contains(&facade_root_file.as_path()),
+            "facade {facade_root_file:?} must not be an entry module: {entry_root_files:?}"
         );
 
         assert!(
@@ -2059,6 +2064,490 @@ mod owned_source_inventory_tests {
             vec!["#page.bst"],
             "entry-root normal module owns only its own root file"
         );
+
+        fs::remove_dir_all(&root).expect("should remove temp root");
+    }
+}
+
+// ---- Phase 5a: canonical structural project module graph ----
+
+mod project_module_graph_tests {
+    use super::*;
+    use crate::builder_surface::SourcePackageRegistry;
+    use crate::compiler_frontend::compiler_errors::ErrorType;
+    use crate::compiler_frontend::semantic_identity::ModuleRootRole;
+    use crate::compiler_frontend::symbols::string_interning::StringTable;
+    use std::path::PathBuf;
+
+    use super::module_identity::ModuleId;
+    use super::project_module_graph::{DependencyEdgeOutcome, ProjectModuleGraph};
+    use super::source_tree_index::SourceTreeIndex;
+
+    fn discover_index(
+        root: &std::path::Path,
+        entry_root_relative: &str,
+    ) -> (SourceTreeIndex, std::path::PathBuf, std::path::PathBuf) {
+        let entry_root = root.join(entry_root_relative);
+        fs::create_dir_all(&entry_root).expect("should create entry root");
+
+        let mut config = Config::new(root.to_path_buf());
+        config.entry_root = PathBuf::from(entry_root_relative);
+        let canonical_root = fs::canonicalize(root).expect("project root should canonicalize");
+        let canonical_entry_root =
+            fs::canonicalize(&entry_root).expect("entry root should canonicalize");
+        let mut string_table = StringTable::new();
+
+        let index = SourceTreeIndex::discover(
+            canonical_entry_root.clone(),
+            &canonical_root,
+            &config,
+            &SourcePackageRegistry::default(),
+            &crate::builder_surface::SourceFileKindRegistry::default(),
+            &mut string_table,
+        )
+        .expect("source tree index should build");
+
+        (index, canonical_root, canonical_entry_root)
+    }
+
+    /// Find the `ModuleId` whose identity table record has the given role and logical path.
+    fn module_id_for(
+        index: &SourceTreeIndex,
+        role: ModuleRootRole,
+        logical_path: &str,
+    ) -> ModuleId {
+        let table = index.module_identities();
+        table
+            .module_ids()
+            .find(|id| {
+                table.record(*id).role() == role
+                    && table
+                        .record(*id)
+                        .logical_module_path()
+                        .to_str()
+                        .map(|path| path == logical_path)
+                        .unwrap_or(false)
+            })
+            .unwrap_or_else(|| {
+                panic!("expected a {role:?} module with logical path {logical_path:?}")
+            })
+    }
+
+    #[test]
+    fn nodes_are_stored_in_deterministic_module_id_order() {
+        let root = temp_dir("graph_node_order");
+        let src = root.join("src");
+        fs::create_dir_all(src.join("zeta")).expect("should create zeta");
+        fs::create_dir_all(src.join("alpha")).expect("should create alpha");
+
+        fs::write(src.join("#home.bst"), "").expect("should write entry root");
+        fs::write(src.join("zeta/#page.bst"), "").expect("should write zeta root");
+        fs::write(src.join("alpha/#mod.bst"), "").expect("should write alpha root");
+
+        let (index, _project_root, _entry_root) = discover_index(&root, "src");
+        let graph = ProjectModuleGraph::from_source_tree_index(&index);
+
+        let graph_ids: Vec<ModuleId> = graph.nodes().iter().map(|node| node.module_id()).collect();
+        let table_ids: Vec<ModuleId> = index.module_identities().module_ids().collect();
+
+        assert_eq!(
+            graph_ids, table_ids,
+            "graph node order must match deterministic ModuleId order from the identity table"
+        );
+
+        for (graph_node, table_id) in graph.nodes().iter().zip(table_ids.iter().copied()) {
+            let record = index.module_identities().record(table_id);
+            assert_eq!(graph_node.module_id(), table_id);
+            assert_eq!(graph_node.role(), record.role());
+            assert_eq!(graph_node.stable_origin(), record.stable_origin());
+            assert_eq!(graph_node.root_directory(), record.root_directory());
+            assert_eq!(graph_node.root_file(), record.root_file());
+            assert_eq!(
+                graph_node.nearest_parent(),
+                index.module_identities().nearest_ancestor_module(table_id)
+            );
+            assert_eq!(
+                graph_node.direct_children(),
+                index.module_identities().direct_child_modules(table_id)
+            );
+            assert_eq!(
+                graph_node.owned_source_set(),
+                index.owned_source_set(table_id)
+            );
+        }
+
+        fs::remove_dir_all(&root).expect("should remove temp root");
+    }
+
+    #[test]
+    fn entry_modules_are_normal_only_and_facade_is_separate() {
+        let root = temp_dir("graph_entries_and_facade");
+        let src = root.join("src");
+        fs::create_dir_all(src.join("pages")).expect("should create pages");
+        fs::create_dir_all(src.join("components")).expect("should create components");
+
+        fs::write(src.join("#site.bst"), "").expect("should write entry normal root");
+        fs::write(src.join("pages/#pages.bst"), "").expect("should write child normal root");
+        fs::write(src.join("components/+ui.bst"), "").expect("should write support root");
+        fs::write(root.join("+package.bst"), "").expect("should write project facade");
+
+        let (index, _project_root, _entry_root) = discover_index(&root, "src");
+        let graph = ProjectModuleGraph::from_source_tree_index(&index);
+
+        let entry_ids: Vec<ModuleRootRole> = graph
+            .entry_modules()
+            .iter()
+            .map(|id| graph.node(*id).role())
+            .collect();
+        assert!(
+            entry_ids.iter().all(|role| *role == ModuleRootRole::Normal),
+            "entry candidates must all be normal modules: {entry_ids:?}"
+        );
+        assert_eq!(
+            graph.entry_modules().len(),
+            2,
+            "two normal roots should be entry candidates"
+        );
+
+        let support_id = module_id_for(&index, ModuleRootRole::Support, "components");
+        assert!(
+            !graph.entry_modules().contains(&support_id),
+            "support root must never be an entry candidate"
+        );
+
+        let facade_id = graph
+            .facade()
+            .expect("project package facade should be classified");
+        assert_eq!(
+            graph.node(facade_id).role(),
+            ModuleRootRole::ProjectPackageFacade
+        );
+        assert!(
+            !graph.entry_modules().contains(&facade_id),
+            "facade must never be an entry candidate"
+        );
+        assert_eq!(
+            graph.node(facade_id).nearest_parent(),
+            None,
+            "facade stays outside the normal ancestry tree"
+        );
+
+        fs::remove_dir_all(&root).expect("should remove temp root");
+    }
+
+    #[test]
+    fn support_visibility_is_visible_to_owner_and_normal_descendants_outside_subtree() {
+        let root = temp_dir("graph_support_visibility");
+        let src = root.join("src");
+        fs::create_dir_all(src.join("markdown/parser")).expect("should create markdown parser");
+        fs::create_dir_all(src.join("pages/article")).expect("should create pages article");
+
+        fs::write(src.join("#site.bst"), "").expect("should write site normal root");
+        fs::write(src.join("markdown/+package.bst"), "").expect("should write support root");
+        fs::write(src.join("markdown/parser/#parser.bst"), "")
+            .expect("should write private normal");
+        fs::write(src.join("pages/#pages.bst"), "").expect("should write pages normal root");
+        fs::write(src.join("pages/article/#article.bst"), "").expect("should write article normal");
+
+        let (index, _project_root, _entry_root) = discover_index(&root, "src");
+        let graph = ProjectModuleGraph::from_source_tree_index(&index);
+
+        let support_id = module_id_for(&index, ModuleRootRole::Support, "markdown");
+        let site_id = module_id_for(&index, ModuleRootRole::Normal, "");
+        let pages_id = module_id_for(&index, ModuleRootRole::Normal, "pages");
+        let article_id = module_id_for(&index, ModuleRootRole::Normal, "pages/article");
+
+        // Visible to the owning normal module and normal descendants outside the private subtree.
+        assert!(
+            graph.is_support_visible_to_consumer(support_id, site_id),
+            "support is visible to its owning normal module"
+        );
+        assert!(
+            graph.is_support_visible_to_consumer(support_id, pages_id),
+            "support is visible to a normal sibling descendant of the owner"
+        );
+        assert!(
+            graph.is_support_visible_to_consumer(support_id, article_id),
+            "support is visible to a deeper normal descendant of the owner"
+        );
+
+        fs::remove_dir_all(&root).expect("should remove temp root");
+    }
+
+    #[test]
+    fn support_visibility_enforces_private_same_scope_and_outer_scope_boundaries() {
+        let root = temp_dir("graph_support_visibility_rejections");
+        let src = root.join("src");
+        fs::create_dir_all(src.join("markdown/parser")).expect("should create markdown parser");
+        fs::create_dir_all(src.join("assets")).expect("should create same-scope support");
+        fs::create_dir_all(src.join("pages/extras")).expect("should create pages extras support");
+
+        fs::write(src.join("#site.bst"), "").expect("should write site normal root");
+        fs::write(src.join("markdown/+package.bst"), "").expect("should write support root");
+        fs::write(src.join("markdown/parser/#parser.bst"), "")
+            .expect("should write private normal");
+        fs::write(src.join("assets/+assets.bst"), "").expect("should write same-scope support");
+        fs::write(src.join("pages/#pages.bst"), "").expect("should write pages normal root");
+        fs::write(src.join("pages/extras/+extras.bst"), "").expect("should write sibling support");
+
+        let (index, _project_root, _entry_root) = discover_index(&root, "src");
+        let graph = ProjectModuleGraph::from_source_tree_index(&index);
+
+        let support_id = module_id_for(&index, ModuleRootRole::Support, "markdown");
+        let parser_id = module_id_for(&index, ModuleRootRole::Normal, "markdown/parser");
+        let assets_id = module_id_for(&index, ModuleRootRole::Support, "assets");
+        let extras_id = module_id_for(&index, ModuleRootRole::Support, "pages/extras");
+
+        // Not visible to private descendants of the support package.
+        assert!(
+            !graph.is_support_visible_to_consumer(support_id, parser_id),
+            "support must not be visible to its own private descendants"
+        );
+        // Not visible to itself.
+        assert!(
+            !graph.is_support_visible_to_consumer(support_id, support_id),
+            "support must not be visible to itself"
+        );
+        // Not visible to another support package owned by the same normal scope.
+        assert!(
+            !graph.is_support_visible_to_consumer(support_id, assets_id),
+            "support must not be visible to a same-scope support sibling"
+        );
+        // A support facade in a strictly nested normal scope may import outer support packages.
+        assert!(
+            graph.is_support_visible_to_consumer(support_id, extras_id),
+            "nested support facade should see a support package from a strictly outer scope"
+        );
+        // A non-support module id is not a valid support argument.
+        assert!(
+            !graph.is_support_visible_to_consumer(parser_id, support_id),
+            "querying visibility for a non-support module returns false"
+        );
+
+        fs::remove_dir_all(&root).expect("should remove temp root");
+    }
+
+    #[test]
+    fn support_visibility_rejects_modules_outside_owner_subtree() {
+        let root = temp_dir("graph_support_visibility_outside");
+        let src = root.join("src");
+        fs::create_dir_all(src.join("other")).expect("should create other branch");
+        fs::create_dir_all(src.join("pages/components")).expect("should create pages components");
+
+        fs::write(src.join("#site.bst"), "").expect("should write site normal root");
+        fs::write(src.join("other/#other.bst"), "").expect("should write unrelated normal root");
+        fs::write(src.join("pages/#pages.bst"), "").expect("should write pages normal root");
+        fs::write(src.join("pages/components/+ui.bst"), "").expect("should write support root");
+
+        let (index, _project_root, _entry_root) = discover_index(&root, "src");
+        let graph = ProjectModuleGraph::from_source_tree_index(&index);
+
+        let support_id = module_id_for(&index, ModuleRootRole::Support, "pages/components");
+        let other_id = module_id_for(&index, ModuleRootRole::Normal, "other");
+
+        assert!(
+            !graph.is_support_visible_to_consumer(support_id, other_id),
+            "support must not be visible outside the owning normal module's subtree"
+        );
+
+        fs::remove_dir_all(&root).expect("should remove temp root");
+    }
+
+    #[test]
+    fn independent_ready_modules_share_wave_zero_in_module_id_order() {
+        let root = temp_dir("graph_independent_waves");
+        let src = root.join("src");
+        fs::create_dir_all(src.join("alpha")).expect("should create alpha");
+        fs::create_dir_all(src.join("beta")).expect("should create beta");
+
+        fs::write(src.join("#home.bst"), "").expect("should write entry root");
+        fs::write(src.join("alpha/#alpha.bst"), "").expect("should write alpha root");
+        fs::write(src.join("beta/#beta.bst"), "").expect("should write beta root");
+
+        let (index, _project_root, _entry_root) = discover_index(&root, "src");
+        let mut graph = ProjectModuleGraph::from_source_tree_index(&index);
+
+        // No edges: every module is independent and shares wave zero, ordered by ModuleId.
+        let waves = graph
+            .compile_waves()
+            .expect("independent graph should produce one wave");
+        assert_eq!(waves.len(), 1, "no edges means one ready wave");
+        let wave_zero: Vec<ModuleId> = waves[0].clone();
+        assert_eq!(
+            wave_zero.len(),
+            graph.node_count(),
+            "every module should be ready in wave zero"
+        );
+        let mut sorted = wave_zero.clone();
+        sorted.sort_by_key(|id| id.index());
+        assert_eq!(wave_zero, sorted, "wave zero must be in ModuleId order");
+
+        // Adding a provider-before-consumer edge splits the waves deterministically.
+        let alpha_id = module_id_for(&index, ModuleRootRole::Normal, "alpha");
+        let beta_id = module_id_for(&index, ModuleRootRole::Normal, "beta");
+        assert_eq!(
+            graph.add_dependency_edge(alpha_id, beta_id).unwrap(),
+            DependencyEdgeOutcome::Inserted,
+            "inserting a fresh edge reports Inserted"
+        );
+        assert_eq!(
+            graph.add_dependency_edge(alpha_id, beta_id).unwrap(),
+            DependencyEdgeOutcome::AlreadyPresent,
+            "inserting the same edge is idempotent"
+        );
+        assert!(graph.has_dependency_edge(alpha_id, beta_id));
+
+        let waves = graph
+            .compile_waves()
+            .expect("ordered graph should wave cleanly");
+        assert_eq!(waves.len(), 2, "provider then consumer is two waves");
+        assert!(
+            waves[0].contains(&alpha_id) && !waves[0].contains(&beta_id),
+            "provider must compile in an earlier wave than its consumer"
+        );
+        assert!(
+            waves[1].contains(&beta_id),
+            "consumer must compile after its provider"
+        );
+
+        fs::remove_dir_all(&root).expect("should remove temp root");
+    }
+
+    #[test]
+    fn facade_is_ordered_by_real_edges_not_a_fake_dependency() {
+        let root = temp_dir("graph_facade_order");
+        let src = root.join("src");
+        fs::create_dir_all(src.join("pages")).expect("should create pages");
+
+        fs::write(src.join("#site.bst"), "").expect("should write entry normal root");
+        fs::write(src.join("pages/#pages.bst"), "").expect("should write child normal root");
+        fs::write(root.join("+package.bst"), "").expect("should write project facade");
+
+        let (index, _project_root, _entry_root) = discover_index(&root, "src");
+        let mut graph = ProjectModuleGraph::from_source_tree_index(&index);
+
+        let facade_id = graph
+            .facade()
+            .expect("project package facade should be classified");
+        let pages_id = module_id_for(&index, ModuleRootRole::Normal, "pages");
+        let site_id = module_id_for(&index, ModuleRootRole::Normal, "");
+
+        // Without edges the facade is independent and joins wave zero with the normal modules.
+        let waves = graph.compile_waves().expect("no-edge graph waves cleanly");
+        assert_eq!(waves.len(), 1, "no edges means one wave");
+        assert!(
+            waves[0].contains(&facade_id),
+            "facade with no edges is independent and ready in wave zero"
+        );
+
+        // Once a real edge targets the facade, it is ordered after its providers without any
+        // hard-coded fake dependency.
+        graph
+            .add_dependency_edge(pages_id, facade_id)
+            .expect("pages -> facade edge should insert");
+        graph
+            .add_dependency_edge(site_id, facade_id)
+            .expect("site -> facade edge should insert");
+
+        let waves = graph
+            .compile_waves()
+            .expect("facade-ordered graph waves cleanly");
+        let facade_wave = waves
+            .iter()
+            .position(|wave| wave.contains(&facade_id))
+            .expect("facade should appear in a wave");
+        let pages_wave = waves
+            .iter()
+            .position(|wave| wave.contains(&pages_id))
+            .expect("pages should appear in a wave");
+        let site_wave = waves
+            .iter()
+            .position(|wave| wave.contains(&site_id))
+            .expect("site should appear in a wave");
+        assert!(
+            facade_wave > pages_wave && facade_wave > site_wave,
+            "facade must compile after both providers that target it"
+        );
+
+        fs::remove_dir_all(&root).expect("should remove temp root");
+    }
+
+    #[test]
+    fn dependency_cycle_reports_blocked_modules_as_internal_error() {
+        let root = temp_dir("graph_cycle_detection");
+        let src = root.join("src");
+        fs::create_dir_all(src.join("alpha")).expect("should create alpha");
+        fs::create_dir_all(src.join("beta")).expect("should create beta");
+
+        fs::write(src.join("#home.bst"), "").expect("should write entry root");
+        fs::write(src.join("alpha/#alpha.bst"), "").expect("should write alpha root");
+        fs::write(src.join("beta/#beta.bst"), "").expect("should write beta root");
+
+        let (index, _project_root, _entry_root) = discover_index(&root, "src");
+        let mut graph = ProjectModuleGraph::from_source_tree_index(&index);
+
+        let alpha_id = module_id_for(&index, ModuleRootRole::Normal, "alpha");
+        let beta_id = module_id_for(&index, ModuleRootRole::Normal, "beta");
+
+        graph
+            .add_dependency_edge(alpha_id, beta_id)
+            .expect("alpha -> beta edge should insert");
+        graph
+            .add_dependency_edge(beta_id, alpha_id)
+            .expect("beta -> alpha edge should insert");
+
+        let cycle_error = graph
+            .compile_waves()
+            .expect_err("a dependency cycle must surface as an internal graph failure");
+        assert_eq!(
+            cycle_error.error_type,
+            ErrorType::Compiler,
+            "a defensive cycle is an internal compiler graph failure"
+        );
+        let message = &cycle_error.msg;
+        assert!(
+            message.contains("cycle"),
+            "cycle error must name the cycle: {message}"
+        );
+        // Deterministic blocked-module reporting includes both modules on the cycle.
+        assert!(
+            message.contains("alpha") && message.contains("beta"),
+            "cycle error must name the involved modules: {message}"
+        );
+
+        fs::remove_dir_all(&root).expect("should remove temp root");
+    }
+
+    #[test]
+    fn self_edge_and_invalid_ids_are_rejected_without_panicking() {
+        let root = temp_dir("graph_edge_validation");
+        let src = root.join("src");
+        fs::create_dir_all(src.join("alpha")).expect("should create alpha");
+
+        fs::write(src.join("#home.bst"), "").expect("should write entry root");
+        fs::write(src.join("alpha/#alpha.bst"), "").expect("should write alpha root");
+
+        let (index, _project_root, _entry_root) = discover_index(&root, "src");
+        let mut graph = ProjectModuleGraph::from_source_tree_index(&index);
+
+        let alpha_id = module_id_for(&index, ModuleRootRole::Normal, "alpha");
+
+        let self_error = graph
+            .add_dependency_edge(alpha_id, alpha_id)
+            .expect_err("a self-edge must be rejected");
+        assert_eq!(self_error.error_type, ErrorType::Compiler);
+
+        let out_of_range = ModuleId::from_index(graph.node_count() + 10);
+        let invalid_error = graph
+            .add_dependency_edge(out_of_range, alpha_id)
+            .expect_err("an out-of-range module id must be rejected");
+        assert_eq!(invalid_error.error_type, ErrorType::Compiler);
+
+        // The graph remains usable for deterministic waves after rejected edges.
+        let waves = graph
+            .compile_waves()
+            .expect("rejected edges do not mutate the graph");
+        assert_eq!(waves.len(), 1, "no accepted edges means one ready wave");
 
         fs::remove_dir_all(&root).expect("should remove temp root");
     }
