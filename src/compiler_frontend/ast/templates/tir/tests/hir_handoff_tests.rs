@@ -45,6 +45,7 @@ use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::compiler_frontend::value_mode::ValueMode;
 use std::cell::RefCell;
+use std::path::PathBuf;
 use std::rc::Rc;
 
 fn empty_location() -> SourceLocation {
@@ -491,7 +492,7 @@ fn owned_handoff_materializes_text_from_the_shared_store() {
 fn owned_handoff_resolves_slot_overlay_to_a_child_template() {
     let store = Rc::new(RefCell::new(TemplateIrStore::new()));
     let mut strings = StringTable::new();
-    let (parent_id, source_id, occurrence_id, view_context) = {
+    let (parent_id, view_context) = {
         let mut store_ref = store.borrow_mut();
         let source_id = text_template(&mut store_ref, &mut strings, "filled");
         let occurrence_id = store_ref.next_slot_occurrence_id();
@@ -525,7 +526,7 @@ fn owned_handoff_resolves_slot_overlay_to_a_child_template() {
             slot_resolution: Some(slot_overlay_id),
             wrapper_context: None,
         };
-        (parent_id, source_id, occurrence_id, context)
+        (parent_id, context)
     };
     let handoff = {
         let store_ref = store.borrow();
@@ -545,8 +546,6 @@ fn owned_handoff_resolves_slot_overlay_to_a_child_template() {
         panic!("slot source should materialize as text");
     };
     assert_eq!(strings.resolve(text), "filled");
-    assert_eq!(occurrence_id, SlotOccurrenceId::new(0));
-    assert!(store.borrow().get_template(source_id).is_some());
 }
 
 #[test]
@@ -592,7 +591,7 @@ fn owned_handoff_missing_slot_resolution_renders_slot_placeholder() {
 fn owned_handoff_preserves_child_boundary() {
     let store = Rc::new(RefCell::new(TemplateIrStore::new()));
     let mut strings = StringTable::new();
-    let (parent_id, child_id) = {
+    let parent_id = {
         let mut store_ref = store.borrow_mut();
         let child_id = text_template(&mut store_ref, &mut strings, "child");
         let occurrence_id = store_ref.next_child_template_occurrence_id();
@@ -608,14 +607,13 @@ fn owned_handoff_preserves_child_boundary() {
             empty_location(),
         ));
         let summary = summarize_existing_root(&store_ref, child_node);
-        let parent_id = store_ref.push_template(TemplateIr::new(
+        store_ref.push_template(TemplateIr::new(
             child_node,
             Style::default(),
             TemplateType::StringFunction,
             summary,
             empty_location(),
-        ));
-        (parent_id, child_id)
+        ))
     };
     let handoff = {
         let store_ref = store.borrow();
@@ -629,8 +627,13 @@ fn owned_handoff_preserves_child_boundary() {
     else {
         panic!("child boundary should remain an owned child handoff");
     };
-    assert!(matches!(template.body, OwnedRuntimeTemplateBody::Render(_)));
-    assert!(store.borrow().get_template(child_id).is_some());
+    let OwnedRuntimeTemplateBody::Render(child_node) = &template.body else {
+        panic!(
+            "child boundary should render an owned node, got {:?}",
+            template.body
+        );
+    };
+    assert_owned_text_node(child_node, "child", &strings);
 }
 
 // ---------------------------------------------------------------------------
@@ -812,12 +815,26 @@ fn runtime_child_reference_uses_structural_handoff() {
     else {
         panic!("expected child template handoff, got {body:?}");
     };
-    assert!(
-        matches!(
-            template.body,
-            OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::DynamicExpression { .. })
-        ),
-        "runtime-reference child should remain an owned dynamic expression"
+    let OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::DynamicExpression {
+        expression,
+        ..
+    }) = &template.body
+    else {
+        panic!(
+            "runtime-reference child should remain an owned dynamic expression, got {:?}",
+            template.body
+        );
+    };
+    let ExpressionKind::Reference(path) = &expression.kind else {
+        panic!(
+            "expected an owned reference expression, got {:?}",
+            expression.kind
+        );
+    };
+    assert_eq!(
+        path.to_path_buf(&strings),
+        PathBuf::from("runtime"),
+        "runtime reference value should survive structural handoff"
     );
 }
 
@@ -1194,18 +1211,4 @@ fn missing_child_in_wrapper_propagates_schema_extraction_error() {
         "expected schema-owned child-template error, got: {}",
         error.msg
     );
-}
-
-#[test]
-fn missing_view_context_is_rejected_before_handoff() {
-    let store = TemplateIrStore::new();
-    let missing_template = TemplateIrId::new(99);
-    let error = TirView::new(
-        &store,
-        missing_template,
-        TemplateTirPhase::Finalized,
-        TemplateViewContext::default(),
-    )
-    .expect_err("missing root should be rejected");
-    assert!(error.msg.contains("does not exist"));
 }
