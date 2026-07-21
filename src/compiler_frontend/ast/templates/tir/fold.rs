@@ -925,11 +925,12 @@ fn fold_conditional_child_wrappers_around_emission(
         wrapper_references.len(),
     );
 
-    // Iterate wrappers in reverse (outermost-first), folding each around the
-    // current child output. The output of one wrapper becomes the input to the
-    // next, matching the nesting order of the structural wrap path.
+    // Iterate wrappers forward (innermost-first), folding each around the current
+    // child output. The output of one wrapper becomes the input to the next, so
+    // forward consumption of the innermost-to-outermost store order yields the
+    // outermost wrapper as the final layer, matching the structural wrap path.
     let mut current_output = output;
-    for wrapper_reference in wrapper_references.iter().rev() {
+    for wrapper_reference in wrapper_references.iter() {
         current_output = fold_tir_wrapper_around_child_output(
             store,
             wrapper_reference,

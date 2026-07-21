@@ -731,18 +731,20 @@ impl<'store> RuntimeHandoffMaterializer<'store> {
 
     /// Wraps a child handoff node in each inherited wrapper template.
     ///
-    /// WHAT: iterates wrappers in reverse (outermost-first), composing each
+    /// WHAT: iterates wrappers forward (innermost-first), composing each
     ///       wrapper around the current wrapped child. The result is an owned
     ///       runtime node that represents wrapper-text-around-child.
-    /// WHY: this mirrors `fold_conditional_child_wrappers_around_emission` and
-    ///      the structural `wrap_tir_node_in_wrappers` nesting order.
+    /// WHY: `TemplateWrapperSet::wrappers` is stored innermost-to-outermost, so
+    ///      forward iteration yields the `outermost(innermost(child))` nesting
+    ///      that mirrors `fold_conditional_child_wrappers_around_emission` and
+    ///      the structural `wrap_tir_node_in_wrappers` order.
     fn apply_wrapper_templates_around_child_handoff(
         &mut self,
         wrapper_references: &[TemplateWrapperReference],
         child_handoff: OwnedRuntimeTemplateNode,
     ) -> Result<OwnedRuntimeTemplateNode, CompilerError> {
         let mut current = child_handoff;
-        for wrapper_reference in wrapper_references.iter().rev() {
+        for wrapper_reference in wrapper_references.iter() {
             current = self
                 .apply_single_wrapper_template_around_child_handoff(*wrapper_reference, current)?;
         }
@@ -751,12 +753,15 @@ impl<'store> RuntimeHandoffMaterializer<'store> {
 
     /// Builds one output-conditioned wrapper node for an inherited wrapper set.
     ///
-    /// WHAT: materializes all wrappers around an `AggregateOutput` marker, then
-    /// pairs that wrapper tree with the original child in `ConditionalWrapper`.
+    /// WHAT: materializes all wrappers forward (innermost-first) around an
+    ///       `AggregateOutput` marker, then pairs that wrapper tree with the
+    ///       original child in `ConditionalWrapper`.
     /// WHY: `IfChildEmits` is a runtime structural condition. HIR already knows
-    /// how to append aggregate wrappers only when a source accumulator emitted
-    /// output, so the handoff should expose that neutral shape instead of TIR
-    /// overlay state.
+    ///      how to append aggregate wrappers only when a source accumulator
+    ///      emitted output, so the handoff should expose that neutral shape
+    ///      instead of TIR overlay state. Forward consumption preserves the
+    ///      innermost-to-outermost store order so the outermost wrapper is the
+    ///      final layer around the marker.
     fn apply_conditional_wrapper_templates_around_child_handoff(
         &mut self,
         wrapper_references: &[TemplateWrapperReference],
@@ -768,7 +773,7 @@ impl<'store> RuntimeHandoffMaterializer<'store> {
         }
 
         let mut wrapper = OwnedRuntimeTemplateNode::AggregateOutput;
-        for wrapper_reference in wrapper_references.iter().rev() {
+        for wrapper_reference in wrapper_references.iter() {
             wrapper = self
                 .apply_single_wrapper_template_around_child_handoff(*wrapper_reference, wrapper)?;
         }

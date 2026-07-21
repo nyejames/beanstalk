@@ -22,11 +22,11 @@ use super::super::overlays::{
 };
 use super::super::refs::TemplateTirChildReference;
 use super::super::slot_composition::{
-    RoutedTirSlotContributions, TirSlotContributions, TirSlotSchema, apply_tir_child_wrappers,
-    collect_tir_slot_schema, compose_tir_head_chain, compose_tir_head_chain_with_overlays,
+    RoutedTirSlotContributions, TirSlotContributions, TirSlotSchema, collect_tir_slot_schema,
+    compose_tir_head_chain, compose_tir_head_chain_with_overlays,
     compose_tir_slot_resolution_context, expand_tir_slot_placeholders,
     materialize_tir_slot_resolution_overlay, route_tir_slot_contributions,
-    view_context_from_slot_resolution_overlay,
+    view_context_from_slot_resolution_overlay, wrap_tir_node_in_wrappers,
 };
 use super::super::store::TemplateIrStore;
 use super::super::summary::TemplateIrSummary;
@@ -357,9 +357,24 @@ fn build_text_slot_text_wrapper(
     string_table: &mut StringTable,
     key: SlotKey,
 ) -> TemplateIrId {
+    build_text_slot_text_wrapper_with_markers(store, string_table, key, "before", "after")
+}
+
+/// Builds a wrapper template with alternating Text and Slot children, using
+/// caller-supplied marker text so distinct wrappers can be told apart.
+///
+/// WHY: identical wrappers cannot prove the innermost-to-outermost wrapping
+///      order; distinct before/after markers expose which layer is innermost.
+fn build_text_slot_text_wrapper_with_markers(
+    store: &mut TemplateIrStore,
+    string_table: &mut StringTable,
+    key: SlotKey,
+    before: &str,
+    after: &str,
+) -> TemplateIrId {
     let mut builder = TemplateIrBuilder::new(store);
 
-    let before_text_id = string_table.intern("before");
+    let before_text_id = string_table.intern(before);
     let before_text_len =
         u32::try_from(string_table.resolve(before_text_id).len()).unwrap_or(u32::MAX);
     let before_text = builder.push_text_node(
@@ -371,7 +386,7 @@ fn build_text_slot_text_wrapper(
 
     let slot_node = builder.push_slot_node(key, empty_location());
 
-    let after_text_id = string_table.intern("after");
+    let after_text_id = string_table.intern(after);
     let after_text_len =
         u32::try_from(string_table.resolve(after_text_id).len()).unwrap_or(u32::MAX);
     let after_text = builder.push_text_node(
@@ -2407,8 +2422,15 @@ fn root_child_kinds_for_node(
 }
 
 // -------------------------
-//  Child Wrapper Composition Tests
+//  Per-Child Wrapper Composition
 // -------------------------
+// These tests exercise `wrap_tir_node_in_wrappers`, the real per-child wrapper
+// path shared with production body-root application. They pin the three
+// distinct wrapper-expansion shapes: slot-bearing wrapper expansion, slot-less
+// wrapper prepend, and multi-wrapper nesting/order. Direct-child filtering
+// (slot-bearing receivers, control-flow children and `$fresh` suppression) is
+// owned by `body_root_wrapper_tests.rs` through
+// `apply_inherited_child_wrappers_to_body_root`.
 
 #[test]
 fn wrap_direct_child_in_single_wrapper_with_default_slot() {
@@ -2418,23 +2440,17 @@ fn wrap_direct_child_in_single_wrapper_with_default_slot() {
     let wrapper = build_wrapper_with_slot_sequence(&mut store, vec![SlotKey::Default]);
     let child = build_single_text_template(&mut store, &mut string_table, "child");
     let child_node = build_child_template_node_for_template(&mut store, child);
-    let parent = build_template_with_children(&mut store, vec![child_node]);
-    let original_root = template_root_node_id(parent, &store);
+    let wrapped_child_node_id =
+        wrap_tir_node_in_wrappers(&mut store, child_node, &[wrapper], &string_table)
+            .expect("wrapper application should succeed");
 
-    let wrapped_root = apply_tir_child_wrappers(&mut store, parent, &[wrapper], &string_table)
-        .expect("wrapper application should succeed");
-
-    assert_ne!(
-        wrapped_root, original_root,
-        "wrapper application should produce a new root"
-    );
-
-    let parent_children = root_child_node_ids_for_node(wrapped_root, &store);
-    assert_eq!(parent_children.len(), 1);
-
-    let wrapped_template_id = expect_child_template_id(parent_children[0], &store);
+    let wrapped_template_id = expect_child_template_id(wrapped_child_node_id, &store);
     let wrapped_children = root_child_node_ids(wrapped_template_id, &store);
-    assert_eq!(wrapped_children.len(), 1);
+    assert_eq!(
+        wrapped_children,
+        vec![child_node],
+        "default-slot expansion should splice the original child node exactly once"
+    );
 
     let resolved_child_id = expect_child_template_id(wrapped_children[0], &store);
     assert_eq!(
@@ -2455,17 +2471,17 @@ fn wrap_direct_child_in_wrapper_without_slots() {
     let wrapper = build_single_text_template(&mut store, &mut string_table, "prefix");
     let child = build_single_text_template(&mut store, &mut string_table, "child");
     let child_node = build_child_template_node_for_template(&mut store, child);
-    let parent = build_template_with_children(&mut store, vec![child_node]);
+    let wrapped_child_node_id =
+        wrap_tir_node_in_wrappers(&mut store, child_node, &[wrapper], &string_table)
+            .expect("wrapper application should succeed");
 
-    let wrapped_root = apply_tir_child_wrappers(&mut store, parent, &[wrapper], &string_table)
-        .expect("wrapper application should succeed");
-
-    let parent_children = root_child_node_ids_for_node(wrapped_root, &store);
-    assert_eq!(parent_children.len(), 1);
-
-    let combined_template_id = expect_child_template_id(parent_children[0], &store);
+    let combined_template_id = expect_child_template_id(wrapped_child_node_id, &store);
     let combined_children = root_child_node_ids(combined_template_id, &store);
     assert_eq!(combined_children.len(), 2);
+    assert_eq!(
+        combined_children[1], child_node,
+        "slot-less wrapping should preserve the original child node identity"
+    );
 
     let wrapper_child_id = expect_child_template_id(combined_children[0], &store);
     assert_eq!(
@@ -2489,32 +2505,38 @@ fn wrap_direct_child_in_multiple_wrappers() {
     let mut string_table = StringTable::new();
     let mut store = TemplateIrStore::new();
 
-    let inner_wrapper =
-        build_text_slot_text_wrapper(&mut store, &mut string_table, SlotKey::Default);
-    let outer_wrapper =
-        build_text_slot_text_wrapper(&mut store, &mut string_table, SlotKey::Default);
+    let inner_wrapper = build_text_slot_text_wrapper_with_markers(
+        &mut store,
+        &mut string_table,
+        SlotKey::Default,
+        "inner-before",
+        "inner-after",
+    );
+    let outer_wrapper = build_text_slot_text_wrapper_with_markers(
+        &mut store,
+        &mut string_table,
+        SlotKey::Default,
+        "outer-before",
+        "outer-after",
+    );
 
     let child = build_single_text_template(&mut store, &mut string_table, "child");
     let child_node = build_child_template_node_for_template(&mut store, child);
-    let parent = build_template_with_children(&mut store, vec![child_node]);
-
-    // Wrappers are stored innermost-first; outermost is applied first by reverse
-    // iteration, so the final nesting is outer(inner(child)).
+    // Wrappers are stored innermost-first; forward iteration applies the
+    // innermost wrapper directly around the child and each later wrapper
+    // around the previous result, so the final nesting is outer(inner(child)).
     let wrapper_ids = vec![inner_wrapper, outer_wrapper];
+    let wrapped_child_node_id =
+        wrap_tir_node_in_wrappers(&mut store, child_node, &wrapper_ids, &string_table)
+            .expect("wrapper application should succeed");
 
-    let wrapped_root = apply_tir_child_wrappers(&mut store, parent, &wrapper_ids, &string_table)
-        .expect("wrapper application should succeed");
-
-    let parent_children = root_child_node_ids_for_node(wrapped_root, &store);
-    assert_eq!(parent_children.len(), 1);
-
-    let outer_resolved_id = expect_child_template_id(parent_children[0], &store);
+    let outer_resolved_id = expect_child_template_id(wrapped_child_node_id, &store);
     let outer_children = root_child_node_ids(outer_resolved_id, &store);
     assert_eq!(outer_children.len(), 3);
 
     assert_eq!(
         text_node_text(outer_children[0], &store, &string_table),
-        Some("before".to_owned())
+        Some("outer-before".to_owned())
     );
 
     let inner_resolved_id = expect_child_template_id(outer_children[1], &store);
@@ -2522,11 +2544,11 @@ fn wrap_direct_child_in_multiple_wrappers() {
     assert_eq!(inner_children.len(), 3);
     assert_eq!(
         text_node_text(inner_children[0], &store, &string_table),
-        Some("before".to_owned())
+        Some("inner-before".to_owned())
     );
     assert_eq!(
         text_node_text(inner_children[2], &store, &string_table),
-        Some("after".to_owned())
+        Some("inner-after".to_owned())
     );
 
     let innermost_child_id = expect_child_template_id(inner_children[1], &store);
@@ -2534,179 +2556,7 @@ fn wrap_direct_child_in_multiple_wrappers() {
 
     assert_eq!(
         text_node_text(outer_children[2], &store, &string_table),
-        Some("after".to_owned())
-    );
-}
-
-#[test]
-fn child_with_slots_is_not_wrapped() {
-    let string_table = StringTable::new();
-    let mut store = TemplateIrStore::new();
-
-    let wrapper = build_wrapper_with_slot_sequence(&mut store, vec![SlotKey::Default]);
-    let child_with_slots = build_wrapper_with_slot_sequence(&mut store, vec![SlotKey::Default]);
-    let child_node = build_child_template_node_for_template(&mut store, child_with_slots);
-    let parent = build_template_with_children(&mut store, vec![child_node]);
-    let original_root = template_root_node_id(parent, &store);
-
-    let wrapped_root = apply_tir_child_wrappers(&mut store, parent, &[wrapper], &string_table)
-        .expect("wrapper application should succeed");
-
-    assert_eq!(
-        wrapped_root, original_root,
-        "a child that is itself a wrapper receiver should not be wrapped"
-    );
-}
-
-#[test]
-fn no_wrappers_returns_original_root() {
-    let mut string_table = StringTable::new();
-    let mut store = TemplateIrStore::new();
-
-    let child = build_single_text_template(&mut store, &mut string_table, "child");
-    let child_node = build_child_template_node_for_template(&mut store, child);
-    let parent = build_template_with_children(&mut store, vec![child_node]);
-    let original_root = template_root_node_id(parent, &store);
-
-    let wrapped_root = apply_tir_child_wrappers(&mut store, parent, &[], &string_table)
-        .expect("wrapper application should succeed");
-
-    assert_eq!(wrapped_root, original_root);
-}
-
-#[test]
-fn branch_chain_child_is_not_wrapped() {
-    let mut string_table = StringTable::new();
-    let mut store = TemplateIrStore::new();
-
-    let branch_body = build_single_text_template(&mut store, &mut string_table, "branch body");
-    let branch = TemplateIrBranch::new(
-        TemplateBranchSelector::Bool(bool_expression(true)),
-        template_root_node_id(branch_body, &store),
-        empty_location(),
-    );
-
-    let mut builder = TemplateIrBuilder::new(&mut store);
-    let branch_chain = builder.push_branch_chain_node(vec![branch], None, empty_location());
-    let parent = builder.finish_template(
-        branch_chain,
-        Style::default(),
-        TemplateType::String,
-        TemplateIrSummary::default(),
-        empty_location(),
-    );
-
-    let wrapper = build_single_text_template(&mut store, &mut string_table, "wrapper");
-    let original_root = template_root_node_id(parent, &store);
-
-    let wrapped_root = apply_tir_child_wrappers(&mut store, parent, &[wrapper], &string_table)
-        .expect("wrapper application should succeed");
-
-    assert_eq!(
-        wrapped_root, original_root,
-        "control-flow branch chain should not be wrapped during composition"
-    );
-}
-
-#[test]
-fn loop_child_is_not_wrapped() {
-    let mut string_table = StringTable::new();
-    let mut store = TemplateIrStore::new();
-
-    let body = build_single_text_template(&mut store, &mut string_table, "iteration");
-    let body_root = template_root_node_id(body, &store);
-    let mut builder = TemplateIrBuilder::new(&mut store);
-    let loop_node = builder.push_loop_node(
-        TemplateLoopHeader::Conditional {
-            condition: Box::new(bool_expression(true)),
-        },
-        body_root,
-        None,
-        empty_location(),
-    );
-    let parent = builder.finish_template(
-        loop_node,
-        Style::default(),
-        TemplateType::String,
-        TemplateIrSummary::default(),
-        empty_location(),
-    );
-
-    let wrapper = build_single_text_template(&mut store, &mut string_table, "wrapper");
-    let original_root = template_root_node_id(parent, &store);
-
-    let wrapped_root = apply_tir_child_wrappers(&mut store, parent, &[wrapper], &string_table)
-        .expect("wrapper application should succeed");
-
-    assert_eq!(
-        wrapped_root, original_root,
-        "control-flow loop should not be wrapped during composition"
-    );
-}
-
-#[test]
-fn mixed_children_wraps_only_direct_child() {
-    let mut string_table = StringTable::new();
-    let mut store = TemplateIrStore::new();
-
-    let wrapper = build_wrapper_with_slot_sequence(&mut store, vec![SlotKey::Default]);
-
-    let body_text = build_text_node(
-        &mut store,
-        &mut string_table,
-        "body text",
-        TemplateSegmentOrigin::Body,
-    );
-
-    let child = build_single_text_template(&mut store, &mut string_table, "child");
-    let child_node = build_child_template_node_for_template(&mut store, child);
-
-    let branch_body = build_single_text_template(&mut store, &mut string_table, "branch body");
-    let branch = TemplateIrBranch::new(
-        TemplateBranchSelector::Bool(bool_expression(true)),
-        template_root_node_id(branch_body, &store),
-        empty_location(),
-    );
-    let mut builder = TemplateIrBuilder::new(&mut store);
-    let branch_chain = builder.push_branch_chain_node(vec![branch], None, empty_location());
-
-    let parent =
-        build_template_with_children(&mut store, vec![body_text, child_node, branch_chain]);
-
-    let wrapped_root = apply_tir_child_wrappers(&mut store, parent, &[wrapper], &string_table)
-        .expect("wrapper application should succeed");
-
-    let parent_children = root_child_node_ids_for_node(wrapped_root, &store);
-    assert_eq!(parent_children.len(), 3);
-
-    assert!(
-        matches!(
-            store.get_node(parent_children[0]).unwrap().kind,
-            TemplateIrNodeKind::Text { .. }
-        ),
-        "plain text should pass through unchanged"
-    );
-
-    let wrapped_template_id = expect_child_template_id(parent_children[1], &store);
-    let wrapped_children = root_child_node_ids(wrapped_template_id, &store);
-    assert_eq!(wrapped_children.len(), 1);
-
-    let resolved_child_id = expect_child_template_id(wrapped_children[0], &store);
-    assert_eq!(
-        resolved_child_id, child,
-        "only the direct body child template should be wrapped"
-    );
-    assert_eq!(
-        template_root_text(resolved_child_id, &store, &string_table),
-        Some("child".to_owned())
-    );
-
-    assert!(
-        matches!(
-            store.get_node(parent_children[2]).unwrap().kind,
-            TemplateIrNodeKind::BranchChain { .. }
-        ),
-        "branch chain should pass through unchanged"
+        Some("outer-after".to_owned())
     );
 }
 
@@ -2716,6 +2566,7 @@ fn materialize_default_slot_overlay(
     slot_count: usize,
 ) -> (
     TemplateIrId,
+    TemplateIrNodeId,
     super::super::overlays::TirSlotResolutionOverlayId,
 ) {
     let wrapper = build_wrapper_with_slot_sequence(store, vec![SlotKey::Default; slot_count]);
@@ -2731,7 +2582,7 @@ fn materialize_default_slot_overlay(
     );
     let overlay_id = materialize_tir_slot_resolution_overlay(store, wrapper_reference, &routed)
         .expect("slot resolution overlay should materialize");
-    (wrapper, overlay_id)
+    (wrapper, contribution_node, overlay_id)
 }
 
 fn slot_resolution_overlay(
@@ -2747,19 +2598,24 @@ fn slot_resolution_overlay(
 fn slot_resolution_overlay_uses_direct_template_ids() {
     let mut store = TemplateIrStore::new();
     let mut string_table = StringTable::new();
-    let (wrapper, overlay_id) = materialize_default_slot_overlay(&mut store, &mut string_table, 1);
+    let (wrapper, contribution_node, overlay_id) =
+        materialize_default_slot_overlay(&mut store, &mut string_table, 1);
     let overlay = slot_resolution_overlay(&store, overlay_id);
 
     assert_eq!(overlay.resolutions.len(), 1);
     let (occurrence_id, resolution) = &overlay.resolutions[0];
     assert_eq!(*occurrence_id, SlotOccurrenceId::new(0));
     assert_eq!(resolution.key, SlotKey::Default);
-    assert!(matches!(
-        resolution.kind,
-        TirSlotResolutionKind::Resolved { .. }
-    ));
-    let source = resolution.sources()[0];
-    assert!(store.get_template(source).is_some());
+    let TirSlotResolutionKind::Resolved { sources } = &resolution.kind else {
+        panic!("default slot should resolve to one source template");
+    };
+    assert_eq!(sources.len(), 1);
+    let source = sources[0];
+    assert_eq!(
+        root_child_node_ids(source, &store),
+        vec![contribution_node],
+        "the store-owned source template should contain the routed contribution node"
+    );
     assert!(store.get_template(wrapper).is_some());
 }
 
@@ -2789,57 +2645,13 @@ fn missing_slot_resolution_is_explicit() {
         &routed,
     )
     .expect("missing slot resolution should materialize");
-    let resolution = &slot_resolution_overlay(&store, overlay_id).resolutions[0].1;
-
+    let overlay = slot_resolution_overlay(&store, overlay_id);
+    assert_eq!(overlay.resolutions.len(), 1);
+    let (occurrence_id, resolution) = &overlay.resolutions[0];
+    assert_eq!(*occurrence_id, SlotOccurrenceId::new(0));
+    assert_eq!(resolution.key, SlotKey::Default);
     assert!(matches!(resolution.kind, TirSlotResolutionKind::Missing));
-}
-
-#[test]
-fn attached_slot_resolution_is_visible_through_tir_view() {
-    let mut store = TemplateIrStore::new();
-    let mut string_table = StringTable::new();
-    let (wrapper, overlay_id) = materialize_default_slot_overlay(&mut store, &mut string_table, 1);
-    let context = view_context_from_slot_resolution_overlay(overlay_id);
-    let view = TirView::new(&store, wrapper, TemplateTirPhase::Composed, context)
-        .expect("attached overlay should construct a view");
-
-    let resolution = view
-        .effective_slot_resolution(SlotOccurrenceId::new(0))
-        .expect("slot lookup should succeed")
-        .expect("attached slot should have a resolution");
-    assert!(matches!(
-        resolution.kind,
-        TirSlotResolutionKind::Resolved { .. }
-    ));
-}
-
-#[test]
-fn composed_view_context_uses_the_same_store() {
-    let mut store = TemplateIrStore::new();
-    let mut string_table = StringTable::new();
-    let wrapper = build_wrapper_with_slot_sequence(&mut store, vec![SlotKey::Default]);
-    let contribution = build_single_text_template(&mut store, &mut string_table, "filled");
-    let fill_node = template_root_node_id(contribution, &store);
-    let fill = build_fill_template(&mut store, vec![fill_node]);
-    let context = compose_tir_slot_resolution_context(
-        &mut store,
-        TemplateTirChildReference::new(
-            wrapper,
-            TemplateTirPhase::Composed,
-            TemplateViewContext::default(),
-        ),
-        fill,
-        &string_table,
-    )
-    .expect("same-store overlay composition should succeed");
-    let view = TirView::new(&store, wrapper, TemplateTirPhase::Composed, context)
-        .expect("composed view context should construct a view");
-
-    assert!(
-        view.effective_slot_resolution(SlotOccurrenceId::new(0))
-            .expect("slot lookup should succeed")
-            .is_some()
-    );
+    assert!(resolution.sources().is_empty());
 }
 
 // -------------------------
@@ -3012,7 +2824,8 @@ fn attach_view_context_carries_slot_resolution() {
     let mut string_table = StringTable::new();
     let mut store = TemplateIrStore::new();
 
-    let (wrapper, overlay_id) = materialize_default_slot_overlay(&mut store, &mut string_table, 1);
+    let (wrapper, contribution_node, overlay_id) =
+        materialize_default_slot_overlay(&mut store, &mut string_table, 1);
     let context = view_context_from_slot_resolution_overlay(overlay_id);
     let view = TirView::new(&store, wrapper, TemplateTirPhase::Composed, context)
         .expect("view should construct with the attached view context");
@@ -3031,14 +2844,11 @@ fn attach_view_context_carries_slot_resolution() {
         matches!(resolution.kind, TirSlotResolutionKind::Resolved { .. }),
         "view should observe a resolved slot through the overlay path"
     );
+    assert_eq!(resolution.sources().len(), 1);
     assert_eq!(
-        resolution.sources().len(),
-        1,
-        "view should observe one source template"
-    );
-    assert!(
-        store.get_template(resolution.sources()[0]).is_some(),
-        "view-observed source should resolve through the same store"
+        root_child_node_ids(resolution.sources()[0], &store),
+        vec![contribution_node],
+        "the view should resolve the same store-owned contribution source"
     );
 }
 

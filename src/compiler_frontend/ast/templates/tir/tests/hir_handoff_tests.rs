@@ -21,7 +21,8 @@ use crate::compiler_frontend::ast::templates::tir::node::{
 };
 use crate::compiler_frontend::ast::templates::tir::overlays::{
     TemplateViewContext, TirExpressionOverlay, TirSlotResolution, TirSlotResolutionOverlay,
-    TirSlotResolutionOverlayId, TirWrapperContext, TirWrapperContextOverlay,
+    TirSlotResolutionOverlayId, TirWrapperApplicationMode, TirWrapperContext,
+    TirWrapperContextOverlay,
 };
 use crate::compiler_frontend::ast::templates::tir::refs::{
     TemplateTirChildReference, TemplateWrapperReference,
@@ -403,6 +404,43 @@ fn build_named_only_wrapper_template(
     )
 }
 
+/// Builds a before/slot/after wrapper template with a default slot and
+/// caller-supplied marker text so distinct wrappers can be told apart.
+///
+/// WHY: identical wrappers cannot prove the innermost-to-outermost handoff
+///      nesting order; distinct before/after markers expose which layer is
+///      innermost.
+fn build_slot_wrapper_template(
+    store: &mut TemplateIrStore,
+    string_table: &mut StringTable,
+    before: &str,
+    after: &str,
+) -> TemplateIrId {
+    let mut builder = TemplateIrBuilder::new(store);
+    let before_node = builder.push_text_node(
+        string_table.intern(before),
+        before.len() as u32,
+        TemplateSegmentOrigin::Body,
+        empty_location(),
+    );
+    let slot_node = builder.push_slot_node(SlotKey::Default, empty_location());
+    let after_node = builder.push_text_node(
+        string_table.intern(after),
+        after.len() as u32,
+        TemplateSegmentOrigin::Body,
+        empty_location(),
+    );
+    let root =
+        builder.push_sequence_node(vec![before_node, slot_node, after_node], empty_location());
+    builder.finish_template(
+        root,
+        Style::default(),
+        TemplateType::String,
+        TemplateIrSummary::empty(),
+        empty_location(),
+    )
+}
+
 /// Builds one parent child occurrence with an inherited wrapper and returns the
 /// parent plus the wrapper-context overlay that activates it. The wrapper's own
 /// view context is `empty_context` unless a separate wrapper overlay is
@@ -454,6 +492,63 @@ fn build_parent_with_inherited_wrapper_and_overlay(
         contexts: vec![(
             child_occurrence_id,
             TirWrapperContext::inherited(wrapper_set_id),
+        )],
+    });
+    let context = TemplateViewContext {
+        expression_overlay: None,
+        slot_resolution: None,
+        wrapper_context: Some(wrapper_overlay_id),
+    };
+
+    (parent_template_id, context)
+}
+
+/// Builds a parent whose single child occurrence inherits one wrapper set built
+/// from `wrapper_template_ids` (stored innermost-to-outermost), activated with
+/// the supplied wrapper-context fields. The wrapper application mode comes
+/// from `wrapper_context`.
+///
+/// WHY: focused multi-wrapper handoff tests need a single inherited wrapper
+///      set holding distinct wrappers, which the single-wrapper builder above
+///      cannot express.
+fn build_parent_with_inherited_wrapper_set(
+    store: &mut TemplateIrStore,
+    wrapper_template_ids: &[TemplateIrId],
+    wrapper_context: TirWrapperContext,
+    string_table: &mut StringTable,
+) -> (TemplateIrId, TemplateViewContext) {
+    let empty_context = TemplateViewContext::default();
+    let child_template_id = text_template(store, string_table, "child");
+    let child_occurrence_id = store.next_child_template_occurrence_id();
+    let child_reference = child_reference(child_template_id, empty_context);
+    let child_node = store.push_node(TemplateIrNode::new(
+        TemplateIrNodeKind::ChildTemplate {
+            reference: child_reference,
+            occurrence_id: child_occurrence_id,
+        },
+        empty_location(),
+    ));
+    let parent_template_id = finish_text_template(store, child_node);
+
+    let wrapper_refs: Vec<TemplateWrapperReference> = wrapper_template_ids
+        .iter()
+        .map(|wrapper_template_id| {
+            TemplateWrapperReference::new(
+                *wrapper_template_id,
+                TemplateTirPhase::Finalized,
+                empty_context,
+            )
+        })
+        .collect();
+    let wrapper_set_id = store.push_or_reuse_wrapper_set(wrapper_refs);
+
+    let wrapper_overlay_id = store.allocate_wrapper_context_overlay(TirWrapperContextOverlay {
+        contexts: vec![(
+            child_occurrence_id,
+            TirWrapperContext {
+                inherited_wrapper_set: Some(wrapper_set_id),
+                ..wrapper_context
+            },
         )],
     });
     let context = TemplateViewContext {
@@ -1036,6 +1131,125 @@ fn inherited_wrapper_handoff_applies_wrapper_overlay() {
         panic!("expected rendered child handoff, got {:?}", template.body);
     };
     assert_owned_text_node(child_body, "child", &strings);
+}
+
+#[test]
+fn inherited_wrapper_handoff_applies_wrapper_set_innermost_to_outermost() {
+    // A single inherited wrapper set holding two distinct wrappers must hand off
+    // as `outer(inner(child))`. `TemplateWrapperSet::wrappers` is stored
+    // innermost-to-outermost, so forward handoff consumption applies the innermost
+    // wrapper directly around the child and the outermost wrapper last.
+    let store = Rc::new(RefCell::new(TemplateIrStore::new()));
+    let mut strings = StringTable::new();
+    let (parent_id, context) = {
+        let mut store_ref = store.borrow_mut();
+        let inner = build_slot_wrapper_template(
+            &mut store_ref,
+            &mut strings,
+            "inner-before",
+            "inner-after",
+        );
+        let outer = build_slot_wrapper_template(
+            &mut store_ref,
+            &mut strings,
+            "outer-before",
+            "outer-after",
+        );
+        build_parent_with_inherited_wrapper_set(
+            &mut store_ref,
+            &[inner, outer],
+            TirWrapperContext::default(),
+            &mut strings,
+        )
+    };
+
+    let body = materialize_parent_handoff(store, parent_id, &mut strings, context);
+    let OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::Sequence { children }) = body
+    else {
+        panic!("expected outer wrapper sequence, got {body:?}");
+    };
+    assert_eq!(children.len(), 3);
+    assert_owned_text_node(&children[0], "outer-before", &strings);
+    assert_owned_text_node(&children[2], "outer-after", &strings);
+
+    let OwnedRuntimeTemplateNode::Sequence {
+        children: inner_children,
+    } = &children[1]
+    else {
+        panic!("expected inner wrapper sequence, got {:?}", children[1]);
+    };
+    assert_eq!(inner_children.len(), 3);
+    assert_owned_text_node(&inner_children[0], "inner-before", &strings);
+    assert_owned_text_node(&inner_children[1], "child", &strings);
+    assert_owned_text_node(&inner_children[2], "inner-after", &strings);
+}
+
+#[test]
+fn inherited_wrapper_handoff_applies_conditional_wrapper_set_innermost_to_outermost() {
+    // The IfChildEmits aggregate-wrapper path must also consume the
+    // innermost-to-outermost store order forward, producing a
+    // `ConditionalWrapper` whose wrapper tree is `outer(inner(AggregateOutput))`.
+    let store = Rc::new(RefCell::new(TemplateIrStore::new()));
+    let mut strings = StringTable::new();
+    let (parent_id, context) = {
+        let mut store_ref = store.borrow_mut();
+        let inner = build_slot_wrapper_template(
+            &mut store_ref,
+            &mut strings,
+            "inner-before",
+            "inner-after",
+        );
+        let outer = build_slot_wrapper_template(
+            &mut store_ref,
+            &mut strings,
+            "outer-before",
+            "outer-after",
+        );
+        build_parent_with_inherited_wrapper_set(
+            &mut store_ref,
+            &[inner, outer],
+            TirWrapperContext {
+                inherited_wrapper_set: None,
+                skip_parent_child_wrappers: false,
+                application_mode: TirWrapperApplicationMode::IfChildEmits,
+            },
+            &mut strings,
+        )
+    };
+
+    let body = materialize_parent_handoff(store, parent_id, &mut strings, context);
+    let OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::ConditionalWrapper {
+        child,
+        wrapper,
+        ..
+    }) = body
+    else {
+        panic!("expected ConditionalWrapper, got {body:?}");
+    };
+
+    // The original child is carried unwrapped beside the aggregate wrapper tree.
+    assert_owned_text_node(&child, "child", &strings);
+
+    let OwnedRuntimeTemplateNode::Sequence { children } = wrapper.as_ref() else {
+        panic!("expected outer wrapper sequence, got {:?}", wrapper);
+    };
+    assert_eq!(children.len(), 3);
+    assert_owned_text_node(&children[0], "outer-before", &strings);
+    assert_owned_text_node(&children[2], "outer-after", &strings);
+
+    let OwnedRuntimeTemplateNode::Sequence {
+        children: inner_children,
+    } = &children[1]
+    else {
+        panic!("expected inner wrapper sequence, got {:?}", children[1]);
+    };
+    assert_eq!(inner_children.len(), 3);
+    assert_owned_text_node(&inner_children[0], "inner-before", &strings);
+    assert!(
+        matches!(inner_children[1], OwnedRuntimeTemplateNode::AggregateOutput),
+        "innermost slot should be the AggregateOutput splice marker"
+    );
+    assert_owned_text_node(&inner_children[2], "inner-after", &strings);
 }
 
 #[test]

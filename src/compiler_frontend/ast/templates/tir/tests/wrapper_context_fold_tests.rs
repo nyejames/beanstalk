@@ -914,6 +914,79 @@ fn wrapper_context_overlay_folds_inherited_wrapper() {
 }
 
 #[test]
+fn wrapper_context_fold_applies_inherited_wrapper_set_innermost_to_outermost() {
+    // A single inherited wrapper set holding two distinct wrappers must fold to
+    // `outer(inner(child))`. `TemplateWrapperSet::wrappers` is stored
+    // innermost-to-outermost, so forward fold consumption applies the innermost
+    // wrapper directly around the child and the outermost wrapper last.
+    let mut string_table = StringTable::new();
+    let store = Rc::new(RefCell::new(TemplateIrStore::new()));
+
+    let (parent, context) = {
+        let mut tir = store.borrow_mut();
+        let child_template_id = build_text_template(&mut tir, &mut string_table, "child");
+        let inner_wrapper =
+            build_slot_wrapper_template(&mut tir, &mut string_table, "inner-before", "inner-after");
+        let outer_wrapper =
+            build_slot_wrapper_template(&mut tir, &mut string_table, "outer-before", "outer-after");
+
+        let mut builder = TemplateIrBuilder::new(&mut tir);
+        let child_node = builder.push_child_template_node_with_reference(
+            TemplateTirChildReference::new(
+                child_template_id,
+                TemplateTirPhase::Composed,
+                TemplateViewContext::default(),
+            ),
+            empty_location(),
+        );
+        let root = builder.push_sequence_node(vec![child_node], empty_location());
+        let parent = builder.finish_template(
+            root,
+            Style::default(),
+            TemplateType::String,
+            TemplateIrSummary::empty(),
+            empty_location(),
+        );
+
+        let inner_ref = TemplateWrapperReference::new(
+            inner_wrapper,
+            TemplateTirPhase::Finalized,
+            TemplateViewContext::default(),
+        );
+        let outer_ref = TemplateWrapperReference::new(
+            outer_wrapper,
+            TemplateTirPhase::Finalized,
+            TemplateViewContext::default(),
+        );
+        let wrapper_set_id = tir.push_or_reuse_wrapper_set(vec![inner_ref, outer_ref]);
+        let context = allocate_wrapper_context_overlay(
+            &mut tir,
+            wrapper_set_id,
+            ChildTemplateOccurrenceId::new(0),
+            TirWrapperContext::default(),
+        );
+        (parent, context)
+    };
+
+    let fixture = WrapperContextFixture {
+        store,
+        parent,
+        wrapper_template_id: None,
+        context,
+    };
+
+    let emission = fold_fixture(&fixture, &mut string_table);
+    let TemplateEmission::Output(output_id) = emission else {
+        panic!("expected Output emission, got {emission:?}");
+    };
+    assert_eq!(
+        string_table.resolve(output_id),
+        "outer-beforeinner-beforechildinner-afterouter-after",
+        "a single innermost-to-outermost wrapper set must fold to outer(inner(child))"
+    );
+}
+
+#[test]
 fn prepared_fold_keeps_parent_expression_authority_through_nested_wrappers() {
     let mut string_table = StringTable::new();
     let fixture = build_nested_virtual_wrapper_fixture(&mut string_table);

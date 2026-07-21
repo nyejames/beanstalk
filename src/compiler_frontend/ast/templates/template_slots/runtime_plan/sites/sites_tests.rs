@@ -9,14 +9,17 @@
 
 use super::{build_tir_wrapper_render_pieces, slot_key_for_node};
 use crate::compiler_frontend::ast::templates::error::TemplateError;
-use crate::compiler_frontend::ast::templates::template::SlotKey;
 use crate::compiler_frontend::ast::templates::template::TemplateSegmentOrigin;
+use crate::compiler_frontend::ast::templates::template::{SlotKey, Style, TemplateType};
+use crate::compiler_frontend::ast::templates::template_slots::RuntimeSlotContributionSourceId;
 use crate::compiler_frontend::ast::templates::template_slots::TemplateSlotError;
-use crate::compiler_frontend::ast::templates::tir::refs::TemplateTirChildReference;
+use crate::compiler_frontend::ast::templates::tir::refs::{
+    TemplateTirChildReference, TemplateWrapperReference,
+};
 use crate::compiler_frontend::ast::templates::tir::{
-    TemplateIrBuilder, TemplateIrId, TemplateIrNodeId, TemplateIrStore, TemplateSlotPlanId,
-    TemplateSlotSiteRenderPiece, TemplateSlotSiteRenderPlan, TemplateTirPhase, TemplateViewContext,
-    TirCopyState,
+    TemplateIrBuilder, TemplateIrId, TemplateIrNodeId, TemplateIrNodeKind, TemplateIrStore,
+    TemplateIrSummary, TemplateSlotPlanId, TemplateSlotSiteRenderPiece, TemplateSlotSiteRenderPlan,
+    TemplateTirPhase, TemplateViewContext, TirCopyState,
 };
 use crate::compiler_frontend::compiler_errors::ErrorType;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -152,4 +155,122 @@ fn missing_structural_authority_propagates_through_runtime_slot_site_planner() {
             panic!("missing structural authority must not become a user diagnostic");
         }
     }
+}
+
+/// Builds a before/slot/after wrapper template with a default slot and
+/// caller-supplied marker text so distinct wrappers can be told apart.
+fn build_slot_text_wrapper(
+    store: &mut TemplateIrStore,
+    string_table: &mut StringTable,
+    before: &str,
+    after: &str,
+) -> TemplateIrId {
+    let mut builder = TemplateIrBuilder::new(store);
+    let before_node = builder.push_text_node(
+        string_table.intern(before),
+        before.len() as u32,
+        TemplateSegmentOrigin::Body,
+        empty_location(),
+    );
+    let slot_node = builder.push_slot_node(SlotKey::Default, empty_location());
+    let after_node = builder.push_text_node(
+        string_table.intern(after),
+        after.len() as u32,
+        TemplateSegmentOrigin::Body,
+        empty_location(),
+    );
+    let root =
+        builder.push_sequence_node(vec![before_node, slot_node, after_node], empty_location());
+    builder.finish_template(
+        root,
+        Style::default(),
+        TemplateType::String,
+        TemplateIrSummary::empty(),
+        empty_location(),
+    )
+}
+
+/// Asserts that a render piece is a copied text node carrying `expected`.
+fn assert_site_text_piece(
+    piece: &TemplateSlotSiteRenderPiece,
+    store: &TemplateIrStore,
+    string_table: &StringTable,
+    expected: &str,
+) {
+    let TemplateSlotSiteRenderPiece::Render(node_id) = piece else {
+        panic!("expected Render piece, got {piece:?}");
+    };
+    let node = store
+        .get_node(*node_id)
+        .expect("render piece node should exist in the store");
+    match &node.kind {
+        TemplateIrNodeKind::Text { text, .. } => {
+            assert_eq!(string_table.resolve(*text), expected);
+        }
+        other => panic!("expected Text node, got {other:?}"),
+    }
+}
+
+#[test]
+fn wrap_site_plan_applies_wrapper_set_innermost_to_outermost() {
+    // `wrap_site_plan_with_tir_child_wrappers` must consume the
+    // innermost-to-outermost wrapper-set order forward, so a single two-wrapper
+    // set wraps the contribution as outer(inner(contribution)). The render
+    // pieces must read outer-before, inner-before, contribution, inner-after,
+    // outer-after; reverse consumption would swap the inner/outer markers.
+    let mut string_table = StringTable::new();
+    let mut store = TemplateIrStore::new();
+
+    let inner_wrapper =
+        build_slot_text_wrapper(&mut store, &mut string_table, "inner-before", "inner-after");
+    let outer_wrapper =
+        build_slot_text_wrapper(&mut store, &mut string_table, "outer-before", "outer-after");
+
+    let inner_ref = TemplateWrapperReference::new(
+        inner_wrapper,
+        TemplateTirPhase::Finalized,
+        TemplateViewContext::default(),
+    );
+    let outer_ref = TemplateWrapperReference::new(
+        outer_wrapper,
+        TemplateTirPhase::Finalized,
+        TemplateViewContext::default(),
+    );
+    // Wrapper sets are stored innermost-to-outermost; forward site-plan
+    // consumption must yield outer(inner(contribution)).
+    let wrapper_set_id = store.push_or_reuse_wrapper_set(vec![inner_ref, outer_ref]);
+
+    let contribution_source_id = RuntimeSlotContributionSourceId(0);
+    let source_plan = TemplateSlotSiteRenderPlan {
+        pieces: vec![TemplateSlotSiteRenderPiece::ContributionSource(
+            contribution_source_id,
+        )],
+    };
+
+    let mut copy_state = TirCopyState::new();
+    let mut planner = super::RuntimeWrapperSitePlanBuilder {
+        sources: &[],
+        slot_plan_id: TemplateSlotPlanId::new(0),
+        store: &mut store,
+        copy_state: &mut copy_state,
+    };
+
+    let wrapped = planner
+        .wrap_site_plan_with_tir_child_wrappers(source_plan, wrapper_set_id)
+        .expect("site wrapper application should succeed");
+
+    assert_eq!(wrapped.pieces.len(), 5);
+    assert_site_text_piece(&wrapped.pieces[0], &store, &string_table, "outer-before");
+    assert_site_text_piece(&wrapped.pieces[1], &store, &string_table, "inner-before");
+    match &wrapped.pieces[2] {
+        TemplateSlotSiteRenderPiece::ContributionSource(source_id) => {
+            assert_eq!(
+                *source_id, contribution_source_id,
+                "middle piece should be the original contribution source"
+            );
+        }
+        other => panic!("expected ContributionSource piece, got {other:?}"),
+    }
+    assert_site_text_piece(&wrapped.pieces[3], &store, &string_table, "inner-after");
+    assert_site_text_piece(&wrapped.pieces[4], &store, &string_table, "outer-after");
 }

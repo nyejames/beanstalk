@@ -9,8 +9,8 @@
 //!      focused submodules: schema discovery, contribution routing, overlay
 //!      allocation, head-chain composition, child-wrapper application, and the
 //!      small shared helpers they all depend on. Each submodule owns one step of
-//!      the composition pipeline, while this file preserves the exact public
-//!      surface that existed when the module was a single file.
+//!      the composition pipeline, while this file exposes the current module
+//!      surface used by the surrounding TIR stage.
 //!
 //! ## Module layout
 //!
@@ -32,10 +32,8 @@ mod helpers;
 mod overlays;
 mod schema;
 
-// Re-exports: preserve every name that was reachable through
-// `slot_composition::` before the split. Surfaces used only by focused tests
-// are gated with `#[cfg(test)]` to keep the lib build free of spurious unused-
-// import warnings while still exposing the exact same test API.
+// Re-exports expose the current slot-composition surface. Test-only inspection
+// seams remain gated so production builds carry only active compiler APIs.
 
 pub(crate) use schema::{
     TirSlotSchema, collect_tir_slot_placeholders_in_order, collect_tir_slot_schema,
@@ -47,14 +45,6 @@ pub(crate) use child_wrappers::wrap_tir_node_in_wrappers;
 
 pub(crate) use overlays::merge_tir_slot_resolution_contexts;
 
-// `ComposedTirRoot` was nameable as `slot_composition::ComposedTirRoot`
-// before the split. No caller names it today, but the re-export preserves the
-// exact pre-split surface. Allowed-unused keeps the build warning-free.
-#[allow(unused_imports)]
-pub(crate) use helpers::ComposedTirRoot;
-
-#[cfg(test)]
-pub(crate) use child_wrappers::apply_tir_child_wrappers;
 #[cfg(test)]
 pub(crate) use contributions::route_tir_slot_contributions;
 pub(crate) use contributions::{RoutedTirSlotContributions, TirSlotContributions};

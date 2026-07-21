@@ -187,10 +187,14 @@ impl RuntimeWrapperSitePlanBuilder<'_> {
     /// Applies an ordered TIR wrapper set around a slot-site render plan.
     ///
     /// WHAT: resolves store-local wrapper template IDs from the wrapper-set side
-    /// table and wraps from innermost to outermost using the TIR-native wrapper
-    /// render-piece path.
-    /// WHY: `TirSlotPlaceholder` no longer stores recursive `Template` values,
-    /// so runtime slot-site planning must consume the module-local ID path.
+    ///       table and iterates them forward (innermost-first), wrapping each
+    ///       around the current plan using the TIR-native wrapper render-piece
+    ///       path so the outermost wrapper becomes the final layer.
+    /// WHY: `TemplateWrapperSet::wrappers` is stored innermost-to-outermost, so
+    ///      forward consumption yields the `outermost(innermost(plan))` nesting
+    ///      the store contract requires. `TirSlotPlaceholder` no longer stores
+    ///      recursive `Template` values, so runtime slot-site planning must
+    ///      consume the module-local ID path.
     fn wrap_site_plan_with_tir_child_wrappers(
         &mut self,
         mut plan: TemplateSlotSiteRenderPlan,
@@ -204,9 +208,11 @@ impl RuntimeWrapperSitePlanBuilder<'_> {
         };
 
         // Wrapper sets store `TemplateWrapperReference` values; extract the
-        // store-local `TemplateIrId` for module-local TIR lookups.
+        // store-local `TemplateIrId` for module-local TIR lookups. Iterate
+        // forward so the innermost-to-outermost store order produces
+        // `outer(inner(plan))`.
         let wrapper_refs = wrapper_set.wrappers.clone();
-        for wrapper_ref in wrapper_refs.into_iter().rev() {
+        for wrapper_ref in wrapper_refs {
             add_ast_counter(AstCounter::TemplateWrapperApplications, 1);
 
             let wrapper_id = wrapper_ref.root;

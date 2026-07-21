@@ -1183,24 +1183,3 @@ fn required_wrapper_set_count(
         ))
     })
 }
-
-/// Returns true if the referenced TIR template still has unresolved slot placeholders.
-///
-/// WHAT: checks the template's summary for slot flags. Templates with slots are
-///       wrapper receivers, not direct child output, so they must not be wrapped
-///       by `$children(..)` wrappers.
-/// WHY: unresolved-slot templates are wrapper receivers, so this check excludes
-///      them from direct-child wrapping.
-#[cfg(test)]
-pub(super) fn tir_template_has_unresolved_slots(
-    store: &TemplateIrStore,
-    template_id: TemplateIrId,
-) -> SlotSchemaResult<bool> {
-    let template = store.get_template(template_id).ok_or_else(|| {
-        Box::new(internal_compiler_error(
-            "TIR child wrapper application: child template ID was not present in the store.",
-        ))
-    })?;
-
-    Ok(template.summary.has_slots || template.summary.slot_count > 0)
-}
