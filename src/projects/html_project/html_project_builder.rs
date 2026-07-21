@@ -120,7 +120,7 @@ impl BackendBuilder for HtmlProjectBuilder {
         let mut has_directory_homepage = false;
         let artifact_modules: Vec<&Module> = modules
             .iter()
-            .filter(|module| module.root_activity.has_html_artifact_activity())
+            .filter(|module| module.metadata.root_activity.has_html_artifact_activity())
             .collect();
         let mut compiled_html_output_paths = Vec::with_capacity(artifact_modules.len());
         let mut warnings = Vec::new();
@@ -414,12 +414,12 @@ impl HtmlProjectBuilder {
         let compile_input = HtmlModuleCompileInput {
             hir_module: &module.hir,
             type_environment: &module.type_environment,
-            const_fragments: &module.const_top_level_fragments,
+            const_fragments: &module.metadata.const_top_level_fragments,
             borrow_analysis: &module.borrow_analysis,
             project_name,
             document_config,
             release_build,
-            root_activity: &module.root_activity,
+            root_activity: &module.metadata.root_activity,
             external_package_registry: Arc::clone(&module.external_package_registry),
         };
         if wasm_enabled {

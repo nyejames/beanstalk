@@ -221,7 +221,7 @@ impl FrontendProject {
         self.frontend
             .generate_hir(ast)
             .expect("HIR lowering should succeed")
-            .0
+            .hir_module
     }
 
     fn borrow_checked_hir(&mut self) -> BorrowCheckReport {

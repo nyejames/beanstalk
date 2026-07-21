@@ -23,7 +23,7 @@ Flow: [projects](src/projects/) → [build_system](src/build_system/) → [compi
     - [dev_server](src/projects/dev_server/): HTTP/SSE/watch rebuild loop. kw: serve, hot reload.
     - [html_project](src/projects/html_project/): HTML builder and HTML-Wasm integration. kw: shell, assets, wasm.
 - [builder boundary above frontend](src/build_system/): kw — config, modules, artifacts, cleanup.
-    - [build.rs](src/build_system/build.rs): build_project, BuildResult, output writing.
+    - [build.rs](src/build_system/build.rs): build_project, BuildResult, current module payload and its non-HIR compiler-metadata lane, output writing.
     - [project_config.rs](src/build_system/project_config.rs) + [project_config/](src/build_system/project_config/): config.bst parse/validate through frontend+AST.
     - [path_validation.rs](src/build_system/path_validation.rs): project path policy checks.
     - [utils.rs](src/build_system/utils.rs): shared builder helpers.
@@ -53,6 +53,7 @@ Flow: [projects](src/projects/) → [build_system](src/build_system/) → [compi
 - [paths](src/compiler_frontend/paths/): import/path normalization/format/resolution. kw: @imports, source roots.
 - [source_packages](src/compiler_frontend/source_packages/): package-root registration and public import boundaries.
 - [semantic_identity.rs](src/compiler_frontend/semantic_identity.rs): stable package, module and exported declaration origin identities shared across compiler/build stages.
+- [module_metadata.rs](src/compiler_frontend/module_metadata.rs): named HIR-lowering result, resolved documentation metadata, rendered-path handoff and non-HIR metadata validation.
 - [external_packages](src/compiler_frontend/external_packages/): virtual package registry, external IDs. kw: @core, @web, opaque.
 - [builtins](src/compiler_frontend/builtins/): compiler-owned types/ops/casts/runtime error metadata.
 - [style_directives](src/compiler_frontend/style_directives/): frontend+builder template directive registry.
@@ -117,7 +118,7 @@ Flow: [projects](src/projects/) → [build_system](src/build_system/) → [compi
 - [backend-facing semantic IR](src/compiler_frontend/hir/): kw — CFG, locals, TypeId, reachability.
     - [hir_builder](src/compiler_frontend/hir/hir_builder/), [hir_builder.rs](src/compiler_frontend/hir/hir_builder.rs): AST → HIR lowering state.
     - [hir_expression](src/compiler_frontend/hir/hir_expression/), [hir_statement](src/compiler_frontend/hir/hir_statement/): lowering implementation owners.
-    - [validation](src/compiler_frontend/hir/validation/): internal invariant checks only.
+    - [validation](src/compiler_frontend/hir/validation/): executable-HIR internal invariant checks only; non-HIR module metadata is validated by [module_metadata.rs](src/compiler_frontend/module_metadata.rs).
     - [reachability.rs](src/compiler_frontend/hir/reachability.rs): function/block/external/map/runtime-cast feature facts.
     - [reactivity.rs](src/compiler_frontend/hir/reactivity.rs): HIR reactive metadata.
 - [borrow_checker](src/compiler_frontend/analysis/borrow_checker/): HIR side-table borrow facts. kw — exclusivity, moves, aliases.

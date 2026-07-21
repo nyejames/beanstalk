@@ -5,7 +5,9 @@
 //! WHY: the refactor split tests by module responsibility, so common scaffolding should
 //!      live in one place instead of being redefined in every test file.
 
-use crate::build_system::build::{FileKind, Module, ModuleRootActivity, OutputFile};
+use crate::build_system::build::{
+    FileKind, Module, ModuleCompilerMetadata, ModuleRootActivity, OutputFile,
+};
 use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
@@ -76,13 +78,17 @@ pub(crate) fn create_test_module(entry_point: PathBuf, string_table: &mut String
         hir: hir_module,
         type_environment: TypeEnvironment::new(),
         borrow_analysis: BorrowCheckReport::default(),
-        warnings: vec![],
-        const_top_level_fragments: vec![],
-        // Most builder fixtures represent active page roots. API-only modules opt into the
-        // explicit default when a test needs to verify artifact filtering.
-        root_activity: ModuleRootActivity {
-            has_non_trivial_root_body: true,
-            ..ModuleRootActivity::default()
+        metadata: ModuleCompilerMetadata {
+            warnings: vec![],
+            const_top_level_fragments: vec![],
+            // Most builder fixtures represent active page roots. API-only modules opt into the
+            // explicit default when a test needs to verify artifact filtering.
+            root_activity: ModuleRootActivity {
+                has_non_trivial_root_body: true,
+                ..ModuleRootActivity::default()
+            },
+            doc_fragments: vec![],
+            rendered_path_usages: vec![],
         },
         external_package_registry: Arc::new(ExternalPackageRegistry::new()),
         module_external_imports: vec![],

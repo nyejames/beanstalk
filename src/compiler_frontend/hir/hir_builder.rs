@@ -16,6 +16,7 @@
 use crate::compiler_frontend::ast::Ast;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, SourceLocation};
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
+use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::hir::blocks::HirBlock;
@@ -31,6 +32,7 @@ use crate::compiler_frontend::hir::regions::HirRegion;
 use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::hir::validation::validate_hir_module;
 use crate::compiler_frontend::instrumentation::{FrontendCounter, add_frontend_counter};
+use crate::compiler_frontend::module_metadata::{HirLoweringMetadata, HirLoweringResult};
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -47,7 +49,7 @@ pub fn lower_module(
     ast: Ast,
     string_table: &mut StringTable,
     path_format_config: PathStringFormatConfig,
-) -> Result<(HirModule, TypeEnvironment), CompilerMessages> {
+) -> Result<HirLoweringResult, CompilerMessages> {
     let type_environment = ast.type_environment.clone();
     let ctx = HirBuilder::new(string_table, path_format_config, type_environment);
     ctx.build_hir_module(ast)
@@ -65,7 +67,7 @@ mod hir_builder_test_support;
 #[cfg(test)]
 pub(crate) use hir_builder_test_support::{
     HirTestChoiceDefinition, assert_no_placeholder_terminators, build_ast, build_ast_with_choices,
-    lower_ast, validate_module_for_tests,
+    lower_ast, lower_ast_with_metadata, validate_module_for_tests,
 };
 // -------------------
 // HIR Builder Context
@@ -79,6 +81,19 @@ pub(crate) use hir_builder_test_support::{
 pub struct HirBuilder<'a> {
     // === Result being built ===
     pub(super) module: HirModule,
+
+    // === Non-HIR metadata extracted during lowering ===
+    // WHAT: resolved documentation fragments and rendered-path usages pulled from the AST. These
+    //       are compiler metadata, not executable HIR state, and are returned through the typed
+    //       `HirLoweringMetadata` result boundary.
+    pub(super) extracted_metadata: HirLoweringMetadata,
+
+    // === AST warnings kept for error context only ===
+    // WHAT: the AST's own warnings, held privately so failed lowering can render them alongside
+    //       the failing HIR transformation error. Successful-module warnings are not duplicated
+    //       here: frontend orchestration already owns the merged preparation + AST warning
+    //       vector and remains the single successful-module warning source.
+    ast_warnings: Vec<CompilerDiagnostic>,
 
     // === For variable name resolution ===
     pub(super) string_table: &'a mut StringTable,
@@ -200,6 +215,9 @@ impl<'a> HirBuilder<'a> {
         HirBuilder {
             module: HirModule::new(),
 
+            extracted_metadata: HirLoweringMetadata::new(),
+            ast_warnings: Vec::new(),
+
             string_table,
             #[cfg(test)]
             path_format_config,
@@ -249,7 +267,7 @@ impl<'a> HirBuilder<'a> {
     fn lower_error_messages(&self, error: CompilerError) -> CompilerMessages {
         CompilerMessages::from_error_with_warnings(
             error,
-            self.module.warnings.to_owned(),
+            self.ast_warnings.clone(),
             self.string_table,
         )
         .with_type_context_for_all_diagnostics(self.type_environment.clone())
@@ -282,12 +300,11 @@ impl<'a> HirBuilder<'a> {
 
     /// Builds an HIR module from an AST.
     /// This is the main entry point for HIR generation.
-    pub fn build_hir_module(
-        mut self,
-        ast: Ast,
-    ) -> Result<(HirModule, TypeEnvironment), CompilerMessages> {
-        self.module.warnings = ast.warnings.to_owned();
-        self.module.rendered_path_usages = ast.rendered_path_usages.to_owned();
+    pub fn build_hir_module(mut self, ast: Ast) -> Result<HirLoweringResult, CompilerMessages> {
+        // Keep the AST warnings privately for error-context rendering only. They are not exposed
+        // on the successful lowering result; frontend orchestration owns the merged warning vector.
+        self.ast_warnings = ast.warnings.to_owned();
+        self.extracted_metadata.rendered_path_usages = ast.rendered_path_usages.to_owned();
         self.module.const_facts = HirConstFacts::from(&ast.const_facts);
 
         // 1. Prepare declarations (functions, structs, choices)
@@ -317,11 +334,13 @@ impl<'a> HirBuilder<'a> {
             return Err(self.lower_error_messages(error));
         }
 
-        let warnings = self.module.warnings.to_owned();
+        let warnings = self.ast_warnings.clone();
         let string_table = &*self.string_table;
         self.module.side_table = self.side_table;
 
-        // 6. Validate the final HIR module
+        // 6. Validate the final HIR module. HIR validation checks executable HIR only; non-HIR
+        //    compiler metadata (documentation fragments) is validated separately at the module
+        //    compilation boundary.
         if let Err(error) = validate_hir_module(&self.module, &self.type_environment) {
             return Err(
                 CompilerMessages::from_error_with_warnings(error, warnings, string_table)
@@ -331,7 +350,11 @@ impl<'a> HirBuilder<'a> {
 
         record_hir_counters(&self.module);
 
-        Ok((self.module, self.type_environment))
+        Ok(HirLoweringResult {
+            hir_module: self.module,
+            type_environment: self.type_environment,
+            metadata: self.extracted_metadata,
+        })
     }
 
     /// Processes a single AST node and generates corresponding HIR.

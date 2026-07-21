@@ -41,7 +41,7 @@ fn relative_one_segment_underflow_returns_escapes_project_root() {
     );
     let expected_source_path = usage.source_path.clone();
     let expected_render_location = usage.render_location.clone();
-    module.hir.rendered_path_usages.push(usage);
+    module.metadata.rendered_path_usages.push(usage);
 
     let error = plan_module_tracked_assets(
         &module,
@@ -91,7 +91,7 @@ fn relative_repeated_underflow_returns_escapes_project_root() {
     );
     let expected_source_path = usage.source_path.clone();
     let expected_render_location = usage.render_location.clone();
-    module.hir.rendered_path_usages.push(usage);
+    module.metadata.rendered_path_usages.push(usage);
 
     let error = plan_module_tracked_assets(&module, Path::new("index.html"), &mut string_table)
         .expect_err("repeated underflow should produce error");
@@ -135,8 +135,8 @@ fn duplicate_same_source_and_output_dedupes_within_module() {
             line_number: 1,
         },
     );
-    module.hir.rendered_path_usages.push(usage.clone());
-    module.hir.rendered_path_usages.push(usage);
+    module.metadata.rendered_path_usages.push(usage.clone());
+    module.metadata.rendered_path_usages.push(usage);
 
     let planned = plan_module_tracked_assets(&module, Path::new("index.html"), &mut string_table)
         .expect("planning succeeds");
@@ -153,18 +153,21 @@ fn public_root_directory_usage_is_ignored() {
 
     let mut string_table = StringTable::new();
     let mut module = create_test_module(root.join("src/#page.bst"), &mut string_table);
-    module.hir.rendered_path_usages.push(rendered_path_usage(
-        &mut string_table,
-        RenderedPathUsageInput {
-            source_path_components: &[],
-            public_path_components: &[],
-            filesystem_path: root.join("src"),
-            base: CompileTimePathBase::EntryRoot,
-            kind: CompileTimePathKind::Directory,
-            source_file_scope_components: &["src", "#page.bst"],
-            line_number: 2,
-        },
-    ));
+    module
+        .metadata
+        .rendered_path_usages
+        .push(rendered_path_usage(
+            &mut string_table,
+            RenderedPathUsageInput {
+                source_path_components: &[],
+                public_path_components: &[],
+                filesystem_path: root.join("src"),
+                base: CompileTimePathBase::EntryRoot,
+                kind: CompileTimePathKind::Directory,
+                source_file_scope_components: &["src", "#page.bst"],
+                line_number: 2,
+            },
+        ));
 
     let planned = plan_module_tracked_assets(&module, Path::new("index.html"), &mut string_table)
         .expect("planning succeeds");
@@ -182,18 +185,21 @@ fn non_asset_directory_link_is_ignored() {
 
     let mut string_table = StringTable::new();
     let mut module = create_test_module(root.join("src/docs/guide/#page.bst"), &mut string_table);
-    module.hir.rendered_path_usages.push(rendered_path_usage(
-        &mut string_table,
-        RenderedPathUsageInput {
-            source_path_components: &[".", "subdir"],
-            public_path_components: &[".", "subdir"],
-            filesystem_path: root.join("src/docs/guide/subdir"),
-            base: CompileTimePathBase::RelativeToFile,
-            kind: CompileTimePathKind::Directory,
-            source_file_scope_components: &["src", "docs", "guide", "#page.bst"],
-            line_number: 5,
-        },
-    ));
+    module
+        .metadata
+        .rendered_path_usages
+        .push(rendered_path_usage(
+            &mut string_table,
+            RenderedPathUsageInput {
+                source_path_components: &[".", "subdir"],
+                public_path_components: &[".", "subdir"],
+                filesystem_path: root.join("src/docs/guide/subdir"),
+                base: CompileTimePathBase::RelativeToFile,
+                kind: CompileTimePathKind::Directory,
+                source_file_scope_components: &["src", "docs", "guide", "#page.bst"],
+                line_number: 5,
+            },
+        ));
 
     let planned = plan_module_tracked_assets(
         &module,
@@ -244,8 +250,8 @@ fn large_asset_warning_dedupes_to_first_render_location() {
             line_number: 8,
         },
     );
-    module.hir.rendered_path_usages.push(first_usage);
-    module.hir.rendered_path_usages.push(second_usage);
+    module.metadata.rendered_path_usages.push(first_usage);
+    module.metadata.rendered_path_usages.push(second_usage);
 
     let planned = plan_module_tracked_assets(&module, Path::new("index.html"), &mut string_table)
         .expect("planning succeeds");
@@ -273,18 +279,21 @@ fn emit_tracked_assets_reads_source_bytes_into_binary_outputs() {
 
     let mut string_table = StringTable::new();
     let mut module = create_test_module(root.join("#page.bst"), &mut string_table);
-    module.hir.rendered_path_usages.push(rendered_path_usage(
-        &mut string_table,
-        RenderedPathUsageInput {
-            source_path_components: &["assets", "logo.png"],
-            public_path_components: &["assets", "logo.png"],
-            filesystem_path: root.join("assets/logo.png"),
-            base: CompileTimePathBase::EntryRoot,
-            kind: CompileTimePathKind::File,
-            source_file_scope_components: &["#page.bst"],
-            line_number: 1,
-        },
-    ));
+    module
+        .metadata
+        .rendered_path_usages
+        .push(rendered_path_usage(
+            &mut string_table,
+            RenderedPathUsageInput {
+                source_path_components: &["assets", "logo.png"],
+                public_path_components: &["assets", "logo.png"],
+                filesystem_path: root.join("assets/logo.png"),
+                base: CompileTimePathBase::EntryRoot,
+                kind: CompileTimePathKind::File,
+                source_file_scope_components: &["#page.bst"],
+                line_number: 1,
+            },
+        ));
     let planned = plan_module_tracked_assets(&module, Path::new("index.html"), &mut string_table)
         .expect("planning succeeds");
 

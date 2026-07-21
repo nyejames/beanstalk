@@ -138,7 +138,6 @@ impl<'a> HirDisplayContext<'a> {
             "  start_function: {}",
             self.function_label(module.start_function)
         );
-        let _ = writeln!(out, "  doc_fragments: {}", module.doc_fragments.len());
 
         let _ = writeln!(out, "  regions: {}", module.regions.len());
 
@@ -168,10 +167,6 @@ impl<'a> HirDisplayContext<'a> {
                 let block_rendered = self.render_block(block);
                 self.push_indented_multiline(&mut out, 4, &block_rendered);
             }
-        }
-
-        if !module.warnings.is_empty() {
-            let _ = writeln!(out, "  warnings: {}", module.warnings.len());
         }
 
         out.push('}');

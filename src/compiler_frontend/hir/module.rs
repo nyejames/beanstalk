@@ -1,24 +1,27 @@
 //! HIR module container.
 //!
-//! WHAT: the complete semantic IR payload produced for one Beanstalk module.
+//! WHAT: the executable/semantic IR payload produced for one Beanstalk module.
 //! WHY: backends consume `HirModule` as the stable frontend output after AST lowering and borrow
 //! validation.
 //!
 //! Type identity lives in the frontend `TypeEnvironment` carried beside the module at the
 //! compiled-module boundary. HIR nodes store compact frontend `TypeId`s and do not own a separate
 //! semantic type table.
+//!
+//! Non-HIR compiler metadata — warnings, resolved documentation fragments, and rendered-path
+//! usages — is extracted by HIR lowering into `HirLoweringMetadata` and assembled into
+//! `ModuleCompilerMetadata` on the build-system module payload. `HirModule` carries only
+//! executable/semantic HIR state.
 
-use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::hir::blocks::HirBlock;
 use crate::compiler_frontend::hir::const_facts::HirConstFacts;
-use crate::compiler_frontend::hir::constants::{HirDocFragment, HirModuleConst};
+use crate::compiler_frontend::hir::constants::HirModuleConst;
 use crate::compiler_frontend::hir::functions::{HirFunction, HirFunctionOrigin};
 use crate::compiler_frontend::hir::hir_side_table::HirSideTable;
 use crate::compiler_frontend::hir::ids::FunctionId;
 use crate::compiler_frontend::hir::regions::HirRegion;
 use crate::compiler_frontend::hir::structs::HirStruct;
-use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap};
 use rustc_hash::FxHashMap;
 
@@ -82,9 +85,7 @@ pub struct HirModule {
     /// entry/runtime-template behavior stable across lowering passes.
     pub function_origins: FxHashMap<FunctionId, HirFunctionOrigin>,
 
-    pub doc_fragments: Vec<HirDocFragment>,
     pub module_constants: Vec<HirModuleConst>,
-    pub rendered_path_usages: Vec<RenderedPathUsage>,
 
     /// Region tree
     pub regions: Vec<HirRegion>,
@@ -96,9 +97,6 @@ pub struct HirModule {
     /// WHY: provides metadata for later borrow-checker and lowering optimizations
     ///      without changing HIR semantics today.
     pub const_facts: HirConstFacts,
-
-    /// Warnings Collected along the way
-    pub warnings: Vec<CompilerDiagnostic>,
 }
 
 impl HirModule {
@@ -111,11 +109,8 @@ impl HirModule {
             side_table: HirSideTable::default(),
             start_function: FunctionId(0),
             function_origins: FxHashMap::default(),
-            doc_fragments: vec![],
             module_constants: vec![],
-            rendered_path_usages: vec![],
             regions: vec![],
-            warnings: vec![],
             const_facts: HirConstFacts::default(),
         }
     }
@@ -123,20 +118,5 @@ impl HirModule {
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         self.side_table.remap_string_ids(remap);
         self.const_facts.remap_string_ids(remap);
-
-        for fragment in &mut self.doc_fragments {
-            fragment.location.remap_string_ids(remap);
-        }
-
-        for usage in &mut self.rendered_path_usages {
-            usage.source_path.remap_string_ids(remap);
-            usage.public_path.remap_string_ids(remap);
-            usage.source_file_scope.remap_string_ids(remap);
-            usage.render_location.remap_string_ids(remap);
-        }
-
-        for warning in &mut self.warnings {
-            warning.remap_string_ids(remap);
-        }
     }
 }

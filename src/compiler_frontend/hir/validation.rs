@@ -90,7 +90,6 @@ impl<'a> HirValidator<'a> {
         self.validate_function_cfg_ownership()?;
 
         // 4. Validate module-level metadata.
-        self.validate_doc_fragments()?;
         self.validate_module_constants()?;
         self.validate_reactive_metadata()?;
 

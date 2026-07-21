@@ -1,52 +1,21 @@
 //! Module-level HIR metadata validation.
 //!
-//! WHAT: checks doc fragment locations and folded module constant payloads after lowering.
+//! WHAT: checks folded module constant payloads and reactive metadata after lowering.
 //! WHY: these values are consumed by builders outside the executable CFG, so they need explicit
 //! validation instead of relying on statement or expression walks.
+//!
+//! Documentation-metadata validation moved to the module compilation boundary
+//! (`HirLoweringMetadata::validate`) because documentation fragments are not executable HIR state.
 
 use super::HirValidator;
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::hir::constants::{HirConstValue, HirDocFragmentKind};
+use crate::compiler_frontend::hir::constants::HirConstValue;
 use crate::compiler_frontend::hir::hir_side_table::HirLocation;
 
 impl<'a> HirValidator<'a> {
     // -------------------------
     //  Metadata Validation
     // -------------------------
-
-    pub(super) fn validate_doc_fragments(&self) -> Result<(), CompilerError> {
-        for (index, fragment) in self.module.doc_fragments.iter().enumerate() {
-            if matches!(fragment.kind, HirDocFragmentKind::Doc)
-                && fragment
-                    .location
-                    .start_pos
-                    .line_number
-                    .gt(&fragment.location.end_pos.line_number)
-            {
-                return Err(self.error_with_hir(
-                    format!(
-                        "Doc fragment #{index} has invalid location: start line {} is after end line {}",
-                        fragment.location.start_pos.line_number, fragment.location.end_pos.line_number
-                    ),
-                    None,
-                ));
-            }
-
-            if fragment.location.start_pos.line_number == fragment.location.end_pos.line_number
-                && fragment.location.start_pos.char_column > fragment.location.end_pos.char_column
-            {
-                return Err(self.error_with_hir(
-                    format!(
-                        "Doc fragment #{index} has invalid location columns: start {} is after end {}",
-                        fragment.location.start_pos.char_column, fragment.location.end_pos.char_column
-                    ),
-                    None,
-                ));
-            }
-        }
-
-        Ok(())
-    }
 
     pub(super) fn validate_reactive_metadata(&self) -> Result<(), CompilerError> {
         for source in self.module.side_table.reactive_sources() {

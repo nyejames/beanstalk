@@ -34,9 +34,9 @@ pub(crate) fn entry_and_start(string_table: &mut StringTable) -> (InternedPath, 
 }
 
 pub(crate) fn lower_hir(ast: Ast, string_table: &mut StringTable) -> HirModule {
-    let (module, _) = lower_module(ast, string_table, PathStringFormatConfig::default())
+    let lowering = lower_module(ast, string_table, PathStringFormatConfig::default())
         .expect("HIR lowering should succeed");
-    module
+    lowering.hir_module
 }
 
 /// Builds a malformed raw-template expression for HIR boundary invariant tests.

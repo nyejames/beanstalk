@@ -71,13 +71,14 @@ fn classifies_entry_start_and_normal_functions() {
         entry_path,
     );
 
-    let (module, _) = HirBuilder::new(
+    let lowering = HirBuilder::new(
         &mut string_table,
         PathStringFormatConfig::default(),
         crate::compiler_frontend::datatypes::environment::TypeEnvironment::new(),
     )
     .build_hir_module(ast)
     .expect("HIR lowering should succeed");
+    let module = lowering.hir_module;
 
     let normal_id =
         find_function_id_by_path(&module, &normal_fn).expect("normal function should be present");

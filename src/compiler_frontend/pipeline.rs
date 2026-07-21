@@ -14,7 +14,6 @@ use crate::compiler_frontend::compiler_errors::{
     CompilerError, CompilerMessages, compiler_error_to_diagnostic,
 };
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, DiagnosticBag};
-use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::headers::beandown_prepare::prepare_beandown_file;
 use crate::compiler_frontend::headers::parse_file_headers::{
@@ -38,6 +37,8 @@ use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenizerEntryMode
 use crate::projects::settings::Config;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+
+use crate::compiler_frontend::module_metadata::HirLoweringResult;
 
 pub struct CompilerFrontend {
     pub(crate) external_package_registry: Arc<ExternalPackageRegistry>,
@@ -377,10 +378,7 @@ impl CompilerFrontend {
     // -----------------------------
     //  HIR GENERATION
     // -----------------------------
-    pub fn generate_hir(
-        &mut self,
-        ast: Ast,
-    ) -> Result<(HirModule, TypeEnvironment), CompilerMessages> {
+    pub fn generate_hir(&mut self, ast: Ast) -> Result<HirLoweringResult, CompilerMessages> {
         lower_module(ast, &mut self.string_table, self.path_format_config.clone())
     }
 

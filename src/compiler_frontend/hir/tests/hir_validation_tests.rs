@@ -20,7 +20,7 @@ use crate::compiler_frontend::hir::expressions::{
     HirExpression, HirExpressionKind, HirVariantCarrier, HirVariantField, ValueKind,
 };
 use crate::compiler_frontend::hir::hir_builder::{
-    HirTestChoiceDefinition, build_ast, build_ast_with_choices, lower_ast,
+    HirTestChoiceDefinition, build_ast, build_ast_with_choices, lower_ast, lower_ast_with_metadata,
     validate_module_for_tests,
 };
 use crate::compiler_frontend::hir::ids::{
@@ -1084,7 +1084,7 @@ fn validator_rejects_expression_type_containing_generic_parameter() {
 }
 
 #[test]
-fn validator_rejects_invalid_doc_fragment_location() {
+fn module_metadata_validation_rejects_invalid_doc_fragment_location() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
 
@@ -1107,12 +1107,14 @@ fn validator_rejects_invalid_doc_fragment_location() {
         location: invalid_location,
     });
 
-    let error = lower_ast(ast, &mut string_table)
-        .expect_err("validator should reject invalid doc fragment locations");
-    let (_error_type, message, _location) = error
-        .first_infrastructure_error_for_tests()
-        .expect("HIR validation failure should be wrapped for rendering");
-    assert!(message.contains("Doc fragment"));
+    let lowering =
+        lower_ast_with_metadata(ast, &mut string_table).expect("HIR lowering should succeed");
+    let error = lowering
+        .metadata
+        .validate()
+        .expect_err("metadata validation should reject invalid doc fragment locations");
+    assert_eq!(error.error_type, ErrorType::Compiler);
+    assert!(error.msg.contains("Doc fragment"));
 }
 
 #[test]

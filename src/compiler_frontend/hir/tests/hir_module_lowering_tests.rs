@@ -11,9 +11,10 @@ use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::templates::template::TemplateType;
 use crate::compiler_frontend::ast::{AstDocFragment, AstDocFragmentKind};
 use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
-use crate::compiler_frontend::hir::constants::{HirConstValue, HirDocFragmentKind};
+use crate::compiler_frontend::hir::constants::HirConstValue;
 use crate::compiler_frontend::hir::expressions::HirExpressionKind;
 use crate::compiler_frontend::hir::statements::HirStatementKind;
+use crate::compiler_frontend::module_metadata::ModuleDocFragmentKind;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tests::ast_fixture_support::{
     function_node, make_test_variable, node, test_location,
@@ -22,7 +23,7 @@ use crate::compiler_frontend::tests::hir_fixture_support::raw_template_expressio
 
 use crate::compiler_frontend::value_mode::ValueMode;
 
-use crate::compiler_frontend::hir::hir_builder::{build_ast, lower_ast};
+use crate::compiler_frontend::hir::hir_builder::{build_ast, lower_ast, lower_ast_with_metadata};
 use crate::compiler_frontend::tests::type_id_fixture_support::{no_value_expr, reference_expr};
 
 #[test]
@@ -338,7 +339,7 @@ fn lowers_struct_module_constant_into_record_with_ordered_fields() {
 }
 
 #[test]
-fn lowers_ast_doc_fragments_into_hir_doc_metadata() {
+fn extracts_ast_doc_fragments_into_module_metadata() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
     let first_doc = string_table.intern("First doc");
@@ -368,19 +369,14 @@ fn lowers_ast_doc_fragments_into_hir_doc_metadata() {
         },
     ];
 
-    let (module, _type_environment) =
-        lower_ast(ast, &mut string_table).expect("HIR lowering should succeed");
-    assert_eq!(module.doc_fragments.len(), 2);
-    assert!(matches!(
-        module.doc_fragments[0].kind,
-        HirDocFragmentKind::Doc
-    ));
-    assert!(matches!(
-        module.doc_fragments[1].kind,
-        HirDocFragmentKind::Doc
-    ));
-    assert_eq!(module.doc_fragments[0].rendered_text, "First doc");
-    assert_eq!(module.doc_fragments[1].rendered_text, "Second doc");
-    assert_eq!(module.doc_fragments[0].location.start_pos.line_number, 4);
-    assert_eq!(module.doc_fragments[1].location.start_pos.line_number, 7);
+    let lowering =
+        lower_ast_with_metadata(ast, &mut string_table).expect("HIR lowering should succeed");
+    let doc_fragments = &lowering.metadata.doc_fragments;
+    assert_eq!(doc_fragments.len(), 2);
+    assert!(matches!(doc_fragments[0].kind, ModuleDocFragmentKind::Doc));
+    assert!(matches!(doc_fragments[1].kind, ModuleDocFragmentKind::Doc));
+    assert_eq!(doc_fragments[0].rendered_text, "First doc");
+    assert_eq!(doc_fragments[1].rendered_text, "Second doc");
+    assert_eq!(doc_fragments[0].location.start_pos.line_number, 4);
+    assert_eq!(doc_fragments[1].location.start_pos.line_number, 7);
 }

@@ -2,15 +2,16 @@
 //!
 //! WHAT: fills non-CFG module metadata after declarations and constants have
 //! been prepared.
-//! WHY: doc fragments and function origins are consumed by builders and later
-//! validation, but they are not part of expression or statement lowering.
+//! WHY: function origins are executable HIR metadata consumed by builders and later validation.
+//! Resolved documentation fragments are non-HIR compiler metadata extracted into the lowering
+//! metadata result boundary, not stored on `HirModule`.
 
 use crate::compiler_frontend::ast::Ast;
 use crate::compiler_frontend::ast::AstDocFragmentKind;
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::hir::constants::{HirDocFragment, HirDocFragmentKind};
 use crate::compiler_frontend::hir::functions::HirFunctionOrigin;
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
+use crate::compiler_frontend::module_metadata::{ModuleDocFragment, ModuleDocFragmentKind};
 
 impl<'a> HirBuilder<'a> {
     pub(super) fn assign_function_origins(&mut self) -> Result<(), CompilerError> {
@@ -32,18 +33,20 @@ impl<'a> HirBuilder<'a> {
     }
 
     pub(super) fn resolve_doc_fragments(&mut self, ast: &Ast) -> Result<(), CompilerError> {
-        self.module.doc_fragments.clear();
+        self.extracted_metadata.doc_fragments.clear();
 
         for fragment in &ast.doc_fragments {
             let kind = match fragment.kind {
-                AstDocFragmentKind::Doc => HirDocFragmentKind::Doc,
+                AstDocFragmentKind::Doc => ModuleDocFragmentKind::Doc,
             };
 
-            self.module.doc_fragments.push(HirDocFragment {
-                kind,
-                rendered_text: self.string_table.resolve(fragment.value).to_owned(),
-                location: fragment.location.to_owned(),
-            });
+            self.extracted_metadata
+                .doc_fragments
+                .push(ModuleDocFragment {
+                    kind,
+                    rendered_text: self.string_table.resolve(fragment.value).to_owned(),
+                    location: fragment.location.to_owned(),
+                });
         }
 
         Ok(())

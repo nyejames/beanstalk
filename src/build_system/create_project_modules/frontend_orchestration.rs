@@ -5,7 +5,7 @@
 //! borrow checking.
 
 use crate::build_system::build::{
-    CompiledModuleResult, Module, ModuleRootActivity, ResolvedConstFragment,
+    CompiledModuleResult, Module, ModuleCompilerMetadata, ModuleRootActivity, ResolvedConstFragment,
 };
 
 use crate::builder_surface::external_import_providers::provider::BuilderRuntimePackageMetadata;
@@ -15,7 +15,6 @@ use crate::compiler_frontend::arena::FrontendArenaCapacityEstimate;
 use crate::compiler_frontend::ast::Ast;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
-use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::external_packages::{
     ExternalFunctionId, ExternalPackageId, ExternalPackageRegistry,
 };
@@ -27,6 +26,7 @@ use crate::compiler_frontend::hir::module::HirModule;
 use crate::compiler_frontend::hir::reachability::collect_reachability_from_start;
 use crate::compiler_frontend::instrumentation::{FrontendCounter, add_frontend_counter};
 use crate::compiler_frontend::module_dependencies::SortedHeaders;
+use crate::compiler_frontend::module_metadata::HirLoweringResult;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::identity::SourceFileTable;
@@ -716,10 +716,24 @@ impl FrontendModuleBuildContext<'_> {
                 .collect::<Vec<_>>();
 
             // 5. Lower AST to Higher-level Intermediate Representation (HIR).
-            let (hir_module, type_environment) =
+            let hir_lowering =
                 timed_frontend_stage("frontend.hir", "HIR generated in: ", module_label, || {
                     Self::lower_hir(&mut compiler, module_ast, &warnings)
                 })?;
+            let HirLoweringResult {
+                hir_module,
+                type_environment,
+                metadata: lowering_metadata,
+            } = hir_lowering;
+
+            // 5b. Validate extracted non-HIR compiler metadata before a successful module is
+            // returned. Invalid compiler metadata is an internal CompilerError.
+            if let Err(error) = lowering_metadata.validate() {
+                return Err(CompilerMessages::from_error_ref(
+                    error,
+                    &compiler.string_table,
+                ));
+            }
 
             // 6. Run static analysis (Borrow Checker).
             let borrow_analysis = timed_frontend_stage(
@@ -807,9 +821,12 @@ impl FrontendModuleBuildContext<'_> {
                 hir: hir_module,
                 type_environment,
                 borrow_analysis,
-                warnings,
-                const_top_level_fragments,
-                root_activity,
+                metadata: ModuleCompilerMetadata::from_hir_lowering(
+                    warnings,
+                    lowering_metadata,
+                    const_top_level_fragments,
+                    root_activity,
+                ),
                 external_package_registry: Arc::clone(&compiler.external_package_registry),
                 module_external_imports,
             })
@@ -902,7 +919,7 @@ impl FrontendModuleBuildContext<'_> {
         compiler: &mut CompilerFrontend,
         module_ast: Ast,
         warnings: &[CompilerDiagnostic],
-    ) -> Result<(HirModule, TypeEnvironment), CompilerMessages> {
+    ) -> Result<HirLoweringResult, CompilerMessages> {
         compiler
             .generate_hir(module_ast)
             .map_err(|messages| merge_stage_messages(messages, warnings, &compiler.string_table))

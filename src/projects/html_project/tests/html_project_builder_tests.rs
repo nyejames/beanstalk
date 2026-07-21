@@ -217,7 +217,7 @@ fn emits_const_fragment_and_calls_start() {
     let entry_path = PathBuf::from("#page.bst");
     let mut string_table = StringTable::new();
     let mut module = create_test_module(entry_path.clone(), &mut string_table);
-    module.const_top_level_fragments = vec![ResolvedConstFragment {
+    module.metadata.const_top_level_fragments = vec![ResolvedConstFragment {
         runtime_insertion_index: 0,
         rendered_text: String::from("<meta charset=\"utf-8\">"),
     }];
@@ -530,7 +530,7 @@ fn directory_build_skips_api_only_sibling_from_all_artifact_planning() {
 
     let homepage = create_test_module(entry_root.join("#home.bst"), &mut string_table);
     let mut api_only = create_test_module(entry_root.join("api/#api.bst"), &mut string_table);
-    api_only.root_activity = ModuleRootActivity::default();
+    api_only.metadata.root_activity = ModuleRootActivity::default();
     api_only.module_external_imports = vec![ModuleExternalImport {
         package_id: ExternalPackageId(1),
         runtime_asset: Some(RuntimeAssetIdentity {
@@ -539,18 +539,21 @@ fn directory_build_skips_api_only_sibling_from_all_artifact_planning() {
         }),
         required_runtime_imports: vec![],
     }];
-    api_only.hir.rendered_path_usages.push(rendered_path_usage(
-        &mut string_table,
-        RenderedPathUsageInput {
-            source_path_components: &["missing-asset.png"],
-            public_path_components: &["assets", "missing-asset.png"],
-            filesystem_path: entry_root.join("missing-asset.png"),
-            base: CompileTimePathBase::EntryRoot,
-            kind: CompileTimePathKind::File,
-            source_file_scope_components: &["api", "#api.bst"],
-            line_number: 1,
-        },
-    ));
+    api_only
+        .metadata
+        .rendered_path_usages
+        .push(rendered_path_usage(
+            &mut string_table,
+            RenderedPathUsageInput {
+                source_path_components: &["missing-asset.png"],
+                public_path_components: &["assets", "missing-asset.png"],
+                filesystem_path: entry_root.join("missing-asset.png"),
+                base: CompileTimePathBase::EntryRoot,
+                kind: CompileTimePathKind::File,
+                source_file_scope_components: &["api", "#api.bst"],
+                line_number: 1,
+            },
+        ));
 
     let project = builder
         .build_backend(vec![homepage, api_only], &config, &[], &mut string_table)
@@ -569,7 +572,7 @@ fn single_file_api_only_build_can_emit_no_artifacts() {
     let entry_path = PathBuf::from("api.bst");
     let mut string_table = StringTable::new();
     let mut api_only = create_test_module(entry_path.clone(), &mut string_table);
-    api_only.root_activity = ModuleRootActivity::default();
+    api_only.metadata.root_activity = ModuleRootActivity::default();
 
     let project = builder
         .build_backend(
@@ -715,33 +718,39 @@ fn build_backend_emits_tracked_assets_and_dedupes_same_source_output() {
     let mut string_table = StringTable::new();
 
     let mut homepage = create_test_module(canonical_root.join("#page.bst"), &mut string_table);
-    homepage.hir.rendered_path_usages.push(rendered_path_usage(
-        &mut string_table,
-        RenderedPathUsageInput {
-            source_path_components: &["assets", "logo.png"],
-            public_path_components: &["assets", "logo.png"],
-            filesystem_path: canonical_root.join("assets/logo.png"),
-            base: CompileTimePathBase::EntryRoot,
-            kind: CompileTimePathKind::File,
-            source_file_scope_components: &["#page.bst"],
-            line_number: 1,
-        },
-    ));
+    homepage
+        .metadata
+        .rendered_path_usages
+        .push(rendered_path_usage(
+            &mut string_table,
+            RenderedPathUsageInput {
+                source_path_components: &["assets", "logo.png"],
+                public_path_components: &["assets", "logo.png"],
+                filesystem_path: canonical_root.join("assets/logo.png"),
+                base: CompileTimePathBase::EntryRoot,
+                kind: CompileTimePathKind::File,
+                source_file_scope_components: &["#page.bst"],
+                line_number: 1,
+            },
+        ));
 
     let mut docs_page =
         create_test_module(canonical_root.join("docs/#page.bst"), &mut string_table);
-    docs_page.hir.rendered_path_usages.push(rendered_path_usage(
-        &mut string_table,
-        RenderedPathUsageInput {
-            source_path_components: &["assets", "logo.png"],
-            public_path_components: &["assets", "logo.png"],
-            filesystem_path: canonical_root.join("assets/logo.png"),
-            base: CompileTimePathBase::EntryRoot,
-            kind: CompileTimePathKind::File,
-            source_file_scope_components: &["docs", "#page.bst"],
-            line_number: 1,
-        },
-    ));
+    docs_page
+        .metadata
+        .rendered_path_usages
+        .push(rendered_path_usage(
+            &mut string_table,
+            RenderedPathUsageInput {
+                source_path_components: &["assets", "logo.png"],
+                public_path_components: &["assets", "logo.png"],
+                filesystem_path: canonical_root.join("assets/logo.png"),
+                base: CompileTimePathBase::EntryRoot,
+                kind: CompileTimePathKind::File,
+                source_file_scope_components: &["docs", "#page.bst"],
+                line_number: 1,
+            },
+        ));
 
     let project = builder
         .build_backend(vec![homepage, docs_page], &config, &[], &mut string_table)
@@ -779,35 +788,41 @@ fn build_backend_allows_same_source_file_to_emit_multiple_relative_outputs() {
     let mut string_table = StringTable::new();
 
     let mut homepage = create_test_module(canonical_root.join("#page.bst"), &mut string_table);
-    homepage.hir.rendered_path_usages.push(rendered_path_usage(
-        &mut string_table,
-        RenderedPathUsageInput {
-            source_path_components: &[".", "logo.png"],
-            public_path_components: &[".", "logo.png"],
-            filesystem_path: canonical_root.join("shared/logo.png"),
-            base: CompileTimePathBase::RelativeToFile,
-            kind: CompileTimePathKind::File,
-            source_file_scope_components: &["#page.bst"],
-            line_number: 1,
-        },
-    ));
+    homepage
+        .metadata
+        .rendered_path_usages
+        .push(rendered_path_usage(
+            &mut string_table,
+            RenderedPathUsageInput {
+                source_path_components: &[".", "logo.png"],
+                public_path_components: &[".", "logo.png"],
+                filesystem_path: canonical_root.join("shared/logo.png"),
+                base: CompileTimePathBase::RelativeToFile,
+                kind: CompileTimePathKind::File,
+                source_file_scope_components: &["#page.bst"],
+                line_number: 1,
+            },
+        ));
 
     let mut blog_page = create_test_module(
         canonical_root.join("blog/post/#page.bst"),
         &mut string_table,
     );
-    blog_page.hir.rendered_path_usages.push(rendered_path_usage(
-        &mut string_table,
-        RenderedPathUsageInput {
-            source_path_components: &["..", "shared", "logo.png"],
-            public_path_components: &["..", "shared", "logo.png"],
-            filesystem_path: canonical_root.join("shared/logo.png"),
-            base: CompileTimePathBase::RelativeToFile,
-            kind: CompileTimePathKind::File,
-            source_file_scope_components: &["blog", "post", "#page.bst"],
-            line_number: 1,
-        },
-    ));
+    blog_page
+        .metadata
+        .rendered_path_usages
+        .push(rendered_path_usage(
+            &mut string_table,
+            RenderedPathUsageInput {
+                source_path_components: &["..", "shared", "logo.png"],
+                public_path_components: &["..", "shared", "logo.png"],
+                filesystem_path: canonical_root.join("shared/logo.png"),
+                base: CompileTimePathBase::RelativeToFile,
+                kind: CompileTimePathKind::File,
+                source_file_scope_components: &["blog", "post", "#page.bst"],
+                line_number: 1,
+            },
+        ));
 
     let project = builder
         .build_backend(vec![homepage, blog_page], &config, &[], &mut string_table)
@@ -839,33 +854,39 @@ fn build_backend_rejects_conflicting_tracked_asset_output_paths() {
     let mut string_table = StringTable::new();
 
     let mut homepage = create_test_module(canonical_root.join("#page.bst"), &mut string_table);
-    homepage.hir.rendered_path_usages.push(rendered_path_usage(
-        &mut string_table,
-        RenderedPathUsageInput {
-            source_path_components: &["assets", "logo.png"],
-            public_path_components: &["assets", "logo.png"],
-            filesystem_path: canonical_root.join("assets/logo-a.png"),
-            base: CompileTimePathBase::EntryRoot,
-            kind: CompileTimePathKind::File,
-            source_file_scope_components: &["#page.bst"],
-            line_number: 1,
-        },
-    ));
+    homepage
+        .metadata
+        .rendered_path_usages
+        .push(rendered_path_usage(
+            &mut string_table,
+            RenderedPathUsageInput {
+                source_path_components: &["assets", "logo.png"],
+                public_path_components: &["assets", "logo.png"],
+                filesystem_path: canonical_root.join("assets/logo-a.png"),
+                base: CompileTimePathBase::EntryRoot,
+                kind: CompileTimePathKind::File,
+                source_file_scope_components: &["#page.bst"],
+                line_number: 1,
+            },
+        ));
 
     let mut docs_page =
         create_test_module(canonical_root.join("docs/#page.bst"), &mut string_table);
-    docs_page.hir.rendered_path_usages.push(rendered_path_usage(
-        &mut string_table,
-        RenderedPathUsageInput {
-            source_path_components: &["assets", "logo.png"],
-            public_path_components: &["assets", "logo.png"],
-            filesystem_path: canonical_root.join("assets/logo-b.png"),
-            base: CompileTimePathBase::EntryRoot,
-            kind: CompileTimePathKind::File,
-            source_file_scope_components: &["docs", "#page.bst"],
-            line_number: 1,
-        },
-    ));
+    docs_page
+        .metadata
+        .rendered_path_usages
+        .push(rendered_path_usage(
+            &mut string_table,
+            RenderedPathUsageInput {
+                source_path_components: &["assets", "logo.png"],
+                public_path_components: &["assets", "logo.png"],
+                filesystem_path: canonical_root.join("assets/logo-b.png"),
+                base: CompileTimePathBase::EntryRoot,
+                kind: CompileTimePathKind::File,
+                source_file_scope_components: &["docs", "#page.bst"],
+                line_number: 1,
+            },
+        ));
 
     let error =
         match builder.build_backend(vec![homepage, docs_page], &config, &[], &mut string_table) {
@@ -894,18 +915,21 @@ fn build_backend_rejects_tracked_asset_output_that_matches_generated_html() {
     let mut string_table = StringTable::new();
 
     let mut homepage = create_test_module(canonical_root.join("#page.bst"), &mut string_table);
-    homepage.hir.rendered_path_usages.push(rendered_path_usage(
-        &mut string_table,
-        RenderedPathUsageInput {
-            source_path_components: &["assets", "copied.html"],
-            public_path_components: &["index.html"],
-            filesystem_path: canonical_root.join("assets/copied.html"),
-            base: CompileTimePathBase::EntryRoot,
-            kind: CompileTimePathKind::File,
-            source_file_scope_components: &["#page.bst"],
-            line_number: 1,
-        },
-    ));
+    homepage
+        .metadata
+        .rendered_path_usages
+        .push(rendered_path_usage(
+            &mut string_table,
+            RenderedPathUsageInput {
+                source_path_components: &["assets", "copied.html"],
+                public_path_components: &["index.html"],
+                filesystem_path: canonical_root.join("assets/copied.html"),
+                base: CompileTimePathBase::EntryRoot,
+                kind: CompileTimePathKind::File,
+                source_file_scope_components: &["#page.bst"],
+                line_number: 1,
+            },
+        ));
 
     let error = match builder.build_backend(vec![homepage], &config, &[], &mut string_table) {
         Err(messages) => messages,

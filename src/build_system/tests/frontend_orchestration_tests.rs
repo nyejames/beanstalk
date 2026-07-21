@@ -539,7 +539,7 @@ fn prepare_module_retains_header_syntax_for_semantic_compilation() {
         "semantic compilation should preserve the module entry point"
     );
     assert!(
-        compiled.module.warnings.is_empty(),
+        compiled.module.metadata.warnings.is_empty(),
         "semantic compilation should not introduce warnings for a clean constant declaration"
     );
 }

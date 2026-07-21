@@ -705,6 +705,10 @@ pub(crate) fn build_ast_with_choices(
 }
 
 /// Lower a test `Ast` into a `HirModule` and its `TypeEnvironment`.
+///
+/// WHAT: preserves the established two-element HIR lowering test contract by destructuring the
+///       named production lowering result inside the helper. Most HIR tests only need the module
+///       and type environment and should not know about extracted module metadata.
 pub(crate) fn lower_ast(
     ast: Ast,
     string_table: &mut crate::compiler_frontend::symbols::string_interning::StringTable,
@@ -715,6 +719,19 @@ pub(crate) fn lower_ast(
     ),
     CompilerMessages,
 > {
+    let result = lower_ast_with_metadata(ast, string_table)?;
+    Ok((result.hir_module, result.type_environment))
+}
+
+/// Lower a test `Ast` and return the full named lowering result, including extracted non-HIR
+/// module metadata.
+///
+/// WHAT: a narrowly named helper for tests that genuinely need to assert extracted documentation
+///       fragments or rendered-path metadata. It does not widen the common `lower_ast` contract.
+pub(crate) fn lower_ast_with_metadata(
+    ast: Ast,
+    string_table: &mut crate::compiler_frontend::symbols::string_interning::StringTable,
+) -> Result<crate::compiler_frontend::module_metadata::HirLoweringResult, CompilerMessages> {
     let type_environment = ast.type_environment.clone();
     HirBuilder::new(
         string_table,

@@ -9,19 +9,19 @@ Replace entry-closure compilation with canonical project and package graphs, imm
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/canonical-module-compilation-and-scoped-packages-plan.md
 STATUS: active
-CURRENT_SLICE: Phase 5b accepted; checkpoint commit pending
-LAST_ACCEPTED_COMMIT: 538843fdd (Phase 5a canonical structural project graph)
-WORKTREE: main at 538843fdd with accepted Phase 5b code, tests and this parent-owned plan update; unrelated user documentation work may appear and must be preserved
-REQUIRED_RELOADS: startup files, this plan, relevant language/import and borrow references, current frontend/header source and diff
+CURRENT_SLICE: Phase 6a accepted; checkpoint commit pending
+LAST_ACCEPTED_COMMIT: a8f652780 (Phase 5b retained structural provider edges)
+WORKTREE: main at a8f652780 with accepted Phase 6a source, tests, index and this plan update; unrelated user documentation work may appear and must be preserved
+REQUIRED_RELOADS: startup files, this plan, relevant language/import and borrow references, current module payload, HIR lowering/validation and backend consumer source plus diff
 RELEVANT_CONTEXT_NOW:
 - docs: build-system-design.md Project and package topology plus Deterministic scheduling define canonical graph nodes, strict support scope, facade placement and deterministic waves
-- code: reachable discovery retains exact-location LocalStructuralDependencyFact values at its existing local-resolution join; module inventory merges them into ProjectModuleGraph and returns current normal-entry inventories in populated wave order
+- code: module_metadata.rs owns the named HIR-lowering result plus resolved documentation/rendered-path extraction; build.rs::ModuleCompilerMetadata owns successful warnings, const fragments, root activity, documentation and rendered-path remapping/consumption
 ACCEPTANCE_CRITERIA:
-- accepted: Stage 0 retains exact-location local structural dependency facts only for authored references that resolve across normal project module roots, reusing the existing scan and resolver join
-- accepted: provider-free worker results and serial discovery merge facts deterministically; the graph maps canonical roots, inserts idempotent provider-before-consumer edges and retains the first deterministic authored location
-- accepted: returned normal-entry inventories follow populated compile-wave order, while actual Rayon semantic compilation remains explicitly unchanged for the next slice
-- accepted: graph/inventory disagreement and absent project roots are release-safe internal CompilerError boundaries with no panic, skip or best-effort fallback
-- accepted: focused tests cover edge direction, same-module exclusion, duplicate fan-in, wave-ordered inventories and exact source-location retention
+- accepted: warnings, resolved documentation fragments and rendered-path usages no longer live in HirModule; no compatibility fields or duplicate successful-warning lane remains
+- accepted: HirLoweringResult names the executable, type and extracted-metadata boundary while existing broad test helpers preserve their narrower two-value contract
+- accepted: ModuleCompilerMetadata is the single assembled metadata/remap owner and HTML warning, fragment, root-activity and tracked-asset consumers use it
+- accepted: executable HIR validation no longer validates documentation metadata; extracted metadata validation uses CompilerError before successful Module construction and retains authored locations
+- accepted: mandatory start, flat backend handoff, diagnostics, output and user-visible behavior are unchanged; focused HIR, orchestration and HTML tests cover the moved ownership
 VALIDATION_STATE:
 - Phase 4d just validate: passed; cross-target Clippy, 3419 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases
 - Phase 4e focused validation: passed; 2 import-scanning, 5 reachability, 178 module-discovery, 19 orchestration, 5 token-remap and 116 header tests plus cargo check --tests and git diff --check
@@ -32,12 +32,14 @@ VALIDATION_STATE:
 - Phase 5a just validate: passed; cross-target Clippy, 3433 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases (-1ms average)
 - Phase 5b focused validation: passed; 9 graph and 192 create-project-modules tests plus cargo check --tests, cargo clippy --tests -D warnings, formatting and git diff --check
 - Phase 5b just validate: passed; cross-target Clippy, 3437 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases (-1ms average)
-DOCS_IMPACT: index.md already names ProjectModuleGraph; progress matrix unchanged because canonical per-node semantic scheduling has not landed
-BLOCKERS_OR_OPEN_DECISIONS: none; project-local structural edges and deterministic inventory order are accepted, while source-package graphs remain separate
+- Phase 6a focused validation: passed; 210 HIR, 20 frontend-orchestration and 226 HTML-project tests plus cargo check --tests, cargo clippy --tests -D warnings, formatting and git diff --check
+- Phase 6a just validate: passed; cross-target Clippy, 3437 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases (+1ms average)
+DOCS_IMPACT: index.md now names the non-HIR metadata and executable-HIR validation owners; progress matrix unchanged for this internal ownership refactor
+BLOCKERS_OR_OPEN_DECISIONS: true dependency-wave semantic compilation requires immutable source-provider interfaces from Phase 7, so Phase 5 structural scheduling is complete enough to proceed without adding a non-canonical wave loop
 DELEGATION_DECISION: ollama - user requires Ollama for every worker slice
 NEXT_WORKER_ORDER: ollama only; no provider substitution for this run
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit Phase 5b, record its hash, then scope the smallest canonical per-node preparation and dependency-wave scheduling slice through Ollama
+NEXT_RESUME_ACTION: commit Phase 6a, record its hash, then scope the smallest explicit executable/link lane or module-outcome slice through Ollama
 ```
 
 ## Hard prerequisites
@@ -483,6 +485,20 @@ See `docs/compiler-design-overview.md` "Module compilation outcomes" and "Compil
 - Record five base-module fingerprints: public-interface, implementation, dormant root-activity, runtime-dependency, documentation.
 - Build `GraphCompilationOutcome` with successful, diagnosed and blocked lanes.
 - Use `Result<GraphCompilationOutcome, CompilerError>` for the graph boundary.
+
+Accepted Phase 6a checkpoint:
+
+- `HirModule` now owns executable and semantic HIR only. Successful warnings, resolved
+  documentation fragments and rendered-path usages leave AST/HIR lowering through the named
+  `HirLoweringResult` and never occupy HIR fields or HIR validation.
+- `ModuleCompilerMetadata` is the current module payload's single non-HIR metadata lane. It owns
+  successful warnings, resolved const fragments, root activity, documentation fragments and
+  rendered-path usages, including their one post-merge string-ID remap path.
+- documentation metadata uses non-HIR names and an internal `CompilerError` validation boundary
+  before successful module construction. HTML warning, fragment, root-activity and tracked-asset
+  consumers read the metadata lane without changing output behavior.
+- explicit executable/link lanes, immutable interfaces, fingerprints and module/graph outcomes
+  remain later Phase 6 slices; mandatory start and the flat backend handoff are unchanged here.
 
 ### Phase 7: Add stable public interfaces, cross-module calls and effect summaries
 

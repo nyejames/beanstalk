@@ -28,7 +28,7 @@ use crate::compiler_frontend::symbols::string_interning::StringTable;
 // HIR test imports continue to work without mentioning parse-era type syntax.
 pub(crate) use crate::compiler_frontend::tests::type_id_fixture_support::{
     HirTestChoiceDefinition, assert_no_placeholder_terminators, build_ast, build_ast_with_choices,
-    lower_ast,
+    lower_ast, lower_ast_with_metadata,
 };
 
 pub(crate) fn validate_module_for_tests(

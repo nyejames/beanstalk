@@ -20,6 +20,7 @@ use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::hir::module::HirModule;
 use crate::compiler_frontend::instrumentation::{FrontendCounter, increment_frontend_counter};
+use crate::compiler_frontend::module_metadata::{HirLoweringMetadata, ModuleDocFragment};
 use crate::compiler_frontend::style_directives::{StyleDirectiveRegistry, StyleDirectiveSpec};
 use crate::compiler_frontend::symbols::compiler_symbols::CompilerSymbolSet;
 use crate::compiler_frontend::symbols::string_interning::{StringIdRemap, StringTable};
@@ -29,6 +30,7 @@ use crate::builder_surface::external_import_providers::provider::{
     RequiredRuntimeImport, RuntimeAssetIdentity,
 };
 use crate::compiler_frontend::external_packages::{ExternalPackageId, ExternalPackageRegistry};
+use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
 use crate::projects::settings::{Config, ProjectConfigError};
 
 use std::collections::HashSet;
@@ -91,6 +93,60 @@ impl ModuleRootActivity {
     }
 }
 
+/// Non-HIR compiler and builder-facing metadata for one compiled module.
+///
+/// WHAT: owns the module warnings, resolved const top-level fragments, header-derived root
+///       activity, resolved documentation fragments, and rendered-path usages.
+/// WHY: these are compiler-metadata lanes, not executable HIR state. Consolidating them into one
+///      owned lane on the `Module` payload keeps HIR limited to executable/semantic IR and gives
+///      string-ID remapping, warning collection, and tracked-asset planning a single owner.
+pub(crate) struct ModuleCompilerMetadata {
+    pub(crate) warnings: Vec<CompilerDiagnostic>,
+    pub(crate) const_top_level_fragments: Vec<ResolvedConstFragment>,
+    pub(crate) root_activity: ModuleRootActivity,
+    pub(crate) doc_fragments: Vec<ModuleDocFragment>,
+    pub(crate) rendered_path_usages: Vec<RenderedPathUsage>,
+}
+
+impl ModuleCompilerMetadata {
+    pub(crate) fn from_hir_lowering(
+        warnings: Vec<CompilerDiagnostic>,
+        lowering_metadata: HirLoweringMetadata,
+        const_top_level_fragments: Vec<ResolvedConstFragment>,
+        root_activity: ModuleRootActivity,
+    ) -> Self {
+        Self {
+            warnings,
+            doc_fragments: lowering_metadata.doc_fragments,
+            rendered_path_usages: lowering_metadata.rendered_path_usages,
+            const_top_level_fragments,
+            root_activity,
+        }
+    }
+
+    /// Remap interned string IDs after string-table merging.
+    ///
+    /// WHY: warnings, documentation locations, and rendered-path interned fields must all remap
+    ///      exactly once. Const fragment rendered text is already a resolved `String` and root
+    ///      activity carries no interned fields.
+    pub(crate) fn remap_string_ids(&mut self, remap: &StringIdRemap) {
+        for warning in &mut self.warnings {
+            warning.remap_string_ids(remap);
+        }
+
+        for fragment in &mut self.doc_fragments {
+            fragment.location.remap_string_ids(remap);
+        }
+
+        for usage in &mut self.rendered_path_usages {
+            usage.source_path.remap_string_ids(remap);
+            usage.public_path.remap_string_ids(remap);
+            usage.source_file_scope.remap_string_ids(remap);
+            usage.render_location.remap_string_ids(remap);
+        }
+    }
+}
+
 /// Frontend output for one module root ready for backend lowering.
 ///
 /// WHAT: bundles typed HIR plus borrow-analysis facts and warnings for a module entry file.
@@ -100,11 +156,8 @@ pub struct Module {
     pub(crate) hir: HirModule,
     pub(crate) type_environment: TypeEnvironment,
     pub(crate) borrow_analysis: BorrowCheckReport,
-    pub(crate) warnings: Vec<CompilerDiagnostic>,
-    /// Resolved const top-level fragments with their runtime insertion indices.
-    pub(crate) const_top_level_fragments: Vec<ResolvedConstFragment>,
-    /// Header-derived activity metadata for the active module root.
-    pub(crate) root_activity: ModuleRootActivity,
+    /// Non-HIR compiler and builder-facing metadata lane.
+    pub(crate) metadata: ModuleCompilerMetadata,
     /// Effective external package registry after provider resolution for this module.
     ///
     /// WHY: provider-backed import discovery mutates the registry during Stage 0; the module
@@ -126,9 +179,7 @@ impl Module {
         self.hir.remap_string_ids(remap);
         self.type_environment.remap_string_ids(remap);
 
-        for warning in &mut self.warnings {
-            warning.remap_string_ids(remap);
-        }
+        self.metadata.remap_string_ids(remap);
 
         // BorrowCheckReport contains only HIR IDs (no StringIds).
         // ResolvedConstFragment.rendered_text is already a String.
@@ -665,7 +716,7 @@ fn emit_project_output_files(
 pub fn collect_frontend_warnings(modules: &[Module]) -> Vec<CompilerDiagnostic> {
     let mut warnings = Vec::new();
     for module in modules {
-        warnings.extend(module.warnings.iter().cloned());
+        warnings.extend(module.metadata.warnings.iter().cloned());
     }
     warnings
 }

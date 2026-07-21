@@ -87,7 +87,7 @@ pub(crate) fn plan_module_tracked_assets(
     let mut large_warning_locations_by_source: FxHashMap<PathBuf, SourceLocation> =
         FxHashMap::default();
 
-    for usage in &module.hir.rendered_path_usages {
+    for usage in &module.metadata.rendered_path_usages {
         let Some(asset) = plan_one_tracked_asset(module, usage, html_output_path, string_table)?
         else {
             continue;

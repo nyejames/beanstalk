@@ -1,28 +1,10 @@
-//! HIR compile-time constants and documentation fragments.
+//! HIR compile-time constants.
 //!
-//! WHAT: data carried from AST into HIR for module constants and extracted documentation output.
+//! WHAT: data carried from AST into HIR for module constants.
 //! WHY: constants are backend/tooling metadata, not ordinary runtime statements.
 
 use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::hir::ids::HirConstId;
-use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum HirDocFragmentKind {
-    Doc,
-}
-
-#[derive(Debug, Clone)]
-pub struct HirDocFragment {
-    pub kind: HirDocFragmentKind,
-    /// The resolved documentation text.
-    ///
-    /// WHY: preserved for HIR-to-backend metadata and documentation-fragment extraction.
-    ///      Currently read only in tests; retained so the struct carries the full fragment shape.
-    #[allow(dead_code)]
-    pub rendered_text: String,
-    pub location: SourceLocation,
-}
 
 #[derive(Debug, Clone)]
 pub struct HirConstField {
