@@ -326,6 +326,30 @@ impl FileImport {
 }
 
 impl HeaderKind {
+    /// Whether this header kind is an authored declaration that may participate in a
+    /// module-root public export surface.
+    ///
+    /// WHAT: returns `true` exactly for the authored declaration kinds: functions, structs,
+    ///       choices, transparent type aliases, compile-time constants and trait declarations.
+    ///       Returns `false` for const templates, the implicit active-root start function, trait
+    ///       conformance and trait incompatibility, which are not exportable declarations.
+    /// WHY: the header, AST public-surface and semantic-origin stages all need the same
+    ///      declaration-kind gate to decide which headers may become public export entries.
+    ///      Owning the kind set on `HeaderKind` keeps one declaration-kind authority so the three
+    ///      stage-local public-export predicates cannot drift. Each predicate keeps its own
+    ///      file-role and export-mode policy; this method owns only the declaration-kind policy.
+    pub fn is_authored_public_export_declaration(&self) -> bool {
+        matches!(
+            self,
+            HeaderKind::Function { .. }
+                | HeaderKind::Struct { .. }
+                | HeaderKind::Choice { .. }
+                | HeaderKind::TypeAlias { .. }
+                | HeaderKind::Trait { .. }
+                | HeaderKind::Constant { .. }
+        )
+    }
+
     /// Remap every interned string owned by this header kind into the merged global string table.
     ///
     /// WHAT: dispatches to nested remap methods for function signatures, declaration shells,

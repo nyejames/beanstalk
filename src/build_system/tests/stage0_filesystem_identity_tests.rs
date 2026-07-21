@@ -1468,6 +1468,35 @@ mod module_identity_tests {
         assert_eq!(identity.role(), ModuleRootRole::Normal);
     }
 
+    #[test]
+    fn synthetic_single_file_origin_is_deterministic_normal_with_empty_path() {
+        // Single-file compilation is a synthetic-module mode: it builds one deterministic
+        // normal-module origin from the configured project name, the empty logical module path
+        // and `ModuleRootRole::Normal`. The empty path is the entry-root spelling and is always
+        // valid, so construction never fails. Repeated construction yields the same identity and
+        // the identity is independent of any cosmetic root filename or checkout root.
+        let origin = StableModuleOriginIdentity::from_relative_logical_path(
+            StablePackageIdentity::project_local("my-project"),
+            Path::new(""),
+            ModuleRootRole::Normal,
+        )
+        .expect("the empty logical path must build a synthetic single-file origin");
+        assert_eq!(origin.logical_module_path(), "");
+        assert_eq!(origin.role(), ModuleRootRole::Normal);
+        assert_eq!(origin.package().name(), "my-project");
+
+        let again = StableModuleOriginIdentity::from_relative_logical_path(
+            StablePackageIdentity::project_local("my-project"),
+            Path::new(""),
+            ModuleRootRole::Normal,
+        )
+        .expect("repeated construction must yield the same identity");
+        assert_eq!(
+            origin, again,
+            "synthetic single-file origin must be deterministic"
+        );
+    }
+
     fn first_diagnostic_code(messages: &CompilerMessages) -> String {
         let diagnostic = messages
             .error_diagnostics()

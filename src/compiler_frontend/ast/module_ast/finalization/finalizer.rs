@@ -220,6 +220,8 @@ impl<'context, 'services> AstFinalizer<'context, 'services> {
             );
         }
 
+        let resolved_receiver_catalog = Some(Rc::clone(&lookups.receiver_methods));
+
         Ok(Ast {
             nodes: emitted.ast,
             module_constants,
@@ -231,6 +233,7 @@ impl<'context, 'services> AstFinalizer<'context, 'services> {
             choice_definitions,
             type_environment,
             const_facts,
+            resolved_receiver_catalog,
         })
     }
 

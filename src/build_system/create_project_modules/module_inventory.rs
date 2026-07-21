@@ -1,15 +1,19 @@
 //! Directory-project module inventory assembly.
 //!
 //! WHAT: turns the canonical project module graph's normal entry modules into `DiscoveredModule`
-//! records containing all transitively reachable input files.
+//! records carrying their graph-assigned stable module origin and all transitively reachable
+//! input files.
 //! WHY: module inventory is the Stage 0 bridge between the structural graph and parallel frontend
-//! compilation. Entry root paths and deterministic entry order come from the graph's compile
-//! waves so entry classification has one owner; root setup and source-backed package validation
-//! live in sibling modules.
+//! compilation. The graph-owned `StableModuleOriginIdentity` travels with each module so semantic
+//! compilation receives a canonical identity instead of reconstructing one from an entry path.
+//! Entry root paths and deterministic entry order come from the graph's compile waves so entry
+//! classification has one owner; root setup and source-backed package validation live in sibling
+//! modules.
 
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_messages::InvalidConfigReason;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
+use crate::compiler_frontend::semantic_identity::StableModuleOriginIdentity;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::projects::settings::Config;
@@ -38,8 +42,40 @@ use super::reachable_file_discovery::{
 ///      so it stays serial. Multi-entry directory builds are the case the parallel path targets.
 const PROVIDER_FREE_PARALLEL_MIN_MODULES: usize = 2;
 
-/// Entry point and all collected source files for one discovered module.
+/// One normal entry module seed carrying its graph-assigned `ModuleId` and canonical root file.
+///
+/// WHAT: discovery seeds entry modules in deterministic `ModuleId` order. The `ModuleId` travels
+///       through serial and parallel discovery so the deterministic compile-wave reorder can
+///       match by identity rather than re-deriving identity from a root path, and so the
+///       graph-owned `StableModuleOriginIdentity` is preserved for each discovered module.
+/// WHY: the graph owns the canonical origin identity; discovery must not reconstruct it. Carrying
+///      the dense `ModuleId` keeps the graph as the single identity owner through reorder.
+struct ModuleEntrySeed {
+    module_id: ModuleId,
+    entry_path: PathBuf,
+}
+
+/// Discovery-internal inventory carrying the graph-assigned `ModuleId` through serial and parallel
+/// discovery so the compile-wave reorder can match by identity.
+///
+/// The graph-owned `StableModuleOriginIdentity` is attached once, after reorder, when each draft
+/// is lifted to the consumer-facing [`DiscoveredModule`].
+struct DiscoveredModuleDraft {
+    module_id: ModuleId,
+    entry_point: PathBuf,
+    input_files: Vec<PreparedSourceInput>,
+}
+
+/// Entry point, graph-owned stable origin and all collected source files for one discovered
+/// module.
+///
+/// Carries the graph-owned `StableModuleOriginIdentity` so semantic compilation receives a
+/// canonical module identity through the handoff instead of reconstructing one from an entry
+/// path. The dense `ModuleId` does not cross this boundary: the stable origin value is the
+/// semantic identity contract consumed by the `DefinedPublicExportOrigins` component.
 pub(crate) struct DiscoveredModule {
+    /// The graph-assigned cross-build origin identity for this canonical module.
+    pub(crate) stable_origin: StableModuleOriginIdentity,
     pub(crate) entry_point: PathBuf,
     pub(crate) input_files: Vec<PreparedSourceInput>,
 }
@@ -64,9 +100,9 @@ pub(crate) fn discover_all_modules_in_project(
     external_imports: &mut ExternalImportDiscoveryState<'_>,
     string_table: &mut StringTable,
 ) -> Result<Vec<DiscoveredModule>, CompilerMessages> {
-    let entry_points = normal_entry_root_paths_in_module_id_order(project_module_graph);
+    let seeds = normal_entry_seeds_in_module_id_order(project_module_graph);
 
-    if entry_points.is_empty() {
+    if seeds.is_empty() {
         return Err(config_diagnostic_messages(
             config,
             "entry_root",
@@ -87,9 +123,10 @@ pub(crate) fn discover_all_modules_in_project(
     //      retained lexical data for every already-scanned `.bst` so the lexer never runs twice.
     //      Skip classification for the common single-entry case because that path stays serial
     //      provider-capable anyway.
-    let provider_free_inventory = if entry_points.len() >= PROVIDER_FREE_PARALLEL_MIN_MODULES {
+    let provider_free_inventory = if seeds.len() >= PROVIDER_FREE_PARALLEL_MIN_MODULES {
+        let entry_paths: Vec<PathBuf> = seeds.iter().map(|seed| seed.entry_path.clone()).collect();
         classify_provider_free_project(
-            &entry_points,
+            &entry_paths,
             project_path_resolver,
             style_directives,
             &*external_imports.external_packages,
@@ -100,9 +137,9 @@ pub(crate) fn discover_all_modules_in_project(
         ProviderFreeProjectInventory::provider_capable_required()
     };
 
-    let (mut modules, dependency_facts) = if !provider_free_inventory.provider_capable_required {
+    let (drafts, dependency_facts) = if !provider_free_inventory.provider_capable_required {
         match discover_modules_provider_free_parallel(
-            &entry_points,
+            &seeds,
             project_path_resolver,
             style_directives,
             &*external_imports.external_packages,
@@ -116,7 +153,7 @@ pub(crate) fn discover_all_modules_in_project(
                 // the real filesystem/import failure with stable path identity. Reuse the complete
                 // classification cache so the lexer never runs twice for the same source.
                 discover_modules_serial_provider_capable(
-                    &entry_points,
+                    &seeds,
                     project_path_resolver,
                     style_directives,
                     external_imports,
@@ -127,7 +164,7 @@ pub(crate) fn discover_all_modules_in_project(
         }
     } else {
         discover_modules_serial_provider_capable(
-            &entry_points,
+            &seeds,
             project_path_resolver,
             style_directives,
             external_imports,
@@ -147,26 +184,29 @@ pub(crate) fn discover_all_modules_in_project(
     // The directory compiler still feeds this vector to a Rayon batch, so Phase 5b establishes
     // deterministic dependency-ordered inventory position only; actual dependency-wave semantic
     // scheduling is a later Phase 5 slice.
-    order_discovered_modules_by_compile_waves(project_module_graph, &mut modules, string_table)
+    order_discovered_modules_by_compile_waves(project_module_graph, drafts, string_table)
 }
 
-/// Deterministic normal entry root files in `ModuleId` order, for discovery seeding.
+/// Deterministic normal entry module seeds in `ModuleId` order, for discovery seeding.
 ///
-/// Maps the graph's normal entry modules to their canonical root files in `ModuleId` order.
-/// Support roots and the project package facade are excluded because they never appear in
-/// `entry_modules`. Compile waves are not consulted here: dependency edges are inserted only after
-/// discovery completes, so seeding uses the stable identity order.
-fn normal_entry_root_paths_in_module_id_order(
+/// Maps the graph's normal entry modules to their `ModuleId` and canonical root file in
+/// `ModuleId` order. Support roots and the project package facade are excluded because they
+/// never appear in `entry_modules`. Compile waves are not consulted here: dependency edges are
+/// inserted only after discovery completes, so seeding uses the stable identity order. The
+/// `ModuleId` is carried through discovery so the compile-wave reorder matches by identity and
+/// the graph-owned `StableModuleOriginIdentity` is preserved without re-deriving it from a path.
+fn normal_entry_seeds_in_module_id_order(
     project_module_graph: &ProjectModuleGraph,
-) -> Vec<PathBuf> {
+) -> Vec<ModuleEntrySeed> {
     project_module_graph
         .entry_modules()
         .iter()
-        .map(|module_id| {
-            project_module_graph
+        .map(|module_id| ModuleEntrySeed {
+            module_id: *module_id,
+            entry_path: project_module_graph
                 .node(*module_id)
                 .root_file()
-                .to_path_buf()
+                .to_path_buf(),
         })
         .collect()
 }
@@ -265,22 +305,24 @@ fn graph_inventory_mismatch_error(
     CompilerMessages::from_error_ref(CompilerError::compiler_error(reason), string_table)
 }
 
-/// Reorder discovered modules to match the populated graph's compile-wave order.
+/// Reorder discovered module drafts to match the populated graph's compile-wave order and lift
+/// each draft to a `DiscoveredModule` carrying its graph-owned stable origin.
 ///
 /// WHAT: flattens the graph's compile waves, keeps only normal entry modules, and reorders the
-///       discovered modules so providers precede consumers in the returned inventory order.
-///       Modules are keyed by their canonical entry root file, which is the graph node's
-///       `root_file` for each entry module.
+///       discovered drafts so providers precede consumers in the returned inventory order.
+///       Drafts are keyed by their graph-assigned `ModuleId`, so the reorder matches by identity
+///       rather than re-deriving identity from a root path. Each lifted `DiscoveredModule` carries
+///       the exact `StableModuleOriginIdentity` the graph assigned to that module.
 /// WHY: discovery seeds entries in `ModuleId` order and collects dependency facts; the graph
 ///      inserts edges from those facts, so the dependency-ordered wave order is only known after
 ///      the merge. The graph and discovery must agree exactly on the normal entry set: every
-///      graph entry root needs one matching discovered module and vice versa. Duplicate entry
-///      paths, missing graph entries and leftover inventories are all internal invariant failures
+///      graph entry needs one matching discovered draft and vice versa. Duplicate entry modules,
+///      missing graph entries and leftover inventories are all internal invariant failures
 ///      surfaced through the `CompilerMessages`/string-table boundary. A graph cycle is the same
 ///      kind of internal failure reported by `compile_waves`.
 fn order_discovered_modules_by_compile_waves(
     project_module_graph: &ProjectModuleGraph,
-    modules: &mut Vec<DiscoveredModule>,
+    drafts: Vec<DiscoveredModuleDraft>,
     string_table: &mut StringTable,
 ) -> Result<Vec<DiscoveredModule>, CompilerMessages> {
     let waves = project_module_graph
@@ -293,61 +335,64 @@ fn order_discovered_modules_by_compile_waves(
         .copied()
         .collect();
 
-    let ordered_entry_root_files: Vec<PathBuf> = waves
+    let ordered_entry_module_ids: Vec<ModuleId> = waves
         .iter()
         .flat_map(|wave| wave.iter().copied())
         .filter(|module_id| entry_modules.contains(module_id))
-        .map(|module_id| {
-            project_module_graph
-                .node(module_id)
-                .root_file()
-                .to_path_buf()
-        })
         .collect();
 
-    // Index discovered modules by their canonical entry root file. A duplicate entry point means
+    // Index discovered drafts by their graph-assigned `ModuleId`. A duplicate `ModuleId` means
     // two inventories claim the same graph node, which breaks the one-to-one correspondence the
     // wave order depends on; report it as an internal failure instead of silently dropping one.
-    let mut module_by_entry: FxHashMap<PathBuf, DiscoveredModule> = FxHashMap::default();
-    for module in modules.drain(..) {
-        let entry_point = module.entry_point.clone();
-        if module_by_entry
-            .insert(entry_point.clone(), module)
-            .is_some()
-        {
+    let mut draft_by_module_id: FxHashMap<ModuleId, DiscoveredModuleDraft> = FxHashMap::default();
+    for draft in drafts {
+        let module_id = draft.module_id;
+        if draft_by_module_id.insert(module_id, draft).is_some() {
             return Err(graph_inventory_mismatch_error(
                 format!(
-                    "Module discovery produced duplicate entry root files for {entry_point:?}; the project module graph expects one discovered module per normal entry root"
+                    "Module discovery produced duplicate inventories for ModuleId {}; the project module graph expects one discovered module per normal entry",
+                    module_id.index()
                 ),
                 string_table,
             ));
         }
     }
 
-    // Consume modules in dependency-ordered wave order. A graph entry root with no matching
-    // discovered module means discovery and the graph disagree on the normal entry set.
-    let mut ordered = Vec::with_capacity(ordered_entry_root_files.len());
-    for entry_root_file in &ordered_entry_root_files {
-        let module = match module_by_entry.remove(entry_root_file) {
-            Some(module) => module,
+    // Consume drafts in dependency-ordered wave order and lift each to a `DiscoveredModule`
+    // carrying the graph-owned stable origin. A graph entry with no matching discovered draft
+    // means discovery and the graph disagree on the normal entry set.
+    let mut ordered = Vec::with_capacity(ordered_entry_module_ids.len());
+    for module_id in &ordered_entry_module_ids {
+        let draft = match draft_by_module_id.remove(module_id) {
+            Some(draft) => draft,
             None => {
                 return Err(graph_inventory_mismatch_error(
                     format!(
-                        "The project module graph lists normal entry root {entry_root_file:?} that has no matching discovered module inventory"
+                        "The project module graph lists normal entry ModuleId {} that has no matching discovered module inventory",
+                        module_id.index()
                     ),
                     string_table,
                 ));
             }
         };
-        ordered.push(module);
+        let stable_origin = project_module_graph
+            .node(*module_id)
+            .stable_origin()
+            .clone();
+        ordered.push(DiscoveredModule {
+            stable_origin,
+            entry_point: draft.entry_point,
+            input_files: draft.input_files,
+        });
     }
 
-    // Any remaining inventory has no graph entry root, so discovery returned a module the graph
+    // Any remaining inventory has no graph entry, so discovery returned a module the graph
     // does not classify as a normal entry.
-    if let Some(leftover) = module_by_entry.keys().next() {
+    if let Some(leftover) = draft_by_module_id.keys().next() {
         return Err(graph_inventory_mismatch_error(
             format!(
-                "Module discovery returned an inventory for entry root {leftover:?} that the project module graph does not classify as a normal entry"
+                "Module discovery returned an inventory for ModuleId {} that the project module graph does not classify as a normal entry",
+                leftover.index()
             ),
             string_table,
         ));
@@ -364,22 +409,28 @@ fn order_discovered_modules_by_compile_waves(
 ///       during each entry's traversal so the graph merge can insert provider-before-consumer
 ///       edges after discovery.
 fn discover_modules_serial_provider_capable(
-    entry_points: &[PathBuf],
+    seeds: &[ModuleEntrySeed],
     project_path_resolver: &ProjectPathResolver,
     style_directives: &StyleDirectiveRegistry,
     external_imports: &mut ExternalImportDiscoveryState<'_>,
     classification_cache: Option<&FxHashMap<PathBuf, ScannedImportSource>>,
     string_table: &mut StringTable,
-) -> Result<(Vec<DiscoveredModule>, Vec<LocalStructuralDependencyFact>), CompilerMessages> {
-    let mut modules = Vec::with_capacity(entry_points.len());
+) -> Result<
+    (
+        Vec<DiscoveredModuleDraft>,
+        Vec<LocalStructuralDependencyFact>,
+    ),
+    CompilerMessages,
+> {
+    let mut drafts = Vec::with_capacity(seeds.len());
     let mut dependency_facts = Vec::new();
 
-    for entry_point in entry_points {
+    for seed in seeds {
         let CollectedReachableInputs {
             input_files,
             dependency_facts: entry_facts,
         } = collect_reachable_input_files(
-            entry_point,
+            &seed.entry_path,
             project_path_resolver,
             style_directives,
             external_imports,
@@ -387,14 +438,15 @@ fn discover_modules_serial_provider_capable(
             string_table,
         )?;
 
-        modules.push(DiscoveredModule {
-            entry_point: entry_point.clone(),
+        drafts.push(DiscoveredModuleDraft {
+            module_id: seed.module_id,
+            entry_point: seed.entry_path.clone(),
             input_files,
         });
         dependency_facts.extend(entry_facts);
     }
 
-    Ok((modules, dependency_facts))
+    Ok((drafts, dependency_facts))
 }
 
 /// Parallel provider-free module discovery.
@@ -407,15 +459,20 @@ fn discover_modules_serial_provider_capable(
 /// WHY: provider-free BFS is embarrassingly parallel across entry points and does not need the
 ///      mutable provider state that makes provider-capable discovery serial.
 fn discover_modules_provider_free_parallel(
-    entry_points: &[PathBuf],
+    seeds: &[ModuleEntrySeed],
     project_path_resolver: &ProjectPathResolver,
     style_directives: &StyleDirectiveRegistry,
     external_packages: &crate::compiler_frontend::external_packages::ExternalPackageRegistry,
     provider_free_inventory: &ProviderFreeProjectInventory,
     string_table: &mut StringTable,
-) -> Result<(Vec<DiscoveredModule>, Vec<LocalStructuralDependencyFact>), ProviderFreeDiscoveryFailed>
-{
-    // Run provider-free BFS for each entry point in parallel. Each worker forks a local
+) -> Result<
+    (
+        Vec<DiscoveredModuleDraft>,
+        Vec<LocalStructuralDependencyFact>,
+    ),
+    ProviderFreeDiscoveryFailed,
+> {
+    // Run provider-free BFS for each entry seed in parallel. Each worker forks a local
     // `StringTable` from the parent so classification's retained tokens (parent-valid StringIds)
     // stay interpretable without re-tokenizing. Workers only return the inventory and dependency
     // facts carrying source text plus retained tokens whose StringIds are parent-valid, so no
@@ -425,13 +482,13 @@ fn discover_modules_provider_free_parallel(
         usize,
         ReachableSourceInventory,
         Vec<LocalStructuralDependencyFact>,
-    )> = entry_points
+    )> = seeds
         .par_iter()
         .enumerate()
-        .map(|(index, entry_path)| {
+        .map(|(index, seed)| {
             let mut local_string_table = fork_source.fork_for_module().into_parts().0;
             let discovery = discover_reachable_source_files_provider_free(
-                entry_path,
+                &seed.entry_path,
                 project_path_resolver,
                 style_directives,
                 external_packages,
@@ -444,21 +501,23 @@ fn discover_modules_provider_free_parallel(
         })
         .collect::<Result<Vec<_>, _>>()?;
 
-    // Deterministic ordering: sort by the original entry-point index regardless of completion
-    // order, preserving module order by entry path and a deterministic fact merge order.
+    // Deterministic ordering: sort by the original seed index regardless of completion order,
+    // preserving module order by entry path and a deterministic fact merge order.
     indexed_outcomes.sort_by_key(|(index, _, _)| *index);
 
-    let mut modules = Vec::with_capacity(entry_points.len());
+    let mut drafts = Vec::with_capacity(seeds.len());
     let mut dependency_facts = Vec::new();
     for (index, inventory, entry_facts) in indexed_outcomes {
         let input_files = assemble_input_files_from_inventory(inventory, string_table)
             .map_err(|_| ProviderFreeDiscoveryFailed)?;
-        modules.push(DiscoveredModule {
-            entry_point: entry_points[index].clone(),
+        let seed = &seeds[index];
+        drafts.push(DiscoveredModuleDraft {
+            module_id: seed.module_id,
+            entry_point: seed.entry_path.clone(),
             input_files,
         });
         dependency_facts.extend(entry_facts);
     }
 
-    Ok((modules, dependency_facts))
+    Ok((drafts, dependency_facts))
 }

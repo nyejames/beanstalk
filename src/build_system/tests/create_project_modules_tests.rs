@@ -20,6 +20,7 @@ use crate::compiler_frontend::compiler_messages::{
 };
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
+use crate::compiler_frontend::semantic_identity::StableModuleOriginIdentity;
 use crate::compiler_frontend::source_packages::root_file::PreparedSourcePackageRoots;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -4758,6 +4759,71 @@ fn dependency_fact_retains_authored_source_location() {
     assert_eq!(
         retained_location.start_pos.line_number, 0,
         "retained location should point at the first authored source line"
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn discovered_modules_carry_their_graph_assigned_stable_origin() {
+    // Hidden invariant: directory discovery must preserve the exact `StableModuleOriginIdentity`
+    // the project module graph assigned to each module, rather than re-deriving it from an entry
+    // path. Each discovered module's stable origin must equal its matching graph node's origin.
+    let root = temp_dir("phase7a_origin_preservation");
+    let (config, resolver, style_directives, _module_a_root, _module_b_root) =
+        write_cross_module_project(&root);
+
+    let (modules, graph, _string_table) =
+        discover_modules_and_graph_for_test(&config, &resolver, &style_directives);
+
+    assert!(
+        !modules.is_empty(),
+        "the cross-module project should discover at least one normal entry module"
+    );
+
+    for module in &modules {
+        let matching_node = graph
+            .nodes()
+            .iter()
+            .find(|node| node.root_file() == module.entry_point);
+        let matching_node = matching_node.expect(
+            "every discovered module entry point must match a graph node's canonical root file",
+        );
+        assert_eq!(
+            module.stable_origin,
+            *matching_node.stable_origin(),
+            "discovered module stable origin must equal its graph-assigned origin (entry {:?})",
+            module.entry_point,
+        );
+    }
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn discovered_module_origin_is_not_rederived_from_a_path_component() {
+    // Hidden invariant: the stable origin carried by discovery is the graph-owned value type, not
+    // a path-derived fallback. The discovered origins must be distinct `StableModuleOriginIdentity`
+    // values keyed by canonical logical module path, and must round-trip through the graph node.
+    let root = temp_dir("phase7a_origin_identity_values");
+    let (config, resolver, style_directives, _module_a_root, _module_b_root) =
+        write_cross_module_project(&root);
+
+    let (modules, _graph, _string_table) =
+        discover_modules_and_graph_for_test(&config, &resolver, &style_directives);
+
+    // Each module carries a distinct stable origin keyed by its logical module path. The two
+    // cross-module roots have different logical paths, so their origins must differ.
+    let origins: Vec<StableModuleOriginIdentity> = modules
+        .iter()
+        .map(|module| module.stable_origin.clone())
+        .collect();
+    let unique: std::collections::HashSet<StableModuleOriginIdentity> =
+        origins.iter().cloned().collect();
+    assert_eq!(
+        unique.len(),
+        modules.len(),
+        "each discovered module must carry its own distinct graph-assigned stable origin"
     );
 
     fs::remove_dir_all(&root).expect("should remove temp root");

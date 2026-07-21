@@ -9,19 +9,21 @@ Replace entry-closure compilation with canonical project and package graphs, imm
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/canonical-module-compilation-and-scoped-packages-plan.md
 STATUS: active
-CURRENT_SLICE: Phase 6c accepted; checkpoint commit pending
-LAST_ACCEPTED_COMMIT: b45fae3dc (Phase 6b explicit module payload lanes)
-WORKTREE: main at b45fae3dc with accepted Phase 6c source, tests, index and this plan update; unrelated user documentation work may appear and must be preserved
-REQUIRED_RELOADS: startup files, this plan, relevant language/import and borrow references, current exported declaration/type/effect owners, module construction and diff
+CURRENT_SLICE: Phase 7a/7b accepted; checkpoint commit pending
+LAST_ACCEPTED_COMMIT: 16a9c9d22 (Phase 6c typed module compilation outcomes)
+WORKTREE: main at 16a9c9d22 with accepted Phase 7a/7b source, focused tests, index and this plan update; unrelated user documentation work may appear and must be preserved
+REQUIRED_RELOADS: startup files, this plan, stable semantic identity, graph/inventory, retained preparation, bound/sorted headers, public-export validation, semantic compilation and current module-result owners
 RELEVANT_CONTEXT_NOW:
 - docs: build-system-design.md Project and package topology plus Deterministic scheduling define canonical graph nodes, strict support scope, facade placement and deterministic waves
-- code: compile_module_semantic now returns Result<ModuleCompilationOutcome, CompilerError>; ModuleDiagnostics owns self-contained diagnosed user failures and recovered CompilerError values retain optional remappable render identity
+- code: graph/synthetic origins reach semantic compilation; direct free export identities come from bound/sorted active-root declarations and receiver surfaces finalize after AST validation from a transient resolved ReceiverMethodCatalog that is taken before HIR
 ACCEPTANCE_CRITERIA:
-- accepted: ModuleDiagnostics is structurally user-diagnostic-only, retains its local StringTable and render type contexts and requires at least one user-facing Error
-- accepted: ModuleCompilationOutcome separates Success and Diagnosed at the retained-module semantic boundary while CompilerError is the typed Result error
-- accepted: the one structured legacy normalization accepts user errors with warnings, recovers one infrastructure failure with only warning/note companions and rejects malformed mixed or empty failure sequences
-- accepted: recovered CompilerError values carry an optional private render context; CompilerMessages merges/remaps it exactly once so post-fork source paths survive directory aggregation
-- accepted: single-file and directory callers preserve existing output and deterministic string-table merge behavior without graph scheduling, public-interface placeholders or incomplete artefact renaming
+- directory discovery carries the graph-owned stable module origin with each canonical module inventory instead of re-deriving it from entry paths
+- single-file synthetic-module compilation constructs one deterministic stable origin from the configured project identity, empty logical module path and normal-root role
+- retained preparation and semantic compilation receive and consume that identity without reparsing paths or introducing an incomplete PublicSemanticInterface
+- one immutable compiler-owned DefinedPublicExportOrigins component records stable origin IDs and ExportBinding values for declarations defined directly in the active module root; receiver methods remain attached to receiver surfaces rather than free namespace bindings
+- source re-exports, canonical type/value/effect facts and imported provider interfaces remain explicitly absent rather than being represented by donor-local paths or placeholder facts
+- impossible missing name or receiver metadata aborts through CompilerError instead of silently omitting an export; private receiver surfaces remain intentionally absent
+- focused tests protect declaration/category/module identity, deterministic declaration order, receiver ownership, private/start exclusion, graph-origin preservation and single-file identity; behavior and backend output remain unchanged
 VALIDATION_STATE:
 - Phase 4d just validate: passed; cross-target Clippy, 3419 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases
 - Phase 4e focused validation: passed; 2 import-scanning, 5 reachability, 178 module-discovery, 19 orchestration, 5 token-remap and 116 header tests plus cargo check --tests and git diff --check
@@ -38,12 +40,14 @@ VALIDATION_STATE:
 - Phase 6b just validate: passed; cross-target Clippy, 3438 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases (+1ms average)
 - Phase 6c focused validation: passed; 104 compiler-message, 20 frontend-orchestration and 25 project-frontend tests plus full 3444-test unit suite, cargo check --tests, cargo clippy --tests -D warnings, formatting and git diff --check
 - Phase 6c just validate: passed; cross-target Clippy, 3447 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases (0ms average)
-DOCS_IMPACT: index.md names ModuleDiagnostics and the typed module outcome boundary; progress matrix unchanged for this internal result-boundary refactor
-BLOCKERS_OR_OPEN_DECISIONS: true dependency-wave semantic scheduling remains blocked until Phase 7 provides immutable source provider interfaces; Phase 6c must not simulate it by rerunning entry closures in graph order
+- Phase 7a/7b focused validation: passed; 8 defined-export-origin, 18 semantic-identity, 116 header, 30 compiler-frontend, 20 frontend-orchestration, 100 module-discovery and 50 Stage 0 identity tests plus full 3458-test unit suite, all 8 receiver regressions and the full 1793-case integration suite, cargo check --tests, cargo clippy --tests -D warnings, formatting and git diff --check
+- Phase 7a/7b just validate: passed after resolved-receiver correction; cross-target Clippy, 3458 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases (-1ms average)
+DOCS_IMPACT: index.md names the new compiler-owned defined-export-origin component and its deliberate boundary from the final PublicSemanticInterface; progress matrix unchanged for internal interface groundwork
+BLOCKERS_OR_OPEN_DECISIONS: current entry-closure compilation cannot assign source re-export origins correctly without compiled provider interfaces, so this slice records only directly defined exports and must not encode re-exports with donor-local paths
 DELEGATION_DECISION: ollama - user requires Ollama for every worker slice
 NEXT_WORKER_ORDER: ollama only; no provider substitution for this run
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit Phase 6c, record its hash, then scope the smallest immutable PublicSemanticInterface slice through Ollama without final artefact or graph-outcome placeholders
+NEXT_RESUME_ACTION: commit the Phase 7a/7b checkpoint, record its hash, then scope the immutable source-provider interface prerequisite for source re-export bindings through Ollama
 ```
 
 ## Hard prerequisites

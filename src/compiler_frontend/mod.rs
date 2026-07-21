@@ -14,6 +14,7 @@ pub(crate) mod style_directives;
 pub(crate) mod tokenizer;
 
 pub(crate) mod builtins;
+pub(crate) mod defined_public_export_origins;
 pub(crate) mod instrumentation;
 pub(crate) mod keywords;
 pub(crate) mod semantic_identity;

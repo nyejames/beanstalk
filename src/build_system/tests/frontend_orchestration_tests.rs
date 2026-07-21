@@ -23,6 +23,9 @@ use crate::compiler_frontend::headers::parse_file_headers::{
 };
 use crate::compiler_frontend::paths::module_roots::ModuleRootTable;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
+use crate::compiler_frontend::semantic_identity::{
+    ModuleRootRole, StableModuleOriginIdentity, StablePackageIdentity,
+};
 use crate::compiler_frontend::source_packages::root_file::PreparedSourcePackageRoots;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::identity::SourceFileTable;
@@ -490,8 +493,19 @@ fn prepare_module_retains_header_syntax_for_semantic_compilation() {
         project_path_resolver: Some(project_path_resolver.clone()),
     };
 
+    // Single-file preparation tests use the same deterministic synthetic normal-module origin
+    // the single-file compilation path constructs: the configured project name, the empty logical
+    // module path and `ModuleRootRole::Normal`.
+    let stable_origin = StableModuleOriginIdentity::from_relative_logical_path(
+        StablePackageIdentity::project_local("test-project"),
+        std::path::Path::new(""),
+        ModuleRootRole::Normal,
+    )
+    .expect("synthetic single-file module origin should construct");
+
     let prepared = preparation_context
         .prepare_module(
+            stable_origin,
             &input_files,
             &canonical_entry,
             local_table,

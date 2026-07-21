@@ -486,18 +486,18 @@ fn public_export_targets_source_path(entry: &PublicExportEntry, path: &InternedP
     }
 }
 
+/// Whether a header is a public authored module-root export declaration.
+///
+/// WHAT: only declarations marked public by a strict module-root file `export:` block and
+///       admitted by the shared declaration-kind gate become public export entries. The
+///       declaration-kind gate is the shared [`HeaderKind::is_authored_public_export_declaration`]
+///       owner so the header, AST and semantic-origin public-export predicates cannot drift;
+///       this predicate keeps the stage-local file-role and export-mode policy (export-capable
+///       roots plus explicit `Public` mode).
 fn header_is_public_export_declaration(header: &Header) -> bool {
     header.file_role.is_export_capable()
         && header.export_mode.is_public()
-        && matches!(
-            header.kind,
-            HeaderKind::Function { .. }
-                | HeaderKind::Struct { .. }
-                | HeaderKind::Choice { .. }
-                | HeaderKind::TypeAlias { .. }
-                | HeaderKind::Constant { .. }
-                | HeaderKind::Trait { .. }
-        )
+        && header.kind.is_authored_public_export_declaration()
 }
 
 fn is_public_export_trait_incompatibility_header(header: &Header) -> bool {

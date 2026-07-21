@@ -33,7 +33,7 @@ use crate::compiler_frontend::headers::import_environment::{
 use crate::compiler_frontend::headers::module_symbols::{
     ModuleRootBoundary, ModuleSymbols, PublicExportEntry, PublicExportTarget,
 };
-use crate::compiler_frontend::headers::types::{Header, HeaderExportMode, HeaderKind};
+use crate::compiler_frontend::headers::types::{Header, HeaderExportMode};
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::symbols::interned_path::{InternedPath, NonUtf8PathComponent};
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
@@ -71,32 +71,18 @@ fn intern_public_surface_path(
     )
 }
 
-/// Whether a header kind represents a real authored declaration that can be exported by a
-/// module-root public API.
-///
-/// WHAT: functions, structs, choices, type aliases, traits, and compile-time constants are
-/// authored declarations. Const templates, conformance declarations, and the implicit start
-/// function are not.
-fn is_authored_public_export_declaration(kind: &HeaderKind) -> bool {
-    matches!(
-        kind,
-        HeaderKind::Function { .. }
-            | HeaderKind::Struct { .. }
-            | HeaderKind::Choice { .. }
-            | HeaderKind::TypeAlias { .. }
-            | HeaderKind::Trait { .. }
-            | HeaderKind::Constant { .. }
-    )
-}
-
 /// Whether a header is a public authored module-root export.
 ///
 /// WHAT: only declarations marked public by a strict module-root file `export:` block become
-///       public export entries.
+///       public export entries. The declaration-kind gate is the shared
+///       [`HeaderKind::is_authored_public_export_declaration`] owner so the header, AST and
+///       semantic-origin public-export predicates cannot drift; this predicate keeps the
+///       stage-local file-role and export-mode policy (export-capable roots plus explicit
+///       `Public` mode).
 fn is_authored_public_export(header: &Header) -> bool {
     header.file_role.is_export_capable()
         && header.export_mode == HeaderExportMode::Public
-        && is_authored_public_export_declaration(&header.kind)
+        && header.kind.is_authored_public_export_declaration()
 }
 
 /// Build public export maps and file package/module membership from parsed headers and the path

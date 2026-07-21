@@ -21,6 +21,7 @@ use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::hir::module::HirModule;
 use crate::compiler_frontend::instrumentation::{FrontendCounter, increment_frontend_counter};
 use crate::compiler_frontend::module_metadata::{HirLoweringMetadata, ModuleDocFragment};
+use crate::compiler_frontend::semantic_identity::DefinedPublicExportOrigins;
 use crate::compiler_frontend::style_directives::{StyleDirectiveRegistry, StyleDirectiveSpec};
 use crate::compiler_frontend::symbols::compiler_symbols::CompilerSymbolSet;
 use crate::compiler_frontend::symbols::string_interning::{StringIdRemap, StringTable};
@@ -233,6 +234,13 @@ impl Module {
 pub(crate) struct CompiledModuleResult {
     pub module: Module,
     pub string_table: StringTable,
+    /// Stable identity component for public declarations defined directly in the active module
+    /// root, retained alongside the transient successful compile result so the next
+    /// graph/interface slice can consume it. It is not part of the accepted three-lane `Module`;
+    /// the legacy flat `Vec<Module>` conversion boundary drops it locally with a migration
+    /// comment until the graph replaces the flat handoff.
+    #[allow(dead_code)]
+    pub defined_public_export_origins: DefinedPublicExportOrigins,
 }
 
 // -------------------------

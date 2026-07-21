@@ -151,6 +151,7 @@ use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::FileTokens;
+use std::rc::Rc;
 use std::time::Instant;
 
 /// Resolved choice definition carried from AST to HIR for pre-registration.
@@ -202,6 +203,17 @@ pub struct Ast {
     /// WHY: config validation and HIR metadata need one shared source of truth for
     ///      const-ness without re-walking the AST.
     pub const_facts: AstConstFacts,
+
+    /// Resolved receiver-method catalog from the validated AST environment.
+    ///
+    /// WHAT: transient handoff of the [`ReceiverMethodCatalog`] built and validated during AST
+    ///       environment construction, consumed by receiver-surface origin projection at the
+    ///       semantic compilation boundary.
+    /// WHY: receiver-surface origins need the resolved [`ReceiverKey`](crate::compiler_frontend::datatypes::ReceiverKey)
+    ///      (including generic base resolution) rather than best-effort header-parsed receiver
+    ///      names. The catalog is taken from `Ast` before HIR lowering so HIR does not become
+    ///      its consumer.
+    pub resolved_receiver_catalog: Option<Rc<ReceiverMethodCatalog>>,
 }
 
 /// Complete header-stage output consumed by AST construction.

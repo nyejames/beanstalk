@@ -17,6 +17,7 @@ use crate::compiler_frontend::ast::Ast;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::compiler_messages::ModuleDiagnostics;
+use crate::compiler_frontend::defined_public_export_origins::build_defined_public_export_origin_draft;
 use crate::compiler_frontend::external_packages::{
     ExternalFunctionId, ExternalPackageId, ExternalPackageRegistry,
 };
@@ -30,6 +31,7 @@ use crate::compiler_frontend::instrumentation::{FrontendCounter, add_frontend_co
 use crate::compiler_frontend::module_dependencies::SortedHeaders;
 use crate::compiler_frontend::module_metadata::HirLoweringResult;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
+use crate::compiler_frontend::semantic_identity::StableModuleOriginIdentity;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::identity::SourceFileTable;
 use crate::compiler_frontend::symbols::string_interning::{StringTable, StringTableForkSource};
@@ -225,20 +227,23 @@ pub(crate) enum ModuleCompilationOutcome {
 
 impl ModulePreparationContext<'_> {
     /// Prepare one discovered module's source files and aggregate provider-independent header
-    /// syntax, retaining it with the module string-table context for semantic compilation.
+    /// syntax, retaining it with the module string-table context and canonical stable origin for
+    /// semantic compilation.
     ///
     /// WHAT: prepares every source file against local string-table forks, merges chunk-local
     ///       string tables in deterministic input order, and runs `prepare_header_syntax` to
     ///       produce the retained `PreparedHeaderSyntax`. Stops before provider-dependent binding.
     /// WHY: the compiler design overview requires `PreparedHeaderSyntax` to be produced before
     ///      the provider graph is compiled. This context owns no provider-interface values, so
-    ///      preparation cannot reach provider state. Retaining the syntax and string-table context
-    ///      lets semantic compilation begin with `bind_module_headers` without retokenizing or
-    ///      reparsing source, and leaves a clean boundary where Phase 5 can schedule provider
-    ///      binding between this call and
+    ///      preparation cannot reach provider state. Retaining the syntax, string-table context
+    ///      and the graph-assigned `stable_origin` lets semantic compilation begin with
+    ///      `bind_module_headers` without retokenizing or reparsing source and without
+    ///      reconstructing module identity from paths, and leaves a clean boundary where Phase 5
+    ///      can schedule provider binding between this call and
     ///      `FrontendModuleBuildContext::compile_module_semantic`.
     pub(super) fn prepare_module(
         &self,
+        stable_origin: StableModuleOriginIdentity,
         module: &[PreparedSourceInput],
         entry_file_path: &Path,
         mut string_table: StringTable,
@@ -279,6 +284,7 @@ impl ModulePreparationContext<'_> {
         // the same string table and source identities. The payload owns no `CompilerFrontend` or
         // provider state: only syntax, the string table, source identities and warnings.
         Ok(PreparedModule {
+            stable_origin,
             prepared_header_syntax,
             string_table,
             source_files,
@@ -652,10 +658,14 @@ impl FrontendModuleBuildContext<'_> {
     /// WHAT: begins with `bind_module_headers` over the retained `PreparedHeaderSyntax`, then
     ///       resolves dependencies, builds AST, lowers HIR, and runs borrow validation. It
     ///       receives no `PreparedSourceInput`, source text or tokens and cannot rerun file
-    ///       preparation.
+    ///       preparation. The canonical `StableModuleOriginIdentity` is a named input consumed
+    ///       from the retained handoff, not reconstructed from `entry_file_path` or source paths.
     /// WHY: binding depends on provider interfaces, so it belongs after preparation in the
-    ///      semantic phase. The retained string table and source identities carry every fact
-    ///      binding and later stages need without revisiting source.
+    ///      semantic phase. The retained string table, source identities and stable origin carry
+    ///      every fact binding and later stages need without revisiting source. The origin is the
+    ///      semantic module-compilation identity contract consumed by the stable
+    ///      defined-public-export identity component built at the sort boundary and retained
+    ///      alongside the transient successful compile result.
     pub(super) fn compile_module_semantic(
         &self,
         prepared: PreparedModule,
@@ -663,6 +673,7 @@ impl FrontendModuleBuildContext<'_> {
         module_label: Option<&str>,
     ) -> Result<ModuleCompilationOutcome, CompilerError> {
         let PreparedModule {
+            stable_origin,
             prepared_header_syntax,
             string_table,
             source_files,
@@ -670,6 +681,11 @@ impl FrontendModuleBuildContext<'_> {
             source_file_count,
             source_byte_count,
         } = prepared;
+
+        // The canonical module origin is a named semantic-compilation input: the compiler receives
+        // the graph-assigned (or synthetic single-file) identity by consuming the retained
+        // handoff, never by reconstructing it from `entry_file_path`, `SourceFileTable` or absolute
+        // paths. It is consumed below to build the stable defined-public-export identity component.
 
         let external_import_resolution_table = self.external_import_resolution_table;
 
@@ -718,8 +734,25 @@ impl FrontendModuleBuildContext<'_> {
                 runtime_fragment_count: sorted.entry_runtime_fragment_count,
             };
 
+            // Project the pre-AST draft of the stable defined-public-export identity component
+            // from the bound, sorted declaration shells and header-built public export metadata.
+            // This is the immediate consumer of the Phase 7a stable module origin. Free export
+            // bindings and the public nominal-type origin index depend only on header shells, so
+            // they are projected here before `sorted` moves into AST construction. Receiver
+            // surface origins are finalized after the AST succeeds using the resolved
+            // receiver-method catalog, so best-effort header receiver names never mask valid
+            // generic receiver methods or preempt AST receiver diagnostics. The draft is retained
+            // only on overall semantic success, so a diagnosed module exposes no component.
+            let export_origin_draft = build_defined_public_export_origin_draft(
+                &stable_origin,
+                &sorted.headers,
+                &sorted.module_symbols,
+                &compiler.string_table,
+            )
+            .map_err(|error| CompilerMessages::from_error_ref(error, &compiler.string_table))?;
+
             // 3. Build the Abstract Syntax Tree (AST).
-            let module_ast =
+            let mut module_ast =
                 timed_frontend_stage("frontend.ast", "AST created in: ", module_label, || {
                     self.build_ast(
                         &mut compiler,
@@ -727,6 +760,21 @@ impl FrontendModuleBuildContext<'_> {
                         entry_file_path,
                         capacity_estimate,
                         &mut warnings,
+                    )
+                })?;
+
+            // Take the resolved receiver-method catalog from the AST before HIR lowering consumes
+            // it, so HIR does not become the catalog's consumer. The catalog was built and
+            // validated during AST environment construction, so receiver-surface origin projection
+            // sees the resolved ReceiverKey (including generic base resolution) rather than
+            // best-effort header-parsed receiver names.
+            let resolved_receiver_catalog =
+                module_ast.resolved_receiver_catalog.take().ok_or_else(|| {
+                    CompilerMessages::from_error_ref(
+                        CompilerError::compiler_error(
+                            "AST finalization did not retain its resolved receiver-method catalog",
+                        ),
+                        &compiler.string_table,
                     )
                 })?;
 
@@ -841,24 +889,38 @@ impl FrontendModuleBuildContext<'_> {
             module_external_imports.sort_by_key(|import| import.package_id.0);
             module_external_imports.dedup_by_key(|import| import.package_id);
 
-            Ok(Module {
-                executable: ModuleExecutable {
-                    hir: hir_module,
-                    type_environment,
-                    borrow_analysis,
+            // Finalize the stable defined-public-export identity component by projecting receiver
+            // surface origins from the resolved AST receiver catalog. This runs after AST
+            // receiver validation succeeds, so valid generic receiver methods attach to their
+            // generic nominal base origin and invalid receiver declarations already failed in the
+            // AST diagnostic owner. It is not the final PublicSemanticInterface: canonical type
+            // shapes, folded constants, generic templates, trait/evidence, access/effect summaries,
+            // project-context provenance and source re-export origins remain for later.
+            let defined_public_export_origins = export_origin_draft
+                .finalize(resolved_receiver_catalog.as_ref(), &compiler.string_table)
+                .map_err(|error| CompilerMessages::from_error_ref(error, &compiler.string_table))?;
+
+            Ok((
+                Module {
+                    executable: ModuleExecutable {
+                        hir: hir_module,
+                        type_environment,
+                        borrow_analysis,
+                    },
+                    link_facts: ModuleLinkFacts {
+                        external_package_registry: Arc::clone(&compiler.external_package_registry),
+                        module_external_imports,
+                    },
+                    metadata: ModuleCompilerMetadata::from_hir_lowering(
+                        entry_file_path.to_path_buf(),
+                        warnings,
+                        lowering_metadata,
+                        const_top_level_fragments,
+                        root_activity,
+                    ),
                 },
-                link_facts: ModuleLinkFacts {
-                    external_package_registry: Arc::clone(&compiler.external_package_registry),
-                    module_external_imports,
-                },
-                metadata: ModuleCompilerMetadata::from_hir_lowering(
-                    entry_file_path.to_path_buf(),
-                    warnings,
-                    lowering_metadata,
-                    const_top_level_fragments,
-                    root_activity,
-                ),
-            })
+                defined_public_export_origins,
+            ))
         })();
 
         // Normalize the deeper stages' mixed `CompilerMessages` once at this semantic boundary.
@@ -867,12 +929,13 @@ impl FrontendModuleBuildContext<'_> {
         // (an infrastructure failure recovered losslessly from its structured payload). This is
         // the single lossless ownership transfer; graph and render consumers never re-classify.
         match compile_result {
-            Ok(module) => {
+            Ok((module, defined_public_export_origins)) => {
                 let string_table = compiler.string_table;
                 Ok(ModuleCompilationOutcome::Success(Box::new(
                     CompiledModuleResult {
                         module,
                         string_table,
+                        defined_public_export_origins,
                     },
                 )))
             }

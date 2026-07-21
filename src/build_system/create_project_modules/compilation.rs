@@ -12,6 +12,9 @@ use crate::compiler_frontend::compiler_messages::source_location::SourceLocation
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::instrumentation::{FrontendCounter, add_frontend_counter};
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
+use crate::compiler_frontend::semantic_identity::{
+    ModuleRootRole, StableModuleOriginIdentity, StablePackageIdentity,
+};
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringTable, StringTableForkSource};
@@ -274,6 +277,31 @@ pub(crate) fn compile_single_file_frontend(
     // Record the total frontend time for this module (success or error).
     let module_total_start = crate::timing::start_pipeline_timing();
 
+    // Single-file compilation is a separate synthetic-module mode: it builds one deterministic
+    // normal-module origin from the configured project identity, the empty logical module path
+    // and `ModuleRootRole::Normal`. The empty path is the entry-root spelling and is always valid,
+    // so construction failure is a proven internal invariant surfaced through the existing
+    // `CompilerError`/`CompilerMessages` lane rather than a panic. The origin travels through
+    // preparation into semantic compilation so the single-file module receives the same canonical
+    // identity contract as a directory-discovered module.
+    let stable_origin = match StableModuleOriginIdentity::from_relative_logical_path(
+        StablePackageIdentity::project_local(&config.project_name),
+        Path::new(""),
+        ModuleRootRole::Normal,
+    ) {
+        Ok(origin) => origin,
+        Err(error) => {
+            crate::timing::record_started_pipeline_timing_with_label(
+                "frontend.module.total",
+                module_total_start,
+                module_label,
+            );
+            log_stage_timing("stage0.single_file.compile_module", compile_module_start);
+            log_stage_timing("stage0.single_file.total", total_start);
+            return Err(CompilerMessages::from_error_ref(error, string_table));
+        }
+    };
+
     // Preparation is provider-independent: it owns no external package registry, import
     // resolution table or builder runtime packages. Construct it before the semantic context so
     // Phase 5 can schedule provider binding between `prepare_module` and `compile_module_semantic`.
@@ -283,6 +311,7 @@ pub(crate) fn compile_single_file_frontend(
     };
 
     let prepared = match preparation_context.prepare_module(
+        stable_origin,
         &input_files,
         &entry_path,
         local_table,
@@ -349,7 +378,15 @@ pub(crate) fn compile_single_file_frontend(
     // 6. Merge local results back into the global build context.
     let merge_delta_start = crate::timing::start_pipeline_timing();
     let remap = string_table.merge_delta_from(&result.string_table, base_len);
-    let mut module = result.module;
+    // The transient `CompiledModuleResult` also carries the stable defined-public-export
+    // identity component for the next graph/interface slice. The legacy flat `Vec<Module>`
+    // handoff drops it here at the migration boundary; the accepted three-lane `Module` does
+    // not store it.
+    let CompiledModuleResult {
+        mut module,
+        string_table: _,
+        defined_public_export_origins: _,
+    } = result;
     if !remap.is_identity() {
         module.remap_string_ids(&remap);
     }
@@ -402,8 +439,12 @@ impl DirectoryModuleCompileContext<'_> {
     fn compile(&self, discovered: module_inventory::DiscoveredModule) -> DirectoryModuleTaskResult {
         let string_table_fork = self.string_table_fork_source.fork_for_module();
         let (local_table, base_len) = string_table_fork.into_parts();
-        let entry_point = discovered.entry_point.clone();
-        let input_files = &discovered.input_files;
+        let module_inventory::DiscoveredModule {
+            stable_origin,
+            entry_point,
+            input_files,
+        } = discovered;
+        let input_files = &input_files;
 
         // Record module-input counters and the per-module timing label before preparation so
         // the frontend module total can be attributed even when preparation fails.
@@ -424,6 +465,7 @@ impl DirectoryModuleCompileContext<'_> {
         };
 
         let prepared = match preparation_context.prepare_module(
+            stable_origin,
             input_files,
             &entry_point,
             local_table,
@@ -658,15 +700,24 @@ pub(crate) fn compile_directory_frontend(
     let success_merge_start = crate::timing::start_pipeline_timing();
     let mut compiled_modules = Vec::with_capacity(successes.len());
 
-    for mut success in successes {
+    for success in successes {
         let remap = string_table.merge_delta_from(
             &success.compiled.string_table,
             success.string_table_base_len,
         );
+        // The transient `CompiledModuleResult` also carries the stable defined-public-export
+        // identity component for the next graph/interface slice. The legacy flat `Vec<Module>`
+        // handoff drops it here at the migration boundary; the accepted three-lane `Module`
+        // does not store it.
+        let CompiledModuleResult {
+            mut module,
+            string_table: _,
+            defined_public_export_origins: _,
+        } = success.compiled;
         if !remap.is_identity() {
-            success.compiled.module.remap_string_ids(&remap);
+            module.remap_string_ids(&remap);
         }
-        compiled_modules.push(success.compiled.module);
+        compiled_modules.push(module);
     }
     log_stage_timing("stage0.directory.success_merge", success_merge_start);
 

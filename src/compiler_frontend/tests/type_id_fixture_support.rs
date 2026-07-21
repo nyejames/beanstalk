@@ -701,6 +701,7 @@ pub(crate) fn build_ast_with_choices(
             .collect(),
         type_environment,
         const_facts: AstConstFacts::default(),
+        resolved_receiver_catalog: None,
     }
 }
 

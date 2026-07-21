@@ -1,0 +1,418 @@
+//! Construction of the stable identity component for directly-defined public exports.
+//!
+//! WHAT: owns the one construction path that turns already-bound, sorted declaration shells and
+//!       the header-built public export metadata into the immutable
+//!       [`DefinedPublicExportOrigins`] component at the semantic compilation boundary. It is the
+//!       immediate consumer of the Phase 7a [`StableModuleOriginIdentity`]: the module origin
+//!       becomes the exporting-module and declaration-origin component of every recorded binding.
+//! WHY: the compiler design overview requires public-interface facts to be built once from
+//!      retained header facts at the semantic boundary, never by reparsing source or scanning
+//!      HIR/AST/backend output. Keeping this construction in one narrow compiler-semantic module
+//!      keeps stage ownership clear: the headers own declaration-shell discovery, this module
+//!      owns stable export-origin projection, and later phases own the completed interface.
+//!
+//! ## Two-phase split
+//!
+//! Free export bindings and the public nominal-type origin index are projected from bound, sorted
+//! header shells before AST construction ([`build_defined_public_export_origin_draft`]). Receiver
+//! surface origins are finalized from the resolved AST [`ReceiverMethodCatalog`] after AST receiver
+//! validation succeeds ([`DefinedPublicExportOriginDraft::finalize`]). The split exists because the
+//! header-stage receiver-name map is best-effort and absent for valid generic receiver methods and
+//! invalid receiver types; the resolved catalog carries the real [`ReceiverKey`] (including generic
+//! base resolution), so receiver surfaces are complete for valid generics and never preempt AST
+//! receiver diagnostics with an infrastructure error.
+//!
+//! ## Scope
+//!
+//! Only declarations defined directly in the active module root's public surface are recorded:
+//! free functions, nominal structs, choices, transparent aliases, constants and traits. Receiver
+//! methods are attached to their exported receiver type's surface rather than becoming free
+//! namespace bindings. Source re-exports are absent by construction: the current entry-closure
+//! compilation lacks completed provider interfaces, so donor-local source paths are not stable
+//! origins. The future completed provider interface owns re-export stable origin and binding.
+//!
+//! The declaration-kind set recorded here matches the directly-defined public export surface
+//! owned by `headers::public_exports` and `ast::module_ast::environment::public_surface`. Those
+//! owners keep their own stage-local predicates because their file-role semantics differ
+//! (export-capable roots versus the active module root alone); this module's projection is
+//! narrower because imported-module-root headers belong to another module's component.
+
+use crate::compiler_frontend::ast::ReceiverMethodCatalog;
+use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::datatypes::ReceiverKey;
+use crate::compiler_frontend::headers::module_symbols::ModuleSymbols;
+use crate::compiler_frontend::headers::parse_file_headers::{FileRole, Header, HeaderKind};
+use crate::compiler_frontend::semantic_identity::{
+    DefinedPublicExportOrigins, ExportBinding, OriginConstantId, OriginDeclarationId,
+    OriginFunctionId, OriginTraitId, OriginTypeCategory, OriginTypeId, ReceiverSurfaceOrigins,
+    StableModuleOriginIdentity,
+};
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
+
+use rustc_hash::FxHashMap;
+
+/// Pre-AST draft of the directly-defined public export identity component.
+///
+/// WHAT: carries the free-namespace export bindings and the public nominal-type origin index
+///       projected from bound, sorted header shells, plus the module origin needed to finalize
+///       receiver surface origins after AST receiver validation succeeds.
+/// WHY: free bindings and nominal-type origins depend only on header shells and are safe to
+///      project before AST construction. Receiver surface origins need the resolved
+///      [`ReceiverMethodCatalog`] so they are finalized separately after the AST succeeds; the
+///      draft keeps the pre-AST projection and the module origin in one named place so the caller
+///      does not manage loose values across the AST boundary.
+pub(crate) struct DefinedPublicExportOriginDraft {
+    module_origin: StableModuleOriginIdentity,
+    export_bindings: Vec<ExportBinding>,
+    public_nominal_type_origins: FxHashMap<InternedPath, OriginTypeId>,
+}
+
+impl DefinedPublicExportOriginDraft {
+    /// Finalize the complete [`DefinedPublicExportOrigins`] by projecting receiver surface origins
+    /// from the resolved AST receiver catalog.
+    ///
+    /// WHAT: consumes [`ReceiverMethodCatalog`] entries built from resolved function signatures and
+    ///       attaches receiver methods to their receiver's stable type origin. Generic receiver
+    ///       methods resolve to the generic nominal base [`ReceiverKey`] and attach to that stable
+    ///       receiver origin. Only receiver types that are directly-defined public nominal types in
+    ///       the active module root admit a surface; private and imported receiver types remain
+    ///       absent.
+    /// WHY: after successful AST construction every active-root receiver path selected by the draft
+    ///      has a resolved catalog entry, so a missing entry is a proven internal failure. The
+    ///      resolved catalog replaces the best-effort header receiver-name map, which was absent for
+    ///      valid generic receiver methods and invalid receiver types.
+    pub(crate) fn finalize(
+        self,
+        receiver_catalog: &ReceiverMethodCatalog,
+        string_table: &StringTable,
+    ) -> Result<DefinedPublicExportOrigins, CompilerError> {
+        let receiver_surfaces = collect_receiver_surface_origins(
+            &self.module_origin,
+            &self.public_nominal_type_origins,
+            receiver_catalog,
+            string_table,
+        )?;
+
+        Ok(DefinedPublicExportOrigins::new(
+            self.export_bindings,
+            receiver_surfaces,
+        ))
+    }
+}
+
+/// Build the pre-AST draft of the directly-defined public export identity component.
+///
+/// WHAT: projects the sorted declaration shells and header-built public export metadata into free
+///       export bindings and the public nominal-type origin index using the supplied stable module
+///       origin as the exporting-module and declaration-origin component. It reads no source text,
+///       tokens, HIR, AST or backend output. The caller retains the completed component only on
+///       overall semantic success; a diagnosed module exposes no component.
+/// WHY: the semantic compilation boundary already holds the bound, sorted declaration shells and
+///      the public export metadata, so stable export origins are projected here once rather than
+///      reconstructed by a later stage.
+pub(crate) fn build_defined_public_export_origin_draft(
+    module_origin: &StableModuleOriginIdentity,
+    sorted_headers: &[Header],
+    module_symbols: &ModuleSymbols,
+    string_table: &StringTable,
+) -> Result<DefinedPublicExportOriginDraft, CompilerError> {
+    let public_nominal_type_origins =
+        index_public_nominal_type_origins(module_origin, sorted_headers, string_table)?;
+
+    let export_bindings =
+        collect_free_export_bindings(module_origin, sorted_headers, module_symbols, string_table)?;
+
+    Ok(DefinedPublicExportOriginDraft {
+        module_origin: module_origin.clone(),
+        export_bindings,
+        public_nominal_type_origins,
+    })
+}
+
+/// Index the stable type origins of directly-defined public nominal types (structs and choices)
+/// by canonical declaration path, for receiver-method resolution.
+///
+/// Receiver methods travel with their receiver type, so a method is part of the public surface
+/// only when its receiver type is a directly-defined public nominal type. Canonical paths are
+/// unique within a module, so a receiver path resolves to at most one nominal type. The same-file
+/// nominal rule (AST-validated) guarantees that a method whose receiver path matches a public type
+/// is defined in the same file as that type; this projection runs only on overall semantic success,
+/// so the rule already holds.
+fn index_public_nominal_type_origins(
+    module_origin: &StableModuleOriginIdentity,
+    sorted_headers: &[Header],
+    string_table: &StringTable,
+) -> Result<FxHashMap<InternedPath, OriginTypeId>, CompilerError> {
+    let mut nominal_type_origins = FxHashMap::default();
+
+    for header in sorted_headers {
+        if !is_directly_defined_public_export(header) {
+            continue;
+        }
+
+        // A directly-defined public declaration always has a defining name: the header parser
+        // records one for every authored declaration shell. A missing name here is an impossible
+        // metadata gap, not an intentional exclusion, so it must surface as an internal failure
+        // rather than silently omitting a public nominal type from the component.
+        let Some(name) = header.tokens.src_path.name_str(string_table) else {
+            return Err(CompilerError::compiler_error(format!(
+                "defined public export-origin construction: a directly-defined public nominal type header has no resolvable defining name (path: {:?})",
+                header.tokens.src_path
+            )));
+        };
+
+        let category = match &header.kind {
+            HeaderKind::Struct { .. } => OriginTypeCategory::Struct,
+            HeaderKind::Choice { .. } => OriginTypeCategory::Choice,
+            _ => continue,
+        };
+
+        nominal_type_origins.insert(
+            header.tokens.src_path.clone(),
+            OriginTypeId::new(module_origin.clone(), name.to_owned(), category),
+        );
+    }
+
+    Ok(nominal_type_origins)
+}
+
+/// Collect the free-namespace export bindings for directly-defined public declarations.
+///
+/// Receiver methods are excluded here: they are attached to their receiver surface by
+/// `collect_receiver_surface_origins` and must not become independent free namespace bindings.
+fn collect_free_export_bindings(
+    module_origin: &StableModuleOriginIdentity,
+    sorted_headers: &[Header],
+    module_symbols: &ModuleSymbols,
+    string_table: &StringTable,
+) -> Result<Vec<ExportBinding>, CompilerError> {
+    let mut export_bindings = Vec::new();
+
+    for header in sorted_headers {
+        if !is_directly_defined_public_export(header) {
+            continue;
+        }
+
+        // A directly-defined public authored declaration always has a defining name. A missing
+        // name is an impossible metadata gap that must not silently omit a public export from the
+        // component.
+        let Some(name) = header.tokens.src_path.name_str(string_table) else {
+            return Err(CompilerError::compiler_error(format!(
+                "defined public export-origin construction: a directly-defined public declaration header has no resolvable defining name (path: {:?})",
+                header.tokens.src_path
+            )));
+        };
+
+        let Some(origin) =
+            free_export_declaration_origin(header, module_origin, module_symbols, name)
+        else {
+            // The only public declaration that returns `None` after the public check passed is a
+            // receiver method, which travels with its receiver surface instead of the free
+            // namespace. That exclusion is intentional.
+            continue;
+        };
+
+        export_bindings.push(ExportBinding::new(
+            module_origin.clone(),
+            name.to_owned(),
+            origin,
+        ));
+    }
+
+    // Deterministic order independent of hash-map iteration and declaration scheduling: sort by
+    // public name, then by declaration category so two bindings can never tie ambiguously.
+    export_bindings.sort_by(|left, right| {
+        left.public_name().cmp(right.public_name()).then_with(|| {
+            declaration_category_rank(left.origin()).cmp(&declaration_category_rank(right.origin()))
+        })
+    });
+
+    Ok(export_bindings)
+}
+
+/// Resolve the stable origin for one directly-defined public free-namespace export declaration,
+/// or `None` when the header is not a directly-defined public export.
+///
+/// Returns `None` for receiver methods (handled by the receiver-surface path), private
+/// declarations, imported-module-root declarations, the implicit start function, const templates
+/// and trait relations that are not declarations.
+fn free_export_declaration_origin(
+    header: &Header,
+    module_origin: &StableModuleOriginIdentity,
+    module_symbols: &ModuleSymbols,
+    defining_name: &str,
+) -> Option<OriginDeclarationId> {
+    if !is_directly_defined_public_export(header) {
+        return None;
+    }
+
+    match &header.kind {
+        HeaderKind::Function { .. } => {
+            // A public function in the active module root's export surface is a free namespace
+            // export unless it is a receiver method, which travels with its receiver type's
+            // surface instead.
+            if module_symbols
+                .receiver_method_paths
+                .contains(&header.tokens.src_path)
+            {
+                None
+            } else {
+                Some(OriginDeclarationId::Function(OriginFunctionId::new_free(
+                    module_origin.clone(),
+                    defining_name.to_owned(),
+                )))
+            }
+        }
+        HeaderKind::Struct { .. } => Some(OriginDeclarationId::Type(OriginTypeId::new(
+            module_origin.clone(),
+            defining_name.to_owned(),
+            OriginTypeCategory::Struct,
+        ))),
+        HeaderKind::Choice { .. } => Some(OriginDeclarationId::Type(OriginTypeId::new(
+            module_origin.clone(),
+            defining_name.to_owned(),
+            OriginTypeCategory::Choice,
+        ))),
+        HeaderKind::TypeAlias { .. } => Some(OriginDeclarationId::Type(OriginTypeId::new(
+            module_origin.clone(),
+            defining_name.to_owned(),
+            OriginTypeCategory::TransparentAlias,
+        ))),
+        HeaderKind::Constant { .. } => Some(OriginDeclarationId::Constant(OriginConstantId::new(
+            module_origin.clone(),
+            defining_name.to_owned(),
+        ))),
+        HeaderKind::Trait { .. } => Some(OriginDeclarationId::Trait(OriginTraitId::new(
+            module_origin.clone(),
+            defining_name.to_owned(),
+        ))),
+        HeaderKind::StartFunction
+        | HeaderKind::ConstTemplate { .. }
+        | HeaderKind::TraitConformance { .. }
+        | HeaderKind::TraitIncompatibility { .. } => None,
+    }
+}
+
+/// Collect receiver-method origins attached to exported nominal type surfaces from the resolved
+/// AST receiver catalog.
+///
+/// A receiver method is part of the public surface only when its receiver type is a
+/// directly-defined public nominal type in the active module root. The method's stable function
+/// origin is built with [`OriginFunctionId::new_receiver`] using the receiver's stable
+/// [`OriginTypeId`], so it stays attached to that receiver surface and never becomes an
+/// independent free namespace binding.
+///
+/// The catalog is built from resolved function signatures, so generic receiver methods resolve to
+/// the generic nominal base [`ReceiverKey`] and attach to that stable receiver origin. External and
+/// builtin receiver keys are impossible in a successfully validated catalog; encountering them is
+/// an internal failure that must not coerce to a nominal surface.
+fn collect_receiver_surface_origins(
+    module_origin: &StableModuleOriginIdentity,
+    public_nominal_type_origins: &FxHashMap<InternedPath, OriginTypeId>,
+    receiver_catalog: &ReceiverMethodCatalog,
+    string_table: &StringTable,
+) -> Result<Vec<ReceiverSurfaceOrigins>, CompilerError> {
+    let mut methods_by_receiver: FxHashMap<OriginTypeId, Vec<OriginFunctionId>> =
+        FxHashMap::default();
+
+    for entry in receiver_catalog.by_function_path.values() {
+        let receiver_type = match &entry.receiver {
+            ReceiverKey::Struct(path) | ReceiverKey::Choice(path) => {
+                // A receiver path not in the public nominal-type index is a private or imported
+                // receiver type, so the method is not part of this module's public surface. Private
+                // receiver surfaces are deliberately absent and imported-root receiver methods
+                // belong to another module's component.
+                match public_nominal_type_origins.get(path) {
+                    Some(origin) => origin,
+                    None => continue,
+                }
+            }
+
+            ReceiverKey::External(_) | ReceiverKey::BuiltinScalar(_) => {
+                // A successfully validated source receiver catalog contains only Struct and Choice
+                // receiver keys: the AST receiver-method diagnostic owner rejects External and
+                // BuiltinScalar receivers before catalog construction completes. Encountering
+                // either here is a proven internal failure that must not coerce to a nominal
+                // surface.
+                return Err(CompilerError::compiler_error(format!(
+                    "defined public export-origin construction: a resolved receiver catalog entry carries a non-nominal receiver key ({:?})",
+                    entry.receiver
+                )));
+            }
+        };
+
+        // A receiver method path always carries a defining method name. A missing name is an
+        // impossible metadata gap that must not silently omit a public receiver method.
+        let Some(method_name) = entry.function_path.name_str(string_table) else {
+            return Err(CompilerError::compiler_error(format!(
+                "defined public export-origin construction: a receiver method path has no resolvable defining name (path: {:?})",
+                entry.function_path
+            )));
+        };
+
+        let method = OriginFunctionId::new_receiver(
+            module_origin.clone(),
+            method_name.to_owned(),
+            receiver_type.clone(),
+        );
+
+        methods_by_receiver
+            .entry(receiver_type.clone())
+            .or_default()
+            .push(method);
+    }
+
+    // Deterministic order: sort each surface's methods by defining name, then sort surfaces by
+    // receiver defining name and category. Externally observed iteration is therefore independent
+    // of hash-map iteration and declaration scheduling.
+    let mut receiver_surfaces: Vec<ReceiverSurfaceOrigins> = methods_by_receiver
+        .into_iter()
+        .map(|(receiver, mut methods)| {
+            methods.sort_by(|left, right| left.defining_name().cmp(right.defining_name()));
+            ReceiverSurfaceOrigins::new(receiver, methods)
+        })
+        .collect();
+
+    receiver_surfaces.sort_by(|left, right| {
+        left.receiver()
+            .defining_name()
+            .cmp(right.receiver().defining_name())
+            .then_with(|| left.receiver().category().cmp(&right.receiver().category()))
+    });
+
+    Ok(receiver_surfaces)
+}
+
+/// Whether a header is a public declaration authored directly in the active module root.
+///
+/// WHAT: narrows the export surface to the active module's own declarations. The active module
+///       root is the file being compiled; imported-module-root headers belong to another
+///       module's surface and are excluded. Only declarations marked public by a strict
+///       `export:` block are admitted. The declaration-kind gate is the shared
+///       [`HeaderKind::is_authored_public_export_declaration`] owner so the header, AST and
+///       semantic-origin public-export predicates cannot drift; this predicate keeps the
+///       stage-local file-role and export-mode policy (active module root plus explicit `Public`
+///       mode), which is narrower than the header and AST predicates that also accept
+///       imported-module-root declarations. Non-declaration headers (start function, const
+///       templates, trait relations) are rejected here and again by the category match in
+///       `free_export_declaration_origin`.
+fn is_directly_defined_public_export(header: &Header) -> bool {
+    header.file_role == FileRole::ActiveModuleRoot
+        && header.export_mode.is_public()
+        && header.kind.is_authored_public_export_declaration()
+}
+
+/// A deterministic rank for an exported declaration category, used only as a sort tiebreaker.
+fn declaration_category_rank(origin: &OriginDeclarationId) -> u8 {
+    match origin {
+        OriginDeclarationId::Function(_) => 0,
+        OriginDeclarationId::Type(_) => 1,
+        OriginDeclarationId::Constant(_) => 2,
+        OriginDeclarationId::Trait(_) => 3,
+    }
+}
+
+#[cfg(test)]
+#[path = "tests/defined_public_export_origins_tests.rs"]
+mod tests;

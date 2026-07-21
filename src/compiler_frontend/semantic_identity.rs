@@ -314,7 +314,6 @@ impl OriginTypeId {
     /// Compiler-internal: only declarations admitted to a consumer-visible or exported surface
     /// receive an origin ID. Private source types remain without origin IDs by policy; this
     /// slice does not add identity fields to private headers.
-    #[allow(dead_code)]
     pub(crate) fn new(
         module_origin: StableModuleOriginIdentity,
         defining_name: String,
@@ -368,7 +367,6 @@ impl OriginFunctionId {
     ///
     /// Compiler-internal: only declarations admitted to a consumer-visible or exported surface
     /// receive an origin ID. Private functions remain without origin IDs by policy.
-    #[allow(dead_code)]
     pub(crate) fn new_free(
         module_origin: StableModuleOriginIdentity,
         defining_name: String,
@@ -386,7 +384,6 @@ impl OriginFunctionId {
     /// methods admitted to a receiver surface that is itself consumer-visible or exported receive
     /// an origin ID. A method is not an independent namespace export, but its exported receiver
     /// surface still needs a stable function origin.
-    #[allow(dead_code)]
     pub(crate) fn new_receiver(
         module_origin: StableModuleOriginIdentity,
         defining_name: String,
@@ -448,7 +445,6 @@ impl OriginConstantId {
     ///
     /// Compiler-internal: only declarations admitted to a consumer-visible or exported surface
     /// receive an origin ID. Private constants remain without origin IDs by policy.
-    #[allow(dead_code)]
     pub(crate) fn new(module_origin: StableModuleOriginIdentity, defining_name: String) -> Self {
         Self {
             module_origin,
@@ -487,7 +483,6 @@ impl OriginTraitId {
     ///
     /// Compiler-internal: only declarations admitted to a consumer-visible or exported surface
     /// receive an origin ID. Private traits remain without origin IDs by policy.
-    #[allow(dead_code)]
     pub(crate) fn new(module_origin: StableModuleOriginIdentity, defining_name: String) -> Self {
         Self {
             module_origin,
@@ -516,7 +511,6 @@ impl OriginTraitId {
 /// WHY: public-interface binding and exported-symbol tables key over one stable identity value
 /// while still distinguishing declaration category. Identity still derives only from module
 /// origin, defining name, category and receiver type identity where applicable.
-#[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum OriginDeclarationId {
     Function(OriginFunctionId),
@@ -535,5 +529,165 @@ impl OriginDeclarationId {
             OriginDeclarationId::Constant(constant) => constant.module_origin(),
             OriginDeclarationId::Trait(trait_id) => trait_id.module_origin(),
         }
+    }
+}
+
+/// One stable export binding for a public declaration defined directly in the active module root.
+///
+/// WHAT: maps the exporting module's public API name to the stable origin declaration identity
+///       for a declaration authored directly in the active module root's public surface. The
+///       exporting module is the stable [`StableModuleOriginIdentity`], never a build-local dense
+///       `ModuleId`. The public name and the origin's defining name are self-contained owned
+///       strings, never `StringId` or `InternedPath` values that would not survive the graph
+///       table. For a directly defined export the public name equals the defining name; re-export
+///       aliasing is a separate fact owned by the future completed provider interface.
+/// WHY: the compiler design overview's `ExportBinding` contract requires public-interface binding
+///      to key over stable module origins and declaration identities. Recording these bindings at
+///      the semantic compilation boundary lets later phases consume them without reparsing source
+///      or re-deriving identity from donor-local paths.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct ExportBinding {
+    exporting_module: StableModuleOriginIdentity,
+    public_name: String,
+    origin: OriginDeclarationId,
+}
+
+impl ExportBinding {
+    /// Construct one stable export binding for a directly defined public declaration.
+    ///
+    /// Compiler-internal: the construction owner in `defined_public_export_origins` builds these
+    /// only for declarations admitted to the active module root's public surface, so the
+    /// exporting module, public name and origin identity are already known to be consistent.
+    pub(crate) fn new(
+        exporting_module: StableModuleOriginIdentity,
+        public_name: String,
+        origin: OriginDeclarationId,
+    ) -> Self {
+        Self {
+            exporting_module,
+            public_name,
+            origin,
+        }
+    }
+
+    /// The stable identity of the module exporting the declaration.
+    #[allow(dead_code)]
+    pub(crate) fn exporting_module(&self) -> &StableModuleOriginIdentity {
+        &self.exporting_module
+    }
+
+    /// The public API name the exporting module exposes the declaration under.
+    #[allow(dead_code)]
+    pub(crate) fn public_name(&self) -> &str {
+        &self.public_name
+    }
+
+    /// The stable origin identity of the exported declaration.
+    #[allow(dead_code)]
+    pub(crate) fn origin(&self) -> &OriginDeclarationId {
+        &self.origin
+    }
+}
+
+/// Stable origins for the receiver methods attached to one exported receiver type surface.
+///
+/// WHAT: groups the stable function origins of receiver methods that travel with one exported
+///       nominal type's source surface. Each method origin is built with
+///       [`OriginFunctionId::new_receiver`] using the receiver's stable [`OriginTypeId`], so a
+///       method is unrepresentable as an independent free-namespace export. The receiver type
+///       identity is carried explicitly so consumers can group methods by receiver surface
+///       without inspecting each function origin's kind.
+/// WHY: the compiler design overview requires receiver methods to remain attached to their
+///      receiver type's exported surface and to never become independent free namespace entries
+///      that could be imported, aliased or re-exported separately.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct ReceiverSurfaceOrigins {
+    receiver: OriginTypeId,
+    methods: Vec<OriginFunctionId>,
+}
+
+impl ReceiverSurfaceOrigins {
+    /// Construct one receiver surface's method origins.
+    ///
+    /// Compiler-internal: the construction owner builds these only for exported nominal types
+    /// that are directly defined in the active module root, attaching the methods whose receiver
+    /// resolves to that type. `methods` must already be in the construction owner's deterministic
+    /// order.
+    pub(crate) fn new(receiver: OriginTypeId, methods: Vec<OriginFunctionId>) -> Self {
+        Self { receiver, methods }
+    }
+
+    /// The stable origin identity of the receiver type that owns this surface.
+    #[allow(dead_code)]
+    pub(crate) fn receiver(&self) -> &OriginTypeId {
+        &self.receiver
+    }
+
+    /// The stable function origins of the methods attached to this receiver surface, in the
+    /// construction owner's deterministic order.
+    #[allow(dead_code)]
+    pub(crate) fn methods(&self) -> &[OriginFunctionId] {
+        &self.methods
+    }
+}
+
+/// Immutable compiler-owned stable identity component for public declarations defined directly
+/// in the active module root.
+///
+/// WHAT: records stable origin IDs and [`ExportBinding`] values for the declarations authored
+///       directly in the active module root's public surface, including direct `ExportBinding`
+///       facts, plus the receiver-method origins attached to each exported nominal type's
+///       surface. It is the immediate consumer of the Phase 7a [`StableModuleOriginIdentity`]:
+///       the module origin becomes the exporting-module and declaration-origin component of
+///       every recorded binding.
+///
+/// It is deliberately not the final `PublicSemanticInterface`. Canonical type shapes, folded
+/// constant payloads, generic templates, trait/conformance evidence, access and effect
+/// summaries, project-context provenance and cross-module call facts remain for later phases.
+///
+/// Source re-exports are absent from this component by construction: the current entry-closure
+/// compilation lacks completed provider interfaces, so donor-local source paths are not stable
+/// origins and must not be transported. The future completed provider interface owns re-export
+/// stable origin and binding. A directly defined public export is never silently omitted.
+///
+/// Order is deterministic and independent of hash-map iteration and declaration scheduling:
+/// `export_bindings` is sorted by public name (then declaration category), and
+/// `receiver_surfaces` is sorted by receiver defining name (then category) with methods sorted by
+/// defining name. Externally observed iteration over the vectors therefore cannot introduce
+/// nondeterminism.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct DefinedPublicExportOrigins {
+    export_bindings: Vec<ExportBinding>,
+    receiver_surfaces: Vec<ReceiverSurfaceOrigins>,
+}
+
+impl DefinedPublicExportOrigins {
+    /// Construct the component from the already-built, deterministically ordered bindings and
+    /// receiver surfaces.
+    ///
+    /// Compiler-internal: the construction owner in `defined_public_export_origins` assembles the
+    /// vectors in the documented deterministic order before calling this.
+    pub(crate) fn new(
+        export_bindings: Vec<ExportBinding>,
+        receiver_surfaces: Vec<ReceiverSurfaceOrigins>,
+    ) -> Self {
+        Self {
+            export_bindings,
+            receiver_surfaces,
+        }
+    }
+
+    /// The free-namespace export bindings for directly defined public declarations, in
+    /// deterministic order. Excludes receiver methods.
+    #[allow(dead_code)]
+    pub(crate) fn export_bindings(&self) -> &[ExportBinding] {
+        &self.export_bindings
+    }
+
+    /// The receiver-method origins attached to exported nominal type surfaces, in deterministic
+    /// order. Not free-namespace bindings.
+    #[allow(dead_code)]
+    pub(crate) fn receiver_surfaces(&self) -> &[ReceiverSurfaceOrigins] {
+        &self.receiver_surfaces
     }
 }

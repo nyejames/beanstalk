@@ -163,7 +163,9 @@ fn parse_single_file_headers_with_warnings(
     (headers, warnings)
 }
 
-fn parse_single_file_headers_with_table(source: &str) -> (BoundModuleHeaders, StringTable) {
+pub(crate) fn parse_single_file_headers_with_table(
+    source: &str,
+) -> (BoundModuleHeaders, StringTable) {
     let mut string_table = StringTable::new();
     let file_path = PathBuf::from("src/#page.bst");
     let output = prepare_single_file(source, &file_path, &file_path, &mut string_table);
