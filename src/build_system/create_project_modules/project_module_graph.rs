@@ -13,24 +13,29 @@
 //! owner consumes the existing [`ModuleIdentityTable`] and owned source sets rather than
 //! recomputing them, so identity, ancestry and source ownership stay single-owned.
 //!
-//! This slice deliberately does not infer import edges from the filesystem or retained header
-//! syntax. Edge insertion is narrow so a later slice can add graph-resolved provider edges on
-//! top of the same owner.
+//! Edge insertion is narrow and production-consumed by Phase 5b: reachable-file discovery
+//! retains one local structural dependency fact per cross-module import resolution and the
+//! inventory merge maps the fact's canonical roots through this graph before inserting
+//! provider-before-consumer edges, so dependency order is derived without a second filesystem
+//! traversal or a parallel identity/topology table.
 //!
 //! Production wiring: Stage 0 constructs the graph once from the [`SourceTreeIndex`] in
 //! `project_roots` and retains it as the structural owner. `compile_waves` and `entry_modules`
-//! drive deterministic entry selection in `module_inventory`, so graph construction and wave
-//! scheduling are genuine production paths. The dependency-edge and scoped-support-visibility
-//! surfaces remain Phase 5b consumers and carry narrowly scoped dead-code allowances until a
-//! later slice inserts graph-resolved provider edges.
+//! drive deterministic entry selection in `module_inventory`, so graph construction, wave
+//! scheduling and dependency-edge insertion are genuine production paths. The
+//! scoped-support-visibility surface remains a future consumer and carries a narrowly scoped
+//! dead-code allowance until a later slice exercises support-package visibility.
 
 use super::module_identity::ModuleId;
 use super::source_tree_index::{OwnedSourceSet, SourceTreeIndex};
 
 use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::compiler_messages::source_location::SourceLocation;
 use crate::compiler_frontend::semantic_identity::{ModuleRootRole, StableModuleOriginIdentity};
 
-use std::collections::BTreeSet;
+use rustc_hash::FxHashMap;
+
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 /// Outcome of inserting one deterministic provider-before-consumer dependency edge.
@@ -39,10 +44,6 @@ use std::path::Path;
 /// WHY: a duplicate edge does not change the dependency graph, so insertion is idempotent rather
 ///      than an error. Self-edges and out-of-range module IDs remain internal graph failures
 ///      reported through [`CompilerError`].
-// Phase 5b: dependency-edge insertion is not yet production-consumed. The graph stores no
-// edges at the Stage 0 boundary, so this outcome type only surfaces once a later slice inserts
-// graph-resolved provider edges.
-#[allow(dead_code)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum DependencyEdgeOutcome {
     Inserted,
@@ -134,6 +135,15 @@ pub(crate) struct ProjectModuleGraph {
     // Per-provider consumer sets: the consumers that depend on each provider. Used for wave
     // traversal. Maintained in lockstep with `dependency_providers`.
     provider_consumers: Vec<BTreeSet<ModuleId>>,
+    // Canonical module root directory to `ModuleId` lookup, owned by the graph so the Phase 5b
+    // dependency-fact merge can resolve retained canonical roots to graph identities without
+    // recreating the identity table or scanning the filesystem.
+    root_directory_to_module_id: FxHashMap<std::path::PathBuf, ModuleId>,
+    // Retained authored source location for each inserted provider-before-consumer edge, keyed
+    // by the (provider, consumer) `ModuleId` pair. Only the first observation in deterministic
+    // merge order is retained; duplicate observations are idempotent for the edge and never
+    // overwrite the retained location. Source locations are never used for edge identity.
+    edge_source_locations: BTreeMap<(ModuleId, ModuleId), SourceLocation>,
 }
 
 impl ProjectModuleGraph {
@@ -184,12 +194,19 @@ impl ProjectModuleGraph {
         let dependency_providers = (0..node_count).map(|_| BTreeSet::new()).collect();
         let provider_consumers = (0..node_count).map(|_| BTreeSet::new()).collect();
 
+        let mut root_directory_to_module_id = FxHashMap::default();
+        for node in &nodes {
+            root_directory_to_module_id.insert(node.root_directory.clone(), node.module_id);
+        }
+
         Self {
             nodes,
             entry_modules,
             facade,
             dependency_providers,
             provider_consumers,
+            root_directory_to_module_id,
+            edge_source_locations: BTreeMap::new(),
         }
     }
 
@@ -272,13 +289,26 @@ impl ProjectModuleGraph {
         }
     }
 
+    /// The canonical `ModuleId` whose root directory matches `root_directory`, or `None` when
+    /// the root is not a project module graph node.
+    ///
+    /// WHAT: the graph-owned canonical-root-to-`ModuleId` mapping consumed by the Phase 5b
+    ///       dependency-fact merge. Registered source-package roots outside the project graph
+    ///       are intentionally absent and are ignored by the caller before edge insertion.
+    /// WHY: edge insertion must not recreate the `ModuleIdentityTable` or scan the filesystem;
+    ///      the graph already carries every canonical root directory as a node field.
+    pub(crate) fn module_id_for_root_directory(&self, root_directory: &Path) -> Option<ModuleId> {
+        self.root_directory_to_module_id
+            .get(root_directory)
+            .copied()
+    }
+
     /// Insert one deterministic provider-before-consumer dependency edge.
     ///
     /// The provider must compile before the consumer. Module IDs are validated and self-edges
     /// are rejected through an internal [`CompilerError`] without panicking. A duplicate edge
     /// is idempotent and reports [`DependencyEdgeOutcome::AlreadyPresent`] because it does not
     /// change the dependency graph.
-    #[allow(dead_code)]
     pub(crate) fn add_dependency_edge(
         &mut self,
         provider: ModuleId,
@@ -300,6 +330,43 @@ impl ProjectModuleGraph {
         self.provider_consumers[provider.index()].insert(consumer);
 
         Ok(DependencyEdgeOutcome::Inserted)
+    }
+
+    /// Insert one resolved local structural dependency edge and retain its authored location.
+    ///
+    /// WHAT: the Phase 5b production edge-insertion path. Maps already-resolved `ModuleId`
+    ///       identities to the low-level [`add_dependency_edge`] inserter and, for a newly
+    ///       inserted edge, retains the exact authored `SourceLocation` carried by the
+    ///       dependency fact. Duplicate observations are idempotent for the edge and never
+    ///       overwrite the retained location; source locations are never used for edge identity.
+    /// WHY: the inventory merge resolves canonical roots to `ModuleId` through
+    ///      [`module_id_for_root_directory`] and then calls this method so the graph stays the
+    ///      single owner of both edge adjacency and the retained dependency-fact provenance.
+    pub(crate) fn add_local_structural_dependency_edge(
+        &mut self,
+        provider: ModuleId,
+        consumer: ModuleId,
+        authored_location: SourceLocation,
+    ) -> Result<DependencyEdgeOutcome, CompilerError> {
+        let outcome = self.add_dependency_edge(provider, consumer)?;
+        if outcome == DependencyEdgeOutcome::Inserted {
+            self.edge_source_locations
+                .insert((provider, consumer), authored_location);
+        }
+        Ok(outcome)
+    }
+
+    /// The retained authored source location for one provider-before-consumer edge, if present.
+    ///
+    /// Focused graph-invariant tests use this to verify that exact authored source locations
+    /// survive the Phase 5b dependency-fact merge.
+    #[cfg(test)]
+    pub(crate) fn edge_source_location(
+        &self,
+        provider: ModuleId,
+        consumer: ModuleId,
+    ) -> Option<&SourceLocation> {
+        self.edge_source_locations.get(&(provider, consumer))
     }
 
     /// Whether a provider-before-consumer dependency edge is currently present.

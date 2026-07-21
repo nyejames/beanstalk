@@ -140,7 +140,7 @@ fn discover_modules_for_test(
         &crate::builder_surface::SourceFileKindRegistry::default(),
         &mut string_table,
     )?;
-    let project_module_graph =
+    let mut project_module_graph =
         super::project_module_graph::ProjectModuleGraph::from_source_tree_index(&source_tree_index);
     let mut external_packages = ExternalPackageRegistry::new();
     let external_import_providers =
@@ -159,7 +159,7 @@ fn discover_modules_for_test(
     discover_all_modules_in_project(
         config,
         resolver,
-        &project_module_graph,
+        &mut project_module_graph,
         style_directives,
         &mut external_imports,
         &mut string_table,
@@ -184,7 +184,7 @@ fn discover_modules_for_test_with_providers(
         &crate::builder_surface::SourceFileKindRegistry::default(),
         &mut string_table,
     )?;
-    let project_module_graph =
+    let mut project_module_graph =
         super::project_module_graph::ProjectModuleGraph::from_source_tree_index(&source_tree_index);
     let mut external_packages = ExternalPackageRegistry::new();
     let mut external_import_cache =
@@ -202,11 +202,65 @@ fn discover_modules_for_test_with_providers(
     discover_all_modules_in_project(
         config,
         resolver,
-        &project_module_graph,
+        &mut project_module_graph,
         style_directives,
         &mut external_imports,
         &mut string_table,
     )
+}
+
+/// Discover modules and return the populated project module graph plus the shared string table
+/// so focused Phase 5b invariant tests can inspect inserted edges and retained source locations.
+fn discover_modules_and_graph_for_test(
+    config: &Config,
+    resolver: &ProjectPathResolver,
+    style_directives: &StyleDirectiveRegistry,
+) -> (
+    Vec<DiscoveredModule>,
+    super::project_module_graph::ProjectModuleGraph,
+    StringTable,
+) {
+    let mut string_table = StringTable::new();
+    let project_root = fs::canonicalize(&config.entry_dir).expect("project root should resolve");
+    let entry_root =
+        fs::canonicalize(resolve_project_entry_root(config)).expect("entry root should resolve");
+    let source_tree_index = super::source_tree_index::SourceTreeIndex::discover(
+        entry_root,
+        &project_root,
+        config,
+        &crate::builder_surface::SourcePackageRegistry::default(),
+        &crate::builder_surface::SourceFileKindRegistry::default(),
+        &mut string_table,
+    )
+    .expect("source tree index should build");
+    let mut project_module_graph =
+        super::project_module_graph::ProjectModuleGraph::from_source_tree_index(&source_tree_index);
+    let mut external_packages = ExternalPackageRegistry::new();
+    let external_import_providers =
+        crate::builder_surface::external_import_providers::registry::ExternalImportProviderRegistry::empty();
+    let mut external_import_cache =
+        crate::builder_surface::external_import_providers::cache::ExternalImportProviderCache::new(
+        );
+    let mut external_import_resolution_table =
+        crate::builder_surface::external_import_providers::resolution_table::ExternalImportResolutionTable::new();
+    let mut external_imports = super::reachable_file_discovery::ExternalImportDiscoveryState {
+        external_packages: &mut external_packages,
+        providers: &external_import_providers,
+        cache: &mut external_import_cache,
+        resolution_table: &mut external_import_resolution_table,
+    };
+
+    let modules = discover_all_modules_in_project(
+        config,
+        resolver,
+        &mut project_module_graph,
+        style_directives,
+        &mut external_imports,
+        &mut string_table,
+    )
+    .expect("module discovery should pass for focused graph-edge tests");
+
+    (modules, project_module_graph, string_table)
 }
 
 fn rendered_first_error(messages: &CompilerMessages) -> String {
@@ -3199,7 +3253,19 @@ fn reachable_beandown_queues_same_directory_root_file() {
     let modules = discover_modules_for_test(&config, &resolver, &style_directives)
         .expect("reachable .bd should discover same-directory hash root");
 
-    let input_paths: HashSet<_> = modules[0]
+    // The entry module imports a Beandown file from the `docs` module root, so `docs` is its
+    // provider and precedes it in the returned inventory order. Find the entry module by its
+    // root file rather than assuming index 0.
+    let entry_module = modules
+        .iter()
+        .find(|module| {
+            module
+                .entry_point
+                .file_name()
+                .is_some_and(|name| name == "#page.bst")
+        })
+        .expect("entry module should be discovered");
+    let input_paths: HashSet<_> = entry_module
         .input_files
         .iter()
         .map(|input| input.source_path().file_name().unwrap().to_owned())
@@ -3208,7 +3274,7 @@ fn reachable_beandown_queues_same_directory_root_file() {
     assert!(input_paths.contains(OsStr::new("intro.bd")));
     assert!(input_paths.contains(OsStr::new("#docs.bst")));
 
-    let beandown_input = modules[0]
+    let beandown_input = entry_module
         .input_files
         .iter()
         .find(|input| input.source_path().file_name() == Some(OsStr::new("intro.bd")))
@@ -4220,7 +4286,19 @@ fn provider_free_parallel_preserves_cross_module_root_queuing() {
 
     assert_eq!(modules.len(), 2);
 
-    let module_a_inputs = modules[0]
+    // Module A imports an implementation file from module B, so module B is its provider and
+    // precedes module A in the returned inventory order. Find module A by its entry root file
+    // rather than assuming index 0.
+    let module_a = modules
+        .iter()
+        .find(|module| {
+            module
+                .entry_point
+                .file_name()
+                .is_some_and(|name| name == "#pageA.bst")
+        })
+        .expect("module A should be discovered");
+    let module_a_inputs = module_a
         .input_files
         .iter()
         .map(|input| {
@@ -4396,6 +4474,291 @@ fn provider_free_parallel_retains_beanstalk_tokens_for_every_reachable_file() {
             }
         }
     }
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+// -------------------------
+//  Phase 5b: graph-resolved local provider edges
+// -------------------------
+
+/// Write a two-module project where `module_a` imports an implementation file from `module_b`,
+/// plus the config, and return the parsed config and resolver.
+fn write_cross_module_project(
+    root: &std::path::Path,
+) -> (
+    Config,
+    ProjectPathResolver,
+    StyleDirectiveRegistry,
+    std::path::PathBuf,
+    std::path::PathBuf,
+) {
+    let src = root.join("src");
+    let module_a = src.join("module_a");
+    let module_b = src.join("module_b");
+    fs::create_dir_all(&module_a).expect("should create module_a");
+    fs::create_dir_all(&module_b).expect("should create module_b");
+
+    fs::write(
+        root.join(settings::CONFIG_FILE_NAME),
+        "entry_root #= \"src\"\n",
+    )
+    .expect("should write config");
+    fs::write(
+        module_a.join("#pageA.bst"),
+        "import @module_b/impl\n#[:pageA]\n",
+    )
+    .expect("should write pageA");
+    fs::write(module_b.join("#api.bst"), "export:\n    b #= 1\n;\n")
+        .expect("should write module_b root");
+    fs::write(module_b.join("impl.bst"), "impl #= 1\n").expect("should write module_b impl");
+
+    let mut config = Config::new(root.to_path_buf());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config should parse");
+    let resolver = configured_resolver(&config);
+
+    let canonical_module_a = fs::canonicalize(&module_a).expect("module_a should canonicalize");
+    let canonical_module_b = fs::canonicalize(&module_b).expect("module_b should canonicalize");
+    (
+        config,
+        resolver,
+        style_directives,
+        canonical_module_a,
+        canonical_module_b,
+    )
+}
+
+#[test]
+fn local_dependency_edge_is_recorded_provider_before_consumer() {
+    let root = temp_dir("phase5b_provider_before_consumer");
+    let (config, resolver, style_directives, module_a_root, module_b_root) =
+        write_cross_module_project(&root);
+
+    let (modules, graph, _string_table) =
+        discover_modules_and_graph_for_test(&config, &resolver, &style_directives);
+
+    let module_a_id = graph
+        .module_id_for_root_directory(&module_a_root)
+        .expect("module_a root should be a graph node");
+    let module_b_id = graph
+        .module_id_for_root_directory(&module_b_root)
+        .expect("module_b root should be a graph node");
+
+    // The import flows module_a -> module_b, so the provider (module_b) must precede the
+    // consumer (module_a) in the returned inventory order. The edge is provider-before-consumer,
+    // never the reverse.
+    assert!(
+        graph.has_dependency_edge(module_b_id, module_a_id),
+        "provider module_b must have an edge into consumer module_a"
+    );
+    assert!(
+        !graph.has_dependency_edge(module_a_id, module_b_id),
+        "the consumer must not edge into its provider"
+    );
+
+    // The returned modules follow the dependency-ordered wave order: module_b is the provider
+    // and must precede consumer module_a. Phase 5b establishes inventory position only; the
+    // directory compiler still feeds this vector to a Rayon batch.
+    let entry_order: Vec<std::path::PathBuf> = modules
+        .iter()
+        .map(|module| module.entry_point.clone())
+        .collect();
+    let module_a_position = entry_order
+        .iter()
+        .position(|path| path.file_name().is_some_and(|name| name == "#pageA.bst"))
+        .expect("module_a should be in the returned order");
+    let module_b_position = entry_order
+        .iter()
+        .position(|path| path.file_name().is_some_and(|name| name == "#api.bst"))
+        .expect("module_b should be in the returned order");
+    assert!(
+        module_b_position < module_a_position,
+        "provider module_b must precede consumer module_a in compile-wave order"
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn same_module_import_creates_no_project_graph_edge() {
+    let root = temp_dir("phase5b_same_module_no_edge");
+    let src = root.join("src");
+    fs::create_dir_all(&src).expect("should create src");
+
+    fs::write(
+        root.join(settings::CONFIG_FILE_NAME),
+        "entry_root #= \"src\"\n",
+    )
+    .expect("should write config");
+    // The single entry module imports a sibling file inside its own module root.
+    fs::write(src.join("#page.bst"), "import @./helper\n#[:page]\n").expect("should write entry");
+    fs::write(src.join("helper.bst"), "value #= 1\n").expect("should write helper");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config should parse");
+    let resolver = configured_resolver(&config);
+
+    let (modules, graph, _string_table) =
+        discover_modules_and_graph_for_test(&config, &resolver, &style_directives);
+
+    let entry_root = graph.entry_modules().to_vec();
+    assert_eq!(entry_root.len(), 1, "there is one normal entry module");
+
+    // Same-module imports create no project-graph edge, so the graph has no edges and one wave.
+    let waves = graph.compile_waves().expect("no-edge graph waves cleanly");
+    assert_eq!(waves.len(), 1, "no edges means a single ready wave");
+    assert_eq!(modules.len(), 1);
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn duplicate_fan_in_deduplicates_edges_and_orders_provider_first() {
+    let root = temp_dir("phase5b_duplicate_fan_in");
+    let src = root.join("src");
+    let module_a = src.join("module_a");
+    let module_b = src.join("module_b");
+    let module_c = src.join("module_c");
+    fs::create_dir_all(&module_a).expect("should create module_a");
+    fs::create_dir_all(&module_b).expect("should create module_b");
+    fs::create_dir_all(&module_c).expect("should create module_c");
+
+    fs::write(
+        root.join(settings::CONFIG_FILE_NAME),
+        "entry_root #= \"src\"\n",
+    )
+    .expect("should write config");
+    // Two consumers (module_a and module_c) both import module_b; module_a also imports module_b
+    // twice so the duplicate observation is idempotent.
+    fs::write(
+        module_a.join("#pageA.bst"),
+        "import @module_b/impl\nimport @module_b/impl\n#[:pageA]\n",
+    )
+    .expect("should write pageA");
+    fs::write(
+        module_c.join("#pageC.bst"),
+        "import @module_b/impl\n#[:pageC]\n",
+    )
+    .expect("should write pageC");
+    fs::write(module_b.join("#api.bst"), "export:\n    b #= 1\n;\n")
+        .expect("should write module_b root");
+    fs::write(module_b.join("impl.bst"), "impl #= 1\n").expect("should write module_b impl");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config should parse");
+    let resolver = configured_resolver(&config);
+
+    let (modules, graph, _string_table) =
+        discover_modules_and_graph_for_test(&config, &resolver, &style_directives);
+
+    let module_a_id = graph
+        .module_id_for_root_directory(&fs::canonicalize(&module_a).unwrap())
+        .expect("module_a root should be a graph node");
+    let module_b_id = graph
+        .module_id_for_root_directory(&fs::canonicalize(&module_b).unwrap())
+        .expect("module_b root should be a graph node");
+    let module_c_id = graph
+        .module_id_for_root_directory(&fs::canonicalize(&module_c).unwrap())
+        .expect("module_c root should be a graph node");
+
+    // Both consumers depend on the one provider, and the duplicate observation from module_a is
+    // idempotent: each (provider, consumer) pair is one edge.
+    assert!(graph.has_dependency_edge(module_b_id, module_a_id));
+    assert!(graph.has_dependency_edge(module_b_id, module_c_id));
+    assert!(!graph.has_dependency_edge(module_a_id, module_b_id));
+    assert!(!graph.has_dependency_edge(module_c_id, module_b_id));
+
+    // module_b is the sole provider and must appear in an earlier compile wave than both
+    // consumers.
+    let waves = graph.compile_waves().expect("fan-in graph waves cleanly");
+    let provider_wave = waves
+        .iter()
+        .position(|wave| wave.contains(&module_b_id))
+        .expect("module_b should appear in a wave");
+    let consumer_a_wave = waves
+        .iter()
+        .position(|wave| wave.contains(&module_a_id))
+        .expect("module_a should appear in a wave");
+    let consumer_c_wave = waves
+        .iter()
+        .position(|wave| wave.contains(&module_c_id))
+        .expect("module_c should appear in a wave");
+    assert!(
+        provider_wave < consumer_a_wave && provider_wave < consumer_c_wave,
+        "the shared provider must precede both consumers in the returned inventory order"
+    );
+
+    // The returned modules follow the wave order: the provider precedes both consumers.
+    let entry_order: Vec<std::path::PathBuf> = modules
+        .iter()
+        .map(|module| module.entry_point.clone())
+        .collect();
+    let provider_position = entry_order
+        .iter()
+        .position(|path| path.file_name().is_some_and(|name| name == "#api.bst"))
+        .expect("module_b should be in the returned order");
+    assert!(
+        entry_order[provider_position..]
+            .iter()
+            .any(|path| path.file_name().is_some_and(|name| name == "#pageA.bst"))
+            && entry_order[provider_position..]
+                .iter()
+                .any(|path| path.file_name().is_some_and(|name| name == "#pageC.bst")),
+        "both consumers must follow the provider in returned module order"
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn dependency_fact_retains_authored_source_location() {
+    let root = temp_dir("phase5b_source_location_retention");
+    let (config, resolver, style_directives, module_a_root, module_b_root) =
+        write_cross_module_project(&root);
+
+    let (_modules, graph, string_table) =
+        discover_modules_and_graph_for_test(&config, &resolver, &style_directives);
+
+    let module_a_id = graph
+        .module_id_for_root_directory(&module_a_root)
+        .expect("module_a root should be a graph node");
+    let module_b_id = graph
+        .module_id_for_root_directory(&module_b_root)
+        .expect("module_b root should be a graph node");
+
+    let retained_location = graph
+        .edge_source_location(module_b_id, module_a_id)
+        .expect("the provider-before-consumer edge should retain its authored location");
+
+    // The retained scope is the importer file that authored the structural provider reference.
+    let scope_path = retained_location.scope.to_portable_string(&string_table);
+    assert!(
+        scope_path.contains("#pageA.bst"),
+        "retained location scope should name the importing module root file: {scope_path}"
+    );
+    // The import clause is on the first source line.
+    assert_eq!(
+        retained_location.start_pos.line_number, 0,
+        "retained location should point at the first authored source line"
+    );
 
     fs::remove_dir_all(&root).expect("should remove temp root");
 }

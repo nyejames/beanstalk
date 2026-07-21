@@ -19,6 +19,7 @@ use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::compiler_messages::source_location::SourceLocation;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::instrumentation::{FrontendCounter, add_frontend_counter};
+use crate::compiler_frontend::paths::const_paths::StructuralProviderReference;
 use crate::compiler_frontend::paths::path_normalization::join_and_normalize_path;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
@@ -86,6 +87,48 @@ pub(super) struct ReachableSourceFile {
 pub(super) struct ReachableSourceInventory {
     pub(super) files: Vec<ReachableSourceFile>,
     source_cache: FxHashMap<PathBuf, ScannedImportSource>,
+}
+
+/// One resolved local structural dependency fact retained by Stage 0 reachable traversal.
+///
+/// WHAT: records that an authored structural provider reference resolved from a canonical
+///       importer file in one project module root to a canonical source file in a different
+///       project module root, carrying the canonical consumer root, canonical provider root and
+///       the exact authored import-clause `SourceLocation`.
+/// WHY: the project module graph inserts a provider-before-consumer edge from each fact after
+///      discovery completes. The authored source location is retained so a later diagnostic
+///      owner can attribute the edge to the exact import clause without reparsing, but edge
+///      identity is the (consumer, provider) root pair and never the source location.
+#[derive(Clone, Debug)]
+pub(super) struct LocalStructuralDependencyFact {
+    pub(super) consumer_root: PathBuf,
+    pub(super) provider_root: PathBuf,
+    pub(super) authored_location: SourceLocation,
+}
+
+/// Reachable discovery output pairing the file inventory with retained dependency facts.
+///
+/// WHAT: the complete retained inventory plus the local structural dependency facts observed
+///       during one traversal. Both the provider-capable serial path and the provider-free
+///       worker path return this so the inventory merge has one shape.
+/// WHY: dependency facts are collected at the same local-import resolution join as the file
+///      inventory, so they share the traversal owner and stay deterministic regardless of which
+///      discovery path produced them.
+pub(super) struct ReachableDiscoveryResult {
+    pub(super) inventory: ReachableSourceInventory,
+    pub(super) dependency_facts: Vec<LocalStructuralDependencyFact>,
+}
+
+/// Collected reachable inputs for one entry plus the retained dependency facts.
+///
+/// WHAT: `assemble_input_files_from_inventory` turns the inventory into `PreparedSourceInput`
+///       values; the dependency facts travel alongside so the directory-project inventory merge
+///       can insert graph edges after discovery.
+/// WHY: the single-file flow ignores the facts because it has no project module graph, while the
+///      directory-project serial flow threads them into the graph merge.
+pub(super) struct CollectedReachableInputs {
+    pub(super) input_files: Vec<PreparedSourceInput>,
+    pub(super) dependency_facts: Vec<LocalStructuralDependencyFact>,
 }
 
 /// Retained Stage 0 source proven provider-free during the serial classification pass.
@@ -182,11 +225,11 @@ pub(super) fn collect_reachable_input_files(
     external_imports: &mut ExternalImportDiscoveryState<'_>,
     classification_cache: Option<&FxHashMap<PathBuf, ScannedImportSource>>,
     string_table: &mut StringTable,
-) -> Result<Vec<PreparedSourceInput>, CompilerMessages> {
+) -> Result<CollectedReachableInputs, CompilerMessages> {
     let total_start = crate::timing::start_pipeline_timing();
 
-    // 1. Traverse the import graph to find all paths.
-    let inventory = match discover_reachable_source_files(
+    // 1. Traverse the import graph to find all paths and retained dependency facts.
+    let discovery = match discover_reachable_source_files(
         entry_path,
         project_path_resolver,
         style_directives,
@@ -194,16 +237,24 @@ pub(super) fn collect_reachable_input_files(
         classification_cache,
         string_table,
     ) {
-        Ok(files) => files,
+        Ok(discovery) => discovery,
         Err(error) => {
             log_stage_timing("stage0.reachable_discovery.total", total_start);
             return Err(error.into_messages(string_table));
         }
     };
 
-    let result = assemble_input_files_from_inventory(inventory, string_table);
+    let ReachableDiscoveryResult {
+        inventory,
+        dependency_facts,
+    } = discovery;
+
+    let input_files = assemble_input_files_from_inventory(inventory, string_table)?;
     log_stage_timing("stage0.reachable_discovery.total", total_start);
-    result
+    Ok(CollectedReachableInputs {
+        input_files,
+        dependency_facts,
+    })
 }
 
 /// Assemble `PreparedSourceInput` values from a deterministic Stage 0 inventory.
@@ -442,6 +493,7 @@ impl<'a, 'b> ImportPolicy<'a, 'b> {
 struct ReachableTraversalOutcome {
     inventory: ReachableSourceInventory,
     provider_capable_required: bool,
+    dependency_facts: Vec<LocalStructuralDependencyFact>,
 }
 
 fn traverse_reachable_source_files(
@@ -456,6 +508,7 @@ fn traverse_reachable_source_files(
     let mut source_cache = FxHashMap::default();
     let mut imports_scanned: usize = 0;
     let mut provider_capable_required = false;
+    let mut dependency_facts: Vec<LocalStructuralDependencyFact> = Vec::new();
 
     // Seed with entry points in deterministic order.
     for entry_path in entry_paths {
@@ -555,12 +608,13 @@ fn traverse_reachable_source_files(
                 ImportPolicyAction::QueueLocal => {
                     let import_resolve_start = crate::timing::start_pipeline_timing();
                     let result = resolve_and_queue_local_import(
-                        import_path,
+                        provider,
                         &canonical_file,
                         project_path_resolver,
                         string_table,
                         &reachable,
                         &mut queue,
+                        &mut dependency_facts,
                     );
                     log_stage_timing(
                         "stage0.reachable_discovery.import_resolve",
@@ -594,6 +648,7 @@ fn traverse_reachable_source_files(
             source_cache,
         },
         provider_capable_required,
+        dependency_facts,
     })
 }
 
@@ -610,7 +665,7 @@ pub(super) fn discover_reachable_source_files(
     external_imports: &mut ExternalImportDiscoveryState<'_>,
     classification_cache: Option<&FxHashMap<PathBuf, ScannedImportSource>>,
     string_table: &mut StringTable,
-) -> Result<ReachableSourceInventory, SourceDiscoveryError> {
+) -> Result<ReachableDiscoveryResult, SourceDiscoveryError> {
     let mut policy = ImportPolicy::Capable {
         external_imports,
         classification_cache,
@@ -628,36 +683,61 @@ pub(super) fn discover_reachable_source_files(
         !outcome.provider_capable_required,
         "provider-capable traversal must not mark provider-capable replay required"
     );
-    Ok(outcome.inventory)
+    Ok(ReachableDiscoveryResult {
+        inventory: outcome.inventory,
+        dependency_facts: outcome.dependency_facts,
+    })
 }
 
 /// Resolve a normal Beanstalk import to a filesystem path and enqueue reachable files.
 ///
-/// WHAT: handles cross-module root queuing and implementation-file discovery for an import that
-///       is not provider-backed and not a virtual/unsupported package import.
+/// WHAT: handles cross-module root queuing, implementation-file discovery and local structural
+///       dependency-fact retention for an import that is not provider-backed and not a
+///       virtual/unsupported package import.
 /// WHY: this logic is identical between the provider-capable and provider-free discovery paths;
-///      extracting it prevents the two BFS implementations from drifting.
+///      extracting it prevents the two BFS implementations from drifting. The dependency fact is
+///      retained only when the resolution crosses project module roots; same-module imports,
+///      virtual, binding-backed and provider imports never reach this local join.
 fn resolve_and_queue_local_import(
-    import_path: &InternedPath,
+    provider: &StructuralProviderReference,
     canonical_file: &Path,
     project_path_resolver: &ProjectPathResolver,
     string_table: &mut StringTable,
     reachable: &BTreeSet<ReachableSourceFile>,
     queue: &mut VecDeque<ReachableSourceFile>,
+    dependency_facts: &mut Vec<LocalStructuralDependencyFact>,
 ) -> Result<(), SourceDiscoveryError> {
     let resolved = project_path_resolver
         .resolve_import_to_source_file_with_public_surface_fallback(
-            import_path,
+            &provider.path,
             canonical_file,
             string_table,
         )
         .map_err(SourceDiscoveryError::from)?;
 
+    let importer_root = project_path_resolver.module_root_for_file(canonical_file);
+    let target_root = project_path_resolver.module_root_for_file(&resolved.path);
+
+    // Retain one local structural dependency fact when the resolved source file lives in a
+    // different project module root from the importer. The fact carries the exact authored
+    // import-clause location for later attribution; edge identity is the root pair, never the
+    // location. `module_root_for_file` returns project-normal roots only, so roots that belong
+    // to separate registered source packages never reach this join and create no project edge.
+    if let (Some(consumer_root), Some(provider_root)) = (&importer_root, &target_root)
+        && consumer_root != provider_root
+    {
+        dependency_facts.push(LocalStructuralDependencyFact {
+            consumer_root: consumer_root.clone(),
+            provider_root: provider_root.clone(),
+            authored_location: provider.path_location.clone(),
+        });
+    }
+
     // Ensure target module root files are compiled for cross-module imports.
     // WHY: when an import resolves to an implementation file in another module root,
     //      the prepared root file must be available so AST can validate boundary enforcement.
-    if let Some(importer_root) = project_path_resolver.module_root_for_file(canonical_file)
-        && let Some(target_root) = project_path_resolver.module_root_for_file(&resolved.path)
+    if let Some(importer_root) = importer_root
+        && let Some(target_root) = target_root
         && importer_root != target_root
         && let Some(root_path) = project_path_resolver.module_root_file_for_directory(&target_root)
         && !reachable.contains(&ReachableSourceFile {
@@ -846,7 +926,7 @@ pub(super) fn discover_reachable_source_files_provider_free(
     external_packages: &ExternalPackageRegistry,
     project_source_cache: &FxHashMap<PathBuf, ScannedImportSource>,
     string_table: &mut StringTable,
-) -> Result<ReachableSourceInventory, SourceDiscoveryError> {
+) -> Result<ReachableDiscoveryResult, SourceDiscoveryError> {
     let total_start = crate::timing::start_pipeline_timing();
 
     let mut policy = ImportPolicy::FreeWorker {
@@ -875,7 +955,10 @@ pub(super) fn discover_reachable_source_files_provider_free(
     );
 
     log_stage_timing("stage0.reachable_discovery.total", total_start);
-    Ok(outcome.inventory)
+    Ok(ReachableDiscoveryResult {
+        inventory: outcome.inventory,
+        dependency_facts: outcome.dependency_facts,
+    })
 }
 
 fn handle_provider_free_worker_import(

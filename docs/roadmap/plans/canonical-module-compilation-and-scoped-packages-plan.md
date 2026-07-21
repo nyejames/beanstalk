@@ -9,19 +9,19 @@ Replace entry-closure compilation with canonical project and package graphs, imm
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/canonical-module-compilation-and-scoped-packages-plan.md
 STATUS: active
-CURRENT_SLICE: Phase 5a accepted; checkpoint commit pending
-LAST_ACCEPTED_COMMIT: c80821e13 (Phase 4f provider-independent retained module syntax)
-WORKTREE: main at c80821e13 with accepted Phase 5a code, tests, index update and this parent-owned plan update; unrelated user documentation work may appear and must be preserved
+CURRENT_SLICE: Phase 5b accepted; checkpoint commit pending
+LAST_ACCEPTED_COMMIT: 538843fdd (Phase 5a canonical structural project graph)
+WORKTREE: main at 538843fdd with accepted Phase 5b code, tests and this parent-owned plan update; unrelated user documentation work may appear and must be preserved
 REQUIRED_RELOADS: startup files, this plan, relevant language/import and borrow references, current frontend/header source and diff
 RELEVANT_CONTEXT_NOW:
 - docs: build-system-design.md Project and package topology plus Deterministic scheduling define canonical graph nodes, strict support scope, facade placement and deterministic waves
-- code: ProjectModuleGraph is built once from SourceTreeIndex and now owns deterministic nodes, normal entry classification, strict support scopes, dependency edges and compile waves; module inventory consumes its entry/wave order
+- code: reachable discovery retains exact-location LocalStructuralDependencyFact values at its existing local-resolution join; module inventory merges them into ProjectModuleGraph and returns current normal-entry inventories in populated wave order
 ACCEPTANCE_CRITERIA:
-- accepted: one ProjectModuleGraph is built from SourceTreeIndex without another traversal or identity table and retains deterministic identity, topology and source-set facts
-- accepted: normal entries, support roots and the optional facade are classified explicitly; module inventory consumes graph wave order rather than a parallel entry-candidate list
-- accepted: strict support visibility covers the owner, normal sibling branches and strictly outer support scopes while rejecting private descendants, same-scope support siblings and outside modules
-- accepted: dependency insertion is validated and idempotent, compile waves are deterministic and defensive cycles surface as internal graph failures without fake facade edges
-- accepted: focused hidden-invariant tests cover nodes, entries, facade separation, scope boundaries, wave order, duplicate/invalid edges and cycles
+- accepted: Stage 0 retains exact-location local structural dependency facts only for authored references that resolve across normal project module roots, reusing the existing scan and resolver join
+- accepted: provider-free worker results and serial discovery merge facts deterministically; the graph maps canonical roots, inserts idempotent provider-before-consumer edges and retains the first deterministic authored location
+- accepted: returned normal-entry inventories follow populated compile-wave order, while actual Rayon semantic compilation remains explicitly unchanged for the next slice
+- accepted: graph/inventory disagreement and absent project roots are release-safe internal CompilerError boundaries with no panic, skip or best-effort fallback
+- accepted: focused tests cover edge direction, same-module exclusion, duplicate fan-in, wave-ordered inventories and exact source-location retention
 VALIDATION_STATE:
 - Phase 4d just validate: passed; cross-target Clippy, 3419 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases
 - Phase 4e focused validation: passed; 2 import-scanning, 5 reachability, 178 module-discovery, 19 orchestration, 5 token-remap and 116 header tests plus cargo check --tests and git diff --check
@@ -30,12 +30,14 @@ VALIDATION_STATE:
 - Phase 4f just validate: passed; cross-target Clippy, 3424 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases (-1ms average)
 - Phase 5a focused validation: passed; 9 graph and 188 create-project-modules tests plus cargo check --tests, cargo clippy --tests -D warnings, formatting and git diff --check
 - Phase 5a just validate: passed; cross-target Clippy, 3433 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases (-1ms average)
-DOCS_IMPACT: index.md names ProjectModuleGraph; progress matrix unchanged because provider-edge resolution and canonical module compilation have not landed
-BLOCKERS_OR_OPEN_DECISIONS: none; Phase 5a graph structure and scope semantics are accepted
+- Phase 5b focused validation: passed; 9 graph and 192 create-project-modules tests plus cargo check --tests, cargo clippy --tests -D warnings, formatting and git diff --check
+- Phase 5b just validate: passed; cross-target Clippy, 3437 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases (-1ms average)
+DOCS_IMPACT: index.md already names ProjectModuleGraph; progress matrix unchanged because canonical per-node semantic scheduling has not landed
+BLOCKERS_OR_OPEN_DECISIONS: none; project-local structural edges and deterministic inventory order are accepted, while source-package graphs remain separate
 DELEGATION_DECISION: ollama - user requires Ollama for every worker slice
 NEXT_WORKER_ORDER: ollama only; no provider substitution for this run
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit Phase 5a, record its hash, then scope Phase 5b retained provider-reference edge resolution through Ollama
+NEXT_RESUME_ACTION: commit Phase 5b, record its hash, then scope the smallest canonical per-node preparation and dependency-wave scheduling slice through Ollama
 ```
 
 ## Hard prerequisites
@@ -452,6 +454,22 @@ Accepted Phase 5a checkpoint:
   remain Phase 5b.
 - focused graph tests own hidden topology, visibility, ordering and defensive-failure invariants;
   existing discovery tests consume the production graph entry owner.
+
+Accepted Phase 5b checkpoint:
+
+- reachable discovery retains a `LocalStructuralDependencyFact` at the existing local import
+  resolution join when an authored `StructuralProviderReference` crosses normal project module
+  roots. The fact carries canonical consumer/provider roots plus the exact authored location; no
+  import reparse, alternate resolver or location-based edge identity was added.
+- serial and provider-free discovery return the same fact shape. Module inventory merges facts in
+  deterministic root-pair order, and `ProjectModuleGraph` maps canonical roots, inserts
+  idempotent provider-before-consumer edges and retains deterministic edge provenance.
+- current normal-entry inventories are returned in populated compile-wave order. The directory
+  frontend still submits them to its existing Rayon batch, so true dependency-wave semantic
+  scheduling and canonical per-node compilation remain the next Phase 5 slice.
+- graph/inventory mismatch and absent fact roots fail through release-safe internal
+  `CompilerError` boundaries. Focused tests cover edge direction, same-module exclusion,
+  duplicate fan-in, deterministic ordering and exact source-location retention.
 
 ### Phase 6: Add graph outcomes and immutable module artefact lanes
 

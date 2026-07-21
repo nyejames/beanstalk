@@ -239,7 +239,7 @@ pub(crate) fn compile_single_file_frontend(
         None,
         string_table,
     ) {
-        Ok(input_files) => input_files,
+        Ok(collected) => collected.input_files,
         Err(messages) => {
             log_stage_timing("stage0.single_file.reachable_files", reachable_files_start);
             log_stage_timing("stage0.single_file.total", total_start);
@@ -470,7 +470,7 @@ pub(crate) fn compile_directory_frontend(
 
     // 1. Setup path resolution based on config settings.
     let path_resolver_start = crate::timing::start_pipeline_timing();
-    let project_setup = match project_roots::build_project_path_resolver_with_index(
+    let mut project_setup = match project_roots::build_project_path_resolver_with_index(
         config,
         &builder_surface.source_packages,
         &builder_surface.source_file_kinds,
@@ -498,7 +498,7 @@ pub(crate) fn compile_directory_frontend(
     let discovered_modules = match module_inventory::discover_all_modules_in_project(
         config,
         &project_path_resolver,
-        &project_setup.project_module_graph,
+        &mut project_setup.project_module_graph,
         style_directives,
         &mut external_imports,
         string_table,
