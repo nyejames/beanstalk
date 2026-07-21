@@ -1,12 +1,8 @@
 //! Tests for dev-server HTTP routing during successful and failed builds.
 
-use super::{
-    PreparedResponse, handle_connection_with_timeouts, prepare_static_response,
-    should_serve_failed_build_html,
-};
+use super::{PreparedResponse, handle_connection_with_timeouts, prepare_static_response};
 use crate::compiler_tests::test_support::temp_dir;
 use crate::projects::dev_server::state::{BuildState, DevServerState};
-use crate::projects::dev_server::static_files::ResolvedRequestKind;
 use std::fs;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
@@ -35,21 +31,6 @@ fn configure_failed_build_state(
     build_state.last_build_version = 9;
     build_state.entry_page_rel = entry_page_rel;
     build_state
-}
-
-#[test]
-fn failed_build_html_helper_targets_root_and_nested_html_only() {
-    let mut build_state = BuildState::new(PathBuf::from("dev"));
-    build_state.last_build_ok = false;
-
-    assert!(should_serve_failed_build_html(
-        ResolvedRequestKind::PageHtml,
-        &build_state
-    ));
-    assert!(!should_serve_failed_build_html(
-        ResolvedRequestKind::Asset,
-        &build_state
-    ));
 }
 
 #[test]
