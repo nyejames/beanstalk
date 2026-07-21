@@ -30,21 +30,21 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 14C14o new-project target and summary unit ownership review
-LAST_ACCEPTED_COMMIT: `2cbe36410` (Phase 14C14m code)
+CURRENT_SLICE: Phase 14C14p new-project scaffold and prompt unit ownership review
+LAST_ACCEPTED_COMMIT: `ab5826d62` (Phase 14C14o code)
 WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; accepted code is committed; concurrent example-name work remains separately committed
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: unit-test ownership, pruning, compiler-stage boundaries, and final governance rules govern the next slice
-- code: all 334 retained tests across the reviewed Stage 0, frontend, build-system, project, CLI, and complete dev-server groups now have distinct owners; new-project target and summary policy are next
+- code: all 350 retained tests across the reviewed Stage 0, frontend, build-system, project, CLI, complete dev-server, and new-project target/summary groups now have distinct owners; new-project scaffold and prompt policy are next
 ACCEPTANCE_CRITERIA:
 - every remaining full-source unit has a distinct hidden invariant, parser fact, stage boundary, or policy owner
 - units superseded by a stronger canonical integration primary are deleted with replacement evidence
 - stale test-only helpers or production APIs are removed with their final caller
 - HIR, build-system, backend, and final TIR units keep only their owning semantic relationships and hidden facts
 VALIDATION_STATE:
-- `just validate`: passed; cross-target Clippy, 3,455 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
-- Phase 14C14n focused group: passed; eight server-orchestration, four error-page, and three SSE tests
+- `just validate`: passed; cross-target Clippy, 3,436 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
+- Phase 14C14o focused group: passed; 11 target/path, five summary, and all 52 new-project tests
 - Phase 14B audit: passed; zero hard findings; 66 backend-only and 15 adversarial-only primary-less contract advisories
 - Priya expectation alignment: accepted at `6efac7012`; 13 stale Rust and integration expectation files now match renamed inputs
 DOCS_IMPACT: testing, validation, and contributor workflow aligned with final suite policy; progress matrix and index unchanged
@@ -52,7 +52,7 @@ BLOCKERS_OR_OPEN_DECISIONS: none; 81 contract families without a primary are int
 DELEGATION_DECISION: Ollama — bounded Phase 14 implementation slices
 NEXT_WORKER_ORDER: Ollama only; no provider substitution
 STOP_REASON: none
-NEXT_RESUME_ACTION: launch the new-project target and summary unit group through Ollama
+NEXT_RESUME_ACTION: launch the new-project scaffold and prompt unit group through Ollama
 
 ---
 
@@ -247,6 +247,7 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 14C14l dev-server watch and rebuild units | `fce3e9e82` | Accepted | Two JavaScript watch-scope units were consolidated into the main config/entry/package scope owner; the successful rebuild owner now proves declared-entry selection and both emitted pages; the duplicate message-format smoke was removed in favor of the typed error-page formatter owner; 22 watch and rebuild-loop policy, fingerprint, state, queue, warning, and infrastructure owners remain; 3,456 Rust tests and 1,793 integration executions |
 | Phase 14C14m dev-server HTTP and static-file units | `2cbe36410` | Accepted | One private one-line failed-build predicate smoke was removed in favor of response-level nested-page substitution and CSS/JavaScript/image asset-serving owners; all seven remaining HTTP response/timeout and nine static routing, redirect, origin, MIME, traversal, asset, and injection tests remain distinct; 3,455 Rust tests and 1,793 integration executions |
 | Phase 14C14n remaining dev-server units | no code change after `2cbe36410` | Accepted | All eight server-orchestration, four error-page, and three SSE tests remain distinct owners for default policy, entry modes, output resolution, typed/infrastructure diagnostics, escaping, remapping, runtime metadata, wire format, queue pruning, and loopback lifecycle; latest full gate remains 3,455 Rust tests and 1,793 integration executions |
+| Phase 14C14o new-project target and summary units | `ab5826d62` | Accepted | Nineteen repeated path, home-resolution, interactive-choice, naming, summary-section, and current-directory cases were consolidated into labelled algorithm/policy owners without losing exact fallback, platform, prompt, path, cancellation, file-action, or command facts; 11 target/path and five summary owners remain; 3,436 Rust tests and 1,793 integration executions |
 
 ---
 
@@ -1456,6 +1457,7 @@ Do not present lower counts or faster time as proof of correctness.
 | `build_loop_tests::successful_multi_page_build_uses_declared_entry_page` | A multi-page build preserves its declared browser entry while writing nested pages | `build_loop_tests::successful_build_marks_state_ok_and_uses_declared_entry_page`, strengthened to assert build state, version, entry, and both emitted pages | missing-entry, failure-state, queued rebuild, warning, and writer-failure owners remain separate | `fce3e9e82` |
 | `build_loop_tests::format_error_messages_contains_error_text` | Dev-server compiler-message formatting includes stable code and diagnostic text | `error_page_tests::formatted_compiler_messages_include_typed_diagnostics` through the same formatter with a typed config diagnostic | full error-page rendering retains source-frame, link, remapping, and SSE owners | `fce3e9e82` |
 | `http_tests::failed_build_html_helper_targets_root_and_nested_html_only` | Failed builds substitute diagnostics for resolved page HTML but continue serving assets | `http_tests::nested_html_request_uses_stored_error_page_during_failed_build` and `http_tests::failed_build_keeps_css_js_and_image_assets_reachable` through the real response seam | root-without-entry, traversal, redirect ordering, concurrency, and timeout owners remain separate | `2cbe36410` |
+| Nineteen same-family tests in `new_html_project::{target_tests,summary_tests}` consolidated in Phase 14C14o | Path normalization, tilde routing and fallback, interactive target choices, project naming, summary action sections, and current-directory command policy | 11 labelled target/path owners and five summary owners, including `expand_tilde_routes_tilde_forms`, `resolve_home_uses_windows_fallbacks_and_rejects_incomplete_pairs`, `existing_directory_menu_offers_use_child_or_cancel`, `summary_lists_each_file_action_section`, and `summary_includes_cd_only_when_project_is_not_current_dir` | dot/relative/absolute/non-empty target branches, empty-section omission, identity, and next-step commands remain distinct | `ab5826d62` |
 
 ### Coverage gap and handoff ledger
 
