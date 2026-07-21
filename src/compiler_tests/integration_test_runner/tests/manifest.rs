@@ -387,3 +387,40 @@ fn rejects_manifest_fixture_symlink_escape() {
     fs::remove_dir_all(&root).expect("should clean up root");
     fs::remove_dir_all(&outside).expect("should clean up target");
 }
+
+#[cfg(any(unix, windows))]
+#[test]
+fn rejects_duplicate_canonical_fixture_root_through_in_suite_alias() {
+    let root = temp_dir("manifest_duplicate_canonical_root");
+    fs::create_dir_all(&root).expect("should create root");
+    write_success_fixture(&root, "case_a");
+
+    let alias = root.join("alias");
+    if symlink_directory(&root.join("case_a"), &alias).is_err() {
+        fs::remove_dir_all(&root).expect("should clean up root");
+        return;
+    }
+
+    fs::write(
+        root.join(MANIFEST_FILE_NAME),
+        "[[case]]\nid = \"primary_case\"\npath = \"case_a\"\ntags = [\"coverage\"]\n\n[[case]]\nid = \"alias_case\"\npath = \"alias\"\ntags = [\"coverage\"]\n",
+    )
+    .expect("should write manifest");
+
+    let Err(error) = load_test_suite_from_root(&root) else {
+        panic!("duplicate canonical fixture root should be rejected");
+    };
+    assert!(
+        error.contains("primary_case")
+            && error.contains("case_a")
+            && error.contains("alias_case")
+            && error.contains("alias"),
+        "error must retain both conflicting case ids and authored paths: {error}"
+    );
+    assert!(
+        error.contains("duplicate canonical fixture root"),
+        "unexpected: {error}"
+    );
+
+    fs::remove_dir_all(&root).expect("should clean up root");
+}

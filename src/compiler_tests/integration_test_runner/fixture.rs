@@ -15,7 +15,7 @@ use super::{
     WarningExpectation,
 };
 use crate::compiler_frontend::Flag;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -47,6 +47,11 @@ pub(crate) fn load_test_suite_from_root(root: &Path) -> Result<TestSuiteSpec, St
             resolve_declared_fixture_root(&canonical_suite_root, &manifest_path, manifest_case)
         })
         .collect::<Result<Vec<_>, _>>()?;
+    validate_canonical_fixture_root_uniqueness(
+        &manifest_path,
+        &manifest_cases,
+        &canonical_fixture_roots,
+    )?;
     validate_manifest_authoritativeness(&canonical_suite_root, &canonical_fixture_roots)?;
 
     for (manifest_case, fixture_root) in manifest_cases.into_iter().zip(canonical_fixture_roots) {
@@ -55,6 +60,30 @@ pub(crate) fn load_test_suite_from_root(root: &Path) -> Result<TestSuiteSpec, St
     }
 
     Ok(TestSuiteSpec { cases })
+}
+
+fn validate_canonical_fixture_root_uniqueness(
+    manifest_path: &Path,
+    manifest_cases: &[ManifestCaseSpec],
+    canonical_fixture_roots: &[PathBuf],
+) -> Result<(), String> {
+    let mut seen_roots: HashMap<&Path, &ManifestCaseSpec> = HashMap::new();
+    for (manifest_case, canonical_root) in manifest_cases.iter().zip(canonical_fixture_roots) {
+        if let Some(existing_case) = seen_roots.get(canonical_root.as_path()) {
+            return Err(format!(
+                "Manifest '{}' has a duplicate canonical fixture root: case '{}' path '{}' and case '{}' path '{}' both resolve to '{}'. Each fixture must have a unique canonical path.",
+                manifest_path.display(),
+                existing_case.id,
+                existing_case.path.display(),
+                manifest_case.id,
+                manifest_case.path.display(),
+                canonical_root.display()
+            ));
+        }
+        seen_roots.insert(canonical_root.as_path(), manifest_case);
+    }
+
+    Ok(())
 }
 
 fn validate_manifest_authoritativeness(

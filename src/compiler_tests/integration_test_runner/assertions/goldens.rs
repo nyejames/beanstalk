@@ -41,16 +41,12 @@ pub(crate) fn discover_golden_expectation(
 ///
 /// WHAT: returns relative paths in deterministic order and preserves filesystem failures.
 /// WHY: directories alone are not golden contracts, while unreadable golden state must not be
-///      silently treated as absent.
+///      silently treated as absent. Symlink entries are rejected so a golden tree
+///      cannot follow an authored link outside its owning backend or inventory the same
+///      file twice.
 fn discover_golden_files(root: &Path) -> Result<GoldenFileInventory, String> {
-    match fs::metadata(root) {
-        Ok(metadata) if !metadata.is_dir() => {
-            return Err(format!(
-                "Golden path '{}' exists but is not a directory.",
-                root.display()
-            ));
-        }
-        Ok(_) => {}
+    let root_metadata = match fs::symlink_metadata(root) {
+        Ok(metadata) => metadata,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             return Ok(GoldenFileInventory::default());
         }
@@ -60,6 +56,20 @@ fn discover_golden_files(root: &Path) -> Result<GoldenFileInventory, String> {
                 root.display()
             ));
         }
+    };
+
+    if root_metadata.file_type().is_symlink() {
+        return Err(format!(
+            "Golden path '{}' is a symlink. Golden trees must contain only regular files and directories.",
+            root.display()
+        ));
+    }
+
+    if !root_metadata.is_dir() {
+        return Err(format!(
+            "Golden path '{}' exists but is not a directory.",
+            root.display()
+        ));
     }
 
     let mut files = Vec::new();
@@ -94,19 +104,27 @@ fn visit_golden_directory(
     paths.sort();
 
     for path in paths {
-        let metadata = fs::metadata(&path).map_err(|error| {
+        let entry_metadata = fs::symlink_metadata(&path).map_err(|error| {
             format!(
                 "Failed to inspect golden entry '{}': {error}",
                 path.display()
             )
         })?;
 
-        if metadata.is_dir() {
+        if entry_metadata.file_type().is_symlink() {
+            return Err(format!(
+                "Golden directory '{}' contains a symlink entry '{}'. Golden trees must contain only regular files and directories.",
+                root.display(),
+                path.display()
+            ));
+        }
+
+        if entry_metadata.is_dir() {
             visit_golden_directory(&path, root, files)?;
             continue;
         }
 
-        if !metadata.is_file() {
+        if !entry_metadata.is_file() {
             continue;
         }
 

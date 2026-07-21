@@ -836,3 +836,143 @@ fn rejects_entry_symlink_escape() {
     fs::remove_dir_all(&root).expect("should clean up root");
     fs::remove_dir_all(&outside).expect("should clean up target");
 }
+
+#[cfg(any(unix, windows))]
+#[test]
+fn rejects_contained_golden_file_symlink() {
+    let root = temp_dir("golden_contained_file_symlink");
+    let case_root = root.join("case");
+    let input_root = case_root.join(INPUT_DIR_NAME);
+    let golden_root = case_root.join(GOLDEN_DIR_NAME).join("html");
+    fs::create_dir_all(&input_root).expect("should create fixture input directory");
+    fs::create_dir_all(&golden_root).expect("should create golden directory");
+    fs::write(input_root.join("#page.bst"), "#[:ok]\n").expect("should write fixture source");
+    fs::write(golden_root.join("real.html"), "<h1>ok</h1>\n")
+        .expect("should write real golden file");
+    if symlink_file(
+        &golden_root.join("real.html"),
+        &golden_root.join("link.html"),
+    )
+    .is_err()
+    {
+        fs::remove_dir_all(&root).expect("should clean up root");
+        return;
+    }
+    fs::write(
+        case_root.join(EXPECT_FILE_NAME),
+        "[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\n",
+    )
+    .expect("should write expect file");
+
+    let Err(error) = load_canonical_case_specs(&case_root, None) else {
+        panic!("contained golden file symlink should be rejected");
+    };
+    assert!(error.contains("symlink"), "unexpected: {error}");
+
+    fs::remove_dir_all(&root).expect("should clean up root");
+}
+
+#[cfg(any(unix, windows))]
+#[test]
+fn rejects_escaping_golden_file_symlink() {
+    let root = temp_dir("golden_escaping_file_symlink");
+    let outside = temp_dir("golden_escaping_file_symlink_target");
+    let case_root = root.join("case");
+    let input_root = case_root.join(INPUT_DIR_NAME);
+    let golden_root = case_root.join(GOLDEN_DIR_NAME).join("html");
+    fs::create_dir_all(&input_root).expect("should create fixture input directory");
+    fs::create_dir_all(&golden_root).expect("should create golden directory");
+    fs::create_dir_all(&outside).expect("should create outside target");
+    fs::write(input_root.join("#page.bst"), "#[:ok]\n").expect("should write fixture source");
+    let outside_file = outside.join("stolen.html");
+    fs::write(&outside_file, "<h1>stolen</h1>\n").expect("should write outside golden");
+    if symlink_file(&outside_file, &golden_root.join("escape.html")).is_err() {
+        fs::remove_dir_all(&root).expect("should clean up root");
+        fs::remove_dir_all(&outside).expect("should clean up target");
+        return;
+    }
+    fs::write(
+        case_root.join(EXPECT_FILE_NAME),
+        "[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\n",
+    )
+    .expect("should write expect file");
+
+    let Err(error) = load_canonical_case_specs(&case_root, None) else {
+        panic!("escaping golden file symlink should be rejected");
+    };
+    assert!(error.contains("symlink"), "unexpected: {error}");
+
+    fs::remove_dir_all(&root).expect("should clean up root");
+    fs::remove_dir_all(&outside).expect("should clean up target");
+}
+
+#[cfg(any(unix, windows))]
+#[test]
+fn rejects_golden_directory_symlink() {
+    let root = temp_dir("golden_directory_symlink");
+    let outside = temp_dir("golden_directory_symlink_target");
+    let case_root = root.join("case");
+    let input_root = case_root.join(INPUT_DIR_NAME);
+    let golden_root = case_root.join(GOLDEN_DIR_NAME).join("html");
+    fs::create_dir_all(&input_root).expect("should create fixture input directory");
+    fs::create_dir_all(&golden_root).expect("should create golden directory");
+    fs::create_dir_all(&outside).expect("should create outside target");
+    fs::write(input_root.join("#page.bst"), "#[:ok]\n").expect("should write fixture source");
+    fs::write(outside.join("nested.html"), "<h1>stolen</h1>\n")
+        .expect("should write outside golden");
+    if symlink_directory(&outside, &golden_root.join("linked_dir")).is_err() {
+        fs::remove_dir_all(&root).expect("should clean up root");
+        fs::remove_dir_all(&outside).expect("should clean up target");
+        return;
+    }
+    fs::write(
+        case_root.join(EXPECT_FILE_NAME),
+        "[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\n",
+    )
+    .expect("should write expect file");
+
+    let Err(error) = load_canonical_case_specs(&case_root, None) else {
+        panic!("golden directory symlink should be rejected");
+    };
+    assert!(error.contains("symlink"), "unexpected: {error}");
+
+    fs::remove_dir_all(&root).expect("should clean up root");
+    fs::remove_dir_all(&outside).expect("should clean up target");
+}
+
+#[cfg(any(unix, windows))]
+#[test]
+fn rejects_backend_golden_root_symlink() {
+    let root = temp_dir("golden_root_symlink");
+    let outside = temp_dir("golden_root_symlink_target");
+    let case_root = root.join("case");
+    let input_root = case_root.join(INPUT_DIR_NAME);
+    let golden_parent = case_root.join(GOLDEN_DIR_NAME);
+    fs::create_dir_all(&input_root).expect("should create fixture input directory");
+    fs::create_dir_all(&golden_parent).expect("should create golden parent directory");
+    fs::create_dir_all(&outside).expect("should create outside target");
+    fs::write(input_root.join("#page.bst"), "#[:ok]\n").expect("should write fixture source");
+    fs::write(outside.join("index.html"), "<h1>stolen</h1>\n")
+        .expect("should write outside golden");
+    if symlink_directory(&outside, &golden_parent.join("html")).is_err() {
+        fs::remove_dir_all(&root).expect("should clean up root");
+        fs::remove_dir_all(&outside).expect("should clean up target");
+        return;
+    }
+    fs::write(
+        case_root.join(EXPECT_FILE_NAME),
+        "[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\n",
+    )
+    .expect("should write expect file");
+
+    let Err(error) = load_canonical_case_specs(&case_root, None) else {
+        panic!("backend golden root symlink should be rejected");
+    };
+    assert!(
+        error.contains("Golden path") && error.contains("symlink"),
+        "unexpected: {error}"
+    );
+
+    fs::remove_dir_all(&root).expect("should clean up root");
+    fs::remove_dir_all(&outside).expect("should clean up target");
+}
