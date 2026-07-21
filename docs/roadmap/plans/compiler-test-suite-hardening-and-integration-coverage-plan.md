@@ -30,21 +30,21 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 14C15l TIR slot-expansion ownership review
-LAST_ACCEPTED_COMMIT: `678f7a424` (Phase 14C15k code)
+CURRENT_SLICE: Phase 14C15m TIR head-chain ownership review
+LAST_ACCEPTED_COMMIT: `bbe21408d` (Phase 14C15l code)
 WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; accepted code is committed; concurrent example-name work remains separately committed
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: unit-test ownership, pruning, compiler-stage boundaries, and final governance rules govern the next slice
-- code: all 611 retained tests across the reviewed Stage 0, frontend, build-system, project, CLI, dev-server, new-project, and final-TIR groups through slot routing have distinct owners; the 14 TIR slot-expansion tests are next, followed by head-chain, child-wrapper, and overlay groups
+- code: all 607 retained tests across the reviewed Stage 0, frontend, build-system, project, CLI, dev-server, new-project, and final-TIR groups through slot expansion have distinct owners; the 11 TIR head-chain tests are next, followed by child-wrapper and overlay groups
 ACCEPTANCE_CRITERIA:
 - every remaining full-source unit has a distinct hidden invariant, parser fact, stage boundary, or policy owner
 - units superseded by a stronger canonical integration primary are deleted with replacement evidence
 - stale test-only helpers or production APIs are removed with their final caller
 - HIR, build-system, backend, and final TIR units keep only their owning semantic relationships and hidden facts
 VALIDATION_STATE:
-- `just validate`: passed; cross-target Clippy, 3,362 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
-- Phase 14C15k focused group: passed; 13 TIR slot-routing owners within the 76-test slot-composition module
+- `just validate`: passed; cross-target Clippy, 3,358 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
+- Phase 14C15l focused group: passed; 10 TIR slot-expansion owners within the 72-test slot-composition module
 - Phase 14B audit: passed; zero hard findings; 66 backend-only and 15 adversarial-only primary-less contract advisories
 - Priya expectation alignment: accepted at `6efac7012`; 13 stale Rust and integration expectation files now match renamed inputs
 DOCS_IMPACT: testing, validation, and contributor workflow aligned with final suite policy; progress matrix and index unchanged
@@ -52,7 +52,7 @@ BLOCKERS_OR_OPEN_DECISIONS: none; 81 contract families without a primary are int
 DELEGATION_DECISION: Ollama — bounded Phase 14 implementation slices
 NEXT_WORKER_ORDER: Ollama only; no provider substitution
 STOP_REASON: none
-NEXT_RESUME_ACTION: launch the 14-test TIR slot-expansion group through Ollama
+NEXT_RESUME_ACTION: launch the 11-test TIR head-chain group through Ollama
 
 ---
 
@@ -260,6 +260,7 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 14C15i TIR HIR-handoff units | `8588af791` | Accepted | The duplicate missing-root `TirView` constructor test was removed in favor of the exact-view owner; resolved-slot, child-boundary, and runtime-reference tests now inspect only owned handoff text/expression payloads rather than incidental occurrence IDs or source-store existence; all wrapper, overlay, slot, structural-child, schema-error, and infrastructure-lane owners remain distinct; 17 handoff owners remain; 3,365 Rust tests and 1,793 integration executions |
 | Phase 14C15j TIR slot-schema units | `fc30e677d` | Accepted | All 13 default, named, positional, mixed, structural-child, branch, loop, loose-fill, duplicate-default, ordering, membership, and skipped-node schema owners remain distinct; set membership and ordering are now exact, absent dimensions and `has_any_slots` are explicit, and loose-fill tests prove the complete discovered schema before the selected positional key; 3,365 Rust tests and 1,793 integration executions |
 | Phase 14C15k TIR slot-routing units | `678f7a424` | Accepted | Named, default, and positional explicit-insert routing now share one labelled exact target-branch owner; a weaker `nodes_for_slot` query smoke was removed in favor of the mixed explicit/loose bucket owner; all missing-authority, loose positional/default ordering, whitespace chunking, typed rejection, empty-fill, and mixed-bucket owners remain distinct with exact node buckets and discovered schemas; 13 routing owners and 76 slot-composition tests remain; 3,362 Rust tests and 1,793 integration executions |
+| Phase 14C15l TIR slot-expansion units | `bbe21408d` | Accepted | Default, named, and positional placeholder replacement now share one exact node-identity/order owner; nested child expansion pairs slot-bearing clone with slot-less reuse in one parent tree; the weaker text-slot-text smoke was removed after the all-node-kind preservation owner gained mid-sequence splicing and exact non-slot/contribution identity; both malformed wrapper-set paths, empty missing slots, repeated-slot replay, branch/loop rewriting, and the no-slot root fast path remain distinct; 10 expansion owners and 72 slot-composition tests remain; 3,358 Rust tests and 1,793 integration executions |
 
 ---
 
@@ -1495,6 +1496,9 @@ Do not present lower counts or faster time as proof of correctness.
 | `hir_handoff_tests::missing_view_context_is_rejected_before_handoff` | A missing root is rejected before HIR handoff materialization | `view_tests::new_fails_for_missing_root_template`, which calls the same `TirView::new` constructor and asserts the same missing-root error | 17 handoff tests retain owned vocabulary, exact structural relationships, overlays, wrappers, slot outcomes, and malformed-authority propagation | `8588af791` |
 | `slot_composition_tests::{route_explicit_insert_to_named_slot,route_explicit_insert_to_default_slot,route_explicit_insert_to_positional_slot}` consolidated | Explicit insert helpers route their body nodes through the named, default, and positional target match arms | `slot_composition_tests::route_explicit_insert_to_each_target_slot_key`, with labelled exact buckets and complete discovered schema dimensions for every target | unknown-target rejection, nested-insert expansion, and mixed explicit/loose routing remain separate | `678f7a424` |
 | `slot_composition_tests::nodes_for_slot_returns_correct_nodes` | Named insert and loose default content are returned from their routed buckets while an absent positional key is empty | `slot_composition_tests::mixed_explicit_inserts_and_loose_content_are_bucketed`, strengthened to assert named/default node identity and order, absent positional buckets, and the complete wrapper schema | empty-fill routing retains the distinct empty-contribution contract | `678f7a424` |
+| `slot_composition_tests::{expand_default_slot_with_single_contribution,expand_named_slot_with_contribution,expand_positional_slot_with_contribution}` consolidated | Default, named, and positional placeholders splice only their routed contribution nodes | `slot_composition_tests::expand_routes_each_slot_key_branch_to_its_contribution`, with all three keys in one wrapper and exact contribution node identity in declaration order | missing-slot empty expansion and repeated-slot replay remain separate | `bbe21408d` |
+| `slot_composition_tests::{nested_child_template_with_slots_is_expanded,nested_child_template_without_slots_is_unchanged}` consolidated | Nested slot-bearing children clone into expanded entries while slot-less children retain their original template identity | `slot_composition_tests::nested_child_template_clone_vs_reuse_by_slot_presence`, with both children in one parent and exact clone/reuse plus spliced-content assertions | top-level no-slot root reuse remains a separate fast-path owner | `bbe21408d` |
+| `slot_composition_tests::mixed_slots_and_text` | A slot contribution is spliced between surrounding non-slot nodes without a nested sequence | `slot_composition_tests::expand_preserves_non_slot_nodes`, strengthened to place the slot mid-sequence and assert every preserved node ID plus the exact spliced contribution ID | default/named/positional replacement has its own exact branch owner | `bbe21408d` |
 
 ### Coverage gap and handoff ledger
 
