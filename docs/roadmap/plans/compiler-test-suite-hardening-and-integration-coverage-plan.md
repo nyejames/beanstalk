@@ -30,21 +30,21 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 14C15n TIR child-wrapper and basic-overlay ownership review
-LAST_ACCEPTED_COMMIT: `01d2aba3b` (Phase 14C15m code)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; accepted code is committed; concurrent example-name work remains separately committed
+CURRENT_SLICE: Phase 14C15o TIR slot-overlay materialization and view-attachment ownership review
+LAST_ACCEPTED_COMMIT: `1adaf9ea2` (Phase 14C15n code)
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; accepted code is committed; this plan checkpoint is uncommitted; concurrent example-name work remains separately committed
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: unit-test ownership, pruning, compiler-stage boundaries, and final governance rules govern the next slice
-- code: all 614 retained tests across the reviewed Stage 0, frontend, build-system, project, CLI, dev-server, new-project, and final-TIR groups through head-chain composition have distinct owners; the 12 child-wrapper and basic-overlay tests are next, followed by overlay materialization/API/threading
+- code: all reviewed groups through child-wrapper/basic-overlay ownership have distinct owners; obsolete test-only traversal, schema helper, and compatibility re-export are removed; the six named/positional/repeated/structural/attachment slot-overlay tests are next, followed by the store-owned composition API and head-chain overlay groups
 ACCEPTANCE_CRITERIA:
 - every remaining full-source unit has a distinct hidden invariant, parser fact, stage boundary, or policy owner
 - units superseded by a stronger canonical integration primary are deleted with replacement evidence
 - stale test-only helpers or production APIs are removed with their final caller
 - HIR, build-system, backend, and final TIR units keep only their owning semantic relationships and hidden facts
 VALIDATION_STATE:
-- `just validate`: passed; cross-target Clippy, 3,354 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
-- Phase 14C15m focused group: passed; seven TIR head-chain owners within the 68-test slot-composition module
+- `just validate`: passed; cross-target Clippy, 3,351 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
+- Phase 14C15n focused groups: passed; 61 slot-composition, 18 wrapper-fold, 19 HIR-handoff, and six runtime-slot-site tests
 - Phase 14B audit: passed; zero hard findings; 66 backend-only and 15 adversarial-only primary-less contract advisories
 - Priya expectation alignment: accepted at `6efac7012`; 13 stale Rust and integration expectation files now match renamed inputs
 DOCS_IMPACT: testing, validation, and contributor workflow aligned with final suite policy; progress matrix and index unchanged
@@ -52,7 +52,7 @@ BLOCKERS_OR_OPEN_DECISIONS: none; 81 contract families without a primary are int
 DELEGATION_DECISION: Ollama — bounded Phase 14 implementation slices
 NEXT_WORKER_ORDER: Ollama only; no provider substitution
 STOP_REASON: none
-NEXT_RESUME_ACTION: launch the 12-test TIR child-wrapper and basic-overlay group through Ollama
+NEXT_RESUME_ACTION: commit this plan checkpoint, then launch the six-test TIR slot-overlay materialization and view-attachment group through Ollama
 
 ---
 
@@ -262,6 +262,7 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 14C15k TIR slot-routing units | `678f7a424` | Accepted | Named, default, and positional explicit-insert routing now share one labelled exact target-branch owner; a weaker `nodes_for_slot` query smoke was removed in favor of the mixed explicit/loose bucket owner; all missing-authority, loose positional/default ordering, whitespace chunking, typed rejection, empty-fill, and mixed-bucket owners remain distinct with exact node buckets and discovered schemas; 13 routing owners and 76 slot-composition tests remain; 3,362 Rust tests and 1,793 integration executions |
 | Phase 14C15l TIR slot-expansion units | `bbe21408d` | Accepted | Default, named, and positional placeholder replacement now share one exact node-identity/order owner; nested child expansion pairs slot-bearing clone with slot-less reuse in one parent tree; the weaker text-slot-text smoke was removed after the all-node-kind preservation owner gained mid-sequence splicing and exact non-slot/contribution identity; both malformed wrapper-set paths, empty missing slots, repeated-slot replay, branch/loop rewriting, and the no-slot root fast path remain distinct; 10 expansion owners and 72 slot-composition tests remain; 3,358 Rust tests and 1,793 integration executions |
 | Phase 14C15m TIR head-chain units | `01d2aba3b` | Accepted | Three no-receiver/root-passthrough variants now use one exact original-root and head/body node-order owner, while the slot-less child-template owner separately protects the receiver-scan fast path and template identity; head/body fill routes share one exact cross-origin splice owner; nested and multiple receiver variants share one exact bottom-up chain-order owner with preserved wrapper boundary nodes; no-fill, named-slot, and mixed-root paths remain distinct; seven head-chain owners and 68 slot-composition tests remain; 3,354 Rust tests and 1,793 integration executions |
+| Phase 14C15n TIR child-wrapper/basic-overlay units and wrapper order | `1adaf9ea2` | Accepted | Five obsolete test-only child-filtering cases and two weaker overlay duplicates were removed in favor of the production body-root filter owner, exact per-child structural owners, and stronger view/store owners; the final callerless traversal, schema helper, and compatibility re-export were deleted; stronger distinct-wrapper coverage exposed and corrected reverse consumption of the authoritative innermost-to-outermost wrapper order across structural composition, folding, both owned-handoff shapes, and runtime slot planning; four focused cross-boundary regressions prove `outer(inner(child))`; five child-wrapper/basic-overlay owners and 61 slot-composition tests remain; 3,351 Rust tests and 1,793 integration executions |
 
 ---
 
