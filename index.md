@@ -48,7 +48,7 @@ Flow: [projects](src/projects/) → [build_system](src/build_system/) → [compi
 - [headers](src/compiler_frontend/headers/): retained import/declaration shells, local ordering hints, interface binding, start-body split and ModuleSymbols. kw: facade, visibility.
 - [declaration_syntax](src/compiler_frontend/declaration_syntax/): shared declaration/type shell parsers. kw: signatures, ParsedTypeRef.
 - [module_dependencies.rs](src/compiler_frontend/module_dependencies.rs): topological header ordering. kw: dependency edges, cycles.
-- [compiler_messages](src/compiler_frontend/compiler_messages/): CompilerDiagnostic/CompilerError/rendering. kw: diagnostic codes, labels.
+- [compiler_messages](src/compiler_frontend/compiler_messages/): CompilerDiagnostic/CompilerError/rendering plus the self-contained [ModuleDiagnostics](src/compiler_frontend/compiler_messages/module_diagnostics.rs) owner that separates diagnosed module failures from typed infrastructure errors. kw: diagnostic codes, labels, module outcomes.
 - [symbols](src/compiler_frontend/symbols/): StringId, InternedPath, compiler symbols, naming policy.
 - [paths](src/compiler_frontend/paths/): import/path normalization/format/resolution. kw: @imports, source roots.
 - [source_packages](src/compiler_frontend/source_packages/): package-root registration and public import boundaries.

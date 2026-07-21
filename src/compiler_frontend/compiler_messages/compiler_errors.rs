@@ -281,7 +281,18 @@ impl CompilerMessages {
     /// WHY: Several build/backend modules need to convert a `CompilerError` into the richer
     /// `CompilerMessages` type at a boundary. Centralising this avoids repeated inline struct
     /// literals scattered across callers.
-    pub fn from_error(error: CompilerError, string_table: StringTable) -> Self {
+    ///
+    /// When the error carries an attached render-identity context (set at a module semantic
+    /// boundary), the context's `StringTable` is merged into the supplied target table and the
+    /// error's interned location is remapped into that target exactly once. This keeps the
+    /// location resolvable in the returned message set even when the error's path IDs were issued
+    /// by a module-local table that no longer exists. Errors without an attached context keep the
+    /// original behavior: the diagnostic borrows the location unchanged against the target table.
+    pub fn from_error(mut error: CompilerError, mut string_table: StringTable) -> Self {
+        if let Some(render_context) = error.take_render_context() {
+            let remap = string_table.merge_from(&render_context);
+            error.remap_string_ids(&remap);
+        }
         let diagnostic = compiler_error_to_diagnostic(&error);
         Self {
             diagnostics: vec![diagnostic],
@@ -306,15 +317,24 @@ impl CompilerMessages {
     /// WHY: these helpers receive warnings that were produced before the failure. Keeping that
     /// order makes `CompilerMessages` a true production-order diagnostic stream.
     pub fn from_error_with_warnings(
-        error: CompilerError,
+        mut error: CompilerError,
         warning_diagnostics: Vec<CompilerDiagnostic>,
         string_table: &StringTable,
     ) -> Self {
+        // Merge an attached render-identity context into a clone of the caller's table before
+        // building the diagnostic, mirroring `from_error`. The warnings were produced against the
+        // caller's table, so merging only adds the error's local strings and leaves their IDs
+        // valid in the resulting table.
+        let mut merged_table = string_table.clone();
+        if let Some(render_context) = error.take_render_context() {
+            let remap = merged_table.merge_from(&render_context);
+            error.remap_string_ids(&remap);
+        }
         let mut diagnostics = warning_diagnostics;
         diagnostics.push(compiler_error_to_diagnostic(&error));
         Self {
             diagnostics,
-            string_table: string_table.clone(),
+            string_table: merged_table,
             render_type_contexts: Vec::new(),
         }
     }
@@ -471,10 +491,29 @@ pub struct CompilerError {
     // Structured guidance for internal/tooling failures. User-facing diagnostics carry typed
     // payload facts on `CompilerDiagnostic` instead of using this string map.
     pub metadata: HashMap<CompilerErrorMetadataKey, String>,
+
+    // Optional self-contained render-identity context for this error's interned `location`.
+    //
+    // WHAT: carries the `StringTable` that issued the `SourceLocation`'s interned path IDs, so a
+    //       later ownership boundary can merge those IDs into its own table and remap the location
+    //       exactly once instead of resolving it against a mismatched or empty table.
+    // WHY: an infrastructure error recovered at a module semantic boundary can carry a location
+    //      whose interned path IDs are only valid in the module-local table that produced them.
+    //      Without this context a consumer that supplies a different table cannot resolve or
+    //      remap the location, so the path would render incorrectly or point at the wrong string.
+    //      The context is attached only at ownership boundaries that need it; every ordinary
+    //      constructor leaves it `None` so cheap construction and cloning are unchanged.
+    render_context: Option<StringTable>,
 }
 
 impl CompilerError {
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
+        // An attached render context is only authoritative for the location's original ID space.
+        // Once an external caller remaps the location into another table, that table becomes the
+        // authority and the attached context would describe a stale identity. Drop it so no
+        // double-authority can survive the conversion. `CompilerMessages::from_error` takes the
+        // context before remapping, so this drop only affects other external remap callers.
+        self.render_context = None;
         self.location.remap_string_ids(remap);
     }
 
@@ -488,7 +527,40 @@ impl CompilerError {
             location,
             error_type,
             metadata: HashMap::new(),
+            render_context: None,
         }
+    }
+
+    /// Attach structured guidance metadata to this error and return it for chaining.
+    ///
+    /// WHAT: replaces the metadata map wholesale.
+    /// WHY: the module semantic boundary recovers an infrastructure error's metadata from its
+    ///      structured payload alongside the message, location and error type, so a single
+    ///      builder keeps that reconstruction readable without repeated `new_metadata_entry` calls.
+    pub fn with_metadata(mut self, metadata: HashMap<CompilerErrorMetadataKey, String>) -> Self {
+        self.metadata = metadata;
+        self
+    }
+
+    /// Attach the render-identity `StringTable` that issued this error's interned location.
+    ///
+    /// WHAT: stores the table so a later `CompilerMessages::from_error` boundary can merge the
+    ///       location's IDs into its own table and remap the location exactly once.
+    /// WHY: only ownership boundaries that move an error across a string-table scope need this.
+    ///      Ordinary constructors leave the context `None`, so this builder is the single attach
+    ///      point and keeps normal construction cheap.
+    pub fn with_render_context(mut self, string_table: StringTable) -> Self {
+        self.render_context = Some(string_table);
+        self
+    }
+
+    /// Take the attached render-identity context, leaving `None`.
+    ///
+    /// WHAT: moves the optional `StringTable` out of this error.
+    /// WHY: `CompilerMessages::from_error` consumes the context once to merge and remap the
+    ///      location, so the error never keeps a stale authority after the boundary conversion.
+    pub(crate) fn take_render_context(&mut self) -> Option<StringTable> {
+        self.render_context.take()
     }
 
     /// Replace only the location scope path while preserving the existing span positions.
@@ -523,6 +595,7 @@ impl CompilerError {
             location: SourceLocation::default(),
             error_type: ErrorType::Compiler,
             metadata: HashMap::new(),
+            render_context: None,
         }
     }
 
@@ -536,6 +609,7 @@ impl CompilerError {
             location: SourceLocation::default(),
             error_type: ErrorType::Compiler,
             metadata: HashMap::new(),
+            render_context: None,
         }
     }
 
@@ -546,6 +620,7 @@ impl CompilerError {
             location: SourceLocation::from_path(path, string_table),
             error_type: ErrorType::File,
             metadata: HashMap::new(),
+            render_context: None,
         }
     }
 
@@ -555,12 +630,13 @@ impl CompilerError {
         msg: impl Into<String>,
         metadata: HashMap<CompilerErrorMetadataKey, String>,
         string_table: &mut StringTable,
-    ) -> Self {
+    ) -> CompilerError {
         CompilerError {
             msg: msg.into(),
             location: SourceLocation::from_path(path, string_table),
             error_type: ErrorType::File,
             metadata,
+            render_context: None,
         }
     }
 }

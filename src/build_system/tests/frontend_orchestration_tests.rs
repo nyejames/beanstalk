@@ -534,6 +534,10 @@ fn prepare_module_retains_header_syntax_for_semantic_compilation() {
         .compile_module_semantic(prepared, &canonical_entry, module_label)
         .expect("semantic compilation should succeed");
 
+    let super::ModuleCompilationOutcome::Success(compiled) = compiled else {
+        panic!("a clean constant declaration should compile, not diagnose");
+    };
+
     assert_eq!(
         compiled.module.metadata.entry_point, canonical_entry,
         "semantic compilation should preserve the module entry point"

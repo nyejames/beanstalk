@@ -9,19 +9,19 @@ Replace entry-closure compilation with canonical project and package graphs, imm
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/canonical-module-compilation-and-scoped-packages-plan.md
 STATUS: active
-CURRENT_SLICE: Phase 6b accepted; checkpoint commit pending
-LAST_ACCEPTED_COMMIT: c7b96d7e8 (Phase 6a non-HIR module metadata lane)
-WORKTREE: main at c7b96d7e8 with accepted Phase 6b source, tests, index and this plan update; unrelated user documentation work may appear and must be preserved
-REQUIRED_RELOADS: startup files, this plan, relevant language/import and borrow references, current module payload, HIR lowering/validation and backend consumer source plus diff
+CURRENT_SLICE: Phase 6c accepted; checkpoint commit pending
+LAST_ACCEPTED_COMMIT: b45fae3dc (Phase 6b explicit module payload lanes)
+WORKTREE: main at b45fae3dc with accepted Phase 6c source, tests, index and this plan update; unrelated user documentation work may appear and must be preserved
+REQUIRED_RELOADS: startup files, this plan, relevant language/import and borrow references, current exported declaration/type/effect owners, module construction and diff
 RELEVANT_CONTEXT_NOW:
 - docs: build-system-design.md Project and package topology plus Deterministic scheduling define canonical graph nodes, strict support scope, facade placement and deterministic waves
-- code: build.rs::Module is now a three-lane container; ModuleExecutable owns HIR/type/borrow, ModuleLinkFacts owns current external registry/import facts and ModuleCompilerMetadata owns entry/root/compiler metadata
+- code: compile_module_semantic now returns Result<ModuleCompilationOutcome, CompilerError>; ModuleDiagnostics owns self-contained diagnosed user failures and recovered CompilerError values retain optional remappable render identity
 ACCEPTANCE_CRITERIA:
-- accepted: ModuleExecutable is the sole HIR/type/borrow owner and remaps HIR/type identities once while borrow facts remain HIR-ID-only
-- accepted: ModuleLinkFacts is the sole external-registry/import owner and explicitly marks the complete registry as a current dependency for Phase 7 narrowing
-- accepted: the canonical entry path is root-local ModuleCompilerMetadata and Module contains exactly executable, link_facts and metadata without accessors, deref or compatibility fields
-- accepted: frontend construction, HTML validation/lowering, runtime glue and tests consume the owning lane explicitly; mandatory start, backend APIs, diagnostics, output and behavior are unchanged
-- accepted: one focused module-lane remap invariant test protects lane boundaries without duplicating integration behavior
+- accepted: ModuleDiagnostics is structurally user-diagnostic-only, retains its local StringTable and render type contexts and requires at least one user-facing Error
+- accepted: ModuleCompilationOutcome separates Success and Diagnosed at the retained-module semantic boundary while CompilerError is the typed Result error
+- accepted: the one structured legacy normalization accepts user errors with warnings, recovers one infrastructure failure with only warning/note companions and rejects malformed mixed or empty failure sequences
+- accepted: recovered CompilerError values carry an optional private render context; CompilerMessages merges/remaps it exactly once so post-fork source paths survive directory aggregation
+- accepted: single-file and directory callers preserve existing output and deterministic string-table merge behavior without graph scheduling, public-interface placeholders or incomplete artefact renaming
 VALIDATION_STATE:
 - Phase 4d just validate: passed; cross-target Clippy, 3419 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases
 - Phase 4e focused validation: passed; 2 import-scanning, 5 reachability, 178 module-discovery, 19 orchestration, 5 token-remap and 116 header tests plus cargo check --tests and git diff --check
@@ -36,12 +36,14 @@ VALIDATION_STATE:
 - Phase 6a just validate: passed; cross-target Clippy, 3437 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases (+1ms average)
 - Phase 6b focused validation: passed; 1 lane invariant, 20 frontend-orchestration, 25 project-frontend, 226 HTML-project and 227 backend tests plus cargo check --tests, cargo clippy --tests -D warnings, formatting and git diff --check
 - Phase 6b just validate: passed; cross-target Clippy, 3438 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases (+1ms average)
-DOCS_IMPACT: index.md now names the three current module payload lanes; progress matrix unchanged for this internal payload refactor
-BLOCKERS_OR_OPEN_DECISIONS: the complete effective external package registry may remain inside ModuleLinkFacts only as an explicitly current dependency; Phase 7 must replace it with immutable binding/interface and per-function link facts
+- Phase 6c focused validation: passed; 104 compiler-message, 20 frontend-orchestration and 25 project-frontend tests plus full 3444-test unit suite, cargo check --tests, cargo clippy --tests -D warnings, formatting and git diff --check
+- Phase 6c just validate: passed; cross-target Clippy, 3447 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases (0ms average)
+DOCS_IMPACT: index.md names ModuleDiagnostics and the typed module outcome boundary; progress matrix unchanged for this internal result-boundary refactor
+BLOCKERS_OR_OPEN_DECISIONS: true dependency-wave semantic scheduling remains blocked until Phase 7 provides immutable source provider interfaces; Phase 6c must not simulate it by rerunning entry closures in graph order
 DELEGATION_DECISION: ollama - user requires Ollama for every worker slice
 NEXT_WORKER_ORDER: ollama only; no provider substitution for this run
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit Phase 6b, record its hash, then scope the smallest module compilation outcome/diagnostic boundary slice through Ollama
+NEXT_RESUME_ACTION: commit Phase 6c, record its hash, then scope the smallest immutable PublicSemanticInterface slice through Ollama without final artefact or graph-outcome placeholders
 ```
 
 ## Hard prerequisites
@@ -515,6 +517,25 @@ Accepted Phase 6b checkpoint:
   immutable binding interfaces and per-function link facts.
 - frontend construction, backend validation/lowering, runtime glue and test fixtures consume the
   owning lanes without changing the flat `BackendBuilder` API, mandatory start or output behavior.
+
+Accepted Phase 6c checkpoint:
+
+- `FrontendModuleBuildContext::compile_module_semantic` now returns
+  `Result<ModuleCompilationOutcome, CompilerError>`. Success carries the current unmerged module
+  payload and local string table, while `Diagnosed(ModuleDiagnostics)` carries no partial module.
+- `ModuleDiagnostics` is the self-contained owner for one module's user-facing failure. It retains
+  ordered diagnostics, its string table and type-render contexts, requires a user-facing error and
+  cannot contain an infrastructure diagnostic.
+- one structured normalization point temporarily classifies deeper mixed `CompilerMessages`
+  results. User errors may retain warning/note companions; one infrastructure failure may discard
+  only warning/note companions; user-error/infrastructure blends, multiple infrastructure errors
+  and empty or warning-only failures are internal invariants.
+- a recovered `CompilerError` retains an optional private render-identity table. The ordinary
+  `CompilerMessages` conversion merges and remaps that context once, preserving module-local
+  source paths through deterministic directory aggregation without another render-side
+  classification path.
+- graph outcomes, blocked scheduling, final compiled artefacts, public interfaces and fingerprints
+  remain later slices; single-file and directory build/render behavior is unchanged.
 
 ### Phase 7: Add stable public interfaces, cross-module calls and effect summaries
 

@@ -29,8 +29,8 @@ use std::sync::Arc;
 
 use super::collision_detection::validate_source_package_tree_collisions;
 use super::frontend_orchestration::{
-    FrontendModuleBuildContext, ModulePreparationContext, module_timing_label,
-    record_module_input_counters,
+    FrontendModuleBuildContext, ModuleCompilationOutcome, ModulePreparationContext,
+    module_timing_label, record_module_input_counters,
 };
 use super::module_inventory;
 use super::project_roots;
@@ -317,8 +317,8 @@ pub(crate) fn compile_single_file_frontend(
 
     let result = match compile_context.compile_module_semantic(prepared, &entry_path, module_label)
     {
-        Ok(result) => result,
-        Err(messages) => {
+        Ok(ModuleCompilationOutcome::Success(compiled)) => *compiled,
+        Ok(ModuleCompilationOutcome::Diagnosed(diagnostics)) => {
             crate::timing::record_started_pipeline_timing_with_label(
                 "frontend.module.total",
                 module_total_start,
@@ -326,7 +326,17 @@ pub(crate) fn compile_single_file_frontend(
             );
             log_stage_timing("stage0.single_file.compile_module", compile_module_start);
             log_stage_timing("stage0.single_file.total", total_start);
-            return Err(messages);
+            return Err(diagnostics.into_messages());
+        }
+        Err(error) => {
+            crate::timing::record_started_pipeline_timing_with_label(
+                "frontend.module.total",
+                module_total_start,
+                module_label,
+            );
+            log_stage_timing("stage0.single_file.compile_module", compile_module_start);
+            log_stage_timing("stage0.single_file.total", total_start);
+            return Err(CompilerMessages::from_error_ref(error, string_table));
         }
     };
     crate::timing::record_started_pipeline_timing_with_label(
@@ -355,7 +365,14 @@ pub(crate) fn compile_single_file_frontend(
 // -------------------------
 
 /// Module compilation result plus the fork marker needed at merge time.
-struct ModuleCompileOutcome {
+///
+/// Preparation still returns the build-boundary `CompilerMessages`, so the per-module task keeps
+/// the build/render-boundary `CompilerMessages` form for failures. The typed semantic result from
+/// `compile_module_semantic` is packaged into this form once, here: a `Diagnosed` module becomes
+/// its `ModuleDiagnostics::into_messages` inverse, and an infrastructure `CompilerError` becomes
+/// an infrastructure `CompilerMessages` through `CompilerMessages::from_error`. The directory
+/// aggregation and renderer then consume `CompilerMessages` without re-classifying it.
+struct DirectoryModuleTaskResult {
     entry_path: PathBuf,
     string_table_base_len: usize,
     result: Result<CompiledModuleResult, CompilerMessages>,
@@ -382,7 +399,7 @@ struct DirectoryModuleCompileContext<'a> {
 }
 
 impl DirectoryModuleCompileContext<'_> {
-    fn compile(&self, discovered: module_inventory::DiscoveredModule) -> ModuleCompileOutcome {
+    fn compile(&self, discovered: module_inventory::DiscoveredModule) -> DirectoryModuleTaskResult {
         let string_table_fork = self.string_table_fork_source.fork_for_module();
         let (local_table, base_len) = string_table_fork.into_parts();
         let entry_point = discovered.entry_point.clone();
@@ -420,7 +437,7 @@ impl DirectoryModuleCompileContext<'_> {
                     module_total_start,
                     module_label,
                 );
-                return ModuleCompileOutcome {
+                return DirectoryModuleTaskResult {
                     entry_path: entry_point,
                     string_table_base_len: base_len,
                     result: Err(messages),
@@ -443,14 +460,39 @@ impl DirectoryModuleCompileContext<'_> {
             builder_runtime_packages: &self.builder_surface.builder_runtime_packages,
         };
 
-        let result = compile_context.compile_module_semantic(prepared, &entry_point, module_label);
+        // Package the typed semantic result into the build/render-boundary `CompilerMessages` the
+        // directory aggregation already consumes. The semantic boundary's classification
+        // (`ModuleDiagnostics::from_messages`) is not re-run here or by the aggregation. A
+        // `Diagnosed` module becomes its `CompilerMessages` inverse through `into_messages`, which
+        // carries the module-local `StringTable` directly. An infrastructure `CompilerError`
+        // carries its own attached render-identity context (the module-local `StringTable` that
+        // issued its location), so `from_error` merges that context into a fresh module-local fork
+        // used as the merge target and remaps the location exactly once. The fresh fork only
+        // supplies the shared base prefix the aggregation's `merge_delta_from` expects; the
+        // error's attached context supplies the post-base path strings, so the location table is
+        // preserved instead of reconstructed lossily.
+        let result =
+            match compile_context.compile_module_semantic(prepared, &entry_point, module_label) {
+                Ok(ModuleCompilationOutcome::Success(compiled)) => Ok(*compiled),
+                Ok(ModuleCompilationOutcome::Diagnosed(diagnostics)) => {
+                    Err(diagnostics.into_messages())
+                }
+                Err(error) => {
+                    let module_string_table = self
+                        .string_table_fork_source
+                        .fork_for_module()
+                        .into_parts()
+                        .0;
+                    Err(CompilerMessages::from_error(error, module_string_table))
+                }
+            };
         crate::timing::record_started_pipeline_timing_with_label(
             "frontend.module.total",
             module_total_start,
             module_label,
         );
 
-        ModuleCompileOutcome {
+        DirectoryModuleTaskResult {
             entry_path: entry_point,
             string_table_base_len: base_len,
             result,
@@ -544,7 +586,7 @@ pub(crate) fn compile_directory_frontend(
     }
 
     let module_compile_batch_start = crate::timing::start_pipeline_timing();
-    let results: Vec<ModuleCompileOutcome> = if compile_in_parallel {
+    let results: Vec<DirectoryModuleTaskResult> = if compile_in_parallel {
         discovered_modules
             .into_par_iter()
             .map(|discovered| compile_context.compile(discovered))

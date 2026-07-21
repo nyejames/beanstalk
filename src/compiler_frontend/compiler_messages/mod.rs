@@ -23,6 +23,7 @@ pub(crate) mod diagnostic_label;
 pub(crate) mod diagnostic_payload;
 pub(crate) mod diagnostic_severity;
 pub(crate) mod display_messages;
+pub(crate) mod module_diagnostics;
 pub(crate) mod render;
 pub(crate) mod source_location;
 pub(crate) mod trait_keyword_diagnostics;
@@ -66,10 +67,15 @@ pub(crate) use diagnostic_payload::{
     UnsupportedOperatorCategory,
 };
 pub(crate) use diagnostic_severity::DiagnosticSeverity;
+pub(crate) use module_diagnostics::ModuleDiagnostics;
 
 #[cfg(test)]
 #[path = "tests/diagnostic_model_tests.rs"]
 mod diagnostic_model_tests;
+
+#[cfg(test)]
+#[path = "tests/module_diagnostics_tests.rs"]
+mod module_diagnostics_tests;
 
 #[cfg(test)]
 #[path = "tests/type_rendering_tests.rs"]

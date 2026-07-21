@@ -16,6 +16,7 @@ use crate::compiler_frontend::arena::FrontendArenaCapacityEstimate;
 use crate::compiler_frontend::ast::Ast;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
+use crate::compiler_frontend::compiler_messages::ModuleDiagnostics;
 use crate::compiler_frontend::external_packages::{
     ExternalFunctionId, ExternalPackageId, ExternalPackageRegistry,
 };
@@ -197,6 +198,29 @@ pub(super) struct FrontendModuleBuildContext<'a> {
     pub(super) external_packages: Arc<ExternalPackageRegistry>,
     pub(super) external_import_resolution_table: &'a ExternalImportResolutionTable,
     pub(super) builder_runtime_packages: &'a [BuilderRuntimePackageMetadata],
+}
+
+/// Typed result of one retained module's semantic compilation.
+///
+/// WHAT: separates a successfully compiled module from a diagnosed source failure at the
+///       retained-module semantic boundary. `Success` carries the current unmerged module plus
+///       its local string-table delta; `Diagnosed` carries the user-facing diagnostics that the
+///       renderer surfaces.
+/// WHY: the prior boundary returned a mixed `CompilerMessages` for every failure, so a diagnosed
+///      module and an internal `CompilerError` were indistinguishable result classes. This outcome
+///      makes them distinct: a structured user diagnostic becomes `Ok(Diagnosed(...))` while an
+///      infrastructure failure originating from a `CompilerError` becomes `Err(CompilerError)` via
+///      the central lossless normalization in `ModuleDiagnostics::from_messages`.
+///
+/// The success payload keeps the descriptive current name `CompiledModuleResult` for the current
+/// unmerged module plus local string-table state. It is not the final `CompiledModuleArtifact`,
+/// which remains deferred.
+pub(crate) enum ModuleCompilationOutcome {
+    // `CompiledModuleResult` carries the full unmerged module (HIR, type environment and borrow
+    // facts) and is far larger than `ModuleDiagnostics`, so the success payload is boxed to keep
+    // the boundary outcome small. The box is transient: the caller unboxes once before merging.
+    Success(Box<CompiledModuleResult>),
+    Diagnosed(ModuleDiagnostics),
 }
 
 impl ModulePreparationContext<'_> {
@@ -637,7 +661,7 @@ impl FrontendModuleBuildContext<'_> {
         prepared: PreparedModule,
         entry_file_path: &Path,
         module_label: Option<&str>,
-    ) -> Result<CompiledModuleResult, CompilerMessages> {
+    ) -> Result<ModuleCompilationOutcome, CompilerError> {
         let PreparedModule {
             prepared_header_syntax,
             string_table,
@@ -837,12 +861,31 @@ impl FrontendModuleBuildContext<'_> {
             })
         })();
 
-        let string_table = compiler.string_table;
-
-        compile_result.map(|module| CompiledModuleResult {
-            module,
-            string_table,
-        })
+        // Normalize the deeper stages' mixed `CompilerMessages` once at this semantic boundary.
+        // A successful compilation becomes `Success`. A failing stage becomes either
+        // `Diagnosed` (user-facing diagnostics the renderer surfaces) or `Err(CompilerError)`
+        // (an infrastructure failure recovered losslessly from its structured payload). This is
+        // the single lossless ownership transfer; graph and render consumers never re-classify.
+        match compile_result {
+            Ok(module) => {
+                let string_table = compiler.string_table;
+                Ok(ModuleCompilationOutcome::Success(Box::new(
+                    CompiledModuleResult {
+                        module,
+                        string_table,
+                    },
+                )))
+            }
+            Err(messages) => {
+                // The failing stage already cloned the live `compiler.string_table` into the
+                // messages, so the diagnosed payload carries every render identity produced so
+                // far. `compiler` itself is no longer needed.
+                match ModuleDiagnostics::from_messages(messages) {
+                    Ok(diagnostics) => Ok(ModuleCompilationOutcome::Diagnosed(diagnostics)),
+                    Err(error) => Err(error),
+                }
+            }
+        }
     }
 
     /// Bind retained `PreparedHeaderSyntax` against provider interfaces.
