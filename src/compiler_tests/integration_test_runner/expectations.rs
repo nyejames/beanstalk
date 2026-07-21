@@ -1064,11 +1064,12 @@ fn parse_artifacts_must_not_exist(
     Ok(normalized)
 }
 
-/// Validates that every code identity is non-empty and non-whitespace.
+/// Validates that every diagnostic or warning code identity is non-blank.
 ///
-/// WHAT: rejects blank `diagnostic_codes` entries while preserving exact multisets and duplicates.
-/// WHY: a blank diagnostic identity can never match a real compiler diagnostic code, so accepting
-///      it would let an authored contract pass without exercising the error stream.
+/// WHAT: rejects blank entries in the selected code field while preserving exact multisets and
+///       duplicates.
+/// WHY: a blank identity cannot match a structured compiler diagnostic, so it cannot form a
+///      truthful error or warning contract.
 fn validate_code_identities(
     path: &Path,
     context: &str,
