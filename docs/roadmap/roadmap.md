@@ -33,6 +33,14 @@ Do not mark a plan active unless its current-state capsule says it is active.
 
 These items are genuinely deferred. They are not current implementation work. Each item links to its owning plan or stays here only when no plan exists yet.
 
+## Region based memory management syntax and the final memory management design implementation
+
+This will involve finalising the design of regions as well as the final model for GC-eliding static analysis and the split of debug builds being fast and falling back to GC while optimised builds try to completely elide the GC if possible. 
+
+The final model for the direction of the memory management system (the final design brief, not current implementation) is in [the memory management design docs](docs/src/docs/codebase/memory-management)
+
+[Design draft for regions syntax](docs/roadmap/plans/grouped-memory-design.md)
+
 ## Post-TIR template performance follow-ups
 
 The [post-TIR `$md` and template-parser optimisation plan](./plans/post-tir-template-parser-optimization-plan.md)
