@@ -30,21 +30,21 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 14C15k TIR slot-routing ownership review
-LAST_ACCEPTED_COMMIT: `fc30e677d` (Phase 14C15j code)
+CURRENT_SLICE: Phase 14C15l TIR slot-expansion ownership review
+LAST_ACCEPTED_COMMIT: `678f7a424` (Phase 14C15k code)
 WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; accepted code is committed; concurrent example-name work remains separately committed
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: unit-test ownership, pruning, compiler-stage boundaries, and final governance rules govern the next slice
-- code: all 614 retained tests across the reviewed Stage 0, frontend, build-system, project, CLI, dev-server, new-project, and final-TIR groups through slot-schema discovery have distinct owners; the 16 TIR slot-routing tests are next, followed by expansion, head-chain, child-wrapper, and overlay groups
+- code: all 611 retained tests across the reviewed Stage 0, frontend, build-system, project, CLI, dev-server, new-project, and final-TIR groups through slot routing have distinct owners; the 14 TIR slot-expansion tests are next, followed by head-chain, child-wrapper, and overlay groups
 ACCEPTANCE_CRITERIA:
 - every remaining full-source unit has a distinct hidden invariant, parser fact, stage boundary, or policy owner
 - units superseded by a stronger canonical integration primary are deleted with replacement evidence
 - stale test-only helpers or production APIs are removed with their final caller
 - HIR, build-system, backend, and final TIR units keep only their owning semantic relationships and hidden facts
 VALIDATION_STATE:
-- `just validate`: passed; cross-target Clippy, 3,365 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
-- Phase 14C15j focused group: passed; 13 strengthened TIR slot-schema tests within the 79-test slot-composition module
+- `just validate`: passed; cross-target Clippy, 3,362 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
+- Phase 14C15k focused group: passed; 13 TIR slot-routing owners within the 76-test slot-composition module
 - Phase 14B audit: passed; zero hard findings; 66 backend-only and 15 adversarial-only primary-less contract advisories
 - Priya expectation alignment: accepted at `6efac7012`; 13 stale Rust and integration expectation files now match renamed inputs
 DOCS_IMPACT: testing, validation, and contributor workflow aligned with final suite policy; progress matrix and index unchanged
@@ -52,7 +52,7 @@ BLOCKERS_OR_OPEN_DECISIONS: none; 81 contract families without a primary are int
 DELEGATION_DECISION: Ollama — bounded Phase 14 implementation slices
 NEXT_WORKER_ORDER: Ollama only; no provider substitution
 STOP_REASON: none
-NEXT_RESUME_ACTION: launch the 16-test TIR slot-routing group through Ollama
+NEXT_RESUME_ACTION: launch the 14-test TIR slot-expansion group through Ollama
 
 ---
 
@@ -259,6 +259,7 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 14C15h TIR fold-cache, final-view, and render units | `e0d71bb7f` | Accepted | Exact cache-key equality/dimensions, empty-versus-active binding policy, and resolved-versus-missing slot output now use labelled owners; a byte-identical child-cycle preparation duplicate was removed; break/continue preserve distinct exact outputs in one owner; the false aggregate fold-error assertion now owns exact runtime classification; render-unit malformed branches are labelled and assert stable infrastructure reasons; 35 source owners remain; 3,366 Rust tests and 1,793 integration executions |
 | Phase 14C15i TIR HIR-handoff units | `8588af791` | Accepted | The duplicate missing-root `TirView` constructor test was removed in favor of the exact-view owner; resolved-slot, child-boundary, and runtime-reference tests now inspect only owned handoff text/expression payloads rather than incidental occurrence IDs or source-store existence; all wrapper, overlay, slot, structural-child, schema-error, and infrastructure-lane owners remain distinct; 17 handoff owners remain; 3,365 Rust tests and 1,793 integration executions |
 | Phase 14C15j TIR slot-schema units | `fc30e677d` | Accepted | All 13 default, named, positional, mixed, structural-child, branch, loop, loose-fill, duplicate-default, ordering, membership, and skipped-node schema owners remain distinct; set membership and ordering are now exact, absent dimensions and `has_any_slots` are explicit, and loose-fill tests prove the complete discovered schema before the selected positional key; 3,365 Rust tests and 1,793 integration executions |
+| Phase 14C15k TIR slot-routing units | `678f7a424` | Accepted | Named, default, and positional explicit-insert routing now share one labelled exact target-branch owner; a weaker `nodes_for_slot` query smoke was removed in favor of the mixed explicit/loose bucket owner; all missing-authority, loose positional/default ordering, whitespace chunking, typed rejection, empty-fill, and mixed-bucket owners remain distinct with exact node buckets and discovered schemas; 13 routing owners and 76 slot-composition tests remain; 3,362 Rust tests and 1,793 integration executions |
 
 ---
 
@@ -1492,6 +1493,8 @@ Do not present lower counts or faster time as proof of correctness.
 | `fold_final_view_tests::{final_view_fold_loop_preserves_output_before_break,final_view_fold_loop_preserves_output_before_continue}` consolidated; aggregate-output fold-error smoke corrected | Break and continue preserve distinct output; standalone aggregate-output is runtime rather than foldable | `fold_final_view_tests::{final_view_fold_loop_preserves_output_before_break_and_continue,final_view_aggregate_output_outside_wrapper_classifies_as_runtime}` with exact `.`, `...`, and `AggregateOutput` assertions | aggregate-wrapper placement and malformed-wrapper authority owners remain separate | `e0d71bb7f` |
 | Render-unit missing-context/template, sequence-root, head-prefix, and whitespace-trim branch tests consolidated in Phase 14C15h | Same-store wrapper/reference normalization and every malformed render-unit authority branch | Six retained render-unit owners with labelled branches and stable infrastructure-message fragments | parser structural-child reuse and same-store ID preservation remain separate | `e0d71bb7f` |
 | `hir_handoff_tests::missing_view_context_is_rejected_before_handoff` | A missing root is rejected before HIR handoff materialization | `view_tests::new_fails_for_missing_root_template`, which calls the same `TirView::new` constructor and asserts the same missing-root error | 17 handoff tests retain owned vocabulary, exact structural relationships, overlays, wrappers, slot outcomes, and malformed-authority propagation | `8588af791` |
+| `slot_composition_tests::{route_explicit_insert_to_named_slot,route_explicit_insert_to_default_slot,route_explicit_insert_to_positional_slot}` consolidated | Explicit insert helpers route their body nodes through the named, default, and positional target match arms | `slot_composition_tests::route_explicit_insert_to_each_target_slot_key`, with labelled exact buckets and complete discovered schema dimensions for every target | unknown-target rejection, nested-insert expansion, and mixed explicit/loose routing remain separate | `678f7a424` |
+| `slot_composition_tests::nodes_for_slot_returns_correct_nodes` | Named insert and loose default content are returned from their routed buckets while an absent positional key is empty | `slot_composition_tests::mixed_explicit_inserts_and_loose_content_are_bucketed`, strengthened to assert named/default node identity and order, absent positional buckets, and the complete wrapper schema | empty-fill routing retains the distinct empty-contribution contract | `678f7a424` |
 
 ### Coverage gap and handoff ledger
 
