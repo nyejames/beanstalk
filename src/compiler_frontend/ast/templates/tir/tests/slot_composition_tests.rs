@@ -17,7 +17,7 @@ use super::super::node::{
     TemplateIr, TemplateIrBranch, TemplateIrNode, TemplateIrNodeKind, TirSlotPlaceholder,
 };
 use super::super::overlays::{
-    TemplateViewContext, TirExpressionOverlay, TirSlotResolutionKind, TirSlotResolutionOverlay,
+    TemplateViewContext, TirSlotResolutionKind, TirSlotResolutionOverlay,
     TirSlotResolutionOverlayId,
 };
 use super::super::refs::TemplateTirChildReference;
@@ -194,15 +194,6 @@ fn build_child_template_node_for_template(
     let mut builder = TemplateIrBuilder::new(store);
     builder.push_child_template_node(template_id, empty_location())
 }
-/// Builds a `ChildTemplate` node with an explicit effective view identity.
-fn build_child_template_node_with_reference(
-    store: &mut TemplateIrStore,
-    reference: TemplateTirChildReference,
-) -> TemplateIrNodeId {
-    let mut builder = TemplateIrBuilder::new(store);
-    builder.push_child_template_node_with_reference(reference, empty_location())
-}
-
 fn build_wrapper_with_slots(store: &mut TemplateIrStore, keys: Vec<SlotKey>) -> TemplateIrId {
     let mut builder = TemplateIrBuilder::new(store);
 
@@ -2882,21 +2873,27 @@ fn attach_view_context_carries_slot_resolution() {
 //  Head-Chain Composition With Overlay Threading
 // -------------------------
 //
-// These tests exercise `compose_tir_head_chain_with_overlays`, the store-owned
-// entry point that runs the store-local structural composition and then
-// constructs a non-empty slot-resolution view context from the collected
-// wrapper/fill pairs. They confirm that a single slot-bearing wrapper produces
-// a non-empty view context, that the view context carries only the
-// slot-resolution dimension, that composition preserves the wrapper's effective
-// view identity, that no overlay is allocated when no slots are resolved, and
-// that structural expansion output matches the store-local path.
+// `compose_tir_head_chain_with_overlays` is the production stage-boundary owner
+// returning a `ComposedTirRoot`: the structurally composed root plus an optional
+// slot-resolution view context. These tests protect the two distinct boundary
+// contracts that no other owner covers:
+//   * a single slot-bearing wrapper produces a new composed root whose resolved
+//     wrapper splices the exact fill, and a slot-resolution overlay whose single
+//     occurrence/key/kind/source match that fill, with only the slot-resolution
+//     context dimension set;
+//   * a template with no slot-bearing wrapper returns the original root and a
+//     `None` slot context (the production fast path).
+// The structural expansion itself is owned by the head-chain structural tests
+// above and by `expand_preserves_non_slot_nodes`; the wrapper effective-view
+// identity is owned by the `TirView` read authority and view-transition rules,
+// so neither is re-asserted here.
 
 #[test]
 fn head_chain_with_overlays_threads_slot_overlay_for_single_receiver() {
     let mut string_table = StringTable::new();
     let store = Rc::new(RefCell::new(TemplateIrStore::new()));
 
-    let template_id = {
+    let (template_id, head_fill) = {
         let mut store = store.borrow_mut();
         let wrapper = build_wrapper_with_slot_sequence(&mut store, vec![SlotKey::Default]);
         let wrapper_node = build_child_template_node_for_template(&mut store, wrapper);
@@ -2906,7 +2903,8 @@ fn head_chain_with_overlays_threads_slot_overlay_for_single_receiver() {
             "head fill",
             TemplateSegmentOrigin::Head,
         );
-        build_template_with_children(&mut store, vec![wrapper_node, head_fill])
+        let template_id = build_template_with_children(&mut store, vec![wrapper_node, head_fill]);
+        (template_id, head_fill)
     };
 
     let original_root = template_root_node_id(template_id, &store.borrow());
@@ -2914,11 +2912,40 @@ fn head_chain_with_overlays_threads_slot_overlay_for_single_receiver() {
     let composed = compose_tir_head_chain_with_overlays(&store, template_id, &string_table, false)
         .expect("store-level head-chain composition should succeed");
 
+    // --- Structural half of `ComposedTirRoot` ---
+    // Composition replaces the original root with a new sequence whose only
+    // child is the resolved wrapper, and the wrapper's default slot splices the
+    // exact head-fill node identity and content.
     assert_ne!(
         composed.root, original_root,
         "composition should produce a new root"
     );
 
+    let store = store.borrow();
+    let composed_children = root_child_node_ids_for_node(composed.root, &store);
+    assert_eq!(
+        composed_children.len(),
+        1,
+        "composed root should contain only the resolved wrapper"
+    );
+
+    let resolved_wrapper_template_id = expect_child_template_id(composed_children[0], &store);
+    let resolved_wrapper_children = root_child_node_ids(resolved_wrapper_template_id, &store);
+    assert_eq!(
+        resolved_wrapper_children,
+        vec![head_fill],
+        "the resolved wrapper's default slot should splice the exact head-fill node"
+    );
+    assert_eq!(
+        text_node_text(head_fill, &store, &string_table),
+        Some("head fill".to_owned()),
+        "the spliced fill content should be the authored head text"
+    );
+
+    // --- Overlay half of `ComposedTirRoot` ---
+    // The slot-resolution context carries exactly one default-slot resolution
+    // whose source template holds the same fill content. Only the
+    // slot-resolution dimension is set; expression and wrapper-context are absent.
     let context = composed
         .slot_context
         .expect("one slot-bearing wrapper should produce a non-empty view context");
@@ -2935,62 +2962,40 @@ fn head_chain_with_overlays_threads_slot_overlay_for_single_receiver() {
         context.wrapper_context.is_none(),
         "no wrapper-context overlay dimension should be set"
     );
-}
 
-#[test]
-fn head_chain_preserves_the_effective_wrapper_view_identity() {
-    let mut string_table = StringTable::new();
-    let store = Rc::new(RefCell::new(TemplateIrStore::new()));
-
-    let expression_overlay_id = {
-        let mut store = store.borrow_mut();
-        store.allocate_expression_overlay(TirExpressionOverlay {
-            overrides: Vec::new(),
-        })
-    };
-    let wrapper_context = {
-        TemplateViewContext {
-            expression_overlay: Some(expression_overlay_id),
-            slot_resolution: None,
-            wrapper_context: None,
-        }
-    };
-
-    let (template_id, wrapper_node_id, wrapper_reference) = {
-        let mut store = store.borrow_mut();
-        let wrapper = build_wrapper_with_slot_sequence(&mut store, vec![SlotKey::Default]);
-        let wrapper_reference =
-            TemplateTirChildReference::new(wrapper, TemplateTirPhase::Formatted, wrapper_context);
-        let wrapper_node_id =
-            build_child_template_node_with_reference(&mut store, wrapper_reference);
-        let body_fill = build_text_node(
-            &mut store,
-            &mut string_table,
-            "body fill",
-            TemplateSegmentOrigin::Body,
-        );
-        let template_id =
-            build_template_with_children(&mut store, vec![wrapper_node_id, body_fill]);
-        (template_id, wrapper_node_id, wrapper_reference)
-    };
-
-    let composed = compose_tir_head_chain_with_overlays(&store, template_id, &string_table, false)
-        .expect("same-store effective wrapper identity should compose");
-    assert!(
-        composed.slot_context.is_some(),
-        "slot-bearing effective wrapper should reach overlay allocation"
+    let overlay_id = context
+        .slot_resolution
+        .expect("slot-resolution overlay id should be present");
+    let overlay = slot_resolution_overlay(&store, overlay_id);
+    assert_eq!(
+        overlay.resolutions.len(),
+        1,
+        "one default slot occurrence should be resolved"
     );
 
-    let store = store.borrow();
-    let source_wrapper_node = store
-        .get_node(wrapper_node_id)
-        .expect("source wrapper node should remain in the store");
-    let TemplateIrNodeKind::ChildTemplate { reference, .. } = &source_wrapper_node.kind else {
-        panic!("source wrapper should remain a child-template node");
+    let (occurrence_id, resolution) = &overlay.resolutions[0];
+    assert_eq!(
+        *occurrence_id,
+        SlotOccurrenceId::new(0),
+        "the single slot occurrence should keep its document-order ID"
+    );
+    assert_eq!(
+        resolution.key,
+        SlotKey::Default,
+        "the resolved slot key should be the declared default"
+    );
+    let TirSlotResolutionKind::Resolved { sources } = &resolution.kind else {
+        panic!("the default slot should resolve to a source list");
     };
     assert_eq!(
-        *reference, wrapper_reference,
-        "structural composition must not rewrite the wrapper's phase or overlay identity"
+        sources.len(),
+        1,
+        "the default slot should resolve to one source template"
+    );
+    assert_eq!(
+        root_child_node_ids(sources[0], &store),
+        vec![head_fill],
+        "the overlay source template should hold the exact head-fill node"
     );
 }
 
@@ -3024,59 +3029,5 @@ fn head_chain_with_overlays_returns_none_when_no_slots_resolved() {
     assert!(
         composed.slot_context.is_none(),
         "no slot-bearing wrapper should produce no view context"
-    );
-}
-
-#[test]
-fn head_chain_with_overlays_preserves_structural_expansion() {
-    let mut string_table = StringTable::new();
-    let store = Rc::new(RefCell::new(TemplateIrStore::new()));
-
-    let template_id = {
-        let mut store = store.borrow_mut();
-        let wrapper = build_text_slot_text_wrapper(&mut store, &mut string_table, SlotKey::Default);
-        let wrapper_node = build_child_template_node_for_template(&mut store, wrapper);
-        let body_text = build_text_node(
-            &mut store,
-            &mut string_table,
-            "body fill",
-            TemplateSegmentOrigin::Body,
-        );
-        build_template_with_children(&mut store, vec![wrapper_node, body_text])
-    };
-
-    // Run the store-owned overlay path.
-    let overlay_composed =
-        compose_tir_head_chain_with_overlays(&store, template_id, &string_table, false)
-            .expect("store-level composition should succeed");
-
-    // Run the store-local structural path on a fresh store with the same shape.
-    // The composed root children should match, confirming the overlay path does
-    // not alter structural expansion.
-    let mut local_store = TemplateIrStore::new();
-    let local_wrapper =
-        build_text_slot_text_wrapper(&mut local_store, &mut string_table, SlotKey::Default);
-    let local_wrapper_node =
-        build_child_template_node_for_template(&mut local_store, local_wrapper);
-    let local_body_text = build_text_node(
-        &mut local_store,
-        &mut string_table,
-        "body fill",
-        TemplateSegmentOrigin::Body,
-    );
-    let local_template_id =
-        build_template_with_children(&mut local_store, vec![local_wrapper_node, local_body_text]);
-
-    let local_composed_root =
-        compose_tir_head_chain(&mut local_store, local_template_id, &string_table, false)
-            .expect("store-local composition should succeed");
-
-    let overlay_child_count =
-        root_child_kinds_for_node(overlay_composed.root, &store.borrow()).len();
-    let local_child_count = root_child_kinds_for_node(local_composed_root, &local_store).len();
-
-    assert_eq!(
-        overlay_child_count, local_child_count,
-        "overlay path should produce the same number of root children"
     );
 }
