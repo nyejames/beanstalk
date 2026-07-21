@@ -30,21 +30,21 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 14C14k project CLI parser unit ownership review
-LAST_ACCEPTED_COMMIT: `025c27554` (Phase 14C14j code)
+CURRENT_SLICE: Phase 14C14l dev-server watch and rebuild unit ownership review
+LAST_ACCEPTED_COMMIT: `ecd544dfd` (Phase 14C14k code)
 WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; accepted code is committed; concurrent example-name work remains separately committed
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: unit-test ownership, pruning, compiler-stage boundaries, and final governance rules govern the next slice
-- code: all 235 retained tests across the reviewed Stage 0, frontend, builder-surface, build-boundary, output-cleanup, build-orchestration, project-check, and routing groups now have distinct owners; project CLI parsing is next
+- code: all 281 retained tests across the reviewed Stage 0, frontend, build-system, project-check, routing, and CLI groups now have distinct owners; dev-server watch and rebuild orchestration are next
 ACCEPTANCE_CRITERIA:
 - every remaining full-source unit has a distinct hidden invariant, parser fact, stage boundary, or policy owner
 - units superseded by a stronger canonical integration primary are deleted with replacement evidence
 - stale test-only helpers or production APIs are removed with their final caller
 - HIR, build-system, backend, and final TIR units keep only their owning semantic relationships and hidden facts
 VALIDATION_STATE:
-- `just validate`: passed; cross-target Clippy, 3,464 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
-- Phase 14C14j focused groups: passed; three project-check and nine routing-policy tests
+- `just validate`: passed; cross-target Clippy, 3,460 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
+- Phase 14C14k focused group: passed; 46 CLI parser and command-policy tests
 - Phase 14B audit: passed; zero hard findings; 66 backend-only and 15 adversarial-only primary-less contract advisories
 - Priya expectation alignment: accepted at `6efac7012`; 13 stale Rust and integration expectation files now match renamed inputs
 DOCS_IMPACT: testing, validation, and contributor workflow aligned with final suite policy; progress matrix and index unchanged
@@ -52,7 +52,7 @@ BLOCKERS_OR_OPEN_DECISIONS: none; 81 contract families without a primary are int
 DELEGATION_DECISION: Ollama — bounded Phase 14 implementation slices
 NEXT_WORKER_ORDER: Ollama only; no provider substitution
 STOP_REASON: none
-NEXT_RESUME_ACTION: launch the project CLI parser unit group through Ollama
+NEXT_RESUME_ACTION: launch the dev-server watch and rebuild unit group through Ollama
 
 ---
 
@@ -243,6 +243,7 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 14C14h build output cleanup and manifest units | `176c0ea95` | Accepted | Four cosmetic stale-layout and limited-safe-mode scenarios were removed in favor of stronger same-file stale managed/byte-asset removal and missing/unsupported/extension-mismatch preservation owners; 19 manifest classification, normalization, safe-mode, containment, stale deletion, parent-pruning, disabled-cleanup, recovery, and deterministic writer policy owners remain; 3,470 Rust tests and 1,793 integration executions |
 | Phase 14C14i build orchestration units | `f47fc6c50` | Accepted | Three source-shaped directory, custom-entry-root, and backend-bool-shape scenarios were removed in favor of canonical project output, Stage 0 discovery/config-shape, and focused HTML builder owners; the retained invalid `page_url_style` build seam now asserts the exact typed key/value payload instead of rendered wording; 14 build/result, validation-order, writer, mtime, cleanup, remapping, output-root, and typed config-lane owners remain; 3,467 Rust tests and 1,793 integration executions |
 | Phase 14C14j project check and routing units | `025c27554` | Accepted | Three weak directory-check, warning-count, and clean-message smokes were consolidated into the retained single-file zero-message/no-artifact owner and Phase 10's exact directory check/build parity owner; all nine routing tests remain and invalid origin, URL-style, and redirect settings now assert exact typed keys, values, reasons, and expected domains; 12 command-overlay, summary-format, routing-policy, diagnostic-location, and pure path-transform owners remain; 3,464 Rust tests and 1,793 integration executions |
+| Phase 14C14k project CLI parser units | `ecd544dfd` | Accepted | One duplicate missing-backend-value test and three same-family new/check flag and integration-exit pairs were consolidated into table-driven owners without losing command-local error families, exact flag ordering, public help/version spellings, selection/audit policy, or warning-container separation; 46 CLI parser and command-policy owners remain; 3,460 Rust tests and 1,793 integration executions |
 
 ---
 
@@ -1444,6 +1445,10 @@ Do not present lower counts or faster time as proof of correctness.
 | `check_tests::check_compiles_directory_project_without_writing_artifacts` | Directory-project check succeeds without emitting backend outputs | `check_and_build_frontends_produce_identical_diagnostics_and_check_writes_no_artifacts` with exact `dev`/`release`/`index.html` absence and authored-file count | `check_compiles_single_file_without_writing_artifacts` retains the distinct single-file command mode | `025c27554` |
 | `check_tests::check_collects_frontend_warnings_on_success` | Successful check preserves frontend warnings | `check_and_build_frontends_produce_identical_diagnostics_and_check_writes_no_artifacts` with an exact ordered three-warning identity sequence | none | `025c27554` |
 | `check_tests::check_reports_empty_messages_for_warning_free_success` | Warning-free check success returns no errors or warnings | `check_compiles_single_file_without_writing_artifacts`, strengthened to assert zero warnings and zero written artifacts | none | `025c27554` |
+| `cli_tests::tests_command_rejects_missing_backend_value` | Missing `--backend` value is rejected | `tests_command_rejects_missing_selection_values`, whose table includes `--backend` alongside every valued selection option | none | `ecd544dfd` |
+| `cli_tests::{new_html_command_rejects_release_flag,new_html_command_rejects_html_wasm_flag}` → `new_html_command_rejects_build_flags` | New-project parsing rejects build-only flags | one table-driven owner asserting `Unknown new flag` for both exact flags | per-command unknown and removed-warning flag owners remain separate | `ecd544dfd` |
+| `cli_tests::{check_command_rejects_unknown_flags,check_command_rejects_html_wasm_flag}` → `check_command_rejects_build_flags` | Check parsing rejects build-only flags | one table-driven owner asserting `Unknown check flag` for `--release` and `--html-wasm` | multiple-path and mixed-order check parsing remain separate | `ecd544dfd` |
+| `cli_tests::{integration_tests_exit_code_is_zero_when_suite_is_correct,integration_tests_exit_code_is_non_zero_when_suite_is_incorrect}` → `integration_tests_exit_code_reflects_suite_correctness` | Integration command exit status distinguishes correct and incorrect summaries | one owner asserts both helper branches with labelled summary values | none | `ecd544dfd` |
 
 ### Coverage gap and handoff ledger
 
