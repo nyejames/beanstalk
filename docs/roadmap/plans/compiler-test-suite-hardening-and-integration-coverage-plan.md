@@ -30,21 +30,21 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 14C15p TIR store-owned slot-overlay composition API ownership review
-LAST_ACCEPTED_COMMIT: `f3ac89d52` (Phase 14C15o code)
+CURRENT_SLICE: Phase 14C15q TIR production head-chain overlay ownership review
+LAST_ACCEPTED_COMMIT: `4335023aa` (Phase 14C15p code)
 WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; accepted code and plan checkpoint are committed; concurrent example-name work remains separately committed
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: unit-test ownership, pruning, compiler-stage boundaries, and final governance rules govern the next slice
-- code: all reviewed groups through slot-overlay materialization and view attachment have distinct owners; two structurally shaped overlay/context tests with unused causal results are removed; the three store-owned composition API tests are next, followed by the head-chain overlay group
+- code: all reviewed groups through the obsolete single-pair slot-overlay test seam are complete; its three self-tests, final-caller helper, re-export, and stale future-state comment are removed; the four production head-chain overlay tests are next
 ACCEPTANCE_CRITERIA:
 - every remaining full-source unit has a distinct hidden invariant, parser fact, stage boundary, or policy owner
 - units superseded by a stronger canonical integration primary are deleted with replacement evidence
 - stale test-only helpers or production APIs are removed with their final caller
 - HIR, build-system, backend, and final TIR units keep only their owning semantic relationships and hidden facts
 VALIDATION_STATE:
-- `just validate`: passed; cross-target Clippy, 3,349 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
-- Phase 14C15o focused group: passed; 59 slot-composition tests
+- `just validate`: passed; cross-target Clippy, 3,346 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
+- Phase 14C15p focused group: passed; 56 slot-composition tests
 - Phase 14B audit: passed; zero hard findings; 66 backend-only and 15 adversarial-only primary-less contract advisories
 - Priya expectation alignment: accepted at `6efac7012`; 13 stale Rust and integration expectation files now match renamed inputs
 DOCS_IMPACT: testing, validation, and contributor workflow aligned with final suite policy; progress matrix and index unchanged
@@ -52,7 +52,7 @@ BLOCKERS_OR_OPEN_DECISIONS: none; 81 contract families without a primary are int
 DELEGATION_DECISION: Ollama — bounded Phase 14 implementation slices
 NEXT_WORKER_ORDER: Ollama only; no provider substitution
 STOP_REASON: none
-NEXT_RESUME_ACTION: launch the three-test TIR store-owned slot-overlay composition API group through Ollama
+NEXT_RESUME_ACTION: launch the four-test TIR production head-chain overlay group through Ollama
 
 ---
 
@@ -264,6 +264,7 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 14C15m TIR head-chain units | `01d2aba3b` | Accepted | Three no-receiver/root-passthrough variants now use one exact original-root and head/body node-order owner, while the slot-less child-template owner separately protects the receiver-scan fast path and template identity; head/body fill routes share one exact cross-origin splice owner; nested and multiple receiver variants share one exact bottom-up chain-order owner with preserved wrapper boundary nodes; no-fill, named-slot, and mixed-root paths remain distinct; seven head-chain owners and 68 slot-composition tests remain; 3,354 Rust tests and 1,793 integration executions |
 | Phase 14C15n TIR child-wrapper/basic-overlay units and wrapper order | `1adaf9ea2` | Accepted | Five obsolete test-only child-filtering cases and two weaker overlay duplicates were removed in favor of the production body-root filter owner, exact per-child structural owners, and stronger view/store owners; the final callerless traversal, schema helper, and compatibility re-export were deleted; stronger distinct-wrapper coverage exposed and corrected reverse consumption of the authoritative innermost-to-outermost wrapper order across structural composition, folding, both owned-handoff shapes, and runtime slot planning; four focused cross-boundary regressions prove `outer(inner(child))`; five child-wrapper/basic-overlay owners and 61 slot-composition tests remain; 3,351 Rust tests and 1,793 integration executions |
 | Phase 14C15o TIR slot-overlay materialization and view-attachment units | `f3ac89d52` | Accepted | Named, positional, and repeated resolutions now assert exact occurrence identity, slot key, resolved kind, source identity, and store-owned source content; view attachment asserts the one-dimensional context and effective lookup boundary; two structural-expansion tests whose overlay/context results were unused were removed in favor of the exact six-node expansion owner; four overlay/view owners and 59 slot-composition tests remain; 3,349 Rust tests and 1,793 integration executions |
+| Phase 14C15p TIR single-pair slot-overlay test seam | `4335023aa` | Accepted | All three tests exercised only a `#[cfg(test)]` wrapper around already-covered routing, overlay materialization, and view-context primitives; the tests, final-caller wrapper, re-export/import, section prose, and stale future-state comment were removed; production remains owned by head-chain composition and merged overlay allocation; 56 slot-composition tests remain; 3,346 Rust tests and 1,793 integration executions |
 
 ---
 
@@ -1506,6 +1507,7 @@ Do not present lower counts or faster time as proof of correctness.
 | `slot_composition_tests::{single_receiver_with_body_fill,single_receiver_with_head_fill}` consolidated | One receiver routes head-origin and body-origin fill into its default slot | `slot_composition_tests::single_receiver_routes_head_and_body_fill_in_authored_order`, with exact contribution node identity and cross-origin order | none | `01d2aba3b` |
 | `slot_composition_tests::{nested_receivers,multiple_receivers_in_sequence}` consolidated | Head receivers resolve bottom-up while multiple body fills accumulate in the deepest active layer | `slot_composition_tests::nested_receivers_route_multiple_fills_in_chain_order`, with exact fill order and preserved outer boundary nodes | none | `01d2aba3b` |
 | `slot_composition_tests::{overlay_materialization_preserves_structural_expansion,view_context_attachment_preserves_structural_expansion}` | Slot overlay allocation and context construction do not alter structural placeholder expansion | `slot_composition_tests::expand_preserves_non_slot_nodes`, which asserts the exact six-node output identity/order and the exact spliced contribution | `overlay_materializes_{named_slot_resolution,positional_slot_resolution,repeated_slot_sharing_source_list}` and `attach_view_context_carries_slot_resolution` retain the distinct overlay payload and view-read boundaries | `f3ac89d52` |
+| `slot_composition_tests::compose_tir_slot_resolution_context_{default_slot_matches_manual_sequence,named_slot_attaches_resolution,preserves_structural_expansion}` and the final-caller `compose_tir_slot_resolution_context` helper | A test-only single-pair wrapper bundled routing, overlay materialization, and context attachment | Production `compose_tir_head_chain_with_overlays` plus `allocate_slot_resolution_context`; accepted primitive overlay/view tests own the exact payload and one-dimensional context facts | `expand_preserves_non_slot_nodes` retains exact structural expansion independently | `4335023aa` |
 
 ### Coverage gap and handoff ledger
 
