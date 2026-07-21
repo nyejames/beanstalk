@@ -99,6 +99,39 @@ mod non_utf8_filesystem_identity {
     }
 
     #[test]
+    fn facade_discovery_rejects_non_utf8_direct_child_of_project_root() {
+        let root = temp_dir("facade_non_utf8_child");
+        let entry_root = root.join("src");
+        fs::create_dir_all(&entry_root).expect("should create entry root");
+        fs::write(entry_root.join("#page.bst"), "").expect("should write entry root");
+
+        // A non-UTF-8 named direct child of the project root must not be silently skipped while
+        // scanning for the optional project package facade.
+        let bad_name = OsString::from_vec(vec![0xC3, 0x28]);
+        let bad_file = root.join(bad_name);
+        fs::write(&bad_file, "x ~= 1\n").expect("should write non-UTF-8 named file");
+
+        let mut config = Config::new(root.clone());
+        config.entry_root = PathBuf::from("src");
+        let canonical_root = fs::canonicalize(&root).expect("project root should canonicalize");
+        let canonical_entry_root =
+            fs::canonicalize(&entry_root).expect("entry root should canonicalize");
+        let mut string_table = StringTable::new();
+
+        let messages = super::source_tree_index::SourceTreeIndex::discover(
+            canonical_entry_root,
+            &canonical_root,
+            &config,
+            &crate::builder_surface::SourcePackageRegistry::default(),
+            &mut string_table,
+        )
+        .expect_err("non-UTF-8 project-root child should be rejected during facade discovery");
+
+        assert_file_infrastructure_error(&messages);
+        fs::remove_dir_all(&root).expect("should remove temp root");
+    }
+
+    #[test]
     fn collision_detection_rejects_non_utf8_name() {
         let root = temp_dir("collision_non_utf8_name");
         let package_root = root.join("pkg");
@@ -531,5 +564,574 @@ mod non_utf8_hash_root_candidate_tests {
 
         assert_non_utf8_file_error(&messages);
         fs::remove_dir_all(&root).expect("should remove temp root");
+    }
+}
+
+/// Phase 2a module-identity and structural-ancestry tests.
+///
+/// These tests exercise hidden Stage 0 invariants that integration output cannot inspect:
+/// deterministic `ModuleId` ordering by canonical logical path, cosmetic root-filename
+/// independence, explicit root roles, structural ancestry and project package facade separation.
+mod module_identity_tests {
+    use super::module_identity::{
+        ModuleIdentityTable, ModuleRootRole, module_root_role_for_file_name,
+    };
+    use super::*;
+    use crate::builder_surface::SourcePackageRegistry;
+    use std::path::PathBuf;
+
+    fn discover_index(
+        root: &std::path::Path,
+        entry_root_relative: &str,
+    ) -> (
+        super::source_tree_index::SourceTreeIndex,
+        std::path::PathBuf,
+        std::path::PathBuf,
+    ) {
+        let entry_root = root.join(entry_root_relative);
+        fs::create_dir_all(&entry_root).expect("should create entry root");
+
+        let mut config = Config::new(root.to_path_buf());
+        config.entry_root = PathBuf::from(entry_root_relative);
+        let canonical_root = fs::canonicalize(root).expect("project root should canonicalize");
+        let canonical_entry_root =
+            fs::canonicalize(&entry_root).expect("entry root should canonicalize");
+        let mut string_table = StringTable::new();
+
+        let index = super::source_tree_index::SourceTreeIndex::discover(
+            canonical_entry_root.clone(),
+            &canonical_root,
+            &config,
+            &SourcePackageRegistry::default(),
+            &mut string_table,
+        )
+        .expect("source tree index should build");
+
+        (index, canonical_root, canonical_entry_root)
+    }
+
+    #[test]
+    fn assigns_module_ids_in_canonical_logical_path_order() {
+        let root = temp_dir("module_id_canonical_order");
+        let src = root.join("src");
+        fs::create_dir_all(src.join("zeta")).expect("should create zeta");
+        fs::create_dir_all(src.join("alpha")).expect("should create alpha");
+        fs::create_dir_all(src.join("alpha/inner")).expect("should create alpha/inner");
+
+        fs::write(src.join("#home.bst"), "").expect("should write entry root");
+        fs::write(src.join("zeta/#page.bst"), "").expect("should write zeta root");
+        fs::write(src.join("alpha/#mod.bst"), "").expect("should write alpha root");
+        fs::write(src.join("alpha/inner/#page.bst"), "").expect("should write inner root");
+
+        let (index, _project_root, entry_root) = discover_index(&root, "src");
+        let table = index.module_identities();
+
+        let logical_paths: Vec<&std::path::Path> = table
+            .module_ids()
+            .map(|id| table.record(id).logical_module_path())
+            .collect();
+
+        assert_eq!(
+            logical_paths,
+            vec![
+                std::path::Path::new(""),
+                std::path::Path::new("alpha"),
+                std::path::Path::new("alpha/inner"),
+                std::path::Path::new("zeta"),
+            ],
+            "ModuleId order should follow canonical logical paths, not traversal order"
+        );
+
+        let entry_root_id = table
+            .module_id_for_directory(&entry_root)
+            .expect("entry root should have a module id");
+        assert_eq!(table.record(entry_root_id).role(), ModuleRootRole::Normal);
+
+        fs::remove_dir_all(&root).expect("should remove temp root");
+    }
+
+    #[test]
+    fn module_root_role_classifier_maps_filename_markers_to_roles() {
+        assert_eq!(
+            module_root_role_for_file_name("#page.bst"),
+            Some(ModuleRootRole::Normal)
+        );
+        assert_eq!(
+            module_root_role_for_file_name("+pkg.bst"),
+            Some(ModuleRootRole::Support)
+        );
+        assert_eq!(module_root_role_for_file_name("page.bst"), None);
+        assert_eq!(module_root_role_for_file_name("config.bst"), None);
+        assert_eq!(module_root_role_for_file_name("+.bst"), None);
+        assert_eq!(module_root_role_for_file_name("#.bst"), None);
+    }
+
+    #[test]
+    fn module_identity_is_independent_of_cosmetic_root_filename_suffix() {
+        let root = temp_dir("module_id_cosmetic_suffix");
+        let src = root.join("src");
+        fs::create_dir_all(src.join("page")).expect("should create page module");
+        fs::create_dir_all(src.join("other")).expect("should create sibling module");
+
+        fs::write(src.join("#home.bst"), "").expect("should write entry root");
+        fs::write(src.join("page/#mod.bst"), "").expect("should write mod-named root");
+        fs::write(src.join("other/#page.bst"), "").expect("should write sibling root");
+
+        let (index, _project_root, _entry_root) = discover_index(&root, "src");
+        let table = index.module_identities();
+
+        let page_dir = fs::canonicalize(src.join("page")).expect("page dir should canonicalize");
+        let other_dir = fs::canonicalize(src.join("other")).expect("other dir should canonicalize");
+        let page_id = table
+            .module_id_for_directory(&page_dir)
+            .expect("page module should have an id");
+        let other_id = table
+            .module_id_for_directory(&other_dir)
+            .expect("other module should have an id");
+
+        assert_eq!(
+            table.record(page_id).logical_module_path(),
+            std::path::Path::new("page")
+        );
+        // A sibling module is present so ModuleId ordering is non-trivial: the entry root,
+        // `other` and `page` receive identities in canonical logical path order.
+        assert_ne!(page_id, other_id, "page and other must have distinct ids");
+
+        // Rewrite the same module with a cosmetic #page.bst name and confirm the ModuleId value
+        // (not only the logical path text) is unchanged across rediscovery with the sibling
+        // still present.
+        drop(index);
+        fs::remove_file(src.join("page/#mod.bst")).expect("should remove mod root");
+        fs::write(src.join("page/#page.bst"), "").expect("should write page-named root");
+
+        let (index_two, _project_root_two, _entry_root_two) = discover_index(&root, "src");
+        let table_two = index_two.module_identities();
+        let page_id_two = table_two
+            .module_id_for_directory(&page_dir)
+            .expect("page module should still have an id");
+        let other_id_two = table_two
+            .module_id_for_directory(&other_dir)
+            .expect("other module should still have an id");
+
+        assert_eq!(
+            table_two.record(page_id_two).logical_module_path(),
+            std::path::Path::new("page"),
+        );
+        assert_eq!(
+            page_id_two, page_id,
+            "ModuleId must be stable across cosmetic root-filename changes with a sibling present"
+        );
+        assert_eq!(
+            other_id_two, other_id,
+            "sibling ModuleId must also be stable across the cosmetic rename"
+        );
+
+        fs::remove_dir_all(&root).expect("should remove temp root");
+    }
+
+    #[test]
+    fn records_explicit_root_roles_for_normal_and_support_roots() {
+        let root = temp_dir("module_root_roles");
+        let src = root.join("src");
+        fs::create_dir_all(src.join("page")).expect("should create page module");
+        fs::create_dir_all(src.join("components")).expect("should create support module");
+
+        fs::write(src.join("page/#page.bst"), "").expect("should write normal root");
+        fs::write(src.join("components/+ui.bst"), "").expect("should write support root");
+
+        let (index, _project_root, _entry_root) = discover_index(&root, "src");
+        let table = index.module_identities();
+
+        let page_dir = fs::canonicalize(src.join("page")).expect("page dir should canonicalize");
+        let support_dir =
+            fs::canonicalize(src.join("components")).expect("support dir should canonicalize");
+
+        let page_id = table
+            .module_id_for_directory(&page_dir)
+            .expect("page module should have an id");
+        let support_id = table
+            .module_id_for_directory(&support_dir)
+            .expect("support module should have an id");
+
+        assert_eq!(table.record(page_id).role(), ModuleRootRole::Normal);
+        assert_eq!(table.record(support_id).role(), ModuleRootRole::Support);
+
+        // Only normal roots are entry candidates. Assert against the canonical root-file paths
+        // so the support-root exclusion is genuinely protected, not just a filename-stem check.
+        let page_root_file = fs::canonicalize(src.join("page/#page.bst"))
+            .expect("page root file should canonicalize");
+        let support_root_file = fs::canonicalize(src.join("components/+ui.bst"))
+            .expect("support root file should canonicalize");
+        let entry_candidates: Vec<&std::path::Path> = index
+            .entry_candidates()
+            .iter()
+            .map(std::path::Path::new)
+            .collect();
+        assert!(
+            entry_candidates.contains(&page_root_file.as_path()),
+            "normal root {page_root_file:?} should be an entry candidate: {entry_candidates:?}"
+        );
+        assert!(
+            !entry_candidates.contains(&support_root_file.as_path()),
+            "support root {support_root_file:?} must not be an entry candidate: {entry_candidates:?}"
+        );
+
+        fs::remove_dir_all(&root).expect("should remove temp root");
+    }
+
+    #[test]
+    fn records_structural_ancestry_by_nearest_module_containment() {
+        let root = temp_dir("module_ancestry");
+        let src = root.join("src");
+        fs::create_dir_all(src.join("outer/inner")).expect("should create nested modules");
+        fs::write(src.join("#page.bst"), "").expect("should write entry root");
+        fs::write(src.join("outer/#mod.bst"), "").expect("should write outer root");
+        fs::write(src.join("outer/inner/#page.bst"), "").expect("should write inner root");
+
+        let (index, _project_root, entry_root) = discover_index(&root, "src");
+        let table = index.module_identities();
+
+        let outer_dir = fs::canonicalize(src.join("outer")).expect("outer dir should canonicalize");
+        let inner_dir =
+            fs::canonicalize(src.join("outer/inner")).expect("inner dir should canonicalize");
+
+        let entry_id = table
+            .module_id_for_directory(&entry_root)
+            .expect("entry root should have an id");
+        let outer_id = table
+            .module_id_for_directory(&outer_dir)
+            .expect("outer module should have an id");
+        let inner_id = table
+            .module_id_for_directory(&inner_dir)
+            .expect("inner module should have an id");
+
+        assert_eq!(table.nearest_ancestor_module(entry_id), None);
+        assert_eq!(table.nearest_ancestor_module(outer_id), Some(entry_id));
+        assert_eq!(table.nearest_ancestor_module(inner_id), Some(outer_id));
+
+        let entry_children: Vec<_> = table.direct_child_modules(entry_id).to_vec();
+        assert!(
+            entry_children.contains(&outer_id),
+            "outer should be a child of entry root"
+        );
+        let outer_children: Vec<_> = table.direct_child_modules(outer_id).to_vec();
+        assert_eq!(
+            outer_children,
+            vec![inner_id],
+            "inner should be the only child of outer"
+        );
+        assert!(
+            table.direct_child_modules(inner_id).is_empty(),
+            "inner should have no children"
+        );
+
+        fs::remove_dir_all(&root).expect("should remove temp root");
+    }
+
+    #[test]
+    fn support_roots_participate_in_structural_ancestry() {
+        let root = temp_dir("module_support_ancestry");
+        let src = root.join("src");
+        fs::create_dir_all(src.join("page/components")).expect("should create modules");
+        fs::write(src.join("page/#page.bst"), "").expect("should write normal root");
+        fs::write(src.join("page/components/+ui.bst"), "").expect("should write support root");
+
+        let (index, _project_root, _entry_root) = discover_index(&root, "src");
+        let table = index.module_identities();
+
+        let page_dir = fs::canonicalize(src.join("page")).expect("page dir should canonicalize");
+        let support_dir =
+            fs::canonicalize(src.join("page/components")).expect("support dir should canonicalize");
+
+        let page_id = table
+            .module_id_for_directory(&page_dir)
+            .expect("page module should have an id");
+        let support_id = table
+            .module_id_for_directory(&support_dir)
+            .expect("support module should have an id");
+
+        assert_eq!(
+            table.nearest_ancestor_module(support_id),
+            Some(page_id),
+            "support root's nearest ancestor should be the enclosing normal module"
+        );
+
+        fs::remove_dir_all(&root).expect("should remove temp root");
+    }
+
+    #[test]
+    fn discovers_project_package_facade_outside_entry_root_containment() {
+        let root = temp_dir("module_facade_separation");
+        let src = root.join("src");
+        fs::create_dir_all(&src).expect("should create entry root");
+        fs::write(src.join("#page.bst"), "").expect("should write entry module");
+        fs::write(root.join("+package.bst"), "").expect("should write project facade");
+
+        let (index, project_root, _entry_root) = discover_index(&root, "src");
+        let table = index.module_identities();
+
+        let facade_dir = project_root;
+        let facade_id = table
+            .module_id_for_directory(&facade_dir)
+            .expect("facade should have a module id");
+        assert_eq!(
+            table.record(facade_id).role(),
+            ModuleRootRole::ProjectPackageFacade,
+        );
+
+        // The facade is outside the entry-root containment tree.
+        assert_eq!(
+            table.nearest_ancestor_module(facade_id),
+            None,
+            "facade must have no ancestor"
+        );
+        assert!(
+            table.direct_child_modules(facade_id).is_empty(),
+            "facade must have no children"
+        );
+
+        // The facade is not an entry candidate. Assert against the canonical facade and entry
+        // root-file paths so the exclusion is genuinely protected, not just a filename-stem check.
+        let facade_root_file = fs::canonicalize(root.join("+package.bst"))
+            .expect("facade root file should canonicalize");
+        let entry_root_file =
+            fs::canonicalize(src.join("#page.bst")).expect("entry root file should canonicalize");
+        let entry_candidates: Vec<&std::path::Path> = index
+            .entry_candidates()
+            .iter()
+            .map(std::path::Path::new)
+            .collect();
+        assert!(
+            entry_candidates.contains(&entry_root_file.as_path()),
+            "entry module {entry_root_file:?} should be an entry candidate: {entry_candidates:?}"
+        );
+        assert!(
+            !entry_candidates.contains(&facade_root_file.as_path()),
+            "facade {facade_root_file:?} must not be an entry candidate: {entry_candidates:?}"
+        );
+
+        assert!(
+            index.stats().project_package_facade_found,
+            "facade discovery should be recorded in stats"
+        );
+
+        fs::remove_dir_all(&root).expect("should remove temp root");
+    }
+
+    #[test]
+    fn missing_project_root_surfaces_file_error_not_missing_facade() {
+        let root = temp_dir("facade_missing_project_root");
+        let entry_root = root.join("src");
+        fs::create_dir_all(&entry_root).expect("should create entry root");
+        fs::write(entry_root.join("#page.bst"), "").expect("should write entry root");
+
+        let mut config = Config::new(root.clone());
+        config.entry_root = PathBuf::from("src");
+        let canonical_entry_root =
+            fs::canonicalize(&entry_root).expect("entry root should canonicalize");
+        let missing_project_root = root.join("does_not_exist");
+        let mut string_table = StringTable::new();
+
+        let messages = super::source_tree_index::SourceTreeIndex::discover(
+            canonical_entry_root,
+            &missing_project_root,
+            &config,
+            &SourcePackageRegistry::default(),
+            &mut string_table,
+        )
+        .expect_err("missing project root should surface a file error, not a missing facade");
+
+        assert_file_infrastructure_error(&messages, "discovering package facade");
+
+        fs::remove_dir_all(&root).expect("should remove temp root");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unreadable_project_root_surfaces_file_error_not_missing_facade() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = temp_dir("facade_unreadable_project_root");
+        let entry_root = root.join("src");
+        fs::create_dir_all(&entry_root).expect("should create entry root");
+        fs::write(entry_root.join("#page.bst"), "").expect("should write entry root");
+
+        let mut config = Config::new(root.clone());
+        config.entry_root = PathBuf::from("src");
+        let canonical_root = fs::canonicalize(&root).expect("project root should canonicalize");
+        let canonical_entry_root =
+            fs::canonicalize(&entry_root).expect("entry root should canonicalize");
+
+        // Drop read permission so facade discovery cannot read the project root directory.
+        // Execute permission is retained so the earlier canonicalization already succeeded.
+        fs::set_permissions(&root, fs::Permissions::from_mode(0o300))
+            .expect("should drop read permission");
+
+        let mut string_table = StringTable::new();
+        let messages = super::source_tree_index::SourceTreeIndex::discover(
+            canonical_entry_root,
+            &canonical_root,
+            &config,
+            &SourcePackageRegistry::default(),
+            &mut string_table,
+        )
+        .expect_err("unreadable project root should surface a file error, not a missing facade");
+
+        assert_file_infrastructure_error(&messages, "discovering package facade");
+
+        // Restore permissions so cleanup can remove the directory.
+        fs::set_permissions(&root, fs::Permissions::from_mode(0o755))
+            .expect("should restore permissions");
+        fs::remove_dir_all(&root).expect("should remove temp root");
+    }
+
+    fn assert_file_infrastructure_error(messages: &CompilerMessages, expected_text: &str) {
+        use crate::compiler_frontend::compiler_errors::ErrorType;
+
+        let (error_type, message, _location) = messages
+            .first_infrastructure_error_for_tests()
+            .expect("expected an infrastructure file error");
+        assert_eq!(
+            *error_type,
+            ErrorType::File,
+            "project root read failure should be a File infrastructure error"
+        );
+        assert!(
+            message.contains(expected_text),
+            "error message should mention {expected_text:?}: {message}"
+        );
+    }
+
+    #[test]
+    fn facade_outside_entry_root_is_not_classified_as_a_support_root() {
+        let root = temp_dir("module_facade_not_support");
+        let src = root.join("src");
+        fs::create_dir_all(&src).expect("should create entry root");
+        fs::write(src.join("#page.bst"), "").expect("should write entry module");
+        fs::write(root.join("+package.bst"), "").expect("should write project facade");
+
+        let (index, _project_root, _entry_root) = discover_index(&root, "src");
+        let table = index.module_identities();
+
+        let support_count = table
+            .module_ids()
+            .filter(|id| table.record(*id).role() == ModuleRootRole::Support)
+            .count();
+        assert_eq!(
+            support_count, 0,
+            "facade outside entry root must not be a support root"
+        );
+
+        let facade_count = table
+            .module_ids()
+            .filter(|id| table.record(*id).role() == ModuleRootRole::ProjectPackageFacade)
+            .count();
+        assert_eq!(facade_count, 1, "exactly one facade should be discovered");
+
+        fs::remove_dir_all(&root).expect("should remove temp root");
+    }
+
+    #[test]
+    fn rejects_multiple_hash_roots_in_one_directory() {
+        let root = temp_dir("module_multiple_hash_roots");
+        let src = root.join("src");
+        fs::create_dir_all(&src).expect("should create entry root");
+        fs::write(src.join("#page.bst"), "").expect("should write first root");
+        fs::write(src.join("#mod.bst"), "").expect("should write second root");
+
+        let entry_root = root.join("src");
+        let mut config = Config::new(root.clone());
+        config.entry_root = PathBuf::from("src");
+        let canonical_root = fs::canonicalize(&root).expect("project root should canonicalize");
+        let canonical_entry_root =
+            fs::canonicalize(&entry_root).expect("entry root should canonicalize");
+        let mut string_table = StringTable::new();
+
+        let messages = super::source_tree_index::SourceTreeIndex::discover(
+            canonical_entry_root,
+            &canonical_root,
+            &config,
+            &SourcePackageRegistry::default(),
+            &mut string_table,
+        )
+        .expect_err("multiple hash roots should be rejected");
+
+        assert_eq!(first_diagnostic_code(&messages), "BST-CONFIG-0001");
+
+        fs::remove_dir_all(&root).expect("should remove temp root");
+    }
+
+    #[test]
+    fn rejects_mixed_normal_and_support_roots_in_one_directory() {
+        let root = temp_dir("module_mixed_roots");
+        let src = root.join("src");
+        fs::create_dir_all(&src).expect("should create entry root");
+        fs::write(src.join("#page.bst"), "").expect("should write normal root");
+        fs::write(src.join("+pkg.bst"), "").expect("should write support root");
+
+        let entry_root = root.join("src");
+        let mut config = Config::new(root.clone());
+        config.entry_root = PathBuf::from("src");
+        let canonical_root = fs::canonicalize(&root).expect("project root should canonicalize");
+        let canonical_entry_root =
+            fs::canonicalize(&entry_root).expect("entry root should canonicalize");
+        let mut string_table = StringTable::new();
+
+        let messages = super::source_tree_index::SourceTreeIndex::discover(
+            canonical_entry_root,
+            &canonical_root,
+            &config,
+            &SourcePackageRegistry::default(),
+            &mut string_table,
+        )
+        .expect_err("mixed normal and support roots should be rejected");
+
+        assert_eq!(first_diagnostic_code(&messages), "BST-CONFIG-0001");
+
+        fs::remove_dir_all(&root).expect("should remove temp root");
+    }
+
+    #[test]
+    fn rejects_multiple_support_roots_in_one_directory() {
+        let root = temp_dir("module_multiple_support_roots");
+        let src = root.join("src");
+        fs::create_dir_all(src.join("pkg")).expect("should create support directory");
+        fs::write(src.join("pkg/+one.bst"), "").expect("should write first support root");
+        fs::write(src.join("pkg/+two.bst"), "").expect("should write second support root");
+
+        let entry_root = root.join("src");
+        let mut config = Config::new(root.clone());
+        config.entry_root = PathBuf::from("src");
+        let canonical_root = fs::canonicalize(&root).expect("project root should canonicalize");
+        let canonical_entry_root =
+            fs::canonicalize(&entry_root).expect("entry root should canonicalize");
+        let mut string_table = StringTable::new();
+
+        let messages = super::source_tree_index::SourceTreeIndex::discover(
+            canonical_entry_root,
+            &canonical_root,
+            &config,
+            &SourcePackageRegistry::default(),
+            &mut string_table,
+        )
+        .expect_err("multiple support roots should be rejected");
+
+        assert_eq!(first_diagnostic_code(&messages), "BST-CONFIG-0001");
+
+        fs::remove_dir_all(&root).expect("should remove temp root");
+    }
+
+    #[test]
+    fn empty_table_has_no_identities_or_ancestry() {
+        let table = ModuleIdentityTable::empty();
+        assert_eq!(table.module_ids().count(), 0);
+    }
+
+    fn first_diagnostic_code(messages: &CompilerMessages) -> String {
+        let diagnostic = messages
+            .error_diagnostics()
+            .next()
+            .expect("expected at least one typed error diagnostic");
+        diagnostic.kind.code().to_owned()
     }
 }

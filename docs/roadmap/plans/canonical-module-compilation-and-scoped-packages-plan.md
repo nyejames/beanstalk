@@ -9,28 +9,27 @@ Replace entry-closure compilation with canonical project and package graphs, imm
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/canonical-module-compilation-and-scoped-packages-plan.md
 STATUS: active
-CURRENT_SLICE: Phase 2a - deterministic module identities, root roles and structural ancestry
-LAST_ACCEPTED_COMMIT: none
-WORKTREE: main at 3be652bd230dd5c64d90d63fa2348651ceea4b4b; clean before this plan refresh; unrelated user documentation work may appear and must be preserved
+CURRENT_SLICE: Phase 2a accepted; checkpoint commit pending
+LAST_ACCEPTED_COMMIT: bb65c5303310e73480d0ff4aee7b422fd119d9f9 (Phase 1 owner refresh)
+WORKTREE: main at bb65c5303310e73480d0ff4aee7b422fd119d9f9 with the accepted Phase 2a code, tests and this plan update; unrelated user documentation work may appear and must be preserved
 REQUIRED_RELOADS: startup files, this plan, relevant language/import and borrow references, current source and diff
 RELEVANT_CONTEXT_NOW:
 - docs: compiler-design-overview.md stable identities; build-system-design.md source indexing and topology
-- code: source_tree_index.rs, paths/module_roots.rs and project_roots.rs own current root discovery and lookup
+- code: module_identity.rs is the Stage 0 durable identity/topology owner; source_tree_index.rs builds it; paths/module_roots.rs remains a derived normal-root-only frontend lookup
 ACCEPTANCE_CRITERIA:
-- deterministic ModuleId assignment uses canonical logical path order and ignores cosmetic root suffixes
-- normal, support and project-facade root roles are explicit
-- nearest structural parent and direct-child relationships are represented and tested
-- no entry-closure, package-scope or backend migration is pulled into this slice
+- Phase 2a diff and architecture audit are accepted
+- progress matrix remains unchanged because user-visible support has not changed
+- stage only the seven Phase 2a code/test files and this plan update
 VALIDATION_STATE:
-- cargo fmt: not run; no Rust changes yet
-- just validate: not run; first code-bearing slice pending
-- cargo run --quiet -- build docs --release: passed after the Phase 1 plan refresh
+- cargo fmt: passed
+- targeted module identity/source tree tests and cargo check --tests: passed
+- just validate: passed; cross-target Clippy, 3374 Rust tests, 1793 integration cases, docs check and 28/28 benchmark cases
 DOCS_IMPACT: plan state only; progress matrix unchanged
 BLOCKERS_OR_OPEN_DECISIONS: none
 DELEGATION_DECISION: ollama - user requires Ollama for every worker slice
 NEXT_WORKER_ORDER: ollama only; no provider substitution for this run
 STOP_REASON: none
-NEXT_RESUME_ACTION: launch the Phase 2a implementation slice through the reviewed Ollama wrapper
+NEXT_RESUME_ACTION: commit Phase 2a, record its hash, then scope Phase 2b declaration identities
 ```
 
 ## Hard prerequisites
@@ -260,6 +259,17 @@ See `docs/compiler-design-overview.md` "Stable semantic identities" and "Type id
 - Record the nearest ancestor module as structural parent and direct child modules by nearest-module ancestry.
 - Represent the optional project facade as a special node outside the entry-root containment tree.
 - Keep module identity independent of root suffix text (the suffix after `#` or `+` is cosmetic).
+
+Accepted Phase 2a checkpoint:
+
+- `module_identity.rs` is the Stage 0 owner of deterministic `ModuleId`, root roles, logical
+  module paths and nearest-module ancestry.
+- `SourceTreeIndex` builds the durable identity table and derives the existing normal-root-only
+  frontend resolver table from it, so support and facade discovery does not change current import
+  behaviour.
+- normal, support and project-facade roles, cosmetic suffix stability, ancestry, entry-candidate
+  exclusion and facade filesystem failures have focused subsystem coverage.
+- stable exported declaration identities remain for Phase 2b.
 
 ### Phase 3: Build canonical source indexes and owned or semantic source sets
 

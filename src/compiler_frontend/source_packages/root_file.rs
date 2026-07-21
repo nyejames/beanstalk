@@ -91,6 +91,23 @@ pub(crate) fn file_name_is_hash_root_file(file_name: &str) -> bool {
     !root_name.is_empty()
 }
 
+/// Whether a filesystem filename is a `+*.bst` support root file.
+pub(crate) fn file_name_is_support_root_file(file_name: &str) -> bool {
+    let Some(root_name) = file_name.strip_prefix('+') else {
+        return false;
+    };
+    let Some(root_name) = root_name.strip_suffix(".bst") else {
+        return false;
+    };
+
+    !root_name.is_empty()
+}
+
+/// Whether a filesystem filename is any canonical Beanstalk module root (`#*.bst` or `+*.bst`).
+pub(crate) fn file_name_is_module_root_file(file_name: &str) -> bool {
+    file_name_is_hash_root_file(file_name) || file_name_is_support_root_file(file_name)
+}
+
 /// Discover direct-child Beanstalk hash roots without assigning a semantic filename role.
 ///
 /// WHAT: applies the generic `#*.bst` filename policy to one source-backed package directory.

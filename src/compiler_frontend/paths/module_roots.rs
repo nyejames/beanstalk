@@ -1,18 +1,19 @@
 //! Prepared module-root lookup data for project-aware path resolution.
 //!
-//! WHAT: stores the canonical module-root records prepared by Stage 0 and provides nearest-root
-//! lookups for the frontend.
-//! WHY: filesystem traversal belongs to the build system. The frontend consumes this table
-//! without discovering project structure during resolver construction.
+//! WHAT: stores the canonical normal module-root records prepared by Stage 0 and provides
+//! nearest-root lookups for the frontend resolver.
+//! WHY: filesystem discovery and durable module identity belong to Stage 0. The frontend
+//! consumes this narrow lookup table without discovering project structure or owning module
+//! identity, roles or ancestry.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-/// Stable identity for one prepared module-root record.
+/// Internal index for one prepared normal module-root record.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub(crate) struct ModuleRootId(usize);
+struct ModuleRootId(usize);
 
-/// One canonical hash-root file and its containing module directory.
+/// One canonical normal module root and its containing directory.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct ModuleRootRecord {
     root_directory: PathBuf,
@@ -28,8 +29,11 @@ impl ModuleRootRecord {
     }
 }
 
-/// Prepared module-root records and indexes used by path resolution.
+/// Prepared normal module-root records and indexes used by path resolution.
 ///
+/// Stage 0 builds this table from the normal roots of its durable module identity table. Support
+/// and facade roots stay out of this table so import resolution and header-role lookup are
+/// unchanged by Phase 2 identity work.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct ModuleRootTable {
     records: Vec<ModuleRootRecord>,

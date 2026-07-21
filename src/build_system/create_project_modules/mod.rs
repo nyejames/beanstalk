@@ -6,6 +6,7 @@
 //! - `source_package_discovery` — project-local source-backed package scanning and prefix-merge checks
 //! - `root_validation`          — source-backed package generic hash-root preflight
 //! - `source_tree_index`        — one directory-project source-tree traversal with collision checks
+//! - `module_identity`          — Stage 0 durable module identity and structural topology
 //! - `module_inventory`         — project-level module assembly
 //! - `reachable_file_discovery` — BFS traversal over import graphs
 //! - `import_scanning`          — per-file import path extraction
@@ -20,6 +21,7 @@ mod collision_detection;
 mod compilation;
 mod frontend_orchestration;
 pub(crate) mod import_scanning;
+mod module_identity;
 mod module_inventory;
 mod project_roots;
 mod project_structure_diagnostics;

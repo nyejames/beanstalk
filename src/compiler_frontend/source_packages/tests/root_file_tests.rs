@@ -1,8 +1,9 @@
 use super::root_file::{
     HashRootFileDiscovery, PreparedSourcePackageRoots, discover_hash_root_file,
-    file_name_is_config_file, file_name_is_hash_root_file,
-    hash_root_file_name_from_import_component, import_component_is_hash_root_file,
-    import_path_references_config_file, import_path_references_hash_root_file,
+    file_name_is_config_file, file_name_is_hash_root_file, file_name_is_module_root_file,
+    file_name_is_support_root_file, hash_root_file_name_from_import_component,
+    import_component_is_hash_root_file, import_path_references_config_file,
+    import_path_references_hash_root_file,
 };
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -200,4 +201,17 @@ fn rejects_non_utf8_direct_child_filename_with_the_offending_path() {
         path, bad_file,
         "the offending path should be preserved in the typed error"
     );
+}
+
+#[test]
+fn classifies_only_plus_prefixed_beanstalk_filenames_as_support_roots() {
+    assert!(file_name_is_support_root_file("+pkg.bst"));
+    assert!(file_name_is_support_root_file("+anything.bst"));
+    assert!(!file_name_is_support_root_file("#home.bst"));
+    assert!(!file_name_is_support_root_file("pkg.bst"));
+    assert!(!file_name_is_support_root_file("+pkg.js"));
+    assert!(!file_name_is_support_root_file("+.bst"));
+    assert!(file_name_is_module_root_file("#home.bst"));
+    assert!(file_name_is_module_root_file("+pkg.bst"));
+    assert!(!file_name_is_module_root_file("home.bst"));
 }
