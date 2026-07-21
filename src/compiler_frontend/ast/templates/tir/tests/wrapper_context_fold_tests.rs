@@ -982,7 +982,8 @@ fn wrapper_context_overlay_honors_fresh_suppression() {
 }
 
 #[test]
-fn prepared_fold_applies_if_child_emits_wrapper_when_child_outputs() {
+fn prepared_fold_applies_if_child_emits_only_when_the_child_emits_output() {
+    // A child that structurally outputs receives the inherited wrapper.
     let mut string_table = StringTable::new();
     let fixture = build_wrapper_context_fixture(
         &mut string_table,
@@ -995,19 +996,19 @@ fn prepared_fold_applies_if_child_emits_wrapper_when_child_outputs() {
     );
     let emission = fold_fixture(&fixture, &mut string_table);
     let TemplateEmission::Output(output_id) = emission else {
-        panic!("expected Output emission, got {:?}", emission);
+        panic!(
+            "expected Output emission for an emitting child, got {:?}",
+            emission
+        );
     };
     assert_eq!(
         string_table.resolve(output_id),
         "beforechildafter",
         "IfChildEmits should wrap a child that structurally outputs"
     );
-}
 
-#[test]
-fn prepared_fold_skips_if_child_emits_wrapper_when_child_has_no_output() {
-    let mut string_table = StringTable::new();
-    let fixture = build_wrapper_context_fixture(
+    // A child that structurally emits nothing must not render the wrapper.
+    let silent_fixture = build_wrapper_context_fixture(
         &mut string_table,
         TirWrapperContext {
             inherited_wrapper_set: None,
@@ -1016,9 +1017,9 @@ fn prepared_fold_skips_if_child_emits_wrapper_when_child_has_no_output() {
         },
         build_false_no_else_branch_template,
     );
-    let emission = fold_fixture(&fixture, &mut string_table);
+    let silent_emission = fold_fixture(&silent_fixture, &mut string_table);
     assert_eq!(
-        emission,
+        silent_emission,
         TemplateEmission::NoOutput,
         "false no-else child should not render inherited wrappers"
     );
@@ -1049,10 +1050,12 @@ fn prepared_fold_applies_wrapper_expression_overlay() {
 }
 
 #[test]
-fn preparation_folds_const_outer_override_over_runtime_wrapper_expression() {
+fn preparation_classifies_outer_override_by_const_vs_runtime_expression() {
+    // A const outer override replaces a runtime wrapper-local expression so the
+    // whole wrapper folds to a constant result.
     let mut string_table = StringTable::new();
     let outer_text = string_table.intern("outer-const");
-    let (fixture, _) = build_expression_wrapper_fixture(
+    let (const_outer_fixture, _) = build_expression_wrapper_fixture(
         &mut string_table,
         runtime_string_expression(),
         Some(Expression::string_slice(
@@ -1061,8 +1064,8 @@ fn preparation_folds_const_outer_override_over_runtime_wrapper_expression() {
             ValueMode::ImmutableOwned,
         )),
     );
-    let emission =
-        prepared_fold_fixture_result(&fixture, &mut string_table).unwrap_or_else(|error| {
+    let emission = prepared_fold_fixture_result(&const_outer_fixture, &mut string_table)
+        .unwrap_or_else(|error| {
             panic!("const outer override should make the wrapper foldable: {error:?}")
         });
     let TemplateEmission::Output(output_id) = emission else {
@@ -1073,22 +1076,25 @@ fn preparation_folds_const_outer_override_over_runtime_wrapper_expression() {
         "outer-constchild",
         "the const outer override must replace the runtime wrapper-local expression"
     );
-}
 
-#[test]
-fn preparation_preserves_outer_runtime_expression_override_in_handoff() {
-    let mut string_table = StringTable::new();
+    // A runtime outer override keeps the wrapper on the runtime handoff path and
+    // survives into the owned handoff as the effective expression.
     let wrapper_text = string_table.intern("wrapper-local");
-    let (fixture, _) = build_expression_wrapper_fixture(
+    let (runtime_outer_fixture, _) = build_expression_wrapper_fixture(
         &mut string_table,
         Expression::string_slice(wrapper_text, empty_location(), ValueMode::ImmutableOwned),
         Some(runtime_string_expression()),
     );
 
     let preparation = {
-        let (phase, store) = fixture_parent_view(&fixture);
-        let view = TirView::new(&store, fixture.parent, phase, fixture.context)
-            .expect("parent view should construct");
+        let (phase, store) = fixture_parent_view(&runtime_outer_fixture);
+        let view = TirView::new(
+            &store,
+            runtime_outer_fixture.parent,
+            phase,
+            runtime_outer_fixture.context,
+        )
+        .expect("parent view should construct");
         prepare_tir_view(&view, TemplatePreparationMode::Value)
             .expect("outer runtime wrapper override should be a valid runtime result")
     };
@@ -1097,7 +1103,7 @@ fn preparation_preserves_outer_runtime_expression_override_in_handoff() {
         "a runtime outer override must not be classified as a const wrapper"
     );
 
-    let handoff = handoff_fixture(&fixture, &mut string_table);
+    let handoff = handoff_fixture(&runtime_outer_fixture, &mut string_table);
     let wrapped = expect_single_render_child(&handoff.body);
     let OwnedRuntimeTemplateNode::Sequence { children } = wrapped else {
         panic!(
