@@ -1,7 +1,7 @@
 //! Per-module frontend compilation pipeline for Beanstalk projects.
 //!
 //! Drives a single discovered module through the full frontend pipeline:
-//! scheduled file preparation (tokenization + header parsing) → dependency sort → AST → HIR →
+//! provider-independent source preparation → provider binding → dependency sort → AST → HIR →
 //! borrow checking.
 
 use crate::build_system::build::{
@@ -21,7 +21,7 @@ use crate::compiler_frontend::external_packages::{
 };
 use crate::compiler_frontend::headers::parse_file_headers::{
     BoundModuleHeaders, FileFrontendPrepareError, FileFrontendPrepareOutput, HeaderKind,
-    HeaderParseOptions, bind_module_headers, prepare_header_syntax,
+    HeaderParseOptions, PreparedHeaderSyntax, bind_module_headers, prepare_header_syntax,
 };
 use crate::compiler_frontend::hir::module::HirModule;
 use crate::compiler_frontend::hir::reachability::collect_reachability_from_start;
@@ -36,6 +36,7 @@ use crate::compiler_frontend::{
     FrontendFilePrepareSource,
 };
 
+use super::prepared_module::PreparedModule;
 use super::prepared_source::PreparedSourceInput;
 
 #[cfg(feature = "detailed_timers")]
@@ -154,15 +155,39 @@ impl FilePreparationStrategy {
 }
 
 // -------------------------
-//  Compilation Context
+//  Preparation Context (provider-independent)
 // -------------------------
 
-/// Lifetime-bound context for compiling one module through the full frontend pipeline.
+/// Provider-independent context for preparing one module's source files and aggregating
+/// `PreparedHeaderSyntax` without requiring provider interfaces.
 ///
-/// WHAT: bundles the long-lived inputs shared across tokenization, headers, AST, HIR, and borrow
-/// checking for a single module.
+/// WHAT: owns only the inputs file preparation actually requires — style directives and the
+///       project path resolver — and works against a caller-owned `StringTable` and
+///       `SourceFileTable`. It deliberately excludes `ExternalPackageRegistry`, the import
+///       resolution table and builder runtime packages.
+/// WHY: the compiler design overview requires `PreparedHeaderSyntax` to be produced before the
+///      provider graph is compiled. Keeping provider-interface values out of this context makes
+///      the preparation phase genuinely provider-independent, so it cannot reach provider state
+///      and Phase 5 can schedule provider binding between `prepare_module` and semantic
+///      compilation without touching this context.
+pub(super) struct ModulePreparationContext<'a> {
+    pub(super) style_directives: &'a StyleDirectiveRegistry,
+    pub(super) project_path_resolver: Option<ProjectPathResolver>,
+}
+
+// -------------------------
+//  Semantic Compilation Context (provider-dependent)
+// -------------------------
+
+/// Lifetime-bound context for compiling one retained module through the provider-dependent
+/// semantic pipeline.
+///
+/// WHAT: bundles the provider interfaces and long-lived inputs shared across header binding,
+/// dependency sorting, AST, HIR, and borrow checking for a single module.
 /// WHY: bundling these together keeps call sites in the coordinator short and makes the
 /// `StringTable` handoff between orchestration and `CompilerFrontend` explicit in one place.
+///      Preparation is owned by `ModulePreparationContext`; this context begins with
+///      `bind_module_headers` over the retained `PreparedHeaderSyntax`.
 pub(super) struct FrontendModuleBuildContext<'a> {
     pub(super) config: &'a Config,
     pub(super) build_profile: FrontendBuildProfile,
@@ -173,231 +198,91 @@ pub(super) struct FrontendModuleBuildContext<'a> {
     pub(super) builder_runtime_packages: &'a [BuilderRuntimePackageMetadata],
 }
 
-impl FrontendModuleBuildContext<'_> {
-    /// Compile one discovered module through the full frontend pipeline.
-    pub(super) fn compile_module(
-        self,
+impl ModulePreparationContext<'_> {
+    /// Prepare one discovered module's source files and aggregate provider-independent header
+    /// syntax, retaining it with the module string-table context for semantic compilation.
+    ///
+    /// WHAT: prepares every source file against local string-table forks, merges chunk-local
+    ///       string tables in deterministic input order, and runs `prepare_header_syntax` to
+    ///       produce the retained `PreparedHeaderSyntax`. Stops before provider-dependent binding.
+    /// WHY: the compiler design overview requires `PreparedHeaderSyntax` to be produced before
+    ///      the provider graph is compiled. This context owns no provider-interface values, so
+    ///      preparation cannot reach provider state. Retaining the syntax and string-table context
+    ///      lets semantic compilation begin with `bind_module_headers` without retokenizing or
+    ///      reparsing source, and leaves a clean boundary where Phase 5 can schedule provider
+    ///      binding between this call and
+    ///      `FrontendModuleBuildContext::compile_module_semantic`.
+    pub(super) fn prepare_module(
+        &self,
         module: &[PreparedSourceInput],
         entry_file_path: &Path,
-        string_table: StringTable,
-    ) -> Result<CompiledModuleResult, CompilerMessages> {
-        let source_byte_count = record_module_input_counters(module);
+        mut string_table: StringTable,
+        source_byte_count: usize,
+        module_label: Option<&str>,
+    ) -> Result<PreparedModule, CompilerMessages> {
+        let mut warnings = Vec::new();
 
-        // Build a human-readable attribution label so the concise timing summary can
-        // show the slowest module without flooding output with per-module lines.
-        let module_label_text =
-            module_timing_label(entry_file_path, module.len(), source_byte_count);
-        let module_label: Option<&str> = Some(&module_label_text);
-
-        let external_import_resolution_table = self.external_import_resolution_table;
-
-        let mut compiler = CompilerFrontend::new(
-            self.config,
-            string_table,
-            self.style_directives.to_owned(),
-            Arc::clone(&self.external_packages),
-            self.project_path_resolver.clone(),
-        );
-
-        // Record the total frontend time for this module (success or error).
-        let module_total_start = crate::timing::start_pipeline_timing();
-        let compile_result = (|| {
-            let mut warnings = Vec::new();
-
-            // 1. Map input source files into the compiler's source table.
-            Self::attach_source_files(&mut compiler, module, entry_file_path)?;
-
-            // 2. Prepare all files against one local string-table per worker chunk. Beanstalk
-            //    files parse retained Stage 0 tokens, Beandown tokenizes its body once and plain
-            //    Markdown bypasses tokenization. Merge/remap once before aggregation.
-            let (module_headers, file_warnings) = timed_frontend_stage(
-                "frontend.file_prepare",
-                "Files Prepared in: ",
-                module_label,
-                || {
-                    Self::prepare_module_files(
-                        &mut compiler,
-                        module,
-                        entry_file_path,
-                        external_import_resolution_table,
-                        source_byte_count,
-                    )
-                },
-            )?;
-            warnings.extend(file_warnings);
-
-            let capacity_estimate =
-                record_frontend_capacity_estimate(module.len(), source_byte_count, &module_headers);
-
-            // 3. Resolve dependencies and sort headers for linear processing.
-            let sorted = timed_frontend_stage(
-                "frontend.dependency_sort",
-                "Dependency graph created in: ",
-                module_label,
-                || Self::sort_headers(&mut compiler, module_headers, &warnings),
-            )?;
-
-            let root_activity = ModuleRootActivity {
-                has_non_trivial_root_body: sorted.has_non_trivial_root_body,
-                const_fragment_count: sorted.const_fragment_count,
-                runtime_fragment_count: sorted.entry_runtime_fragment_count,
-            };
-
-            // 4. Build the Abstract Syntax Tree (AST).
-            let module_ast =
-                timed_frontend_stage("frontend.ast", "AST created in: ", module_label, || {
-                    self.build_ast(
-                        &mut compiler,
-                        sorted,
-                        entry_file_path,
-                        capacity_estimate,
-                        &mut warnings,
-                    )
-                })?;
-
-            // 5. Resolve const fragment StringIds to strings before AST is consumed by HIR.
-            let const_top_level_fragments = module_ast
-                .const_top_level_fragments
-                .iter()
-                .map(|fragment| ResolvedConstFragment {
-                    runtime_insertion_index: fragment.runtime_insertion_index,
-                    rendered_text: compiler.string_table.resolve(fragment.value).to_owned(),
-                })
-                .collect::<Vec<_>>();
-
-            // 6. Lower AST to Higher-level Intermediate Representation (HIR).
-            let (hir_module, type_environment) =
-                timed_frontend_stage("frontend.hir", "HIR generated in: ", module_label, || {
-                    Self::lower_hir(&mut compiler, module_ast, &warnings)
-                })?;
-
-            // 7. Run static analysis (Borrow Checker).
-            let borrow_analysis = timed_frontend_stage(
-                "frontend.borrow",
-                "Borrow checking completed in: ",
-                module_label,
-                || Self::check_borrows(&compiler, &hir_module, &warnings),
-            )?;
-            record_borrow_counters(&borrow_analysis);
-
-            // Runtime import metadata is tied to calls that can execute from entry `start`.
-            // The registry and provider table stay fully populated for type checking and
-            // diagnostics; only the backend-facing module metadata is reachability-filtered.
-            let reachability = collect_reachability_from_start(&hir_module)
-                .map_err(|error| CompilerMessages::from_error_ref(error, &compiler.string_table))?;
-            let reachable_external_package_ids = collect_reachable_external_package_ids(
-                &reachability.reachable_external_functions,
-                compiler.external_package_registry.as_ref(),
-            );
-
-            // -------------------------
-            //  Finalize Module Build
-            // -------------------------
-
-            borrow_log!("=== BORROW CHECKER OUTPUT ===");
-            borrow_log!(format!(
-                "Borrow checking completed successfully (states={} functions={} blocks={} conflicts_checked={} stmt_facts={} term_facts={} value_facts={})",
-                borrow_analysis.analysis.total_state_snapshots(),
-                borrow_analysis.stats.functions_analyzed,
-                borrow_analysis.stats.blocks_analyzed,
-                borrow_analysis.stats.conflicts_checked,
-                borrow_analysis.analysis.statement_facts.len(),
-                borrow_analysis.analysis.terminator_facts.len(),
-                borrow_analysis.analysis.value_facts.len()
-            ));
-            borrow_log!("=== END BORROW CHECKER OUTPUT ===");
-
-            // Collect provider-resolved imports used by this module after the frontend has
-            // consumed them. HIR still carries only stable external IDs; this side payload is for
-            // backend asset/glue planning.
-            let source_logical_paths = collect_module_source_logical_paths(
-                module,
-                self.project_path_resolver.as_ref(),
-                &mut compiler.string_table,
-            )
-            .map_err(|error| CompilerMessages::from_error_ref(error, &compiler.string_table))?;
-
-            let mut module_external_imports: Vec<crate::build_system::build::ModuleExternalImport> =
-                external_import_resolution_table
-                    .collect_unique_resolved_imports_for_source_files(&source_logical_paths)
-                    .into_iter()
-                    .filter(|resolved| {
-                        reachable_external_package_ids.contains(&resolved.package_id)
-                    })
-                    .map(
-                        |resolved| crate::build_system::build::ModuleExternalImport {
-                            package_id: resolved.package_id,
-                            runtime_asset: resolved.runtime_asset,
-                            required_runtime_imports: resolved.required_runtime_imports,
-                        },
-                    )
-                    .collect();
-
-            // Append reachable builder-runtime packages so they share the same runtime asset/glue
-            // emission path as reachable provider-resolved imports.
-            for builder_runtime in self.builder_runtime_packages {
-                if reachable_external_package_ids.contains(&builder_runtime.package_id) {
-                    module_external_imports.push(
-                        crate::build_system::build::ModuleExternalImport {
-                            package_id: builder_runtime.package_id,
-                            runtime_asset: builder_runtime.runtime_asset.clone(),
-                            required_runtime_imports: builder_runtime
-                                .required_runtime_imports
-                                .clone(),
-                        },
-                    );
-                }
-            }
-
-            module_external_imports.sort_by_key(|import| import.package_id.0);
-            module_external_imports.dedup_by_key(|import| import.package_id);
-
-            Ok(Module {
-                entry_point: entry_file_path.to_path_buf(),
-                hir: hir_module,
-                type_environment,
-                borrow_analysis,
-                warnings,
-                const_top_level_fragments,
-                root_activity,
-                external_package_registry: Arc::clone(&compiler.external_package_registry),
-                module_external_imports,
-            })
-        })();
-
-        crate::timing::record_started_pipeline_timing_with_label(
-            "frontend.module.total",
-            module_total_start,
-            module_label,
-        );
-
-        let string_table = compiler.string_table;
-
-        compile_result.map(|module| CompiledModuleResult {
+        // 1. Build the module source identity table against the caller-owned string table. Source
+        //    identities are deterministic and provider-free, so this needs no provider interface.
+        let source_files = Self::attach_source_files(
+            &mut string_table,
+            &self.project_path_resolver,
             module,
+            entry_file_path,
+        )?;
+
+        // 2. Prepare all files against one local string-table per worker chunk. Beanstalk files
+        //    parse retained Stage 0 tokens, Beandown tokenizes its body once and plain Markdown
+        //    bypasses tokenization. Merge/remap once before aggregating header syntax.
+        let (prepared_header_syntax, file_warnings) = timed_frontend_stage(
+            "frontend.file_prepare",
+            "Files Prepared in: ",
+            module_label,
+            || {
+                self.prepare_module_files(
+                    &mut string_table,
+                    &source_files,
+                    module,
+                    entry_file_path,
+                    source_byte_count,
+                )
+            },
+        )?;
+        warnings.extend(file_warnings);
+
+        // Retain the deterministic preparation context so semantic compilation can continue against
+        // the same string table and source identities. The payload owns no `CompilerFrontend` or
+        // provider state: only syntax, the string table, source identities and warnings.
+        Ok(PreparedModule {
+            prepared_header_syntax,
             string_table,
+            source_files,
+            warnings,
+            source_file_count: module.len(),
+            source_byte_count,
         })
     }
 
-    // -------------------------
-    //  Pipeline Stage Helpers
-    // -------------------------
-
+    /// Build the module `SourceFileTable` from input source paths against a caller-owned string
+    /// table and the project path resolver.
+    ///
+    /// WHAT: assigns deterministic source identities for the prepared module without touching any
+    ///       provider interface.
+    /// WHY: preparation needs source identities to drive file preparation and header syntax, but
+    ///      not the external package registry or import resolution table.
     fn attach_source_files(
-        compiler: &mut CompilerFrontend,
+        string_table: &mut StringTable,
+        project_path_resolver: &Option<ProjectPathResolver>,
         module: &[PreparedSourceInput],
         entry_file_path: &Path,
-    ) -> Result<(), CompilerMessages> {
-        let source_files = SourceFileTable::build(
+    ) -> Result<SourceFileTable, CompilerMessages> {
+        SourceFileTable::build(
             module.iter().map(|input_file| input_file.source_path()),
             entry_file_path,
-            compiler.project_path_resolver.as_ref(),
-            &mut compiler.string_table,
+            project_path_resolver.as_ref(),
+            string_table,
         )
-        .map_err(|error| CompilerMessages::from_error_ref(error, &compiler.string_table))?;
-
-        compiler.set_source_files(source_files);
-        Ok(())
+        .map_err(|error| CompilerMessages::from_error_ref(error, string_table))
     }
 
     /// Prepare all source files in the module against local string-table forks, then merge and
@@ -408,26 +293,26 @@ impl FrontendModuleBuildContext<'_> {
     /// WHY: keeping scheduling separate from aggregation avoids Rayon overhead on tiny modules
     ///      without changing deterministic merge order or frontend ownership boundaries.
     fn prepare_module_files(
-        compiler: &mut CompilerFrontend,
+        &self,
+        string_table: &mut StringTable,
+        source_files: &SourceFileTable,
         module: &[PreparedSourceInput],
         entry_file_path: &Path,
-        external_import_resolution_table: &ExternalImportResolutionTable,
         source_byte_count: usize,
-    ) -> Result<(BoundModuleHeaders, Vec<CompilerDiagnostic>), CompilerMessages> {
-        let entry_file_id = compiler
-            .source_files
+    ) -> Result<(PreparedHeaderSyntax, Vec<CompilerDiagnostic>), CompilerMessages> {
+        let entry_file_id = source_files
             .get_by_canonical_path(entry_file_path)
             .map(|identity| identity.file_id);
 
         let options = HeaderParseOptions {
             entry_file_id,
-            project_path_resolver: compiler.project_path_resolver.clone(),
+            project_path_resolver: self.project_path_resolver.clone(),
         };
 
         // Create one shared fork source for all file-preparation workers. Each scheduled chunk
         // gets a local table forked from this immutable base, so preparation never needs mutable
         // access to the module string table during tokenization or header parsing.
-        let fork_source = compiler.string_table.fork_source();
+        let fork_source = string_table.fork_source();
         let base_len = fork_source.base_len();
 
         // Offsets are only relevant for the active module root, and there is exactly one root per
@@ -437,8 +322,8 @@ impl FrontendModuleBuildContext<'_> {
         let runtime_fragment_offset = 0usize;
 
         let prepare_context = FrontendFilePrepareContext {
-            source_files: &compiler.source_files,
-            style_directives: &compiler.style_directives,
+            source_files,
+            style_directives: self.style_directives,
             entry_file_path,
             options: &options,
         };
@@ -472,12 +357,10 @@ impl FrontendModuleBuildContext<'_> {
         );
 
         Self::merge_file_preparation_chunks(
-            compiler,
+            string_table,
             preparation_chunks,
             module.len(),
             base_len,
-            external_import_resolution_table,
-            &options,
         )
     }
 
@@ -487,13 +370,11 @@ impl FrontendModuleBuildContext<'_> {
     /// WHY: chunk-local workers may finish in any order, but the frontend's source identity,
     /// warning, diagnostic, and header order must follow the original module input order.
     fn merge_file_preparation_chunks(
-        compiler: &mut CompilerFrontend,
+        string_table: &mut StringTable,
         mut preparation_chunks: Vec<FilePreparationChunk>,
         module_file_count: usize,
         base_len: usize,
-        external_import_resolution_table: &ExternalImportResolutionTable,
-        options: &HeaderParseOptions,
-    ) -> Result<(BoundModuleHeaders, Vec<CompilerDiagnostic>), CompilerMessages> {
+    ) -> Result<(PreparedHeaderSyntax, Vec<CompilerDiagnostic>), CompilerMessages> {
         // Completion order is a scheduler detail. Merge order is the module input order encoded
         // by deterministic chunk indexes.
         timed_frontend_substep(
@@ -506,7 +387,7 @@ impl FrontendModuleBuildContext<'_> {
         // builds reject malformed scheduler payloads with a CompilerError instead of silently
         // dropping, reordering or truncating prepared files.
         validate_preparation_chunk_order(&preparation_chunks, module_file_count)
-            .map_err(|error| CompilerMessages::from_error_ref(error, &compiler.string_table))?;
+            .map_err(|error| CompilerMessages::from_error_ref(error, string_table))?;
 
         let mut prepared_outputs = Vec::new();
         let mut warnings = Vec::new();
@@ -524,11 +405,7 @@ impl FrontendModuleBuildContext<'_> {
             let remap = timed_frontend_substep(
                 "file_prepare_string_table_delta_merge_ms",
                 "File preparation string-table delta merged in: ",
-                || {
-                    compiler
-                        .string_table
-                        .merge_delta_from(&chunk.local_string_table, base_len)
-                },
+                || string_table.merge_delta_from(&chunk.local_string_table, base_len),
             );
             let remap_is_identity = remap.is_identity();
             add_frontend_counter(FrontendCounter::FilePreparationResultMergeCount, 1);
@@ -595,7 +472,7 @@ impl FrontendModuleBuildContext<'_> {
 
         if !diagnostics.is_empty() {
             let mut messages =
-                CompilerMessages::from_diagnostics(diagnostics, compiler.string_table.clone());
+                CompilerMessages::from_diagnostics(diagnostics, string_table.clone());
             messages.prepend_diagnostics_preserving_context(warnings);
             return Err(messages);
         }
@@ -608,44 +485,19 @@ impl FrontendModuleBuildContext<'_> {
         let prepared = timed_frontend_substep(
             "file_prepare_header_syntax_preparation_ms",
             "File preparation header syntax prepared in: ",
-            || prepare_header_syntax(prepared_outputs, &mut compiler.string_table),
+            || prepare_header_syntax(prepared_outputs, string_table),
         )
         .map_err(|bag| {
-            let mut messages = CompilerMessages::from_diagnostics(
-                bag.into_diagnostics(),
-                compiler.string_table.clone(),
-            );
-            messages.prepend_diagnostics_preserving_context(warnings.iter().cloned());
-            messages
-        })?;
-
-        let headers = timed_frontend_substep(
-            "file_prepare_header_binding_ms",
-            "File preparation headers bound in: ",
-            || {
-                bind_module_headers(
-                    prepared,
-                    compiler.external_package_registry.as_ref(),
-                    external_import_resolution_table,
-                    options.project_path_resolver.as_ref(),
-                    &mut compiler.string_table,
-                )
-            },
-        )
-        .map_err(|bag| {
-            let mut messages = CompilerMessages::from_diagnostics(
-                bag.into_diagnostics(),
-                compiler.string_table.clone(),
-            );
+            let mut messages =
+                CompilerMessages::from_diagnostics(bag.into_diagnostics(), string_table.clone());
             messages.prepend_diagnostics_preserving_context(warnings.iter().cloned());
             messages
         })?;
 
         add_frontend_counter(FrontendCounter::PreparedFileCount, prepared_file_count);
         add_frontend_counter(FrontendCounter::TokenCount, token_count);
-        record_header_counters(&headers);
 
-        Ok((headers, warnings))
+        Ok((prepared, warnings))
     }
 
     fn prepare_module_file_chunks(
@@ -766,6 +618,242 @@ impl FrontendModuleBuildContext<'_> {
             local_string_table,
             results,
         }
+    }
+}
+
+impl FrontendModuleBuildContext<'_> {
+    /// Compile one retained module through the provider-dependent semantic pipeline.
+    ///
+    /// WHAT: begins with `bind_module_headers` over the retained `PreparedHeaderSyntax`, then
+    ///       resolves dependencies, builds AST, lowers HIR, and runs borrow validation. It
+    ///       receives no `PreparedSourceInput`, source text or tokens and cannot rerun file
+    ///       preparation.
+    /// WHY: binding depends on provider interfaces, so it belongs after preparation in the
+    ///      semantic phase. The retained string table and source identities carry every fact
+    ///      binding and later stages need without revisiting source.
+    pub(super) fn compile_module_semantic(
+        &self,
+        prepared: PreparedModule,
+        entry_file_path: &Path,
+        module_label: Option<&str>,
+    ) -> Result<CompiledModuleResult, CompilerMessages> {
+        let PreparedModule {
+            prepared_header_syntax,
+            string_table,
+            source_files,
+            mut warnings,
+            source_file_count,
+            source_byte_count,
+        } = prepared;
+
+        let external_import_resolution_table = self.external_import_resolution_table;
+
+        let mut compiler = CompilerFrontend::new(
+            self.config,
+            string_table,
+            self.style_directives.to_owned(),
+            Arc::clone(&self.external_packages),
+            self.project_path_resolver.clone(),
+        );
+        compiler.set_source_files(source_files);
+
+        let compile_result = (|| {
+            // 1. Bind retained header syntax against provider interfaces.
+            let module_headers = timed_frontend_stage(
+                "frontend.header_bind",
+                "Headers bound in: ",
+                module_label,
+                || {
+                    Self::bind_retained_headers(
+                        &mut compiler,
+                        prepared_header_syntax,
+                        external_import_resolution_table,
+                        &warnings,
+                    )
+                },
+            )?;
+
+            let capacity_estimate = record_frontend_capacity_estimate(
+                source_file_count,
+                source_byte_count,
+                &module_headers,
+            );
+
+            // 2. Resolve dependencies and sort headers for linear processing.
+            let sorted = timed_frontend_stage(
+                "frontend.dependency_sort",
+                "Dependency graph created in: ",
+                module_label,
+                || Self::sort_headers(&mut compiler, module_headers, &warnings),
+            )?;
+
+            let root_activity = ModuleRootActivity {
+                has_non_trivial_root_body: sorted.has_non_trivial_root_body,
+                const_fragment_count: sorted.const_fragment_count,
+                runtime_fragment_count: sorted.entry_runtime_fragment_count,
+            };
+
+            // 3. Build the Abstract Syntax Tree (AST).
+            let module_ast =
+                timed_frontend_stage("frontend.ast", "AST created in: ", module_label, || {
+                    self.build_ast(
+                        &mut compiler,
+                        sorted,
+                        entry_file_path,
+                        capacity_estimate,
+                        &mut warnings,
+                    )
+                })?;
+
+            // 4. Resolve const fragment StringIds to strings before AST is consumed by HIR.
+            let const_top_level_fragments = module_ast
+                .const_top_level_fragments
+                .iter()
+                .map(|fragment| ResolvedConstFragment {
+                    runtime_insertion_index: fragment.runtime_insertion_index,
+                    rendered_text: compiler.string_table.resolve(fragment.value).to_owned(),
+                })
+                .collect::<Vec<_>>();
+
+            // 5. Lower AST to Higher-level Intermediate Representation (HIR).
+            let (hir_module, type_environment) =
+                timed_frontend_stage("frontend.hir", "HIR generated in: ", module_label, || {
+                    Self::lower_hir(&mut compiler, module_ast, &warnings)
+                })?;
+
+            // 6. Run static analysis (Borrow Checker).
+            let borrow_analysis = timed_frontend_stage(
+                "frontend.borrow",
+                "Borrow checking completed in: ",
+                module_label,
+                || Self::check_borrows(&compiler, &hir_module, &warnings),
+            )?;
+            record_borrow_counters(&borrow_analysis);
+
+            // Runtime import metadata is tied to calls that can execute from entry `start`.
+            // The registry and provider table stay fully populated for type checking and
+            // diagnostics; only the backend-facing module metadata is reachability-filtered.
+            let reachability = collect_reachability_from_start(&hir_module)
+                .map_err(|error| CompilerMessages::from_error_ref(error, &compiler.string_table))?;
+            let reachable_external_package_ids = collect_reachable_external_package_ids(
+                &reachability.reachable_external_functions,
+                compiler.external_package_registry.as_ref(),
+            );
+
+            // -------------------------
+            //  Finalize Module Build
+            // -------------------------
+
+            borrow_log!("=== BORROW CHECKER OUTPUT ===");
+            borrow_log!(format!(
+                "Borrow checking completed successfully (states={} functions={} blocks={} conflicts_checked={} stmt_facts={} term_facts={} value_facts={})",
+                borrow_analysis.analysis.total_state_snapshots(),
+                borrow_analysis.stats.functions_analyzed,
+                borrow_analysis.stats.blocks_analyzed,
+                borrow_analysis.stats.conflicts_checked,
+                borrow_analysis.analysis.statement_facts.len(),
+                borrow_analysis.analysis.terminator_facts.len(),
+                borrow_analysis.analysis.value_facts.len()
+            ));
+            borrow_log!("=== END BORROW CHECKER OUTPUT ===");
+
+            // Collect provider-resolved imports used by this module after the frontend has
+            // consumed them. HIR still carries only stable external IDs; this side payload is for
+            // backend asset/glue planning. Source logical paths are derived from the retained
+            // source identity table, not from raw source inputs.
+            let source_logical_paths = collect_source_logical_paths_from_table(
+                &compiler.source_files,
+                &compiler.string_table,
+                self.project_path_resolver.is_some(),
+            );
+
+            let mut module_external_imports: Vec<crate::build_system::build::ModuleExternalImport> =
+                external_import_resolution_table
+                    .collect_unique_resolved_imports_for_source_files(&source_logical_paths)
+                    .into_iter()
+                    .filter(|resolved| {
+                        reachable_external_package_ids.contains(&resolved.package_id)
+                    })
+                    .map(
+                        |resolved| crate::build_system::build::ModuleExternalImport {
+                            package_id: resolved.package_id,
+                            runtime_asset: resolved.runtime_asset,
+                            required_runtime_imports: resolved.required_runtime_imports,
+                        },
+                    )
+                    .collect();
+
+            // Append reachable builder-runtime packages so they share the same runtime asset/glue
+            // emission path as reachable provider-resolved imports.
+            for builder_runtime in self.builder_runtime_packages {
+                if reachable_external_package_ids.contains(&builder_runtime.package_id) {
+                    module_external_imports.push(
+                        crate::build_system::build::ModuleExternalImport {
+                            package_id: builder_runtime.package_id,
+                            runtime_asset: builder_runtime.runtime_asset.clone(),
+                            required_runtime_imports: builder_runtime
+                                .required_runtime_imports
+                                .clone(),
+                        },
+                    );
+                }
+            }
+
+            module_external_imports.sort_by_key(|import| import.package_id.0);
+            module_external_imports.dedup_by_key(|import| import.package_id);
+
+            Ok(Module {
+                entry_point: entry_file_path.to_path_buf(),
+                hir: hir_module,
+                type_environment,
+                borrow_analysis,
+                warnings,
+                const_top_level_fragments,
+                root_activity,
+                external_package_registry: Arc::clone(&compiler.external_package_registry),
+                module_external_imports,
+            })
+        })();
+
+        let string_table = compiler.string_table;
+
+        compile_result.map(|module| CompiledModuleResult {
+            module,
+            string_table,
+        })
+    }
+
+    /// Bind retained `PreparedHeaderSyntax` against provider interfaces.
+    ///
+    /// WHAT: resolves public exports, builds the import environment, canonicalizes dependency
+    ///       edges, and completes constant initializer dependencies. Consumes only the retained
+    ///       syntax carried in from preparation — it never retokenizes or reparses source.
+    /// WHY: these facts depend on provider interfaces and the project path resolver, so they
+    ///      belong in the semantic phase after preparation has produced `PreparedHeaderSyntax`.
+    fn bind_retained_headers(
+        compiler: &mut CompilerFrontend,
+        prepared_header_syntax: PreparedHeaderSyntax,
+        external_import_resolution_table: &ExternalImportResolutionTable,
+        warnings: &[CompilerDiagnostic],
+    ) -> Result<BoundModuleHeaders, CompilerMessages> {
+        let headers = bind_module_headers(
+            prepared_header_syntax,
+            compiler.external_package_registry.as_ref(),
+            external_import_resolution_table,
+            compiler.project_path_resolver.as_ref(),
+            &mut compiler.string_table,
+        )
+        .map_err(|bag| {
+            let mut messages = CompilerMessages::from_diagnostics(
+                bag.into_diagnostics(),
+                compiler.string_table.clone(),
+            );
+            messages.prepend_diagnostics_preserving_context(warnings.iter().cloned());
+            messages
+        })?;
+
+        record_header_counters(&headers);
+        Ok(headers)
     }
 
     fn sort_headers(
@@ -941,7 +1029,7 @@ fn validate_preparation_chunk_order(
     Ok(())
 }
 
-fn record_module_input_counters(module: &[PreparedSourceInput]) -> usize {
+pub(super) fn record_module_input_counters(module: &[PreparedSourceInput]) -> usize {
     add_frontend_counter(FrontendCounter::ModuleCount, 1);
     add_frontend_counter(FrontendCounter::SourceFileCount, module.len());
 
@@ -1115,32 +1203,27 @@ fn merge_stage_messages(
     messages
 }
 
-fn collect_module_source_logical_paths(
-    module: &[PreparedSourceInput],
-    project_path_resolver: Option<&ProjectPathResolver>,
-    string_table: &mut StringTable,
-) -> Result<Vec<String>, CompilerError> {
-    let Some(project_path_resolver) = project_path_resolver else {
-        return Ok(Vec::new());
-    };
-
-    let mut logical_paths = Vec::with_capacity(module.len());
-    for input_file in module {
-        let logical_path = project_path_resolver
-            .logical_path_for_canonical_file(input_file.source_path(), string_table)?;
-        let logical_path_text = logical_path.to_str().ok_or_else(|| {
-            CompilerError::file_error(
-                &logical_path,
-                format!(
-                    "Source file logical path {logical_path:?} contains a non-UTF-8 component; Beanstalk identity requires UTF-8 paths."
-                ),
-                string_table,
-            )
-        })?;
-        logical_paths.push(logical_path_text.replace('\\', "/"));
+/// Render the module's source logical paths from the retained source identity table.
+///
+/// WHAT: iterates the `SourceFileTable` built during preparation and renders each identity's
+///       portable logical path. Returns an empty vector when no project path resolver was used
+///       during preparation, matching the prior raw-source path behaviour.
+/// WHY: semantic compilation derives source logical paths from retained identities instead of
+///      carrying raw source paths, so the preparation/semantic boundary stays free of
+///      `PreparedSourceInput`. UTF-8 validity was already enforced when the table was built.
+fn collect_source_logical_paths_from_table(
+    source_files: &SourceFileTable,
+    string_table: &StringTable,
+    has_project_path_resolver: bool,
+) -> Vec<String> {
+    if !has_project_path_resolver {
+        return Vec::new();
     }
 
-    Ok(logical_paths)
+    source_files
+        .iter()
+        .map(|identity| identity.logical_path.to_portable_string(string_table))
+        .collect()
 }
 
 /// Format a bounded, human-readable attribution label for one module's timing.
@@ -1149,7 +1232,7 @@ fn collect_module_source_logical_paths(
 ///      short label suitable for the concise timing summary's "slowest module" line.
 /// WHY:  the label stays out of stable `BST_BENCH timing` lines; it is display-only
 ///       evidence so the summary can attribute the max sample without per-module listing.
-fn module_timing_label(
+pub(super) fn module_timing_label(
     entry_file_path: &Path,
     source_file_count: usize,
     source_byte_count: usize,

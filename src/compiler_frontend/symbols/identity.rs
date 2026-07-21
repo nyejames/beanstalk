@@ -120,6 +120,15 @@ impl SourceFileTable {
     pub fn get(&self, file_id: FileId) -> Option<&SourceFileIdentity> {
         self.files.get(file_id.0 as usize)
     }
+
+    /// Iterate the source file identities in deterministic (logical-path) order.
+    ///
+    /// WHY: semantic compilation derives source logical paths from the retained identity table
+    ///      instead of carrying raw source paths, so the build-system/frontend boundary stays
+    ///      free of `PreparedSourceInput` after preparation.
+    pub fn iter(&self) -> std::slice::Iter<'_, SourceFileIdentity> {
+        self.files.iter()
+    }
 }
 
 fn logical_path_for_single_file_mode(canonical_file: &Path, source_root: &Path) -> PathBuf {

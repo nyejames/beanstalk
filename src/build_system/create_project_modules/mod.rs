@@ -9,6 +9,7 @@
 //! - `module_identity`          — Stage 0 durable module identity and structural topology
 //! - `module_inventory`         — project-level module assembly
 //! - `prepared_source`          — state-safe retained source and token inputs
+//! - `prepared_module`          — retained module-preparation payload handed to semantic compilation
 //! - `reachable_file_discovery` — BFS traversal over import graphs
 //! - `import_scanning`          — per-file import path extraction
 //! - `project_structure_diagnostics` — typed Stage 0 project diagnostics
@@ -24,6 +25,7 @@ mod frontend_orchestration;
 pub(crate) mod import_scanning;
 mod module_identity;
 mod module_inventory;
+mod prepared_module;
 mod prepared_source;
 mod project_roots;
 mod project_structure_diagnostics;

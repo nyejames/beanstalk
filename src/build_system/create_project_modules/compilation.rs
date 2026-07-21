@@ -28,7 +28,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use super::collision_detection::validate_source_package_tree_collisions;
-use super::frontend_orchestration::FrontendModuleBuildContext;
+use super::frontend_orchestration::{
+    FrontendModuleBuildContext, ModulePreparationContext, module_timing_label,
+    record_module_input_counters,
+};
 use super::module_inventory;
 use super::project_roots;
 use super::project_structure_diagnostics::non_utf8_filesystem_name_error;
@@ -261,7 +264,48 @@ pub(crate) fn compile_single_file_frontend(
     );
 
     let compile_module_start = crate::timing::start_pipeline_timing();
-    let result = match (FrontendModuleBuildContext {
+
+    // Record module-input counters and the per-module timing label before preparation so the
+    // frontend module total can be attributed even when preparation fails.
+    let source_byte_count = record_module_input_counters(&input_files);
+    let module_label_text = module_timing_label(&entry_path, input_files.len(), source_byte_count);
+    let module_label: Option<&str> = Some(&module_label_text);
+
+    // Record the total frontend time for this module (success or error).
+    let module_total_start = crate::timing::start_pipeline_timing();
+
+    // Preparation is provider-independent: it owns no external package registry, import
+    // resolution table or builder runtime packages. Construct it before the semantic context so
+    // Phase 5 can schedule provider binding between `prepare_module` and `compile_module_semantic`.
+    let preparation_context = ModulePreparationContext {
+        style_directives,
+        project_path_resolver: Some(project_path_resolver.clone()),
+    };
+
+    let prepared = match preparation_context.prepare_module(
+        &input_files,
+        &entry_path,
+        local_table,
+        source_byte_count,
+        module_label,
+    ) {
+        Ok(prepared) => prepared,
+        Err(messages) => {
+            crate::timing::record_started_pipeline_timing_with_label(
+                "frontend.module.total",
+                module_total_start,
+                module_label,
+            );
+            log_stage_timing("stage0.single_file.compile_module", compile_module_start);
+            log_stage_timing("stage0.single_file.total", total_start);
+            return Err(messages);
+        }
+    };
+
+    // Semantic compilation is provider-dependent: it binds retained `PreparedHeaderSyntax`
+    // against provider interfaces, then resolves dependencies, builds AST, lowers HIR and runs
+    // borrow validation.
+    let compile_context = FrontendModuleBuildContext {
         config,
         build_profile,
         project_path_resolver: Some(project_path_resolver),
@@ -269,16 +313,27 @@ pub(crate) fn compile_single_file_frontend(
         external_packages: Arc::clone(&external_packages),
         external_import_resolution_table: &builder_surface.external_import_resolution_table,
         builder_runtime_packages: &builder_surface.builder_runtime_packages,
-    })
-    .compile_module(&input_files, &entry_path, local_table)
+    };
+
+    let result = match compile_context.compile_module_semantic(prepared, &entry_path, module_label)
     {
         Ok(result) => result,
         Err(messages) => {
+            crate::timing::record_started_pipeline_timing_with_label(
+                "frontend.module.total",
+                module_total_start,
+                module_label,
+            );
             log_stage_timing("stage0.single_file.compile_module", compile_module_start);
             log_stage_timing("stage0.single_file.total", total_start);
             return Err(messages);
         }
     };
+    crate::timing::record_started_pipeline_timing_with_label(
+        "frontend.module.total",
+        module_total_start,
+        module_label,
+    );
     log_stage_timing("stage0.single_file.compile_module", compile_module_start);
 
     // 6. Merge local results back into the global build context.
@@ -330,7 +385,53 @@ impl DirectoryModuleCompileContext<'_> {
     fn compile(&self, discovered: module_inventory::DiscoveredModule) -> ModuleCompileOutcome {
         let string_table_fork = self.string_table_fork_source.fork_for_module();
         let (local_table, base_len) = string_table_fork.into_parts();
-        let result = FrontendModuleBuildContext {
+        let entry_point = discovered.entry_point.clone();
+        let input_files = &discovered.input_files;
+
+        // Record module-input counters and the per-module timing label before preparation so
+        // the frontend module total can be attributed even when preparation fails.
+        let source_byte_count = record_module_input_counters(input_files);
+        let module_label_text =
+            module_timing_label(&entry_point, input_files.len(), source_byte_count);
+        let module_label: Option<&str> = Some(&module_label_text);
+
+        // Record the total frontend time for this module (success or error).
+        let module_total_start = crate::timing::start_pipeline_timing();
+
+        // Preparation is provider-independent: it owns no external package registry, import
+        // resolution table or builder runtime packages. Construct it before the semantic context
+        // so Phase 5 can schedule provider binding between the two calls.
+        let preparation_context = ModulePreparationContext {
+            style_directives: self.style_directives,
+            project_path_resolver: Some(self.project_path_resolver.clone()),
+        };
+
+        let prepared = match preparation_context.prepare_module(
+            input_files,
+            &entry_point,
+            local_table,
+            source_byte_count,
+            module_label,
+        ) {
+            Ok(prepared) => prepared,
+            Err(messages) => {
+                crate::timing::record_started_pipeline_timing_with_label(
+                    "frontend.module.total",
+                    module_total_start,
+                    module_label,
+                );
+                return ModuleCompileOutcome {
+                    entry_path: entry_point,
+                    string_table_base_len: base_len,
+                    result: Err(messages),
+                };
+            }
+        };
+
+        // Semantic compilation is provider-dependent: it binds retained `PreparedHeaderSyntax`
+        // against provider interfaces, then resolves dependencies, builds AST, lowers HIR and
+        // runs borrow validation.
+        let compile_context = FrontendModuleBuildContext {
             config: self.config,
             build_profile: self.build_profile,
             project_path_resolver: Some(self.project_path_resolver.clone()),
@@ -340,15 +441,17 @@ impl DirectoryModuleCompileContext<'_> {
                 .builder_surface
                 .external_import_resolution_table,
             builder_runtime_packages: &self.builder_surface.builder_runtime_packages,
-        }
-        .compile_module(
-            &discovered.input_files,
-            &discovered.entry_point,
-            local_table,
+        };
+
+        let result = compile_context.compile_module_semantic(prepared, &entry_point, module_label);
+        crate::timing::record_started_pipeline_timing_with_label(
+            "frontend.module.total",
+            module_total_start,
+            module_label,
         );
 
         ModuleCompileOutcome {
-            entry_path: discovered.entry_point,
+            entry_path: entry_point,
             string_table_base_len: base_len,
             result,
         }

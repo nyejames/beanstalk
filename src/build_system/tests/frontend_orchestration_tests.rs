@@ -7,6 +7,7 @@
 
 use super::super::prepared_source::PreparedSourceInput;
 use super::merge_stage_messages;
+use crate::builder_surface::SourceFileKindRegistry;
 use crate::builder_surface::external_import_providers::resolution_table::ExternalImportResolutionTable;
 use crate::compiler_frontend::CompilerFrontend;
 use crate::compiler_frontend::compiler_errors::{CompilerMessages, SourceLocation};
@@ -17,15 +18,19 @@ use crate::compiler_frontend::compiler_messages::{
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::headers::parse_file_headers::{
-    FileFrontendPrepareError, HeaderKind, HeaderParseOptions, bind_module_headers,
-    prepare_header_syntax,
+    FileFrontendPrepareError, HeaderKind, HeaderParseOptions, PreparedHeaderSyntax,
+    bind_module_headers, prepare_header_syntax,
 };
+use crate::compiler_frontend::paths::module_roots::ModuleRootTable;
+use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
+use crate::compiler_frontend::source_packages::root_file::PreparedSourcePackageRoots;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::identity::SourceFileTable;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind, TokenizerEntryMode};
 use crate::compiler_frontend::{
-    FrontendFilePrepareContext, FrontendFilePrepareInput, FrontendFilePrepareSource,
+    FrontendBuildProfile, FrontendFilePrepareContext, FrontendFilePrepareInput,
+    FrontendFilePrepareSource,
 };
 use crate::projects::settings::Config;
 use std::fs;
@@ -142,7 +147,7 @@ fn frontend_preparation_fixture(file_sources: &[(&str, &str)]) -> FrontendPrepar
 }
 
 fn header_source_file_names(
-    headers: &crate::compiler_frontend::headers::parse_file_headers::BoundModuleHeaders,
+    headers: &PreparedHeaderSyntax,
     string_table: &StringTable,
 ) -> Vec<String> {
     headers
@@ -407,6 +412,138 @@ fn fused_preparation_merges_local_forks_and_resolves_source_and_generated_string
     );
 }
 
+//  ----------------------------------------------------------------------
+//  Phase boundary: preparation retains PreparedHeaderSyntax for semantic compilation
+//  ----------------------------------------------------------------------
+
+/// Demonstrate the provider-independent preparation/semantic phase boundary and guard against
+/// semantic compilation regaining source or token inputs.
+///
+/// WHAT: `prepare_module` runs on a `ModulePreparationContext` that carries no provider-interface
+///       values — only style directives and the project path resolver — and retains a
+///       `PreparedModule` carrying `PreparedHeaderSyntax`, the module string table and source
+///       identities. `compile_module_semantic` runs on a separately constructed
+///       `FrontendModuleBuildContext` that owns the provider interfaces, and consumes only the
+///       retained payload through HIR and borrow validation. The `PreparedModule` type carries no
+///       source text or tokens, so the type system prevents semantic compilation from rerunning
+///       file preparation, and the boundary lets Phase 5 schedule provider binding between the
+///       two calls.
+#[test]
+fn prepare_module_retains_header_syntax_for_semantic_compilation() {
+    let temp_dir = tempfile::tempdir().expect("should create temp dir");
+    let entry_file = temp_dir.path().join("entry.bst");
+    fs::write(&entry_file, "alpha #= 1\n").unwrap();
+    let canonical_entry = fs::canonicalize(&entry_file).unwrap();
+
+    let mut string_table = StringTable::new();
+    let source_files = SourceFileTable::build(
+        std::iter::once(canonical_entry.as_path()),
+        &canonical_entry,
+        None,
+        &mut string_table,
+    )
+    .expect("source file table should build");
+
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let input_files = vec![tokenized_beanstalk_prepared_input(
+        &source_files,
+        &style_directives,
+        &mut string_table,
+        canonical_entry.clone(),
+        "alpha #= 1\n",
+    )];
+
+    // Fork a local module string table sharing the fixture base so retained token StringIds
+    // stay valid, mirroring the production per-module fork.
+    let local_table = string_table.fork_source().fork_for_module().into_parts().0;
+
+    let source_byte_count = source_byte_count(&input_files);
+    let module_label_text =
+        super::module_timing_label(&canonical_entry, input_files.len(), source_byte_count);
+    let module_label: Option<&str> = Some(&module_label_text);
+
+    let external_packages = Arc::new(ExternalPackageRegistry::new());
+    let resolution_table = ExternalImportResolutionTable::default();
+
+    // Build a real project path resolver so the semantic phase can run AST, HIR and borrow
+    // validation over the retained payload, exercising the full preparation/semantic boundary.
+    let project_root = canonical_entry
+        .parent()
+        .expect("entry file should have a parent directory")
+        .to_path_buf();
+    let source_file_kinds = SourceFileKindRegistry::new();
+    let project_path_resolver = ProjectPathResolver::new_with_module_roots(
+        project_root.clone(),
+        project_root,
+        PreparedSourcePackageRoots::empty(),
+        &source_file_kinds,
+        ModuleRootTable::empty(),
+    )
+    .expect("project path resolver should build");
+
+    // Phase 1: preparation is provider-independent. The preparation context carries no external
+    // package registry, import resolution table or builder runtime packages — only style
+    // directives and the project path resolver — so it can run before any provider interface
+    // exists.
+    let preparation_context = super::ModulePreparationContext {
+        style_directives: &style_directives,
+        project_path_resolver: Some(project_path_resolver.clone()),
+    };
+
+    let prepared = preparation_context
+        .prepare_module(
+            &input_files,
+            &canonical_entry,
+            local_table,
+            source_byte_count,
+            module_label,
+        )
+        .expect("module preparation should succeed");
+
+    assert!(
+        prepared
+            .prepared_header_syntax
+            .headers
+            .iter()
+            .any(|header| matches!(header.kind, HeaderKind::Constant { .. })),
+        "retained PreparedHeaderSyntax should carry the parsed constant declaration"
+    );
+    assert_eq!(
+        prepared.source_files.iter().count(),
+        1,
+        "retained source identity table should carry the one source file"
+    );
+    assert_eq!(prepared.source_file_count, 1);
+    assert_eq!(prepared.source_byte_count, source_byte_count);
+
+    // Phase 2: semantic compilation is provider-dependent. A separately constructed
+    // `FrontendModuleBuildContext` owns the provider interfaces, binds the retained
+    // `PreparedHeaderSyntax`, then resolves dependencies, builds AST, lowers HIR and runs borrow
+    // validation. It receives no `PreparedSourceInput`, source text or tokens.
+    let compile_context = super::FrontendModuleBuildContext {
+        config: &Config::new(temp_dir.path().to_path_buf()),
+        build_profile: FrontendBuildProfile::Dev,
+        project_path_resolver: Some(project_path_resolver),
+        style_directives: &style_directives,
+        external_packages: Arc::clone(&external_packages),
+        external_import_resolution_table: &resolution_table,
+        builder_runtime_packages: &[],
+    };
+
+    let compiled = compile_context
+        .compile_module_semantic(prepared, &canonical_entry, module_label)
+        .expect("semantic compilation should succeed");
+
+    assert_eq!(
+        compiled.module.entry_point, canonical_entry,
+        "semantic compilation should preserve the module entry point"
+    );
+    assert!(
+        compiled.module.warnings.is_empty(),
+        "semantic compilation should not introduce warnings for a clean constant declaration"
+    );
+}
+
 #[test]
 fn file_preparation_strategy_uses_serial_for_tiny_modules() {
     assert_eq!(
@@ -560,14 +697,19 @@ fn serial_file_preparation_produces_deterministic_ordered_output() {
         super::FilePreparationStrategy::Serial
     );
 
-    let (headers, warnings) = super::FrontendModuleBuildContext::prepare_module_files(
-        &mut frontend,
-        &input_files,
-        &canonical_a,
-        &ExternalImportResolutionTable::default(),
-        source_byte_count,
-    )
-    .expect("serial preparation should succeed");
+    let preparation_context = super::ModulePreparationContext {
+        style_directives: &frontend.style_directives,
+        project_path_resolver: frontend.project_path_resolver.clone(),
+    };
+    let (headers, warnings) = preparation_context
+        .prepare_module_files(
+            &mut frontend.string_table,
+            &frontend.source_files,
+            &input_files,
+            &canonical_a,
+            source_byte_count,
+        )
+        .expect("serial preparation should succeed");
 
     // The module table should have grown with strings from all three files plus
     // header-generated strings.
@@ -762,14 +904,19 @@ fn parallel_file_preparation_produces_deterministic_ordered_output() {
         super::FilePreparationStrategy::ParallelChunked
     );
 
-    let (headers, warnings) = super::FrontendModuleBuildContext::prepare_module_files(
-        &mut frontend,
-        &input_files,
-        &entry_file_path,
-        &ExternalImportResolutionTable::default(),
-        source_byte_count,
-    )
-    .expect("parallel preparation should succeed");
+    let preparation_context = super::ModulePreparationContext {
+        style_directives: &frontend.style_directives,
+        project_path_resolver: frontend.project_path_resolver.clone(),
+    };
+    let (headers, warnings) = preparation_context
+        .prepare_module_files(
+            &mut frontend.string_table,
+            &frontend.source_files,
+            &input_files,
+            &entry_file_path,
+            source_byte_count,
+        )
+        .expect("parallel preparation should succeed");
 
     assert!(warnings.is_empty(), "test declarations should not warn");
 
@@ -838,7 +985,7 @@ fn chunked_file_preparation_merges_in_source_order_after_out_of_order_completion
             options: &options,
         };
 
-        super::FrontendModuleBuildContext::prepare_module_file_chunks(
+        super::ModulePreparationContext::prepare_module_file_chunks(
             &fixture.input_files,
             &fork_source,
             &prepare_context,
@@ -849,13 +996,11 @@ fn chunked_file_preparation_merges_in_source_order_after_out_of_order_completion
     };
     chunks.reverse();
 
-    let (headers, warnings) = super::FrontendModuleBuildContext::merge_file_preparation_chunks(
-        &mut fixture.frontend,
+    let (headers, warnings) = super::ModulePreparationContext::merge_file_preparation_chunks(
+        &mut fixture.frontend.string_table,
         chunks,
         fixture.input_files.len(),
         base_len,
-        &ExternalImportResolutionTable::default(),
-        &options,
     )
     .expect("chunk merge should succeed");
 
@@ -891,14 +1036,19 @@ fn chunked_file_preparation_remaps_non_identity_later_chunks() {
     let mut fixture = frontend_preparation_fixture(&file_source_refs);
     let source_byte_count = source_byte_count(&fixture.input_files);
 
-    let (headers, warnings) = super::FrontendModuleBuildContext::prepare_module_files(
-        &mut fixture.frontend,
-        &fixture.input_files,
-        &fixture.entry_file_path,
-        &ExternalImportResolutionTable::default(),
-        source_byte_count,
-    )
-    .expect("chunked preparation should succeed");
+    let preparation_context = super::ModulePreparationContext {
+        style_directives: &fixture.frontend.style_directives,
+        project_path_resolver: fixture.frontend.project_path_resolver.clone(),
+    };
+    let (headers, warnings) = preparation_context
+        .prepare_module_files(
+            &mut fixture.frontend.string_table,
+            &fixture.frontend.source_files,
+            &fixture.input_files,
+            &fixture.entry_file_path,
+            source_byte_count,
+        )
+        .expect("chunked preparation should succeed");
 
     assert!(warnings.is_empty(), "test declarations should not warn");
 
@@ -932,14 +1082,19 @@ fn chunked_file_preparation_preserves_warning_source_order() {
     let mut fixture = frontend_preparation_fixture(&file_source_refs);
     let source_byte_count = source_byte_count(&fixture.input_files);
 
-    let (_headers, warnings) = super::FrontendModuleBuildContext::prepare_module_files(
-        &mut fixture.frontend,
-        &fixture.input_files,
-        &fixture.entry_file_path,
-        &ExternalImportResolutionTable::default(),
-        source_byte_count,
-    )
-    .expect("chunked preparation should succeed with warnings");
+    let preparation_context = super::ModulePreparationContext {
+        style_directives: &fixture.frontend.style_directives,
+        project_path_resolver: fixture.frontend.project_path_resolver.clone(),
+    };
+    let (_headers, warnings) = preparation_context
+        .prepare_module_files(
+            &mut fixture.frontend.string_table,
+            &fixture.frontend.source_files,
+            &fixture.input_files,
+            &fixture.entry_file_path,
+            source_byte_count,
+        )
+        .expect("chunked preparation should succeed with warnings");
 
     let warning_names: Vec<_> = warnings
         .iter()
@@ -1005,23 +1160,13 @@ fn assert_malformed_chunks_rejected(
     expected_fragment: &str,
 ) {
     let mut fixture = frontend_preparation_fixture(&[("a.bst", "x #= 1\n")]);
-    let options = HeaderParseOptions {
-        entry_file_id: fixture
-            .frontend
-            .source_files
-            .get_by_canonical_path(&fixture.entry_file_path)
-            .map(|identity| identity.file_id),
-        project_path_resolver: fixture.frontend.project_path_resolver.clone(),
-    };
     let base_len = fixture.frontend.string_table.fork_source().base_len();
 
-    let error_messages = match super::FrontendModuleBuildContext::merge_file_preparation_chunks(
-        &mut fixture.frontend,
+    let error_messages = match super::ModulePreparationContext::merge_file_preparation_chunks(
+        &mut fixture.frontend.string_table,
         chunks,
         module_file_count,
         base_len,
-        &ExternalImportResolutionTable::default(),
-        &options,
     ) {
         Err(messages) => messages,
         Ok(_) => panic!("malformed chunk payload should be rejected, but merge succeeded"),
@@ -1118,14 +1263,19 @@ fn chunked_file_preparation_skips_identity_payload_remap() {
     let mut fixture = frontend_preparation_fixture(&file_source_refs);
     let source_byte_count = source_byte_count(&fixture.input_files);
 
-    super::FrontendModuleBuildContext::prepare_module_files(
-        &mut fixture.frontend,
-        &fixture.input_files,
-        &fixture.entry_file_path,
-        &ExternalImportResolutionTable::default(),
-        source_byte_count,
-    )
-    .expect("chunked preparation should succeed");
+    let preparation_context = super::ModulePreparationContext {
+        style_directives: &fixture.frontend.style_directives,
+        project_path_resolver: fixture.frontend.project_path_resolver.clone(),
+    };
+    preparation_context
+        .prepare_module_files(
+            &mut fixture.frontend.string_table,
+            &fixture.frontend.source_files,
+            &fixture.input_files,
+            &fixture.entry_file_path,
+            source_byte_count,
+        )
+        .expect("chunked preparation should succeed");
 
     log_frontend_counters();
     let observations = stop_and_collect_benchmark_observations();

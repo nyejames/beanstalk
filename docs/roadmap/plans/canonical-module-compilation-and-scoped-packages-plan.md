@@ -9,30 +9,32 @@ Replace entry-closure compilation with canonical project and package graphs, imm
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/canonical-module-compilation-and-scoped-packages-plan.md
 STATUS: active
-CURRENT_SLICE: Phase 4e accepted; checkpoint commit pending
-LAST_ACCEPTED_COMMIT: 8ad4c9a2a (Phase 4d provider-independent declaration-shell preparation)
-WORKTREE: main at 8ad4c9a2a with accepted Phase 4e code, tests, index update and this parent-owned plan update; unrelated user documentation work may appear and must be preserved
+CURRENT_SLICE: Phase 4f accepted; checkpoint commit pending
+LAST_ACCEPTED_COMMIT: 278a1ce21 (Phase 4e retained Stage 0 token streams)
+WORKTREE: main at 278a1ce21 with accepted Phase 4f code, tests, index update and this parent-owned plan update; unrelated user documentation work may appear and must be preserved
 REQUIRED_RELOADS: startup files, this plan, relevant language/import and borrow references, current frontend/header source and diff
 RELEVANT_CONTEXT_NOW:
 - docs: compiler-design-overview.md Stage 2 and build-system-design.md Prepared-source orchestration require retained syntax before provider binding with no reparse
-- code: ScannedImportSource retains source text, StructuralProviderReference values and FileTokens; PreparedSourceInput makes source-kind/token states explicit; header preparation consumes retained .bst tokens after source-identity rebinding
+- code: ModulePreparationContext prepares source and produces PreparedModule without provider-interface values; FrontendModuleBuildContext consumes that retained syntax and starts at bind_module_headers
 ACCEPTANCE_CRITERIA:
-- Stage 0 import scanning retains the exact FileTokens stream used to collect structural provider references and carries it with the discovered Beanstalk source
-- frontend header preparation consumes retained .bst tokens and never invokes the tokenizer again for a discovered Beanstalk file; Beandown remains tokenized exactly once and plain Markdown remains non-tokenized
-- retained token paths, nested path-item locations and FileId/canonical identity are rebound or remapped into the module SourceFileTable without reconstructing lexical facts
-- provider-capable serial discovery, provider-free classification/parallel discovery and provider-required fallback all preserve one lexical pass per .bst source and deterministic string-table/diagnostic order
-- the old scan-and-discard token path and frontend retokenization fallback for discovered .bst files are removed rather than kept as optional compatibility paths
-- import behavior, diagnostics, module inputs, file-preparation scheduling and current language behavior remain unchanged with focused hidden-invariant coverage
+- directory and single-file orchestration run source-file preparation and module-wide prepare_header_syntax before semantic module compilation, then retain the resulting PreparedHeaderSyntax with its deterministic string-table context
+- semantic compilation receives retained PreparedHeaderSyntax and begins with provider-dependent bind_module_headers; it does not receive raw PreparedSourceInput or rerun file preparation
+- warnings, diagnostics, source identities, frontend counters and serial/parallel deterministic merge order remain unchanged
+- config and direct Beandown service keep their appropriate local adjacent preparation/binding paths; no broad compatibility wrapper or duplicate module-preparation path remains
+- the retained shape is suitable for Phase 5 dependency-ordered provider scheduling without introducing the graph early
+- focused tests prove syntax preparation occurs once and binding consumes retained syntax without source/token inputs
 VALIDATION_STATE:
 - Phase 4d just validate: passed; cross-target Clippy, 3419 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases
 - Phase 4e focused validation: passed; 2 import-scanning, 5 reachability, 178 module-discovery, 19 orchestration, 5 token-remap and 116 header tests plus cargo check --tests and git diff --check
 - Phase 4e just validate: passed; cross-target Clippy, 3423 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases (-1ms average)
-DOCS_IMPACT: index.md names prepared_source.rs; progress matrix unchanged because support and behavior did not change
-BLOCKERS_OR_OPEN_DECISIONS: none; exact token retention and provider-free/provider-required reuse are accepted
+- Phase 4f focused validation: passed; 20 orchestration, 25 frontend-compilation, 179 module-discovery and 116 header tests plus cargo check --tests, cargo clippy --tests -D warnings and git diff --check
+- Phase 4f just validate: passed; cross-target Clippy, 3424 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases (-1ms average)
+DOCS_IMPACT: index.md names prepared_module.rs; progress matrix unchanged because support and behavior did not change
+BLOCKERS_OR_OPEN_DECISIONS: none; provider-independent module preparation and retained syntax handoff are accepted
 DELEGATION_DECISION: ollama - user requires Ollama for every worker slice
 NEXT_WORKER_ORDER: ollama only; no provider substitution for this run
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit Phase 4e, record its hash, then scope the smallest coherent retained PreparedHeaderSyntax scheduling slice
+NEXT_RESUME_ACTION: commit Phase 4f, record its hash, then scope Phase 5a deterministic project graph structure and edges
 ```
 
 ## Hard prerequisites
@@ -407,6 +409,20 @@ Accepted Phase 4e checkpoint:
 - the discarded-token scan path, discovered-Beanstalk frontend retokenization and obsolete raw
   `InputFile` payload were removed. Focused tests cover source reads, retained-token state and
   nested path-location rebinding without changing import or diagnostic behavior.
+
+Accepted Phase 4f checkpoint:
+
+- `ModulePreparationContext` owns provider-independent source identity, per-file preparation and
+  module-wide `prepare_header_syntax`. Its type contains no package registry, provider resolution
+  table or builder runtime interface, and it does not construct a semantic `CompilerFrontend`.
+- `PreparedModule` retains `PreparedHeaderSyntax`, its deterministic module string table, source
+  identity table, preparation warnings and capacity facts. It carries no source text or tokens.
+- `FrontendModuleBuildContext::compile_module_semantic` consumes the retained payload and begins
+  with provider-dependent `bind_module_headers`, followed by local ordering, AST, HIR and borrow
+  validation. The obsolete combined `compile_module` path was removed.
+- single-file and directory orchestration call the two contexts explicitly, leaving a typed
+  scheduling boundary for Phase 5. Source logical paths now come from the retained
+  `SourceFileTable`, and focused coverage guards the provider-free preparation API.
 
 ### Phase 5: Build deterministic project, package and provider graphs
 
