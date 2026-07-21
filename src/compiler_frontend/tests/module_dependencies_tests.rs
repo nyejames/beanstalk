@@ -53,7 +53,6 @@ fn parse_module_headers(
             file_tokens,
             &entry_path_buf,
             &options,
-            &external_package_registry,
             &mut string_table,
             const_template_offset,
             runtime_fragment_offset,
@@ -355,16 +354,9 @@ fn capacity_reference_same_file_forward_reference_is_rejected() {
     )
     .expect("tokenization should succeed");
 
-    let output = prepare_file_from_tokens(
-        file_tokens,
-        &entry_path,
-        &options,
-        &external_package_registry,
-        &mut string_table,
-        0,
-        0,
-    )
-    .expect("preparation should succeed");
+    let output =
+        prepare_file_from_tokens(file_tokens, &entry_path, &options, &mut string_table, 0, 0)
+            .expect("preparation should succeed");
 
     let prepared_syntax = prepare_header_syntax(vec![output], &mut string_table)
         .expect("header syntax preparation should succeed");

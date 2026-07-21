@@ -70,13 +70,11 @@ fn prepare_via_pipeline(
 > {
     let source_files = SourceFileTable::empty();
     let style_directives = StyleDirectiveRegistry::built_ins();
-    let external_package_registry = Arc::new(ExternalPackageRegistry::new());
     let entry_file_path = PathBuf::from("src/#page.bst");
     let options = HeaderParseOptions::default();
     let context = FrontendFilePrepareContext {
         source_files: &source_files,
         style_directives: &style_directives,
-        external_package_registry: external_package_registry.as_ref(),
         entry_file_path: entry_file_path.as_path(),
         options: &options,
     };
@@ -113,7 +111,6 @@ fn ast_from_beandown_source(source: &str) -> (Ast, StringTable) {
     let context = FrontendFilePrepareContext {
         source_files: &source_files,
         style_directives: &style_directives,
-        external_package_registry: external_package_registry.as_ref(),
         entry_file_path: entry_file_path.as_path(),
         options: &options,
     };
@@ -356,7 +353,6 @@ impl BeandownScopeFixture {
         let context = FrontendFilePrepareContext {
             source_files: &self.source_files,
             style_directives: &style_directives,
-            external_package_registry: external_package_registry.as_ref(),
             entry_file_path: self.entry_file_path.as_path(),
             options: &options,
         };
@@ -497,7 +493,6 @@ fn prepare_beanstalk_source(
         file_tokens,
         entry_file_path,
         &HeaderParseOptions::default(),
-        &Arc::new(ExternalPackageRegistry::new()),
         string_table,
         0,
         0,

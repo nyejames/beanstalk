@@ -18,7 +18,11 @@ use crate::compiler_frontend::declaration_syntax::choice::ChoiceVariantPayloadSy
 use crate::compiler_frontend::declaration_syntax::signature_members::{
     FunctionReturnSyntax, FunctionSignatureSyntax, ReturnChannelSyntax, ReturnSlotSyntax,
 };
-use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
+use crate::compiler_frontend::external_packages::{
+    ExternalAbiType, ExternalFunctionDef, ExternalFunctionId, ExternalFunctionLowerings,
+    ExternalPackageRegistry, ExternalReturnAlias, ExternalSymbolId, ExternalSymbolPath,
+    ExternalTypeDef, ExternalTypeId, external_success_returns,
+};
 use crate::compiler_frontend::headers::types::HeaderExportMode;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
@@ -40,7 +44,6 @@ struct HeaderTestPrepareContext<'a> {
     entry_file_path: &'a Path,
     options: &'a HeaderParseOptions,
     style_directives: &'a StyleDirectiveRegistry,
-    external_package_registry: &'a ExternalPackageRegistry,
 }
 
 pub(crate) fn prepare_single_file(
@@ -49,7 +52,6 @@ pub(crate) fn prepare_single_file(
     entry_file_path: &Path,
     string_table: &mut StringTable,
 ) -> FileFrontendPrepareOutput {
-    let external_package_registry = ExternalPackageRegistry::new();
     let options = HeaderParseOptions::default();
     let style_directives = StyleDirectiveRegistry::built_ins();
     let interned_path = InternedPath::try_from_filesystem_path(file_path, string_table)
@@ -64,16 +66,8 @@ pub(crate) fn prepare_single_file(
     )
     .expect("tokenization should succeed");
 
-    prepare_file_from_tokens(
-        file_tokens,
-        entry_file_path,
-        &options,
-        &external_package_registry,
-        string_table,
-        0,
-        0,
-    )
-    .expect("preparation should succeed")
+    prepare_file_from_tokens(file_tokens, entry_file_path, &options, string_table, 0, 0)
+        .expect("preparation should succeed")
 }
 
 fn prepare_test_source_file(
@@ -107,7 +101,6 @@ fn prepare_test_source_file(
         file_tokens,
         context.entry_file_path,
         context.options,
-        context.external_package_registry,
         string_table,
         const_template_offset,
         runtime_fragment_offset,
@@ -214,7 +207,6 @@ fn parse_single_file_headers_with_entry(
         file_tokens,
         &entry_file_path,
         &options,
-        &external_package_registry,
         &mut string_table,
         0,
         0,
@@ -2128,7 +2120,6 @@ pub(crate) fn parse_multi_file_headers(
         entry_file_path: &entry_file_path,
         options: &options,
         style_directives: &style_directives,
-        external_package_registry: &external_package_registry,
     };
 
     let mut prepared_outputs = Vec::new();
@@ -2222,7 +2213,6 @@ fn parse_multi_file_headers_with_result(
         entry_file_path: &entry_file_path,
         options: &options,
         style_directives: &style_directives,
-        external_package_registry: &external_package_registry,
     };
 
     let mut prepared_outputs = Vec::new();
@@ -3232,5 +3222,168 @@ fn authored_default_expression_survives_newline_and_multiline_continuation() {
                 .count()
                 == 2),
         "an operator-continued multiline default should fold both string literals"
+    );
+}
+
+// ---------------------------------------------------------------------------
+//  Provider-independent preparation vs provider-dependent prelude collisions
+// ---------------------------------------------------------------------------
+
+fn empty_void_function_def(name: &str) -> ExternalFunctionDef {
+    ExternalFunctionDef {
+        name: name.to_owned(),
+        parameters: Vec::new(),
+        returns: external_success_returns(ExternalAbiType::Void, ExternalReturnAlias::Fresh),
+        error_return_type: None,
+        lowerings: ExternalFunctionLowerings::default(),
+    }
+}
+
+fn registry_with_prelude_function_symbol(name: &'static str) -> ExternalPackageRegistry {
+    let mut registry = ExternalPackageRegistry::new();
+    let package_id = registry
+        .register_package(
+            "@test/prelude_symbol",
+            crate::builder_surface::PackageOrigin::Builder,
+        )
+        .expect("test package registration should not collide");
+    let function_id = ExternalFunctionId::Synthetic(7_000);
+    registry
+        .register_function_at_path(
+            package_id,
+            ExternalSymbolPath::from_single(name),
+            function_id,
+            empty_void_function_def(name),
+        )
+        .expect("test function registration should not collide");
+    registry
+        .register_prelude_symbol(name, ExternalSymbolId::Function(function_id))
+        .expect("prelude symbol registration should not collide");
+    registry
+}
+
+fn registry_with_prelude_type_symbol(name: &'static str) -> ExternalPackageRegistry {
+    let mut registry = ExternalPackageRegistry::new();
+    let package_id = registry
+        .register_package(
+            "@test/prelude_type",
+            crate::builder_surface::PackageOrigin::Builder,
+        )
+        .expect("test package registration should not collide");
+    let type_id = ExternalTypeId(7_100);
+    registry
+        .register_type_at_path(
+            package_id,
+            ExternalSymbolPath::from_single(name),
+            type_id,
+            ExternalTypeDef {
+                name: name.to_owned(),
+                package_id,
+                abi_type: ExternalAbiType::Handle,
+            },
+        )
+        .expect("test type registration should not collide");
+    registry
+        .register_prelude_symbol(name, ExternalSymbolId::Type(type_id))
+        .expect("prelude type registration should not collide");
+    registry
+}
+
+#[test]
+fn prelude_symbol_declaration_prepared_without_registry_then_collides_at_binding() {
+    let mut string_table = StringTable::new();
+    let file_path = PathBuf::from("src/#page.bst");
+    // Preparation takes no registry input, so a declaration that reuses a prelude symbol name
+    // still parses into a retained declaration shell during provider-independent preparation.
+    let output = prepare_single_file(
+        "prelude_fn |x Int| -> Int:\n    return x\n;\n",
+        &file_path,
+        &file_path,
+        &mut string_table,
+    );
+    assert!(
+        output
+            .headers
+            .iter()
+            .any(|header| matches!(header.kind, HeaderKind::Function { .. })),
+        "provider-independent preparation should retain the prelude-named declaration shell"
+    );
+    let expected_location = output
+        .headers
+        .iter()
+        .find(|header| matches!(header.kind, HeaderKind::Function { .. }))
+        .expect("expected retained prelude-named function shell")
+        .name_location
+        .to_owned();
+
+    let registry = registry_with_prelude_function_symbol("prelude_fn");
+    let result = prepare_and_bind_headers_result(
+        vec![output],
+        &registry,
+        &ExternalImportResolutionTable::default(),
+        None,
+        &mut string_table,
+    );
+    let binding_error = match result {
+        Ok(_) => panic!("binding should reject a declaration that collides with a prelude symbol"),
+        Err(bag) => bag,
+    };
+    let diagnostic = binding_error
+        .diagnostics()
+        .iter()
+        .find(|diagnostic| {
+            matches!(
+                diagnostic.kind,
+                DiagnosticKind::Rule(RuleDiagnosticKind::ReservedBuiltinName)
+            )
+        })
+        .expect("binding should preserve the reserved builtin-name diagnostic");
+    assert_eq!(diagnostic.kind.code(), "BST-RULE-0027");
+    assert_eq!(diagnostic.primary_location, expected_location);
+}
+
+#[test]
+fn prelude_type_generic_parameter_prepared_without_registry_then_collides_at_binding() {
+    let mut string_table = StringTable::new();
+    let file_path = PathBuf::from("src/#page.bst");
+    // A generic parameter reusing a prelude type name parses during provider-independent
+    // preparation; the collision is provider-dependent and is validated during binding.
+    let output = prepare_single_file(
+        "Box type PreludeType = |\n    value PreludeType,\n|\n",
+        &file_path,
+        &file_path,
+        &mut string_table,
+    );
+    assert!(
+        output
+            .headers
+            .iter()
+            .any(|header| matches!(header.kind, HeaderKind::Struct { .. })),
+        "provider-independent preparation should retain the generic declaration shell"
+    );
+
+    let registry = registry_with_prelude_type_symbol("PreludeType");
+    let result = prepare_and_bind_headers_result(
+        vec![output],
+        &registry,
+        &ExternalImportResolutionTable::default(),
+        None,
+        &mut string_table,
+    );
+    let binding_error = match result {
+        Ok(_) => panic!("binding should reject a generic parameter naming a prelude type"),
+        Err(bag) => bag,
+    };
+    assert!(
+        binding_error.diagnostics().iter().any(|diagnostic| {
+            matches!(
+                diagnostic.payload,
+                DiagnosticPayload::InvalidDeclaration {
+                    reason: InvalidDeclarationReason::GenericParameterNameCollision { .. },
+                    ..
+                }
+            )
+        }),
+        "prelude-type generic parameter collision should be diagnosed during binding"
     );
 }

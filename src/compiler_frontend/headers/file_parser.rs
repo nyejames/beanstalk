@@ -342,15 +342,6 @@ fn handle_symbol_item_with_export_mode(
         )));
     }
 
-    // Only prelude-visible external symbols block local declarations; package-scoped symbols that
-    // are not imported should not prevent a file from declaring its own symbol with the same name.
-    if context
-        .external_package_registry
-        .is_prelude_function(context.string_table.resolve(name_id))
-    {
-        return handle_prelude_symbol_item(token_stream, state, current_token, name_id);
-    }
-
     if let Some(first_location) = state.encountered_symbols.get(&name_id) {
         let is_conformance_declaration = (token_stream.current_token_kind() == &TokenKind::Must
             && !starts_trait_declaration_after_must(token_stream))
@@ -388,7 +379,6 @@ fn handle_symbol_item_with_export_mode(
 
     let source_file = token_stream.src_path.to_owned();
     let mut build_context = HeaderBuildContext {
-        external_package_registry: context.external_package_registry,
         warnings: &mut state.warnings,
         source_file: &source_file,
         file_imports: &state.file_import_paths,
@@ -445,24 +435,6 @@ fn handle_symbol_item_with_export_mode(
             state.encountered_symbols.insert(name_id, name_location);
         }
     }
-
-    Ok(())
-}
-
-fn handle_prelude_symbol_item(
-    token_stream: &FileTokens,
-    state: &mut HeaderFileParseState,
-    current_token: Token,
-    name_id: StringId,
-) -> FileParserResult<()> {
-    if starts_duplicate_top_level_header_declaration(token_stream) {
-        return Err(Box::new(CompilerDiagnostic::reserved_builtin_name(
-            name_id,
-            token_stream.current_location(),
-        )));
-    }
-
-    state.push_start_body_token(current_token);
 
     Ok(())
 }

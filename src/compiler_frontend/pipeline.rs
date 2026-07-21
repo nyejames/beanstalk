@@ -58,7 +58,6 @@ pub struct CompilerFrontend {
 pub(crate) struct FrontendFilePrepareContext<'a> {
     pub(crate) source_files: &'a SourceFileTable,
     pub(crate) style_directives: &'a StyleDirectiveRegistry,
-    pub(crate) external_package_registry: &'a ExternalPackageRegistry,
     pub(crate) entry_file_path: &'a Path,
     pub(crate) options: &'a HeaderParseOptions,
 }
@@ -254,7 +253,6 @@ impl CompilerFrontend {
                         &mut file_tokens,
                         context.entry_file_path,
                         context.options,
-                        context.external_package_registry,
                         local_string_table,
                         input.const_template_offset,
                         input.runtime_fragment_offset,

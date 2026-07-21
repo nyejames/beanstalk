@@ -163,7 +163,6 @@ fn prepare_source_file(
     let context = FrontendFilePrepareContext {
         source_files: &compiler.source_files,
         style_directives: &compiler.style_directives,
-        external_package_registry: compiler.external_package_registry.as_ref(),
         entry_file_path: source.source_path.as_path(),
         options: &options,
     };

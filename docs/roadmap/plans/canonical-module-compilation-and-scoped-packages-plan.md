@@ -9,29 +9,29 @@ Replace entry-closure compilation with canonical project and package graphs, imm
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/canonical-module-compilation-and-scoped-packages-plan.md
 STATUS: active
-CURRENT_SLICE: Phase 4c accepted; checkpoint commit pending
-LAST_ACCEPTED_COMMIT: 23b733aef (Phase 4b retained structural provider references)
-WORKTREE: main at 23b733aef with accepted Phase 4c code, focused tests, index and this plan update; unrelated user documentation work may appear and must be preserved
+CURRENT_SLICE: Phase 4d accepted; checkpoint commit pending
+LAST_ACCEPTED_COMMIT: 96a7ac138 (Phase 4c typed local declaration-ordering hints)
+WORKTREE: main at 96a7ac138 with accepted Phase 4d code, tests and this plan update; unrelated user documentation work may appear and must be preserved
 REQUIRED_RELOADS: startup files, this plan, relevant language/import and borrow references, current frontend/header source and diff
 RELEVANT_CONTEXT_NOW:
 - docs: compiler-design-overview.md Stage 2 and build-system-design.md Prepared-source orchestration require retained syntax before provider binding with no reparse
-- code: ordering_hints.rs now records typed conservative LocalDeclarationOrderingHint values without provider classification; binding canonicalizes or drops import spellings and Stage 3 alone resolves retained hints into dependency edges
+- code: per-file token/header preparation and its contexts no longer receive ExternalPackageRegistry; bind_module_headers validates retained prelude-function declaration names and prelude-type generic parameters before building provider-backed visibility
 ACCEPTANCE_CRITERIA:
-- one LocalDeclarationOrderingHint type owns conservative declaration-shell ordering paths and remapping; Header no longer exposes a generic dependencies set
-- syntax preparation records hints without consulting ExternalPackageRegistry to classify source versus virtual/provider imports
-- interface binding canonicalizes or drops import-spelled hints using bound visibility, while Stage 3 alone resolves retained local hints into graph edges
-- StructuralProviderReference, FileImport imported-symbol metadata and LocalDeclarationOrderingHint remain type-distinct production data
-- diagnostics, declaration order and current behavior remain unchanged; focused tests cover remapping, imported/external hint removal and Stage 3 ordering
+- per-file token/header syntax preparation takes no ExternalPackageRegistry or provider-interface input
+- retained declaration and generic-parameter shells carry enough authored identity and location for binding to validate prelude collisions after provider interfaces exist
+- bind_module_headers owns provider/prelude collision validation without retokenizing or reparsing source
+- existing reserved-name and generic-parameter collision diagnostic codes, reasons and source locations remain unchanged
+- obsolete registry fields and arguments are removed rather than retained as compatibility plumbing
 VALIDATION_STATE:
-- Phase 4b just validate: passed; cross-target Clippy, 3416 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases
-- Phase 4c focused validation: passed; 114 header tests, 17 remap tests, 18 module-dependency tests, 2 constant-dependency tests and cargo check --tests
 - Phase 4c just validate: passed; cross-target Clippy, 3417 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases
-DOCS_IMPACT: current plan state refreshed; progress matrix unchanged for a behavior-preserving reference-class split
-BLOCKERS_OR_OPEN_DECISIONS: temporal retention is now unblocked from ordering-hint classification depending on mutable provider discovery; no user blocker
+- Phase 4d focused validation: passed; 116 header tests, 13 namespace-import tests, 20 generic-parameter tests, 19 orchestration tests, canonical prelude collision case and cargo check --tests
+- Phase 4d just validate: passed; cross-target Clippy, 3419 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases
+DOCS_IMPACT: current plan state refreshed; progress matrix unchanged for a behavior-preserving stage-ownership move
+BLOCKERS_OR_OPEN_DECISIONS: provider-independent declaration-shell preparation is complete; temporal Stage 0 retention must preserve deterministic string-table/file identity and provider-free parallel discovery
 DELEGATION_DECISION: ollama - user requires Ollama for every worker slice
 NEXT_WORKER_ORDER: ollama only; no provider substitution for this run
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit Phase 4c, record its hash, then scope temporal retention of prepared source syntax through Stage 0
+NEXT_RESUME_ACTION: commit Phase 4d, record its hash, then scope the smallest coherent Stage 0 prepared-syntax retention slice
 ```
 
 ## Hard prerequisites
@@ -377,6 +377,20 @@ Accepted Phase 4c checkpoint:
   removed; `index.md` names the retained-syntax, hint and binding responsibilities.
 - typed remapping, external-hint removal and existing local ordering have focused coverage.
   Diagnostics, declaration order and current language behavior are unchanged.
+
+Accepted Phase 4d checkpoint:
+
+- per-file token and declaration-shell preparation no longer receives `ExternalPackageRegistry`;
+  `FrontendFilePrepareContext`, `HeaderParseContext`, `HeaderBuildContext` and the token-input
+  preparation APIs contain no provider-interface plumbing.
+- syntax preparation retains declarations and generic parameters uniformly. `bind_module_headers`
+  validates prelude-function declaration names and prelude-type generic parameters from those
+  retained shells once the provider interface exists.
+- the binding-owned checks preserve `BST-RULE-0027` for reserved prelude-function declarations and
+  `BST-RULE-0043` with the generic-parameter collision reason, including authored source locations.
+- import-alias generic collisions remain syntax-owned, while same-file and imported visible-type
+  generic collisions remain AST-owned. No duplicate provider-aware syntax path or compatibility
+  argument remains.
 
 ### Phase 5: Build deterministic project, package and provider graphs
 

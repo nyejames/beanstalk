@@ -60,16 +60,9 @@ pub(crate) fn parse_single_file_ast_result(
         None,
     )?;
 
-    let output = prepare_file_from_tokens(
-        file_tokens,
-        &file_path,
-        &options,
-        external_package_registry.as_ref(),
-        &mut string_table,
-        0,
-        0,
-    )
-    .map_err(|error| error.diagnostic)?;
+    let output =
+        prepare_file_from_tokens(file_tokens, &file_path, &options, &mut string_table, 0, 0)
+            .map_err(|error| error.diagnostic)?;
 
     let prepared_syntax =
         prepare_header_syntax(vec![output], &mut string_table).map_err(|bag| {

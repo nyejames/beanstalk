@@ -564,7 +564,6 @@ fn prepare_one_config_file(
         token_stream,
         entry_file_path,
         &HeaderParseOptions::default(),
-        &services.frontend_surface.binding_packages,
         string_table,
         0,
         0,

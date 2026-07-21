@@ -84,7 +84,6 @@ fn handle_top_level_const_template(
 
     let source_file = token_stream.src_path.to_owned();
     let mut build_context = HeaderBuildContext {
-        external_package_registry: context.external_package_registry,
         warnings: &mut state.warnings,
         source_file: &source_file,
         file_imports: &state.file_import_paths,

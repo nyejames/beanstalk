@@ -173,7 +173,6 @@ impl FrontendProject {
                 file_tokens,
                 &self.entry_file,
                 &options,
-                &self.frontend.external_package_registry,
                 &mut self.frontend.string_table,
                 const_template_offset,
                 runtime_fragment_offset,

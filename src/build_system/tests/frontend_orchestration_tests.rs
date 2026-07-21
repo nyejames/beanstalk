@@ -219,7 +219,6 @@ fn fused_preparation_merges_local_forks_and_resolves_source_and_generated_string
             let prepare_context = FrontendFilePrepareContext {
                 source_files: &frontend.source_files,
                 style_directives: &frontend.style_directives,
-                external_package_registry: frontend.external_package_registry.as_ref(),
                 entry_file_path: &canonical_a,
                 options: &options,
             };
@@ -746,7 +745,6 @@ fn chunked_file_preparation_merges_in_source_order_after_out_of_order_completion
         let prepare_context = FrontendFilePrepareContext {
             source_files: &fixture.frontend.source_files,
             style_directives: &fixture.frontend.style_directives,
-            external_package_registry: fixture.frontend.external_package_registry.as_ref(),
             entry_file_path: &fixture.entry_file_path,
             options: &options,
         };

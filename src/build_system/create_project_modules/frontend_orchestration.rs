@@ -437,7 +437,6 @@ impl FrontendModuleBuildContext<'_> {
         let prepare_context = FrontendFilePrepareContext {
             source_files: &compiler.source_files,
             style_directives: &compiler.style_directives,
-            external_package_registry: compiler.external_package_registry.as_ref(),
             entry_file_path,
             options: &options,
         };

@@ -8,7 +8,9 @@
 
 use crate::builder_surface::external_import_providers::resolution_table::ExternalImportResolutionTable;
 use crate::compiler_frontend::arena::{HeaderStats, TokenStats};
-use crate::compiler_frontend::compiler_messages::DiagnosticBag;
+use crate::compiler_frontend::compiler_messages::{
+    CompilerDiagnostic, DiagnosticBag, InvalidDeclarationReason,
+};
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::headers::constant_dependencies::{
     ConstantDependencyInput, add_constant_initializer_dependencies,
@@ -43,7 +45,6 @@ pub fn parse_file_headers_with_table(
     file_tokens: &mut FileTokens,
     entry_file_path: &Path,
     options: &HeaderParseOptions,
-    external_package_registry: &ExternalPackageRegistry,
     string_table: &mut StringTable,
     const_template_offset: usize,
     runtime_fragment_offset: usize,
@@ -82,7 +83,6 @@ pub fn parse_file_headers_with_table(
     };
 
     let mut parse_context = HeaderParseContext {
-        external_package_registry,
         file_role,
         is_config_file,
         string_table,
@@ -104,7 +104,6 @@ pub fn prepare_file_from_tokens(
     mut file_tokens: FileTokens,
     entry_file_path: &Path,
     options: &HeaderParseOptions,
-    external_package_registry: &ExternalPackageRegistry,
     string_table: &mut StringTable,
     const_template_offset: usize,
     runtime_fragment_offset: usize,
@@ -116,7 +115,6 @@ pub fn prepare_file_from_tokens(
         &mut file_tokens,
         entry_file_path,
         options,
-        external_package_registry,
         &mut local_string_table,
         const_template_offset,
         runtime_fragment_offset,
@@ -210,6 +208,8 @@ pub fn bind_module_headers(
         mut module_symbols,
     } = prepared;
 
+    validate_prelude_declaration_shells(&headers, external_package_registry, string_table)?;
+
     if let Some(resolver) = project_path_resolver {
         build_public_exports(
             &mut module_symbols,
@@ -257,6 +257,67 @@ pub fn bind_module_headers(
         module_symbols,
         import_environment,
     })
+}
+
+/// Validate provider-dependent prelude collisions from retained declaration shells.
+///
+/// WHAT: rejects declaration names that reuse prelude functions and generic parameters that reuse
+/// prelude types, preserving their authored names and locations.
+/// WHY: prelude membership is provider-dependent, so syntax preparation retains these shells
+/// uniformly and binding validates them once the provider interface exists. Import-alias generic
+/// collisions remain syntax-owned; same-file and imported visible-type collisions remain AST-owned.
+fn validate_prelude_declaration_shells(
+    headers: &[Header],
+    external_package_registry: &ExternalPackageRegistry,
+    string_table: &StringTable,
+) -> Result<(), DiagnosticBag> {
+    let mut collision_bag = DiagnosticBag::new();
+    for header in headers {
+        if let Some(name) = header.tokens.src_path.name()
+            && external_package_registry.is_prelude_function(string_table.resolve(name))
+        {
+            collision_bag.push(CompilerDiagnostic::reserved_builtin_name(
+                name,
+                header.name_location.to_owned(),
+            ));
+        }
+
+        let generic_parameters = match &header.kind {
+            HeaderKind::Function {
+                generic_parameters, ..
+            }
+            | HeaderKind::Struct {
+                generic_parameters, ..
+            }
+            | HeaderKind::Choice {
+                generic_parameters, ..
+            } => Some(generic_parameters),
+            _ => None,
+        };
+
+        if let Some(generic_parameters) = generic_parameters {
+            for parameter in &generic_parameters.parameters {
+                if !external_package_registry.is_prelude_type(string_table.resolve(parameter.name))
+                {
+                    continue;
+                }
+
+                collision_bag.push(CompilerDiagnostic::invalid_declaration(
+                    InvalidDeclarationReason::GenericParameterNameCollision {
+                        parameter_name: parameter.name,
+                    },
+                    None,
+                    parameter.location.to_owned(),
+                ));
+            }
+        }
+    }
+
+    if collision_bag.has_errors() {
+        return Err(collision_bag);
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]

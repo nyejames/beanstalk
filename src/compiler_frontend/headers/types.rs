@@ -14,7 +14,6 @@ use crate::compiler_frontend::declaration_syntax::declaration_shell::Declaration
 use crate::compiler_frontend::declaration_syntax::signature_members::{
     FunctionSignatureSyntax, SignatureMemberSyntax,
 };
-use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::headers::import_environment::HeaderImportEnvironment;
 use crate::compiler_frontend::headers::module_symbols::ModuleSymbols;
 use crate::compiler_frontend::paths::const_paths::StructuralProviderReference;
@@ -632,7 +631,6 @@ impl FileFrontendPrepareError {
 
 // Shared file-level state that stays live while one source file is being split into headers.
 pub(super) struct HeaderParseContext<'a> {
-    pub external_package_registry: &'a ExternalPackageRegistry,
     pub file_role: FileRole,
     pub is_config_file: bool,
     pub string_table: &'a mut StringTable,
@@ -650,7 +648,6 @@ pub(super) struct HeaderParseContext<'a> {
 
 // Shared per-header builder inputs that stay stable while one declaration is classified.
 pub(super) struct HeaderBuildContext<'a> {
-    pub external_package_registry: &'a ExternalPackageRegistry,
     pub warnings: &'a mut Vec<CompilerDiagnostic>,
     pub source_file: &'a InternedPath,
     pub file_imports: &'a HashSet<InternedPath>,

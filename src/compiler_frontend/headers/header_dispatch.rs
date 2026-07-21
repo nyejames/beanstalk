@@ -27,7 +27,6 @@ use super::trait_headers::{
     parse_specialized_conformance_target, parse_trait_conformance, parse_trait_declaration,
     parse_trait_incompatibility,
 };
-use crate::compiler_frontend::external_packages::ExternalSymbolId;
 use crate::compiler_frontend::headers::ordering_hints::{
     collect_constant_type_hints, collect_named_type_ordering_hint,
 };
@@ -542,20 +541,16 @@ fn parse_optional_generic_parameters(
     )
 }
 
-fn generic_parameter_forbidden_names(context: &mut HeaderBuildContext<'_>) -> FxHashSet<StringId> {
+fn generic_parameter_forbidden_names(context: &HeaderBuildContext<'_>) -> FxHashSet<StringId> {
+    // WHAT: local names already claimed by retained import shells in this file.
+    // WHY: import aliases are retained syntax, so this collision is provider-independent and
+    // belongs in syntax preparation. Prelude type-symbol collisions are provider-dependent and
+    // are validated during header binding against the bound prelude visibility instead.
     let mut forbidden_names = FxHashSet::default();
 
     for import in context.file_import_entries {
         if let Some(local_name) = import.alias.or_else(|| import.provider.path.name()) {
             forbidden_names.insert(local_name);
-        }
-    }
-
-    // Mutation: prelude names are compiler-owned fixed symbols that must be interned
-    // so they can be compared against parsed generic parameter names.
-    for (prelude_name, symbol_id) in context.external_package_registry.prelude_symbols_by_name() {
-        if matches!(symbol_id, ExternalSymbolId::Type(_)) {
-            forbidden_names.insert(context.string_table.intern(prelude_name));
         }
     }
 
