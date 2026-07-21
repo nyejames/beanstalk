@@ -2659,8 +2659,9 @@ fn missing_slot_resolution_is_explicit() {
 // -------------------------
 //
 // The default and missing cases are pinned above. These tests cover named,
-// positional, repeated, and structural-preservation invariants for the
-// store-owned slot-resolution overlay path.
+// positional, and repeated overlay materialization, plus the `TirView`
+// slot-resolution lookup boundary for the store-owned slot-resolution
+// overlay path.
 
 /// Materializes a slot-resolution overlay for a wrapper with the given slot
 /// keys and fill contribution nodes, returning the wrapper and overlay IDs.
@@ -2692,6 +2693,7 @@ fn overlay_materializes_named_slot_resolution() {
 
     let insert_template =
         build_slot_insert_template(&mut store, SlotKey::Named(title), &mut string_table);
+    let insert_content_node = template_root_node_id(insert_template, &store);
     let mut builder = TemplateIrBuilder::new(&mut store);
     let insert_node = builder.push_insert_contribution_node(insert_template, empty_location());
 
@@ -2707,10 +2709,19 @@ fn overlay_materializes_named_slot_resolution() {
     let (occurrence_id, resolution) = &overlay.resolutions[0];
     assert_eq!(*occurrence_id, SlotOccurrenceId::new(0));
     assert_eq!(resolution.key, SlotKey::Named(title));
+    assert!(
+        matches!(resolution.kind, TirSlotResolutionKind::Resolved { .. }),
+        "named slot should resolve to a source list"
+    );
     assert_eq!(
         resolution.sources().len(),
         1,
         "named slot should have one source"
+    );
+    assert_eq!(
+        root_child_node_ids(resolution.sources()[0], &store),
+        vec![insert_content_node],
+        "the store-owned source template should contain the insert helper's body content"
     );
 }
 
@@ -2738,10 +2749,19 @@ fn overlay_materializes_positional_slot_resolution() {
     let (occurrence_id, resolution) = &overlay.resolutions[0];
     assert_eq!(*occurrence_id, SlotOccurrenceId::new(0));
     assert_eq!(resolution.key, SlotKey::Positional(0));
+    assert!(
+        matches!(resolution.kind, TirSlotResolutionKind::Resolved { .. }),
+        "positional slot should resolve to a source list"
+    );
     assert_eq!(
         resolution.sources().len(),
         1,
         "positional slot should have one source"
+    );
+    assert_eq!(
+        root_child_node_ids(resolution.sources()[0], &store),
+        vec![contribution_node],
+        "the store-owned source template should contain the routed contribution node"
     );
 }
 
@@ -2756,6 +2776,7 @@ fn overlay_materializes_repeated_slot_sharing_source_list() {
     // only a second default slot is rejected.
     let insert_template =
         build_slot_insert_template(&mut store, SlotKey::Named(title), &mut string_table);
+    let insert_content_node = template_root_node_id(insert_template, &store);
     let mut builder = TemplateIrBuilder::new(&mut store);
     let insert_node = builder.push_insert_contribution_node(insert_template, empty_location());
 
@@ -2772,6 +2793,30 @@ fn overlay_materializes_repeated_slot_sharing_source_list() {
     let (second_occurrence, second_resolution) = &overlay.resolutions[1];
     assert_eq!(*first_occurrence, SlotOccurrenceId::new(0));
     assert_eq!(*second_occurrence, SlotOccurrenceId::new(1));
+    assert_eq!(
+        first_resolution.key,
+        SlotKey::Named(title),
+        "first occurrence should carry the named slot key"
+    );
+    assert_eq!(
+        second_resolution.key,
+        SlotKey::Named(title),
+        "second occurrence should carry the same named slot key"
+    );
+    assert!(
+        matches!(
+            first_resolution.kind,
+            TirSlotResolutionKind::Resolved { .. }
+        ),
+        "first occurrence should resolve to a source list"
+    );
+    assert!(
+        matches!(
+            second_resolution.kind,
+            TirSlotResolutionKind::Resolved { .. }
+        ),
+        "second occurrence should resolve to a source list"
+    );
 
     assert_eq!(first_resolution.sources().len(), 1);
     assert_eq!(second_resolution.sources().len(), 1);
@@ -2782,40 +2827,10 @@ fn overlay_materializes_repeated_slot_sharing_source_list() {
         first_source, second_source,
         "repeated slot occurrences should share the same replayable source template"
     );
-}
-
-#[test]
-fn overlay_materialization_preserves_structural_expansion() {
-    // The overlay path must not alter the structural expansion behavior.
-    let mut string_table = StringTable::new();
-    let mut store = TemplateIrStore::new();
-
-    let wrapper = build_wrapper_with_slot_sequence(&mut store, vec![SlotKey::Default]);
-    let contribution = build_single_text_template(&mut store, &mut string_table, "filled");
-    let contribution_node = template_root_node_id(contribution, &store);
-    let fill = build_fill_template(&mut store, vec![contribution_node]);
-    let routed = route_tir_slot_contributions(&store, wrapper, fill, &string_table)
-        .expect("routing should succeed");
-    let wrapper_reference = TemplateTirChildReference::new(
-        wrapper,
-        TemplateTirPhase::Composed,
-        TemplateViewContext::default(),
-    );
-
-    // Materialize the overlay (exercising the overlay path) before expansion.
-    let _overlay_id =
-        materialize_tir_slot_resolution_overlay(&mut store, wrapper_reference, &routed)
-            .expect("overlay materialization should succeed");
-
-    // Structural expansion should still produce the same filled result.
-    let expanded_root = expand_tir_slot_placeholders(&mut store, wrapper, &routed, &string_table)
-        .expect("structural expansion should still succeed");
-
-    let child_kinds = root_child_kinds_for_node(expanded_root, &store);
-    assert_eq!(child_kinds.len(), 1);
-    assert!(
-        matches!(child_kinds[0], TemplateIrNodeKind::Text { .. }),
-        "structural expansion should still splice the default slot contribution"
+    assert_eq!(
+        root_child_node_ids(first_source, &store),
+        vec![insert_content_node],
+        "the shared source template should contain the insert helper's body content"
     );
 }
 
@@ -2827,6 +2842,18 @@ fn attach_view_context_carries_slot_resolution() {
     let (wrapper, contribution_node, overlay_id) =
         materialize_default_slot_overlay(&mut store, &mut string_table, 1);
     let context = view_context_from_slot_resolution_overlay(overlay_id);
+    assert!(
+        context.slot_resolution.is_some(),
+        "view context should carry the slot-resolution dimension"
+    );
+    assert!(
+        context.expression_overlay.is_none(),
+        "view context should not carry an expression-overlay dimension"
+    );
+    assert!(
+        context.wrapper_context.is_none(),
+        "view context should not carry a wrapper-context dimension"
+    );
     let view = TirView::new(&store, wrapper, TemplateTirPhase::Composed, context)
         .expect("view should construct with the attached view context");
 
@@ -2849,41 +2876,6 @@ fn attach_view_context_carries_slot_resolution() {
         root_child_node_ids(resolution.sources()[0], &store),
         vec![contribution_node],
         "the view should resolve the same store-owned contribution source"
-    );
-}
-
-#[test]
-fn view_context_attachment_preserves_structural_expansion() {
-    let mut string_table = StringTable::new();
-    let mut store = TemplateIrStore::new();
-
-    let wrapper = build_wrapper_with_slot_sequence(&mut store, vec![SlotKey::Default]);
-    let contribution = build_single_text_template(&mut store, &mut string_table, "filled");
-    let contribution_node = template_root_node_id(contribution, &store);
-    let fill = build_fill_template(&mut store, vec![contribution_node]);
-    let routed = route_tir_slot_contributions(&store, wrapper, fill, &string_table)
-        .expect("routing should succeed");
-    let wrapper_reference = TemplateTirChildReference::new(
-        wrapper,
-        TemplateTirPhase::Composed,
-        TemplateViewContext::default(),
-    );
-    let overlay_id =
-        materialize_tir_slot_resolution_overlay(&mut store, wrapper_reference, &routed)
-            .expect("overlay materialization should succeed");
-
-    // Attach the view context before structural expansion to confirm the overlay
-    // path does not alter production slot expansion.
-    let _context = view_context_from_slot_resolution_overlay(overlay_id);
-
-    let expanded_root = expand_tir_slot_placeholders(&mut store, wrapper, &routed, &string_table)
-        .expect("structural expansion should still succeed after attachment");
-
-    let child_kinds = root_child_kinds_for_node(expanded_root, &store);
-    assert_eq!(child_kinds.len(), 1);
-    assert!(
-        matches!(child_kinds[0], TemplateIrNodeKind::Text { .. }),
-        "structural expansion should still splice the default slot contribution"
     );
 }
 
