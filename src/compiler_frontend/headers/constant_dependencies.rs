@@ -15,6 +15,7 @@ use crate::compiler_frontend::headers::import_environment::{
 };
 use crate::compiler_frontend::headers::module_symbols::{GenericDeclarationKind, ModuleSymbols};
 use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind};
+use crate::compiler_frontend::headers::types::LocalDeclarationOrderingHint;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::utilities::token_scan::InitializerReference;
@@ -103,7 +104,7 @@ pub(crate) fn add_constant_initializer_dependencies(
     // Collect edges and errors in a first pass, then apply edges in a second pass.
     // WHY: avoids borrowing headers both immutably (for reading kind/source_file) and mutably
     // (for inserting into dependencies) at the same time.
-    let mut edges_to_add: Vec<(usize, InternedPath)> = Vec::new();
+    let mut edges_to_add: Vec<(usize, LocalDeclarationOrderingHint)> = Vec::new();
 
     for (header_index, header) in headers.iter().enumerate() {
         let (initializer_refs, reference_header_index) = match &header.kind {
@@ -177,7 +178,7 @@ pub(crate) fn add_constant_initializer_dependencies(
                         report.cross_file_edges += 1;
                     }
 
-                    edges_to_add.push((header_index, path));
+                    edges_to_add.push((header_index, LocalDeclarationOrderingHint::new(path)));
                 }
 
                 // Type aliases live in the type namespace. They do not create value dependency edges.
@@ -207,9 +208,9 @@ pub(crate) fn add_constant_initializer_dependencies(
         }
     }
 
-    for (header_index, path) in edges_to_add {
+    for (header_index, hint) in edges_to_add {
         let header = &mut headers[header_index];
-        if header.dependencies.insert(path) {
+        if header.local_ordering_hints.insert(hint) {
             report.added_edges += 1;
         }
     }

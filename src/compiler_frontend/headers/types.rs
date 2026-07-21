@@ -208,6 +208,44 @@ impl HeaderExportMode {
     }
 }
 
+/// A conservative declaration-shell ordering fact retained before provider binding.
+///
+/// WHAT: one referenced path captured from a declaration shell's type surface or constant
+/// initializer, recorded in the import spelling or same-file spelling seen during syntax
+/// preparation. It is not an already-proven graph edge.
+/// WHY: Stage 2 retains these hints without knowing which imports are source graph participants
+/// versus virtual or provider bindings. Stage 3 alone resolves retained local hints into
+/// sortable graph edges after binding has canonicalized or dropped import-spelled hints.
+/// MUST NOT: carry alias, export, or provider classification; that metadata stays on
+/// `FileImport` and `StructuralProviderReference`.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct LocalDeclarationOrderingHint {
+    /// The conservative referenced path: an import spelling or a same-file spelling.
+    pub path: InternedPath,
+}
+
+impl LocalDeclarationOrderingHint {
+    /// Wrap one conservative referenced path as a retained ordering hint.
+    pub fn new(path: InternedPath) -> Self {
+        Self { path }
+    }
+
+    /// The conservative referenced path this hint records.
+    pub fn path(&self) -> &InternedPath {
+        &self.path
+    }
+
+    /// Remap the interned path into a merged string table.
+    ///
+    /// WHY: per-file frontend preparation uses local string tables; merging them into the module
+    ///      table requires shifting the `InternedPath` so later stages resolve the hint through the
+    ///      global table.
+    // Called when merging per-file frontend outputs into the module-wide compilation.
+    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
+        self.path.remap_string_ids(remap);
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Header {
     pub kind: HeaderKind,
@@ -224,8 +262,14 @@ pub struct Header {
     /// WHY: import preparation builds module APIs from explicit public-surface metadata, not from
     /// file role alone.
     pub export_mode: HeaderExportMode,
-    // Module-level dependency edges required before AST construction can lower this header.
-    pub dependencies: HashSet<InternedPath>,
+    /// Conservative local declaration-ordering hints retained before provider binding.
+    ///
+    /// WHAT: referenced paths from this declaration shell's type surface and constant initializer,
+    /// recorded in the import or same-file spelling seen during syntax preparation. These are
+    /// ordering hints, not already-proven graph edges.
+    /// WHY: binding canonicalizes or drops import-spelled hints using bound visibility, then
+    /// Stage 3 resolves the retained local hints into sortable graph edges.
+    pub local_ordering_hints: HashSet<LocalDeclarationOrderingHint>,
     pub name_location: SourceLocation,
 
     // Token Body (for functions / templates) and info about canonical_os_path
@@ -369,14 +413,14 @@ impl Header {
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         self.kind.remap_string_ids(remap);
 
-        // Rebuild the dependency set after remapping because InternedPath hash values
+        // Rebuild the hint set after remapping because InternedPath hash values
         // depend on their component StringIds, which change during remapping.
-        let mut remapped_dependencies = HashSet::with_capacity(self.dependencies.len());
-        for mut path in self.dependencies.drain() {
-            path.remap_string_ids(remap);
-            remapped_dependencies.insert(path);
+        let mut remapped_hints = HashSet::with_capacity(self.local_ordering_hints.len());
+        for mut hint in self.local_ordering_hints.drain() {
+            hint.remap_string_ids(remap);
+            remapped_hints.insert(hint);
         }
-        self.dependencies = remapped_dependencies;
+        self.local_ordering_hints = remapped_hints;
 
         self.name_location.remap_string_ids(remap);
         self.tokens.remap_string_ids(remap);

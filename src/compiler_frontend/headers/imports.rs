@@ -1,8 +1,8 @@
 //! Header-stage import collection.
 //!
-//! WHAT: parses top-level import clauses into normalized header dependency paths.
-//! WHY: imports affect file-local visibility and header-provided dependency edges, so their normalization
-//! belongs to the header stage rather than AST body parsing.
+//! WHAT: parses top-level import clauses into normalized structural provider paths.
+//! WHY: imports affect file-local visibility and retained declaration-ordering hints, so their
+//! normalization belongs to the header stage rather than AST body parsing.
 
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, InvalidImportPathReason};
 use crate::compiler_frontend::symbols::interned_path::InternedPath;

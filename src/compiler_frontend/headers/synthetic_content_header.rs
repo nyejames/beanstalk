@@ -66,7 +66,7 @@ pub(crate) fn synthetic_content_header(
         kind: HeaderKind::Constant { declaration },
         file_role: FileRole::Normal,
         export_mode: HeaderExportMode::Private,
-        dependencies: HashSet::new(),
+        local_ordering_hints: HashSet::new(),
         name_location: input.location.clone(),
         tokens: header_tokens,
         source_file: input.source_file,

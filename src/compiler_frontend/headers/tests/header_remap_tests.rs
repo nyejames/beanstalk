@@ -26,7 +26,7 @@ use crate::compiler_frontend::declaration_syntax::signature_members::{
 };
 use crate::compiler_frontend::headers::types::{
     FileFrontendPrepareError, FileFrontendPrepareOutput, FileImport, FileRole, Header,
-    HeaderExportMode, HeaderKind, TopLevelConstFragment,
+    HeaderExportMode, HeaderKind, LocalDeclarationOrderingHint, TopLevelConstFragment,
 };
 use crate::compiler_frontend::paths::const_paths::StructuralProviderReference;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
@@ -448,7 +448,9 @@ fn header_remaps_kind_dependencies_locations_tokens_source_file_and_imports() {
 
     let generic_parameters = make_generic_parameter_list("T", &mut local);
     let mut dependencies = HashSet::new();
-    dependencies.insert(InternedPath::from_single_str("@core/prelude", &mut local));
+    dependencies.insert(LocalDeclarationOrderingHint::new(
+        InternedPath::from_single_str("@core/prelude", &mut local),
+    ));
 
     let mut header = Header {
         kind: HeaderKind::Function {
@@ -457,7 +459,7 @@ fn header_remaps_kind_dependencies_locations_tokens_source_file_and_imports() {
         },
         file_role: FileRole::Normal,
         export_mode: HeaderExportMode::Private,
-        dependencies,
+        local_ordering_hints: dependencies,
         name_location: make_location("test.bst", &mut local),
         tokens: make_file_tokens("my_symbol", &mut local),
         source_file: InternedPath::from_single_str("test.bst", &mut local),
@@ -477,9 +479,9 @@ fn header_remaps_kind_dependencies_locations_tokens_source_file_and_imports() {
     assert_eq!(global.resolve(generic_parameters.parameters[0].name), "T");
 
     // Verify dependencies remapped.
-    assert_eq!(header.dependencies.len(), 1);
-    let dep = header.dependencies.iter().next().unwrap();
-    assert_eq!(dep.to_portable_string(&global), "@core/prelude");
+    assert_eq!(header.local_ordering_hints.len(), 1);
+    let dep = header.local_ordering_hints.iter().next().unwrap();
+    assert_eq!(dep.path().to_portable_string(&global), "@core/prelude");
 
     // Verify name location remapped.
     assert_location_resolves_to(&header.name_location, "test.bst", &global);
@@ -510,7 +512,9 @@ fn header_remap_preserves_correct_ids_when_global_has_preexisting_strings() {
 
     let generic_parameters = make_generic_parameter_list("T", &mut local);
     let mut dependencies = HashSet::new();
-    dependencies.insert(InternedPath::from_single_str("@core/prelude", &mut local));
+    dependencies.insert(LocalDeclarationOrderingHint::new(
+        InternedPath::from_single_str("@core/prelude", &mut local),
+    ));
 
     let mut header = Header {
         kind: HeaderKind::Function {
@@ -519,7 +523,7 @@ fn header_remap_preserves_correct_ids_when_global_has_preexisting_strings() {
         },
         file_role: FileRole::Normal,
         export_mode: HeaderExportMode::Public,
-        dependencies,
+        local_ordering_hints: dependencies,
         name_location: make_location("test.bst", &mut local),
         tokens: make_file_tokens("my_symbol", &mut local),
         source_file: InternedPath::from_single_str("test.bst", &mut local),
@@ -541,10 +545,11 @@ fn header_remap_preserves_correct_ids_when_global_has_preexisting_strings() {
     // Verify dependency resolves correctly.
     assert_eq!(
         header
-            .dependencies
+            .local_ordering_hints
             .iter()
             .next()
             .unwrap()
+            .path()
             .to_portable_string(&global),
         "@core/prelude"
     );
@@ -586,7 +591,9 @@ fn file_frontend_prepare_output_remaps_all_string_id_fields() {
 
     let generic_parameters = make_generic_parameter_list("T", &mut local);
     let mut dependencies = HashSet::new();
-    dependencies.insert(InternedPath::from_single_str("@core/prelude", &mut local));
+    dependencies.insert(LocalDeclarationOrderingHint::new(
+        InternedPath::from_single_str("@core/prelude", &mut local),
+    ));
 
     let header = Header {
         kind: HeaderKind::Function {
@@ -595,7 +602,7 @@ fn file_frontend_prepare_output_remaps_all_string_id_fields() {
         },
         file_role: FileRole::Normal,
         export_mode: HeaderExportMode::Private,
-        dependencies,
+        local_ordering_hints: dependencies,
         name_location: make_location("test.bst", &mut local),
         tokens: make_file_tokens("my_func", &mut local),
         source_file: InternedPath::from_single_str("test.bst", &mut local),
@@ -662,10 +669,11 @@ fn file_frontend_prepare_output_remaps_all_string_id_fields() {
     assert_eq!(global.resolve(generic_parameters.parameters[0].name), "T");
     assert_eq!(
         header
-            .dependencies
+            .local_ordering_hints
             .iter()
             .next()
             .unwrap()
+            .path()
             .to_portable_string(&global),
         "@core/prelude"
     );

@@ -6,7 +6,7 @@
 
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::headers::types::{
-    Header, HeaderBuildContext, HeaderExportMode, HeaderKind,
+    Header, HeaderBuildContext, HeaderExportMode, HeaderKind, LocalDeclarationOrderingHint,
 };
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
@@ -33,7 +33,7 @@ pub(super) fn create_top_level_const_template(
     let const_template_name = context.string_table.intern(&format!(
         "{TOP_LEVEL_CONST_TEMPLATE_NAME}{const_template_number}"
     ));
-    let mut dependencies: HashSet<InternedPath> = HashSet::new();
+    let mut local_ordering_hints: HashSet<LocalDeclarationOrderingHint> = HashSet::new();
 
     // Keep the full template token stream (including open/close) so AST template parsing
     // can treat const templates exactly like regular templates.
@@ -52,7 +52,7 @@ pub(super) fn create_top_level_const_template(
                     .iter()
                     .find(|f| f.name() == Some(*name_id))
             {
-                dependencies.insert(path.to_owned());
+                local_ordering_hints.insert(LocalDeclarationOrderingHint::new(path.to_owned()));
             }
             body.push(token);
         },
@@ -88,7 +88,7 @@ pub(super) fn create_top_level_const_template(
         },
         file_role: context.file_role,
         export_mode: HeaderExportMode::Private,
-        dependencies,
+        local_ordering_hints,
         name_location,
         tokens: template_tokens,
         source_file: context.source_file.to_owned(),

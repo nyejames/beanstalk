@@ -9,29 +9,29 @@ Replace entry-closure compilation with canonical project and package graphs, imm
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/canonical-module-compilation-and-scoped-packages-plan.md
 STATUS: active
-CURRENT_SLICE: Phase 4b accepted; checkpoint commit pending
-LAST_ACCEPTED_COMMIT: 4ac575d8a (Phase 4a retained header syntax and explicit binding boundary)
-WORKTREE: main at 4ac575d8a with accepted Phase 4b code, focused tests and this plan update; unrelated user documentation work may appear and must be preserved
+CURRENT_SLICE: Phase 4c accepted; checkpoint commit pending
+LAST_ACCEPTED_COMMIT: 23b733aef (Phase 4b retained structural provider references)
+WORKTREE: main at 23b733aef with accepted Phase 4c code, focused tests, index and this plan update; unrelated user documentation work may appear and must be preserved
 REQUIRED_RELOADS: startup files, this plan, relevant language/import and borrow references, current frontend/header source and diff
 RELEVANT_CONTEXT_NOW:
 - docs: compiler-design-overview.md Stage 2 and build-system-design.md Prepared-source orchestration require retained syntax before provider binding with no reparse
-- code: const_paths/import_clauses.rs now owns StructuralProviderReference; Stage 0 scanning and retained FileImport shells consume it while current reachability and config callers project provider.path for resolution
+- code: ordering_hints.rs now records typed conservative LocalDeclarationOrderingHint values without provider classification; binding canonicalizes or drops import spellings and Stage 3 alone resolves retained hints into dependency edges
 ACCEPTANCE_CRITERIA:
-- one StructuralProviderReference type owns a parsed provider path and its source location at the shared import-clause syntax boundary
-- Stage 0 reachable discovery consumes StructuralProviderReference values rather than bare import paths
-- FileImport embeds the same structural reference while retaining alias/export metadata for symbol binding; obsolete parallel header_path/path_location fields are removed
-- remapping preserves the nested structural path/location and existing import diagnostics, reachability, aliases and deterministic order remain unchanged
-- the type is production-consumed by both current Stage 0 and retained header syntax, not an unused projection or compatibility wrapper
+- one LocalDeclarationOrderingHint type owns conservative declaration-shell ordering paths and remapping; Header no longer exposes a generic dependencies set
+- syntax preparation records hints without consulting ExternalPackageRegistry to classify source versus virtual/provider imports
+- interface binding canonicalizes or drops import-spelled hints using bound visibility, while Stage 3 alone resolves retained local hints into graph edges
+- StructuralProviderReference, FileImport imported-symbol metadata and LocalDeclarationOrderingHint remain type-distinct production data
+- diagnostics, declaration order and current behavior remain unchanged; focused tests cover remapping, imported/external hint removal and Stage 3 ordering
 VALIDATION_STATE:
-- Phase 4a just validate: passed; cross-target Clippy, 3415 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases
-- Phase 4b focused validation: passed; 63 path tests, 17 remap tests, 5 reachable-discovery tests and 114 header tests
 - Phase 4b just validate: passed; cross-target Clippy, 3416 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases
-DOCS_IMPACT: current plan state refreshed; progress matrix unchanged for a behavior-preserving structural-reference type split
-BLOCKERS_OR_OPEN_DECISIONS: the config source-set caller required a mechanical migration to the shared structural-reference scan and projects provider.path locally; temporal retention still requires replacing Stage 0's separate token scan with prepared syntax; no user blocker
+- Phase 4c focused validation: passed; 114 header tests, 17 remap tests, 18 module-dependency tests, 2 constant-dependency tests and cargo check --tests
+- Phase 4c just validate: passed; cross-target Clippy, 3417 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases
+DOCS_IMPACT: current plan state refreshed; progress matrix unchanged for a behavior-preserving reference-class split
+BLOCKERS_OR_OPEN_DECISIONS: temporal retention is now unblocked from ordering-hint classification depending on mutable provider discovery; no user blocker
 DELEGATION_DECISION: ollama - user requires Ollama for every worker slice
 NEXT_WORKER_ORDER: ollama only; no provider substitution for this run
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit Phase 4b, record its hash, then scope the next retained-syntax prerequisite slice
+NEXT_RESUME_ACTION: commit Phase 4c, record its hash, then scope temporal retention of prepared source syntax through Stage 0
 ```
 
 ## Hard prerequisites
@@ -361,6 +361,22 @@ Accepted Phase 4b checkpoint:
   the path locally because preserving its former path-only API would duplicate the obsolete path.
 - exact path-location retention and nested string-ID remapping have focused coverage. Import
   behavior, diagnostics, visibility and deterministic order are unchanged.
+
+Accepted Phase 4c checkpoint:
+
+- `LocalDeclarationOrderingHint` is the retained declaration-shell vocabulary for conservative
+  type-surface and constant-initializer paths; `Header.local_ordering_hints` no longer presents
+  these facts as already-proven dependency edges.
+- `headers/ordering_hints.rs` records import or same-file spellings without consulting provider
+  availability. `StructuralProviderReference`, `FileImport` binding metadata and local ordering
+  hints are type-distinct production data.
+- interface binding canonicalizes source import spellings through bound visibility and drops
+  external or binding-only hints. Stage 3 is the sole owner that resolves the remaining hints into
+  sortable dependency edges.
+- the former `dependency_edges.rs` collection owner and generic `Header.dependencies` field were
+  removed; `index.md` names the retained-syntax, hint and binding responsibilities.
+- typed remapping, external-hint removal and existing local ordering have focused coverage.
+  Diagnostics, declaration order and current language behavior are unchanged.
 
 ### Phase 5: Build deterministic project, package and provider graphs
 

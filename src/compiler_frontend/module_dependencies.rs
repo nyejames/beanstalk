@@ -1,14 +1,14 @@
 //! Stage 3 dependency ordering for parsed Beanstalk headers.
 //!
-//! WHAT: builds a small dependency graph over top-level declaration headers, topologically sorts
-//! those headers by their header-provided dependency edges, then appends `StartFunction` headers in
-//! source order. Finalizes the header-owned `ModuleSymbols` package: declarations are built from
-//! the sorted headers and appended with builtin declarations.
+//! WHAT: resolves retained local declaration-ordering hints into a dependency graph over top-level
+//! headers, topologically sorts that graph, then appends `StartFunction` headers in source order.
+//! Finalizes the header-owned `ModuleSymbols` package: declarations are built from the sorted
+//! headers and appended with builtin declarations.
 //!
 //! ## Stage contract
 //!
-//! Dependency edges are header-provided top-level declaration dependencies.
-//! They include type-surface dependencies and constant initializer dependencies.
+//! Stage 3 resolves retained hints into top-level declaration dependency edges.
+//! Hints include type-surface and constant-initializer references.
 //! Executable function/start body references remain excluded.
 //!
 //! **`start` excluded from the graph.** `StartFunction` headers are not graph participants — they
@@ -20,7 +20,7 @@ use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, Diagnostic
 use crate::compiler_frontend::headers::import_environment::HeaderImportEnvironment;
 use crate::compiler_frontend::headers::module_symbols::{ModuleSymbols, PublicExportEntry};
 use crate::compiler_frontend::headers::parse_file_headers::{
-    BoundModuleHeaders, Header, HeaderKind, TopLevelConstFragment,
+    BoundModuleHeaders, Header, HeaderKind, LocalDeclarationOrderingHint, TopLevelConstFragment,
 };
 use crate::compiler_frontend::instrumentation::{FrontendCounter, add_frontend_counter};
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
@@ -182,11 +182,9 @@ impl<'a> DependencyGraph<'a> {
         string_table: &StringTable,
     ) -> Vec<ResolvedDependencyEdge> {
         let mut edges = header
-            .dependencies
+            .local_ordering_hints
             .iter()
-            .map(|requested_path| {
-                self.resolve_dependency_edge(header, requested_path, string_table)
-            })
+            .map(|hint| self.resolve_dependency_edge(header, hint, string_table))
             .collect::<Vec<_>>();
 
         edges.sort_by(|left, right| {
@@ -206,9 +204,13 @@ impl<'a> DependencyGraph<'a> {
     fn resolve_dependency_edge(
         &self,
         header: &Header,
-        requested_path: &InternedPath,
+        hint: &LocalDeclarationOrderingHint,
         string_table: &StringTable,
     ) -> ResolvedDependencyEdge {
+        // Stage 3 turns a retained local declaration-ordering hint into a sortable graph edge.
+        // It consumes the typed hint rather than reconstructing the requested path from
+        // FileImport or source syntax.
+        let requested_path = hint.path();
         let location = header.name_location.to_owned();
         let source_order = self.source_order_for_requested_path(requested_path, string_table);
 
@@ -313,13 +315,13 @@ type VisitResult = Result<(), Box<CompilerDiagnostic>>;
 
 /// Topologically sort headers and finalize the header-owned module symbol package.
 ///
-/// WHAT: sorts top-level declaration headers (non-start) by their header-provided dependency edges,
-/// then appends `StartFunction` headers in source order. Builds the `declarations` Vec in sorted order
-/// and appends builtin declarations.
+/// WHAT: resolves retained hints, sorts top-level declaration headers (non-start) by the resulting
+/// dependency edges, then appends `StartFunction` headers in source order. Builds the
+/// `declarations` Vec in sorted order and appends builtin declarations.
 ///
 /// WHY: `StartFunction` is excluded from the dependency graph — it is build-system-only and
-/// cannot be imported by other headers. All other headers are sorted by header-provided edges
-/// (type surfaces and constant initializer references) so AST sees dependencies first.
+/// cannot be imported by other headers. All other headers are sorted by edges resolved from their
+/// retained type-surface and constant-initializer hints so AST sees dependencies first.
 pub fn resolve_module_dependencies(
     parsed: BoundModuleHeaders,
     string_table: &mut StringTable,
@@ -354,7 +356,7 @@ pub fn resolve_module_dependencies(
     let dependency_header_count = top_level_headers.len();
     let dependency_edge_count = top_level_headers
         .iter()
-        .map(|header| header.dependencies.len())
+        .map(|header| header.local_ordering_hints.len())
         .sum();
 
     let (mut sorted, dependency_visit_count) = {
@@ -365,7 +367,7 @@ pub fn resolve_module_dependencies(
         );
         let mut diagnostic_bag = DiagnosticBag::new();
 
-        // Perform topological sort on header-provided dependency edges.
+        // Resolve retained hints and topologically sort the resulting dependency edges.
         let mut tracker = DependencyTracker::new(graph.len());
         let mut sorted: Vec<Header> = Vec::with_capacity(graph.len());
 
@@ -476,7 +478,7 @@ fn visit_node(
 
         tracker.enter(resolved_path.to_owned());
 
-        // Recurse on header-provided dependency edges.
+        // Recurse on the dependency edges resolved from this header's retained hints.
         // WHY: edges include type surfaces and constant initializer references.
         // Executable body references are excluded.
         let dependency_edges = graph.sorted_dependency_edges_for_header(header, string_table);

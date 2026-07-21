@@ -12,8 +12,8 @@ use crate::compiler_frontend::compiler_messages::DiagnosticPayload;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::headers::module_symbols::{PublicExportEntry, PublicExportTarget};
 use crate::compiler_frontend::headers::parse_file_headers::{
-    BoundModuleHeaders, HeaderKind, HeaderParseOptions, bind_module_headers,
-    prepare_file_from_tokens, prepare_header_syntax,
+    BoundModuleHeaders, HeaderKind, HeaderParseOptions, LocalDeclarationOrderingHint,
+    bind_module_headers, prepare_file_from_tokens, prepare_header_syntax,
 };
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
@@ -625,7 +625,9 @@ fn source_package_public_export_dependency_edges_do_not_require_concrete_header_
         .iter_mut()
         .find(|header| header_name(header, &string_table) == "NeedsWidget")
         .expect("expected dependent header");
-    dependent_header.dependencies.insert(public_export_path);
+    dependent_header
+        .local_ordering_hints
+        .insert(LocalDeclarationOrderingHint::new(public_export_path));
 
     headers
         .module_symbols
@@ -651,5 +653,47 @@ fn source_package_public_export_dependency_edges_do_not_require_concrete_header_
         non_start_names,
         vec!["NeedsWidget"],
         "source-backed package public export paths may differ from concrete source headers"
+    );
+}
+
+#[test]
+fn external_package_import_type_hint_does_not_survive_binding_as_graph_participant() {
+    // WHY: syntax preparation records the import spelling for every named type reference
+    // uniformly, including virtual or provider imports. Binding must drop import-spelled hints
+    // that resolve to external symbols so they never become Stage 3 graph participants.
+    let (headers, mut string_table) = parse_module_headers(
+        &[(
+            "src/app.bst",
+            "import @core/io { print }\nwidget #print = \"x\"\n",
+        )],
+        "src/app.bst",
+    );
+
+    let widget_header = headers
+        .headers
+        .iter()
+        .find(|header| header_name(header, &string_table) == "widget")
+        .expect("expected widget constant header");
+
+    assert!(
+        widget_header.local_ordering_hints.is_empty(),
+        "external package import-spelled type hints must be dropped at binding, not retained \
+         as Stage 3 graph participants"
+    );
+
+    let sorted = resolve_module_dependencies(headers, &mut string_table)
+        .expect("dropped external hints must not perturb Stage 3 sorting");
+
+    let non_start_names: Vec<_> = sorted
+        .headers
+        .iter()
+        .filter(|header| !matches!(header.kind, HeaderKind::StartFunction))
+        .map(|header| header_name(header, &string_table))
+        .collect();
+
+    assert_eq!(
+        non_start_names,
+        vec!["widget"],
+        "external import hints must not introduce graph nodes"
     );
 }

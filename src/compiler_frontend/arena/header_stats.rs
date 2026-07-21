@@ -1,7 +1,7 @@
 //! Cheap module-wide header statistics for arena capacity estimates.
 //!
 //! WHAT: counts declaration-shaped headers, their generic parameters, signature members, choice
-//!       variants, and dependency edges during header aggregation.
+//!       variants, and local declaration-ordering hints during header aggregation.
 //! WHY: these counts are policy-only seeds for capacity heuristics; they never affect
 //!      diagnostics, ordering, lowering, type identity, or emitted artifacts.
 
@@ -32,7 +32,7 @@ pub(crate) struct HeaderStats {
     pub generic_parameters: usize,
     pub signature_members: usize,
     pub choice_variants: usize,
-    pub dependency_edges: usize,
+    pub local_ordering_hints: usize,
 }
 
 impl HeaderStats {
@@ -130,7 +130,7 @@ impl HeaderStats {
             }
         }
 
-        self.dependency_edges += header.dependencies.len();
+        self.local_ordering_hints += header.local_ordering_hints.len();
     }
 }
 

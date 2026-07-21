@@ -45,7 +45,7 @@ Flow: [projects](src/projects/) → [build_system](src/build_system/) → [compi
 
 - [frontend module map](src/compiler_frontend/mod.rs); [CompilerFrontend driver](src/compiler_frontend/pipeline.rs)
 - [tokenizer](src/compiler_frontend/tokenizer/): lex source/templates into tokens. kw: TokenizeMode, SourceLocation.
-- [headers](src/compiler_frontend/headers/): imports, declarations, start-body split, ModuleSymbols. kw: facade, visibility.
+- [headers](src/compiler_frontend/headers/): retained import/declaration shells, local ordering hints, interface binding, start-body split and ModuleSymbols. kw: facade, visibility.
 - [declaration_syntax](src/compiler_frontend/declaration_syntax/): shared declaration/type shell parsers. kw: signatures, ParsedTypeRef.
 - [module_dependencies.rs](src/compiler_frontend/module_dependencies.rs): topological header ordering. kw: dependency edges, cycles.
 - [compiler_messages](src/compiler_frontend/compiler_messages/): CompilerDiagnostic/CompilerError/rendering. kw: diagnostic codes, labels.

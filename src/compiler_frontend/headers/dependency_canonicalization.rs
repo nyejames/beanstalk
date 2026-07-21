@@ -1,21 +1,27 @@
-//! Header dependency canonicalization.
+//! Header local declaration-ordering hint canonicalization.
 //!
-//! WHAT: rewrites raw import-spelled dependency edges into canonical resolved symbol paths.
-//! WHY: dependency sorting compares exact header graph keys, so header dependencies must use the
-//! same canonical paths that import preparation exposes through file visibility.
+//! WHAT: rewrites import-spelled local declaration-ordering hints into canonical resolved
+//! symbol paths using bound visibility, and drops external or binding-only import hints.
+//! WHY: Stage 3 compares exact header graph keys, so retained hints must use the same canonical
+//! paths that import preparation exposes through file visibility. Same-file hints are preserved.
 
 use crate::compiler_frontend::compiler_errors::compiler_error_to_diagnostic;
 use crate::compiler_frontend::compiler_messages::DiagnosticBag;
 use crate::compiler_frontend::headers::import_environment::HeaderImportEnvironment;
 use crate::compiler_frontend::headers::parse_file_headers::FileImport;
-use crate::compiler_frontend::headers::types::Header;
+use crate::compiler_frontend::headers::types::{Header, LocalDeclarationOrderingHint};
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use rustc_hash::FxHashMap;
 
 use std::collections::HashSet;
 
-/// Rewrite raw import-path dependency edges into canonical resolved symbol paths.
-pub(super) fn canonicalize_header_dependencies(
+/// Canonicalize retained local declaration-ordering hints using bound visibility.
+///
+/// WHAT: for each hint, if its path matches a file import the import's local name is resolved
+/// through bound visibility to a canonical source path; external or virtual/provider imports
+/// with no header graph participant are dropped. Same-file or already-canonical hints are
+/// preserved.
+pub(super) fn canonicalize_local_ordering_hints(
     headers: &mut [Header],
     import_environment: &HeaderImportEnvironment,
     file_imports_by_source: &FxHashMap<InternedPath, Vec<FileImport>>,
@@ -36,13 +42,13 @@ pub(super) fn canonicalize_header_dependencies(
             .map(|imports| imports.as_slice())
             .unwrap_or(&[]);
 
-        let mut canonical: HashSet<InternedPath> =
-            HashSet::with_capacity(header.dependencies.len());
+        let mut canonical: HashSet<LocalDeclarationOrderingHint> =
+            HashSet::with_capacity(header.local_ordering_hints.len());
 
-        for dependency in header.dependencies.drain() {
+        for hint in header.local_ordering_hints.drain() {
             let matching_import = file_imports
                 .iter()
-                .find(|import| import.provider.path == dependency);
+                .find(|import| import.provider.path == hint.path);
 
             if let Some(import) = matching_import {
                 let local_name = match import.alias {
@@ -50,7 +56,7 @@ pub(super) fn canonicalize_header_dependencies(
                     None => match import.provider.path.name() {
                         Some(name) => name,
                         None => {
-                            canonical.insert(dependency);
+                            canonical.insert(hint);
                             continue;
                         }
                     },
@@ -61,16 +67,17 @@ pub(super) fn canonicalize_header_dependencies(
                     .get(&local_name)
                     .or_else(|| visibility.visible_type_alias_names.get(&local_name))
                 {
-                    canonical.insert(resolved_path.clone());
+                    canonical.insert(LocalDeclarationOrderingHint::new(resolved_path.clone()));
                 }
-                // External symbols and virtual packages have no header graph participant.
+                // External symbols and virtual or provider imports have no header graph
+                // participant, so the import-spelled hint is dropped here.
             } else {
-                // Same-file or already-canonical edge: preserve it.
-                canonical.insert(dependency);
+                // Same-file or already-canonical hint: preserve it.
+                canonical.insert(hint);
             }
         }
 
-        header.dependencies = canonical;
+        header.local_ordering_hints = canonical;
     }
 
     if diagnostic_bag.has_errors() {

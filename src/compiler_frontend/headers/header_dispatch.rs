@@ -28,11 +28,11 @@ use super::trait_headers::{
     parse_trait_incompatibility,
 };
 use crate::compiler_frontend::external_packages::ExternalSymbolId;
-use crate::compiler_frontend::headers::dependency_edges::{
-    collect_constant_type_dependencies, collect_named_type_dependency_edge,
+use crate::compiler_frontend::headers::ordering_hints::{
+    collect_constant_type_hints, collect_named_type_ordering_hint,
 };
 use crate::compiler_frontend::headers::types::{
-    Header, HeaderBuildContext, HeaderExportMode, HeaderKind,
+    Header, HeaderBuildContext, HeaderExportMode, HeaderKind, LocalDeclarationOrderingHint,
 };
 use crate::compiler_frontend::symbols::identifier_policy::{
     IdentifierNamingKind, ensure_not_keyword_shadow_identifier, naming_warning_for_identifier,
@@ -86,8 +86,8 @@ pub(super) fn create_header(
     };
     let _declaration_name_text = context.string_table.resolve(declaration_name).to_owned();
 
-    // Only imported symbols become inter-header dependency edges here.
-    let mut dependencies: HashSet<InternedPath> = HashSet::new();
+    // Conservative local declaration-ordering hints; binding and Stage 3 resolve them.
+    let mut local_ordering_hints: HashSet<LocalDeclarationOrderingHint> = HashSet::new();
     let mut kind: HeaderKind = HeaderKind::StartFunction;
     let mut body = Vec::new();
     let mut capacity_references: Vec<InitializerReference> = Vec::new();
@@ -122,7 +122,7 @@ pub(super) fn create_header(
             kind,
             file_role: context.file_role,
             export_mode,
-            dependencies,
+            local_ordering_hints,
             name_location,
             tokens: header_tokens,
             source_file: context.source_file.to_owned(),
@@ -182,15 +182,15 @@ pub(super) fn create_header(
                 context,
             )?;
 
-            // Collect dependency edges from requirement signatures.
+            // Collect local declaration-ordering hints from requirement signatures.
             for requirement in &declaration.requirements {
                 for param in &requirement.signature.parameters {
-                    collect_type_dependency_edges(
+                    collect_type_ordering_hints(
                         &param.type_annotation,
                         &generic_parameters,
                         &full_name,
                         context,
-                        &mut dependencies,
+                        &mut local_ordering_hints,
                         &mut capacity_references,
                     );
                 }
@@ -200,12 +200,12 @@ pub(super) fn create_header(
                         ..
                     } = &ret.value
                     {
-                        collect_type_dependency_edges(
+                        collect_type_ordering_hints(
                             type_annotation,
                             &generic_parameters,
                             &full_name,
                             context,
-                            &mut dependencies,
+                            &mut local_ordering_hints,
                             &mut capacity_references,
                         );
                     }
@@ -247,7 +247,7 @@ pub(super) fn create_header(
             kind,
             file_role: context.file_role,
             export_mode,
-            dependencies,
+            local_ordering_hints,
             name_location,
             tokens: header_tokens,
             source_file: context.source_file.to_owned(),
@@ -280,14 +280,14 @@ pub(super) fn create_header(
                 &full_name,
             )?;
 
-            // Header-provided dependency edges: parameter + return type references only.
+            // Local declaration-ordering hints: parameter + return type references only.
             for param in &signature.parameters {
-                collect_type_dependency_edges(
+                collect_type_ordering_hints(
                     &param.type_annotation,
                     &generic_parameters,
                     &full_name,
                     context,
-                    &mut dependencies,
+                    &mut local_ordering_hints,
                     &mut capacity_references,
                 );
             }
@@ -298,12 +298,12 @@ pub(super) fn create_header(
                     ..
                 } = &ret.value
                 {
-                    collect_type_dependency_edges(
+                    collect_type_ordering_hints(
                         type_annotation,
                         &generic_parameters,
                         &full_name,
                         context,
-                        &mut dependencies,
+                        &mut local_ordering_hints,
                         &mut capacity_references,
                     );
                 }
@@ -357,12 +357,12 @@ pub(super) fn create_header(
                 // Collect strict type edges from field types only (no default-expression edges).
                 // WHY: struct field type refs are the only struct edges that constrain sort order.
                 for field in &fields {
-                    collect_type_dependency_edges(
+                    collect_type_ordering_hints(
                         &field.type_annotation,
                         &generic_parameters,
                         &full_name,
                         context,
-                        &mut dependencies,
+                        &mut local_ordering_hints,
                         &mut capacity_references,
                     );
                 }
@@ -393,7 +393,7 @@ pub(super) fn create_header(
                 &full_name,
                 token_stream,
                 context,
-                &mut dependencies,
+                &mut local_ordering_hints,
                 &mut capacity_references,
             )?;
 
@@ -432,12 +432,12 @@ pub(super) fn create_header(
                 } = &variant.payload
                 {
                     for field in fields {
-                        collect_type_dependency_edges(
+                        collect_type_ordering_hints(
                             &field.type_annotation,
                             &generic_parameters,
                             &full_name,
                             context,
-                            &mut dependencies,
+                            &mut local_ordering_hints,
                             &mut capacity_references,
                         );
                     }
@@ -481,13 +481,12 @@ pub(super) fn create_header(
             )?;
 
             for_each_named_type_in_parsed_ref(&target, &mut |type_name| {
-                collect_named_type_dependency_edge(
+                collect_named_type_ordering_hint(
                     type_name,
                     context.file_import_entries,
                     context.source_file,
-                    context.external_package_registry,
                     context.string_table,
-                    &mut dependencies,
+                    &mut local_ordering_hints,
                 );
             });
             collect_capacity_references_in_parsed_ref(&target, &mut capacity_references);
@@ -505,7 +504,7 @@ pub(super) fn create_header(
         kind,
         file_role: context.file_role,
         export_mode,
-        dependencies,
+        local_ordering_hints,
         name_location,
         tokens: header_tokens,
         source_file: context.source_file.to_owned(),
@@ -563,12 +562,12 @@ fn generic_parameter_forbidden_names(context: &mut HeaderBuildContext<'_>) -> Fx
     forbidden_names
 }
 
-fn collect_type_dependency_edges(
+fn collect_type_ordering_hints(
     type_ref: &crate::compiler_frontend::datatypes::parsed::ParsedTypeRef,
     generic_parameters: &GenericParameterList,
     current_header_path: &InternedPath,
     context: &mut HeaderBuildContext<'_>,
-    dependencies: &mut HashSet<InternedPath>,
+    local_ordering_hints: &mut HashSet<LocalDeclarationOrderingHint>,
     capacity_references: &mut Vec<InitializerReference>,
 ) {
     for_each_named_type_in_parsed_ref(type_ref, &mut |type_name| {
@@ -580,13 +579,12 @@ fn collect_type_dependency_edges(
             return;
         }
 
-        collect_named_type_dependency_edge(
+        collect_named_type_ordering_hint(
             type_name,
             context.file_import_entries,
             context.source_file,
-            context.external_package_registry,
             context.string_table,
-            dependencies,
+            local_ordering_hints,
         );
     });
     collect_capacity_references_in_parsed_ref(type_ref, capacity_references);
@@ -598,7 +596,7 @@ fn collect_type_dependency_edges(
 // WHY: extracted from `create_header` to reduce its length and make the scope-balancing
 // contract explicit. The token stream must already be positioned on the first body token
 // (i.e. `FunctionSignature::new` has already consumed the signature).
-// Header-provided dependency edges are derived from the signature only; body tokens are captured but
+// Local declaration-ordering hints are derived from the signature only; body tokens are captured but
 // not scanned for imports — that is AST's responsibility at body-lowering time.
 fn capture_function_body_tokens(
     token_stream: &mut FileTokens,
@@ -658,7 +656,7 @@ fn create_constant_header_payload(
     full_name: &InternedPath,
     token_stream: &mut FileTokens,
     context: &mut HeaderBuildContext<'_>,
-    dependencies: &mut HashSet<InternedPath>,
+    local_ordering_hints: &mut HashSet<LocalDeclarationOrderingHint>,
     capacity_references: &mut Vec<InitializerReference>,
 ) -> HeaderDispatchResult<DeclarationSyntax> {
     let Some(declaration_name) = full_name.name() else {
@@ -671,13 +669,13 @@ fn create_constant_header_payload(
     let declaration_syntax =
         parse_declaration_syntax(token_stream, declaration_name, context.string_table)?;
 
-    // Header-provided dependency edges: declared type annotation only.
-    // WHY: constant initializer references are now first-class dependency edges generated by
-    // headers/constant_dependencies.rs; this function only collects type-surface edges.
-    collect_constant_type_dependencies(
+    // Local declaration-ordering hints: declared type annotation only.
+    // WHY: constant initializer references are now first-class ordering hints generated by
+    // headers/constant_dependencies.rs; this function only collects type-surface hints.
+    collect_constant_type_hints(
         &declaration_syntax,
         context,
-        dependencies,
+        local_ordering_hints,
         capacity_references,
     );
 

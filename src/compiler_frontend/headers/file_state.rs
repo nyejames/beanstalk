@@ -152,7 +152,7 @@ impl HeaderFileParseState {
             kind: HeaderKind::StartFunction,
             file_role,
             export_mode: HeaderExportMode::Private,
-            dependencies: HashSet::new(),
+            local_ordering_hints: HashSet::new(),
             name_location: SourceLocation::default(),
             tokens: start_tokens,
             source_file: token_stream.src_path.to_owned(),

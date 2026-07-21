@@ -396,7 +396,7 @@ fn start_function_dependencies_stay_empty_even_with_imported_runtime_template_to
         .expect("expected start function header");
 
     assert!(
-        start_header.dependencies.is_empty(),
+        start_header.local_ordering_hints.is_empty(),
         "start function headers must not carry dependency-graph edges"
     );
 }
@@ -463,7 +463,7 @@ fn exported_untyped_constant_has_no_header_provided_dependencies() {
         .expect("expected constant header");
 
     assert!(
-        constant_header.dependencies.is_empty(),
+        constant_header.local_ordering_hints.is_empty(),
         "header-provided constant dependencies come from declared type syntax only"
     );
 }
@@ -684,7 +684,7 @@ fn start_function_local_references_do_not_create_module_dependencies() {
         .expect("expected start function header");
 
     assert!(
-        start_header.dependencies.is_empty(),
+        start_header.local_ordering_hints.is_empty(),
         "local start-function symbols must not be tracked as inter-header/module dependencies"
     );
 }
@@ -2009,10 +2009,10 @@ fn imported_module_root_discards_const_root_fragments() {
 }
 
 #[test]
-fn typed_constant_creates_header_provided_dependency_on_declared_type() {
+fn typed_constant_retains_local_ordering_hint_for_declared_type() {
     // WHY: the declared type creates a structural ordering constraint so that the type
     // is sorted before any constant that references it. Initializer-expression references
-    // do NOT create header-provided deps — only the declared type annotation does.
+    // are collected later during binding; this check owns the declared type annotation.
     let (headers, string_table) =
         parse_single_file_headers_with_table("struct NavBar {}\ntheme #NavBar = default_navbar\n");
 
@@ -2023,22 +2023,22 @@ fn typed_constant_creates_header_provided_dependency_on_declared_type() {
         .expect("expected constant header");
 
     assert!(
-        !constant_header.dependencies.is_empty(),
-        "typed constant must create a header-provided dependency on its declared type"
+        !constant_header.local_ordering_hints.is_empty(),
+        "typed constant must retain a local ordering hint for its declared type"
     );
     assert!(
         constant_header
-            .dependencies
+            .local_ordering_hints
             .iter()
-            .any(|dep| dep.name_str(&string_table) == Some("NavBar")),
-        "header-provided dependency must reference the declared type name 'NavBar'"
+            .any(|dep| dep.path().name_str(&string_table) == Some("NavBar")),
+        "local ordering hint must reference the declared type name 'NavBar'"
     );
 }
 
 #[test]
-fn struct_fields_create_header_provided_dependencies_on_named_field_types() {
-    // WHY: struct fields whose types are user-defined names create header-provided sort edges so that
-    // the named type is always sorted before the struct that depends on it.
+fn struct_fields_retain_local_ordering_hints_for_named_field_types() {
+    // WHY: struct fields whose types are user-defined names retain conservative hints that Stage 3
+    // resolves so the named type is sorted before the struct that depends on it.
     let (headers, string_table) = parse_single_file_headers_with_table(
         "Point = |x Int, y Int|\nSpan = |start Point, end Point|\n",
     );
@@ -2054,17 +2054,17 @@ fn struct_fields_create_header_provided_dependencies_on_named_field_types() {
 
     assert!(
         span_header
-            .dependencies
+            .local_ordering_hints
             .iter()
-            .any(|dep| dep.name_str(&string_table) == Some("Point")),
-        "Span must carry a header-provided dependency on Point via its field type annotations"
+            .any(|dep| dep.path().name_str(&string_table) == Some("Point")),
+        "Span must retain a local ordering hint for Point via its field type annotations"
     );
 }
 
 #[test]
-fn function_error_return_creates_header_provided_dependency_on_named_type() {
+fn function_error_return_retains_local_ordering_hint_for_named_type() {
     // WHY: final `T!` error slots are part of the declaration surface. Their named types must
-    // participate in header dependency sorting before AST resolves function signatures.
+    // participate in local declaration ordering before AST resolves function signatures.
     let (headers, string_table) = parse_single_file_headers_with_table(
         "AppError = |message String|\nparse || -> Int, AppError!:\n    return 1\n;\n",
     );
@@ -2080,10 +2080,10 @@ fn function_error_return_creates_header_provided_dependency_on_named_type() {
 
     assert!(
         parse_header
-            .dependencies
+            .local_ordering_hints
             .iter()
-            .any(|dep| dep.name_str(&string_table) == Some("AppError")),
-        "function error return slot must carry a header-provided dependency on AppError"
+            .any(|dep| dep.path().name_str(&string_table) == Some("AppError")),
+        "function error return slot must retain a local ordering hint for AppError"
     );
 }
 

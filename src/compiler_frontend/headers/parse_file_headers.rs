@@ -13,7 +13,7 @@ use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::headers::constant_dependencies::{
     ConstantDependencyInput, add_constant_initializer_dependencies,
 };
-use crate::compiler_frontend::headers::dependency_canonicalization::canonicalize_header_dependencies;
+use crate::compiler_frontend::headers::dependency_canonicalization::canonicalize_local_ordering_hints;
 use crate::compiler_frontend::headers::file_parser::parse_headers_in_file;
 use crate::compiler_frontend::headers::import_environment::{
     ImportEnvironmentInput, prepare_import_environment,
@@ -23,7 +23,8 @@ use crate::compiler_frontend::headers::symbol_collection::build_module_symbols;
 use crate::compiler_frontend::headers::types::HeaderParseContext;
 pub use crate::compiler_frontend::headers::types::{
     BoundModuleHeaders, FileFrontendPrepareError, FileFrontendPrepareOutput, FileImport, FileRole,
-    Header, HeaderKind, HeaderParseOptions, PreparedHeaderSyntax, TopLevelConstFragment,
+    Header, HeaderKind, HeaderParseOptions, LocalDeclarationOrderingHint, PreparedHeaderSyntax,
+    TopLevelConstFragment,
 };
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::source_packages::root_file::{
@@ -232,7 +233,7 @@ pub fn bind_module_headers(
     })
     .map_err(|messages| DiagnosticBag::from_diagnostics(messages.into_diagnostics()))?;
 
-    canonicalize_header_dependencies(
+    canonicalize_local_ordering_hints(
         &mut headers,
         &import_environment,
         &module_symbols.file_imports_by_source,
