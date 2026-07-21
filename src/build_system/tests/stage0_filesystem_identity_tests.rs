@@ -574,11 +574,14 @@ mod non_utf8_hash_root_candidate_tests {
 /// independence, explicit root roles, structural ancestry and project package facade separation.
 mod module_identity_tests {
     use super::module_identity::{
-        ModuleIdentityTable, ModuleRootRole, module_root_role_for_file_name,
+        ModuleIdentityTable, ModuleRootRole, StableModuleOriginIdentity, StablePackageIdentity,
+        module_root_role_for_file_name,
     };
     use super::*;
+    use crate::builder_surface::PackageOrigin;
     use crate::builder_surface::SourcePackageRegistry;
-    use std::path::PathBuf;
+    use crate::compiler_frontend::compiler_errors::ErrorType;
+    use std::path::{Path, PathBuf};
 
     fn discover_index(
         root: &std::path::Path,
@@ -1125,6 +1128,329 @@ mod module_identity_tests {
     fn empty_table_has_no_identities_or_ancestry() {
         let table = ModuleIdentityTable::empty();
         assert_eq!(table.module_ids().count(), 0);
+    }
+
+    // ---- Phase 2b: stable cross-build origin identity ----
+
+    /// Discover the module identity table for one checkout root with a configured project name.
+    fn discover_table_with_name(
+        root: &Path,
+        entry_root_relative: &str,
+        project_name: &str,
+    ) -> (ModuleIdentityTable, std::path::PathBuf, std::path::PathBuf) {
+        let entry_root = root.join(entry_root_relative);
+        fs::create_dir_all(&entry_root).expect("should create entry root");
+
+        let mut config = Config::new(root.to_path_buf());
+        config.entry_root = PathBuf::from(entry_root_relative);
+        config.project_name = String::from(project_name);
+
+        let canonical_root = fs::canonicalize(root).expect("project root should canonicalize");
+        let canonical_entry_root =
+            fs::canonicalize(&entry_root).expect("entry root should canonicalize");
+        let mut string_table = StringTable::new();
+
+        let index = super::source_tree_index::SourceTreeIndex::discover(
+            canonical_entry_root.clone(),
+            &canonical_root,
+            &config,
+            &SourcePackageRegistry::default(),
+            &mut string_table,
+        )
+        .expect("source tree index should build");
+
+        (
+            index.module_identities().clone(),
+            canonical_root,
+            canonical_entry_root,
+        )
+    }
+
+    fn entry_module_origin<'a>(
+        table: &'a ModuleIdentityTable,
+        canonical_entry_root: &Path,
+    ) -> &'a StableModuleOriginIdentity {
+        let module_id = table
+            .module_id_for_directory(canonical_entry_root)
+            .expect("entry root should have a module id");
+        table.record(module_id).stable_origin()
+    }
+
+    /// Equal project name and logical module path yield equal stable identities across two
+    /// distinct absolute checkout roots; the identity carries no absolute or ordinary
+    /// source-file path.
+    #[test]
+    fn stable_identity_is_equal_across_distinct_checkout_roots() {
+        let root_a = temp_dir("stable_identity_root_a");
+        let root_b = temp_dir("stable_identity_root_b");
+        for root in [&root_a, &root_b] {
+            let src = root.join("src");
+            fs::create_dir_all(src.join("alpha/inner")).expect("should create nested modules");
+            fs::write(src.join("#home.bst"), "").expect("should write entry root");
+            fs::write(src.join("alpha/#mod.bst"), "").expect("should write alpha root");
+            fs::write(src.join("alpha/inner/#page.bst"), "").expect("should write inner root");
+        }
+
+        let (table_a, project_a, entry_a) = discover_table_with_name(&root_a, "src", "my-project");
+        let (table_b, project_b, entry_b) = discover_table_with_name(&root_b, "src", "my-project");
+
+        let origin_a = entry_module_origin(&table_a, &entry_a);
+        let origin_b = entry_module_origin(&table_b, &entry_b);
+        assert_eq!(
+            origin_a, origin_b,
+            "equal project name and logical module path must yield equal identities across distinct absolute checkout roots"
+        );
+
+        // Hidden-invariant coverage: the stable identity is self-contained, so its debug
+        // representation must not embed either absolute checkout root.
+        let debug_a = format!("{origin_a:?}");
+        let debug_b = format!("{origin_b:?}");
+        assert!(
+            !debug_a.contains(project_a.to_str().expect("project_a is UTF-8"))
+                && !debug_a.contains(project_b.to_str().expect("project_b is UTF-8")),
+            "stable identity debug representation must not contain an absolute checkout root: {debug_a}"
+        );
+        assert!(
+            !debug_b.contains(project_a.to_str().expect("project_a is UTF-8"))
+                && !debug_b.contains(project_b.to_str().expect("project_b is UTF-8")),
+            "stable identity debug representation must not contain an absolute checkout root: {debug_b}"
+        );
+
+        // The nested module identity is equal too, and its logical path is the portable
+        // forward-slash spelling rather than an absolute or ordinary source-file path.
+        let alpha_a = table_a
+            .module_id_for_directory(&entry_a.join("alpha"))
+            .expect("alpha should have an id");
+        let alpha_b = table_b
+            .module_id_for_directory(&entry_b.join("alpha"))
+            .expect("alpha should have an id");
+        assert_eq!(
+            table_a.record(alpha_a).stable_origin(),
+            table_b.record(alpha_b).stable_origin(),
+            "nested module identity must be equal across checkout roots"
+        );
+        assert_eq!(
+            table_a
+                .record(alpha_a)
+                .stable_origin()
+                .logical_module_path(),
+            "alpha",
+            "logical module path must be the portable forward-slash spelling"
+        );
+
+        fs::remove_dir_all(&root_a).expect("should remove root a");
+        fs::remove_dir_all(&root_b).expect("should remove root b");
+    }
+
+    #[test]
+    fn changing_project_name_changes_stable_identity() {
+        let root_a = temp_dir("stable_identity_name_a");
+        let root_b = temp_dir("stable_identity_name_b");
+        for root in [&root_a, &root_b] {
+            let src = root.join("src");
+            fs::create_dir_all(&src).expect("should create entry root");
+            fs::write(src.join("#home.bst"), "").expect("should write entry root");
+        }
+
+        let (table_a, _project_a, entry_a) = discover_table_with_name(&root_a, "src", "first");
+        let (table_b, _project_b, entry_b) = discover_table_with_name(&root_b, "src", "second");
+
+        let origin_a = entry_module_origin(&table_a, &entry_a);
+        let origin_b = entry_module_origin(&table_b, &entry_b);
+        assert_ne!(
+            origin_a, origin_b,
+            "changing the project/package name must change the stable identity"
+        );
+        assert_eq!(origin_a.package().name(), "first");
+        assert_eq!(origin_b.package().name(), "second");
+        assert_eq!(origin_a.package().origin(), PackageOrigin::ProjectLocal);
+
+        fs::remove_dir_all(&root_a).expect("should remove root a");
+        fs::remove_dir_all(&root_b).expect("should remove root b");
+    }
+
+    #[test]
+    fn changing_logical_module_path_changes_stable_identity() {
+        let root = temp_dir("stable_identity_path_change");
+        let src = root.join("src");
+        fs::create_dir_all(src.join("alpha")).expect("should create nested module");
+        fs::write(src.join("#home.bst"), "").expect("should write entry root");
+        fs::write(src.join("alpha/#page.bst"), "").expect("should write alpha root");
+
+        let (table, _project_root, entry_root) =
+            discover_table_with_name(&root, "src", "my-project");
+
+        let entry_origin = entry_module_origin(&table, &entry_root);
+        let alpha_id = table
+            .module_id_for_directory(&entry_root.join("alpha"))
+            .expect("alpha should have an id");
+        let alpha_origin = table.record(alpha_id).stable_origin();
+
+        assert_ne!(
+            entry_origin, alpha_origin,
+            "different logical module paths must yield different identities"
+        );
+        assert_eq!(entry_origin.logical_module_path(), "");
+        assert_eq!(alpha_origin.logical_module_path(), "alpha");
+
+        fs::remove_dir_all(&root).expect("should remove root");
+    }
+
+    #[test]
+    fn changing_root_role_changes_stable_identity() {
+        // The facade shares the project root directory, whose logical path is empty just like the
+        // entry root's, so role is the differentiator.
+        let root_a = temp_dir("stable_identity_role_a");
+        let root_b = temp_dir("stable_identity_role_b");
+        for root in [&root_a, &root_b] {
+            let src = root.join("src");
+            fs::create_dir_all(&src).expect("should create entry root");
+            fs::write(src.join("#home.bst"), "").expect("should write entry root");
+            fs::write(root.join("+package.bst"), "").expect("should write facade");
+        }
+
+        let (table_a, project_a, entry_a) = discover_table_with_name(&root_a, "src", "my-project");
+        let (table_b, project_b, entry_b) = discover_table_with_name(&root_b, "src", "my-project");
+
+        let entry_origin = entry_module_origin(&table_a, &entry_a);
+        let facade_id = table_a
+            .module_id_for_directory(&project_a)
+            .expect("facade should have an id");
+        let facade_origin = table_a.record(facade_id).stable_origin();
+
+        assert_eq!(
+            entry_origin.logical_module_path(),
+            facade_origin.logical_module_path(),
+            "both the entry root and the facade have the empty logical path"
+        );
+        assert_eq!(entry_origin.role(), ModuleRootRole::Normal);
+        assert_eq!(facade_origin.role(), ModuleRootRole::ProjectPackageFacade);
+        assert_ne!(
+            entry_origin, facade_origin,
+            "different root roles must yield different identities even with the same logical path"
+        );
+
+        // The facade identity is itself stable across checkout roots.
+        let facade_id_b = table_b
+            .module_id_for_directory(&project_b)
+            .expect("facade should have an id");
+        assert_eq!(
+            facade_origin,
+            table_b.record(facade_id_b).stable_origin(),
+            "facade identity must be equal across distinct absolute checkout roots"
+        );
+        assert_ne!(
+            facade_origin,
+            entry_module_origin(&table_b, &entry_b),
+            "facade and entry identities must differ in the second tree too"
+        );
+
+        fs::remove_dir_all(&root_a).expect("should remove root a");
+        fs::remove_dir_all(&root_b).expect("should remove root b");
+    }
+
+    #[test]
+    fn cosmetic_root_suffix_rename_does_not_change_stable_identity() {
+        let root_a = temp_dir("stable_identity_cosmetic_a");
+        let root_b = temp_dir("stable_identity_cosmetic_b");
+        fs::create_dir_all(root_a.join("src")).expect("should create entry root a");
+        fs::create_dir_all(root_b.join("src")).expect("should create entry root b");
+        fs::write(root_a.join("src/#page.bst"), "").expect("should write page-named root");
+        fs::write(root_b.join("src/#mod.bst"), "").expect("should write mod-named root");
+
+        let (table_a, _project_a, entry_a) = discover_table_with_name(&root_a, "src", "my-project");
+        let (table_b, _project_b, entry_b) = discover_table_with_name(&root_b, "src", "my-project");
+
+        assert_eq!(
+            entry_module_origin(&table_a, &entry_a),
+            entry_module_origin(&table_b, &entry_b),
+            "cosmetic root filename suffix rename must not change the stable identity"
+        );
+
+        fs::remove_dir_all(&root_a).expect("should remove root a");
+        fs::remove_dir_all(&root_b).expect("should remove root b");
+    }
+
+    #[test]
+    fn project_local_package_identity_preserves_configured_name_verbatim() {
+        // No validation or normalization of the project name is added in this slice; the exact
+        // configured name is preserved as the stable package name input.
+        let identity = StablePackageIdentity::project_local("  weird/name  ");
+        assert_eq!(identity.name(), "  weird/name  ");
+        assert_eq!(identity.origin(), PackageOrigin::ProjectLocal);
+    }
+
+    // ---- Phase 2b correction: invalid logical-path components are rejected ----
+
+    fn stable_origin_from_path(
+        relative: &Path,
+    ) -> Result<StableModuleOriginIdentity, crate::compiler_frontend::compiler_errors::CompilerError>
+    {
+        StableModuleOriginIdentity::from_relative_logical_path(
+            StablePackageIdentity::project_local("my-project"),
+            relative,
+            ModuleRootRole::Normal,
+        )
+    }
+
+    fn assert_internal_identity_error(
+        result: Result<
+            StableModuleOriginIdentity,
+            crate::compiler_frontend::compiler_errors::CompilerError,
+        >,
+        fragment: &str,
+    ) {
+        let error = result.expect_err("an invalid logical path component must be rejected");
+        assert_eq!(
+            error.error_type,
+            ErrorType::Compiler,
+            "an invalid logical path component must use the internal compiler-error lane"
+        );
+        assert!(
+            error.msg.contains(fragment),
+            "internal error message should mention `{fragment}`: {}",
+            error.msg
+        );
+    }
+
+    #[test]
+    fn absolute_logical_path_is_rejected() {
+        // An absolute path carries a `RootDir` component, which must not be silently dropped.
+        assert_internal_identity_error(
+            stable_origin_from_path(Path::new("/alpha")),
+            "invalid component",
+        );
+    }
+
+    #[test]
+    fn parent_component_logical_path_is_rejected() {
+        // A `..` component must not be silently dropped, otherwise `a/../b` and `b` would collide.
+        assert_internal_identity_error(
+            stable_origin_from_path(Path::new("../alpha")),
+            "invalid component",
+        );
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn non_utf8_logical_component_is_rejected() {
+        use std::ffi::OsString;
+        use std::os::unix::ffi::OsStringExt;
+
+        // A normal component that is not valid UTF-8 must surface as an internal error rather
+        // than panicking. Stage 0's earlier UTF-8 validation makes this an invariant failure,
+        // but the constructor stays total.
+        let bad = OsString::from_vec(vec![0xC3, 0x28]);
+        let relative = Path::new(bad.as_os_str());
+        assert_internal_identity_error(stable_origin_from_path(relative), "not UTF-8");
+    }
+
+    #[test]
+    fn valid_relative_logical_path_still_builds_identity() {
+        let identity = stable_origin_from_path(Path::new("alpha/inner"))
+            .expect("a normal relative logical path must build a stable identity");
+        assert_eq!(identity.logical_module_path(), "alpha/inner");
+        assert_eq!(identity.role(), ModuleRootRole::Normal);
     }
 
     fn first_diagnostic_code(messages: &CompilerMessages) -> String {

@@ -9,7 +9,8 @@
 //! module inventory, and collision validators from repeating the same expensive walk.
 
 use super::module_identity::{
-    ModuleIdentityRecord, ModuleIdentityTable, ModuleRootRole, module_root_role_for_file_name,
+    ModuleIdentityRecord, ModuleIdentityTable, ModuleRootRole, StablePackageIdentity,
+    module_root_role_for_file_name,
 };
 use crate::builder_surface::SourcePackageRegistry;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
@@ -140,6 +141,12 @@ impl SourceTreeIndex {
     ) -> Result<Self, CompilerMessages> {
         let discovery_start = crate::timing::start_pipeline_timing();
         let skip_policy = SourceTreeSkipPolicy::from_config(project_root, &entry_root, config);
+
+        // One stable project package identity shared by every node in the project graph: normal
+        // roots, support roots and the optional project package facade. It is derived from the
+        // configured project name, never from the checkout directory or an absolute path.
+        let project_package = StablePackageIdentity::project_local(&config.project_name);
+
         let mut stats = SourceTreeDiscoveryStats::default();
         let mut queue = VecDeque::from([entry_root.clone()]);
         let mut records = Vec::new();
@@ -308,12 +315,16 @@ impl SourceTreeIndex {
                 }
 
                 stats.module_roots_found += 1;
-                records.push(ModuleIdentityRecord::new(
-                    canonical_root_directory,
-                    root.root_file,
-                    root.role,
-                    logical_module_path,
-                ));
+                records.push(
+                    ModuleIdentityRecord::new(
+                        canonical_root_directory,
+                        root.root_file,
+                        root.role,
+                        logical_module_path,
+                        &project_package,
+                    )
+                    .map_err(|error| CompilerMessages::from_error_ref(error, string_table))?,
+                );
             }
 
             subdirectories.sort();
@@ -331,12 +342,16 @@ impl SourceTreeIndex {
                 })
                 .map_err(|error| CompilerMessages::from_error_ref(error, string_table))?;
 
-            records.push(ModuleIdentityRecord::new(
-                facade_directory.clone(),
-                facade_file,
-                ModuleRootRole::ProjectPackageFacade,
-                logical_module_path_from(&facade_directory, &facade_directory, string_table)?,
-            ));
+            records.push(
+                ModuleIdentityRecord::new(
+                    facade_directory.clone(),
+                    facade_file,
+                    ModuleRootRole::ProjectPackageFacade,
+                    logical_module_path_from(&facade_directory, &facade_directory, string_table)?,
+                    &project_package,
+                )
+                .map_err(|error| CompilerMessages::from_error_ref(error, string_table))?,
+            );
         }
 
         record_discovery_metrics(&stats, discovery_start);

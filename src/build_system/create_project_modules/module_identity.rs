@@ -1,13 +1,17 @@
 //! Stage 0 durable module identity and structural topology.
 //!
-//! WHAT: owns the canonical module identities, root roles, logical module paths and structural
-//! ancestry produced by the one Stage 0 source-tree traversal, and derives the narrow frontend
-//! module-root lookup table from the normal roots.
-//! WHY: durable identity and topology are build-system-owned data. The frontend resolver consumes
-//! only the derived normal-root lookup table, so import resolution never sees support or facade
-//! records in this slice. Later graph-construction phases consume the identity and ancestry
-//! directly from this table.
+//! WHAT: owns the canonical module identities, stable cross-build origin identities, root
+//! roles, logical module paths and structural ancestry produced by the one Stage 0 source-tree
+//! traversal, and derives the narrow frontend module-root lookup table from the normal roots.
+//! WHY: durable identity and topology are build-system-owned data. The frontend resolver
+//! consumes only the derived normal-root lookup table, so import resolution never sees support
+//! or facade records in this slice. Later graph-construction phases consume the identity and
+//! ancestry directly from this table. The dense `ModuleId` is the build-local handle for one
+//! build boundary; the owned `StableModuleOriginIdentity` is the cross-build semantic identity
+//! that later exported declaration identities will embed.
 
+use crate::builder_surface::PackageOrigin;
+use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::paths::module_roots::{ModuleRootRecord, ModuleRootTable};
 use crate::compiler_frontend::source_packages::root_file::{
     file_name_is_hash_root_file, file_name_is_support_root_file,
@@ -16,14 +20,165 @@ use crate::compiler_frontend::source_packages::root_file::{
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-/// Stable semantic identity for one canonical module.
+/// Dense deterministic handle for one canonical module inside one build boundary.
 ///
-/// `ModuleId` values are assigned deterministically by sorting canonical logical module paths,
-/// so the identity is independent of traversal completion order and cosmetic root filename
-/// suffixes (`#mod.bst` and `#page.bst` in the same directory collapse to one root whose identity
-/// comes from the directory, not the filename).
+/// `ModuleId` is the build-local index assigned by sorting canonical logical module paths, so
+/// it is independent of traversal completion order and cosmetic root filename suffixes
+/// (`#mod.bst` and `#page.bst` in the same directory collapse to one root whose identity comes
+/// from the directory, not the filename).
+///
+/// It is deliberately not the persistent semantic identity: its numeric value is a build-local
+/// table slot that may cross stages inside that build boundary but must not identify a module
+/// across builds or reach persistent artefacts. The cross-build semantic identity is the owned
+/// [`StableModuleOriginIdentity`](self::StableModuleOriginIdentity).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub(crate) struct ModuleId(usize);
+
+/// Owned, hashable, cross-build identity for one source package within one build boundary.
+///
+/// WHAT: carries the package origin and the canonical package/project name. For the project
+/// graph it is constructed from [`PackageOrigin::ProjectLocal`] and the exact configured
+/// `Config.project_name`. It stores neither absolute filesystem paths nor process-local
+/// string-table IDs, so the same logical package resolves to the same identity across checkout
+/// roots, processes and cosmetic root-filename suffixes.
+/// WHY: later exported declaration identities embed the package identity so origin identities
+/// remain stable when source moves across machines or checkouts. Identity is never inferred from
+/// checkout-directory names or absolute paths.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct StablePackageIdentity {
+    origin: PackageOrigin,
+    name: String,
+}
+
+impl StablePackageIdentity {
+    /// Project-local package identity for the project graph, from the configured project name.
+    ///
+    /// The configured name is preserved exactly as supplied. Validation of empty or malformed
+    /// project names belongs to config/bootstrap owners and is intentionally not added here.
+    pub(crate) fn project_local(project_name: &str) -> Self {
+        Self {
+            origin: PackageOrigin::ProjectLocal,
+            name: project_name.to_owned(),
+        }
+    }
+
+    /// The package origin classification.
+    #[allow(dead_code)]
+    pub(crate) fn origin(&self) -> PackageOrigin {
+        self.origin
+    }
+
+    /// The canonical package/project name spelling.
+    #[allow(dead_code)]
+    pub(crate) fn name(&self) -> &str {
+        &self.name
+    }
+}
+
+/// Owned, hashable, cross-build origin identity for one canonical module.
+///
+/// WHAT: derives a stable module origin from the owning [`StablePackageIdentity`], the canonical
+/// portable logical module path (forward-slash logical spelling, including the empty entry-root
+/// path) and the [`ModuleRootRole`]. It stores no `PathBuf`, `StringId`, `InternedPath`, dense
+/// `ModuleId` or absolute filesystem path, so identity is stable across checkout roots,
+/// traversal order, cosmetic root-filename suffixes and the ordinary source file that contains
+/// a declaration.
+/// WHY: later exported declaration identities embed this module origin identity. Keeping the
+/// dense `ModuleId` as the build-local handle prevents process-local indexes from leaking across
+/// module boundaries or into persistent artefacts.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct StableModuleOriginIdentity {
+    package: StablePackageIdentity,
+    logical_module_path: String,
+    role: ModuleRootRole,
+}
+
+impl StableModuleOriginIdentity {
+    /// Build the cross-build identity from a base-relative logical module path.
+    ///
+    /// `relative_logical_path` is the `PathBuf` produced by stripping the canonical root
+    /// directory against its base (the entry root, or the project root for the facade). It is
+    /// converted to a portable forward-slash spelling so the identity is self-contained and
+    /// platform-independent.
+    ///
+    /// Only normal relative components are accepted. `CurDir`, `ParentDir`, `RootDir`, `Prefix`
+    /// and non-UTF-8 components are rejected through an internal `CompilerError` so two invalid
+    /// inputs can never collapse to the same stable identity. Stage 0's earlier UTF-8 and
+    /// base-relative validation makes these invariant failures, but the constructor remains
+    /// total rather than panicking.
+    pub(crate) fn from_relative_logical_path(
+        package: StablePackageIdentity,
+        relative_logical_path: &Path,
+        role: ModuleRootRole,
+    ) -> Result<Self, CompilerError> {
+        Ok(Self {
+            package,
+            logical_module_path: portable_logical_module_path_from(relative_logical_path)?,
+            role,
+        })
+    }
+
+    /// The owning stable package identity.
+    #[allow(dead_code)]
+    pub(crate) fn package(&self) -> &StablePackageIdentity {
+        &self.package
+    }
+
+    /// The canonical portable logical module path spelling (forward slashes, empty for the
+    /// entry root).
+    #[allow(dead_code)]
+    pub(crate) fn logical_module_path(&self) -> &str {
+        &self.logical_module_path
+    }
+
+    /// The structural root role.
+    #[allow(dead_code)]
+    pub(crate) fn role(&self) -> ModuleRootRole {
+        self.role
+    }
+}
+
+/// Convert a base-relative logical module path into a portable forward-slash logical spelling.
+///
+/// The entry-root module yields the empty string; deeper normal components are joined with `/`.
+/// Only normal relative components are accepted. `CurDir`, `ParentDir`, `RootDir` and `Prefix`
+/// components are rejected through an internal `CompilerError` so two invalid inputs cannot
+/// collapse to the same stable identity. Stage 0 traversal already rejects non-UTF-8 module path
+/// components through structured diagnostics, so a non-UTF-8 normal component here is a proven
+/// internal invariant; it is still surfaced as an explicit `CompilerError` rather than a panic.
+fn portable_logical_module_path_from(relative: &Path) -> Result<String, CompilerError> {
+    use std::path::Component;
+
+    let mut spelling = String::new();
+    for component in relative.components() {
+        match component {
+            Component::Normal(name) => {
+                let name = name.to_str().ok_or_else(|| {
+                    CompilerError::compiler_error(format!(
+                        "stable logical module path component {name:?} in {relative:?} is not \
+                         UTF-8; Stage 0 rejects non-UTF-8 module path components before identity \
+                         construction, so this is an internal invariant violation"
+                    ))
+                })?;
+                if !spelling.is_empty() {
+                    spelling.push('/');
+                }
+                spelling.push_str(name);
+            }
+            Component::CurDir
+            | Component::ParentDir
+            | Component::RootDir
+            | Component::Prefix(_) => {
+                return Err(CompilerError::compiler_error(format!(
+                    "stable logical module path {relative:?} contains an invalid component \
+                     {component:?}; only normal relative components are permitted, so two invalid \
+                     inputs cannot collapse to the same stable identity"
+                )));
+            }
+        }
+    }
+    Ok(spelling)
+}
 
 /// The structural role of one canonical module root.
 ///
@@ -61,21 +216,37 @@ pub(crate) struct ModuleIdentityRecord {
     root_file: PathBuf,
     role: ModuleRootRole,
     logical_module_path: PathBuf,
+    stable_origin: StableModuleOriginIdentity,
 }
 
 impl ModuleIdentityRecord {
+    /// Construct one canonical module record and derive its cross-build origin identity.
+    ///
+    /// `package` is the shared stable package identity for the project graph (or, later, a
+    /// dependency package graph). The portable stable origin identity is derived from
+    /// `logical_module_path` so the dense `PathBuf` remains the single source of truth for the
+    /// build-local relative path while the stable identity stores only the portable spelling.
+    /// Returns an internal `CompilerError` if `logical_module_path` contains an invalid or
+    /// non-UTF-8 component; the caller surfaces it at the Stage 0 boundary.
     pub(crate) fn new(
         root_directory: PathBuf,
         root_file: PathBuf,
         role: ModuleRootRole,
         logical_module_path: PathBuf,
-    ) -> Self {
-        Self {
+        package: &StablePackageIdentity,
+    ) -> Result<Self, CompilerError> {
+        let stable_origin = StableModuleOriginIdentity::from_relative_logical_path(
+            package.clone(),
+            &logical_module_path,
+            role,
+        )?;
+        Ok(Self {
             root_directory,
             root_file,
             role,
             logical_module_path,
-        }
+            stable_origin,
+        })
     }
 
     // Phase 2 identity accessors. Consumed by later source-set and graph phases and exercised by
@@ -98,6 +269,12 @@ impl ModuleIdentityRecord {
     #[allow(dead_code)]
     pub(crate) fn logical_module_path(&self) -> &Path {
         &self.logical_module_path
+    }
+
+    /// The owned cross-build origin identity for this module.
+    #[allow(dead_code)]
+    pub(crate) fn stable_origin(&self) -> &StableModuleOriginIdentity {
+        &self.stable_origin
     }
 }
 

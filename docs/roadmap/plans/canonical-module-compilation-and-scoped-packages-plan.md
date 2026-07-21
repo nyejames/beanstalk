@@ -9,27 +9,26 @@ Replace entry-closure compilation with canonical project and package graphs, imm
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/canonical-module-compilation-and-scoped-packages-plan.md
 STATUS: active
-CURRENT_SLICE: Phase 2a accepted; checkpoint commit pending
-LAST_ACCEPTED_COMMIT: bb65c5303310e73480d0ff4aee7b422fd119d9f9 (Phase 1 owner refresh)
-WORKTREE: main at bb65c5303310e73480d0ff4aee7b422fd119d9f9 with the accepted Phase 2a code, tests and this plan update; unrelated user documentation work may appear and must be preserved
+CURRENT_SLICE: Phase 2b accepted; checkpoint commit pending
+LAST_ACCEPTED_COMMIT: 5d4a6b1cd (Phase 2a deterministic module identities and topology)
+WORKTREE: main at 5d4a6b1cd with the accepted Phase 2b code, tests and this plan update; unrelated user documentation work may appear and must be preserved
 REQUIRED_RELOADS: startup files, this plan, relevant language/import and borrow references, current source and diff
 RELEVANT_CONTEXT_NOW:
-- docs: compiler-design-overview.md stable identities; build-system-design.md source indexing and topology
-- code: module_identity.rs is the Stage 0 durable identity/topology owner; source_tree_index.rs builds it; paths/module_roots.rs remains a derived normal-root-only frontend lookup
+- docs: compiler-design-overview.md cross-build stability; build-system-design.md project identity and package topology
+- code: module_identity.rs distinguishes dense ModuleId from StablePackageIdentity and StableModuleOriginIdentity; source_tree_index.rs constructs one project package identity from Config.project_name
 ACCEPTANCE_CRITERIA:
-- Phase 2a diff and architecture audit are accepted
-- progress matrix remains unchanged because user-visible support has not changed
-- stage only the seven Phase 2a code/test files and this plan update
+- Phase 2b diff and architecture audit are accepted
+- progress matrix remains unchanged because no user-visible support changed
+- stage only the three Phase 2b code/test files and this plan update
 VALIDATION_STATE:
-- cargo fmt: passed
-- targeted module identity/source tree tests and cargo check --tests: passed
-- just validate: passed; cross-target Clippy, 3374 Rust tests, 1793 integration cases, docs check and 28/28 benchmark cases
+- cargo fmt and 23 focused module identity tests: passed
+- just validate: passed; cross-target Clippy, 3383 Rust tests, 1793 integration cases, docs check and 28/28 benchmark cases
 DOCS_IMPACT: plan state only; progress matrix unchanged
 BLOCKERS_OR_OPEN_DECISIONS: none
 DELEGATION_DECISION: ollama - user requires Ollama for every worker slice
 NEXT_WORKER_ORDER: ollama only; no provider substitution for this run
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit Phase 2a, record its hash, then scope Phase 2b declaration identities
+NEXT_RESUME_ACTION: commit Phase 2b, record its hash, then scope stable exported declaration identities
 ```
 
 ## Hard prerequisites
@@ -269,7 +268,17 @@ Accepted Phase 2a checkpoint:
   behaviour.
 - normal, support and project-facade roles, cosmetic suffix stability, ancestry, entry-candidate
   exclusion and facade filesystem failures have focused subsystem coverage.
-- stable exported declaration identities remain for Phase 2b.
+- cross-build package/module origins and exported declaration identities remained after Phase 2a.
+
+Accepted Phase 2b checkpoint:
+
+- `StablePackageIdentity` owns package origin plus the configured canonical project/package name.
+- `StableModuleOriginIdentity` owns that package identity, a portable forward-slash logical module
+  path and root role. It excludes absolute paths, ordinary source-file paths, string-table IDs and
+  dense build-local `ModuleId` values.
+- invalid, absolute, parent and non-UTF-8 logical paths return internal compiler errors rather than
+  panicking or collapsing into another identity.
+- stable exported declaration identities remain for Phase 2c.
 
 ### Phase 3: Build canonical source indexes and owned or semantic source sets
 
