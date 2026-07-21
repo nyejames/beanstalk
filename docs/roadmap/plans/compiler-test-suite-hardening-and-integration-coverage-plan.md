@@ -30,13 +30,13 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 14C14n remaining dev-server unit ownership review
+CURRENT_SLICE: Phase 14C14o new-project target and summary unit ownership review
 LAST_ACCEPTED_COMMIT: `2cbe36410` (Phase 14C14m code)
 WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; accepted code is committed; concurrent example-name work remains separately committed
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: unit-test ownership, pruning, compiler-stage boundaries, and final governance rules govern the next slice
-- code: all 319 retained tests across the reviewed Stage 0, frontend, build-system, project, CLI, and dev watch/rebuild/HTTP/static groups now have distinct owners; error-page, SSE, and server-orchestration units are next
+- code: all 334 retained tests across the reviewed Stage 0, frontend, build-system, project, CLI, and complete dev-server groups now have distinct owners; new-project target and summary policy are next
 ACCEPTANCE_CRITERIA:
 - every remaining full-source unit has a distinct hidden invariant, parser fact, stage boundary, or policy owner
 - units superseded by a stronger canonical integration primary are deleted with replacement evidence
@@ -44,7 +44,7 @@ ACCEPTANCE_CRITERIA:
 - HIR, build-system, backend, and final TIR units keep only their owning semantic relationships and hidden facts
 VALIDATION_STATE:
 - `just validate`: passed; cross-target Clippy, 3,455 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
-- Phase 14C14m focused group: passed; seven HTTP response/timeout and nine static routing tests
+- Phase 14C14n focused group: passed; eight server-orchestration, four error-page, and three SSE tests
 - Phase 14B audit: passed; zero hard findings; 66 backend-only and 15 adversarial-only primary-less contract advisories
 - Priya expectation alignment: accepted at `6efac7012`; 13 stale Rust and integration expectation files now match renamed inputs
 DOCS_IMPACT: testing, validation, and contributor workflow aligned with final suite policy; progress matrix and index unchanged
@@ -52,7 +52,7 @@ BLOCKERS_OR_OPEN_DECISIONS: none; 81 contract families without a primary are int
 DELEGATION_DECISION: Ollama — bounded Phase 14 implementation slices
 NEXT_WORKER_ORDER: Ollama only; no provider substitution
 STOP_REASON: none
-NEXT_RESUME_ACTION: launch the remaining dev-server error-page, SSE, and server-orchestration unit group through Ollama
+NEXT_RESUME_ACTION: launch the new-project target and summary unit group through Ollama
 
 ---
 
@@ -246,6 +246,7 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 14C14k project CLI parser units | `ecd544dfd` | Accepted | One duplicate missing-backend-value test and three same-family new/check flag and integration-exit pairs were consolidated into table-driven owners without losing command-local error families, exact flag ordering, public help/version spellings, selection/audit policy, or warning-container separation; 46 CLI parser and command-policy owners remain; 3,460 Rust tests and 1,793 integration executions |
 | Phase 14C14l dev-server watch and rebuild units | `fce3e9e82` | Accepted | Two JavaScript watch-scope units were consolidated into the main config/entry/package scope owner; the successful rebuild owner now proves declared-entry selection and both emitted pages; the duplicate message-format smoke was removed in favor of the typed error-page formatter owner; 22 watch and rebuild-loop policy, fingerprint, state, queue, warning, and infrastructure owners remain; 3,456 Rust tests and 1,793 integration executions |
 | Phase 14C14m dev-server HTTP and static-file units | `2cbe36410` | Accepted | One private one-line failed-build predicate smoke was removed in favor of response-level nested-page substitution and CSS/JavaScript/image asset-serving owners; all seven remaining HTTP response/timeout and nine static routing, redirect, origin, MIME, traversal, asset, and injection tests remain distinct; 3,455 Rust tests and 1,793 integration executions |
+| Phase 14C14n remaining dev-server units | no code change after `2cbe36410` | Accepted | All eight server-orchestration, four error-page, and three SSE tests remain distinct owners for default policy, entry modes, output resolution, typed/infrastructure diagnostics, escaping, remapping, runtime metadata, wire format, queue pruning, and loopback lifecycle; latest full gate remains 3,455 Rust tests and 1,793 integration executions |
 
 ---
 
