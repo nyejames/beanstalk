@@ -30,20 +30,21 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 14F final measurements and documentation closure
-LAST_ACCEPTED_COMMIT: `d443c3a4f` (Phase 14D checkpoint); concurrent Priya alignment accepted at `9518662e1`
+CURRENT_SLICE: Phase 14F documentation and roadmap closure
+LAST_ACCEPTED_COMMIT: `425a4248e` (Phase 14E mutation-probe checkpoint); concurrent Priya alignment accepted at `9518662e1`
 WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; temporary detached mutation worktree is clean at `d443c3a4f`; concurrent generated `docs/release/docs/errors/index.html` output is separately owned and preserved
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: final measurement, workflow, progress, roadmap, and next-plan closure rules govern the next slice
-- code: all nine representative semantic mutations were caught by their intended primary integration or focused hidden-fact owners and fully restored; no deliberate fault or source diff remains
+- docs: workflow, progress, roadmap, and next-plan closure rules govern the next slice; final measurements are recorded below
+- code: all nine representative semantic mutations were caught by their intended primary integration or focused hidden-fact owners and fully restored; final static inventories and three-run timings are complete
 ACCEPTANCE_CRITERIA:
-- record final Rust, integration, assertion-shape, role, golden, timing, and ownership-change measurements under the Phase 0 method
 - review and finalize authorized testing, validation, contributor, index, progress, roadmap, and next-plan state without inventing status changes
 - rebuild documentation when source documentation changes and preserve separately owned generated output
 - advance to the required final review only after closure evidence is complete
 VALIDATION_STATE:
 - `just validate`: passed; cross-target Clippy, 3,344 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
+- Phase 14F inventory: passed; 1,647 canonical cases, 1,793 executions, zero hard findings, zero goldens, 13 acceptance-only blocks, 982 exact and 19 justified-contains failure blocks
+- Phase 14F timings: three equivalent unit runs median 1.74s; three equivalent integration runs median 9.79s; operational evidence only
 - Phase 14E mutation probes: all nine primary filtered owners passed at baseline, failed for the intended semantic defect, passed after restoration, and left the detached worktree clean; no mutation score claimed
 - Phase 14B audit: passed; zero hard findings; 66 backend-only and 15 adversarial-only primary-less contract advisories
 - Priya expectation alignment: accepted at `9518662e1`; renamed inputs and expectations match
@@ -52,7 +53,7 @@ BLOCKERS_OR_OPEN_DECISIONS: none; 81 contract families without a primary are int
 DELEGATION_DECISION: Ollama — bounded Phase 14 implementation slices
 NEXT_WORKER_ORDER: Ollama only; no provider substitution
 STOP_REASON: none
-NEXT_RESUME_ACTION: run the final audit inventory and Phase 0-compatible timing/count measurements
+NEXT_RESUME_ACTION: review and finalize the authorized workflow, progress, roadmap, and canonical-module-plan closure documents
 
 ---
 
@@ -1388,6 +1389,43 @@ Record under the same method as Phase 0:
 - units removed and retained by invariant category
 
 Do not present lower counts or faster time as proof of correctness.
+
+### Phase 14F accepted final measurements
+
+All measurements were taken on the same machine at `425a4248e`. The separately owned generated
+errors page was present but does not participate in the Rust or canonical integration suites.
+
+- `cargo test --quiet -- --list` listed 3,344 Rust tests. Major owners are compiler frontend 2,386,
+  projects 337, backends 226, build system 187, compiler integration-runner and harness units 177,
+  builder surface 28, and benchmarking 3. Within the frontend, AST owns 1,209, HIR 210, headers
+  185, paths 118, datatypes 93, compiler messages 93, tokenizer 86, declaration syntax 73, analysis
+  50, and other focused frontend owners 269.
+- Three `/usr/bin/time -p cargo test --quiet -- --format terse` runs passed with real wall times
+  2.02s, 1.73s, and 1.74s. The median is 1.74s.
+- `cargo run --quiet -- tests --audit` reported 1,647 canonical cases and 1,793 backend executions:
+  1,638 HTML and 155 HTML-Wasm, comprising 792 successful compilations and 1,001 expected
+  failures. The report has zero hard findings, 66 backend-only and 15 adversarial-only
+  primary-less advisories, 982 exact diagnostic blocks, and 19 justified contains-mode blocks.
+- The final role inventory is 1,149 primary, 397 boundary, 71 backend, 18 adversarial, and 12 smoke
+  cases. Thirteen backend blocks are acceptance-only. There are zero baseline-only blocks and zero
+  strict or normalized golden blocks. The stronger authored owners include 567 rendered-output
+  blocks, 274 artifact blocks, two artifact-absence blocks, and 21 exact-warning blocks.
+- Three `/usr/bin/time -p cargo run --quiet -- tests` runs passed all 1,793 executions with real wall
+  times 10.06s, 9.79s, and 9.64s. The median is 9.79s.
+- Relative to the Phase 0 manifest at `b4503794e`, 23 canonical IDs were added and 27 were removed.
+  Seventeen removed micro-fixture IDs were consolidated into four exact-output primaries for fresh
+  mutable values, choice equality, named/default arguments, and ordered collection operations.
+  Across retained IDs, 376 case directories received source or expectation strengthening and
+  corrections. These counts describe repository change, not independent semantic contracts.
+- Rust test count changed from 3,433 at Phase 0 to 3,344, a net reduction of 89 after both new
+  harness/hidden-fact owners and pruning. Removed units were source-shaped integration duplicates,
+  backend semantic substitutes, cosmetic construction/accessor round trips, repeated policy
+  matrices, and obsolete test-only seams. Retained units own parser and stage shape, structured
+  payloads, semantic identity, CFG and side-table transfer, malformed invariants, build policy,
+  target validation, lowering, helper demand, ABI, and exact TIR view/preparation/handoff facts.
+
+The timing and count changes are operational and inventory evidence only. They do not establish
+correctness or performance improvement.
 
 ## Documentation and roadmap closure
 
