@@ -38,7 +38,7 @@ use crate::compiler_frontend::ast::templates::tir::view::{
     TemplateTirPhase, TirView, TirViewIdentity,
 };
 use crate::compiler_frontend::ast::templates::tir::{
-    PreparedTemplate, RuntimeTemplateReason, TemplatePreparationMode, prepare_tir_view,
+    PreparedTemplate, TemplatePreparationMode, prepare_tir_view,
 };
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -65,34 +65,35 @@ fn sample_key() -> TirFoldCacheKey {
 }
 
 #[test]
-fn cache_key_equality_for_identical_fields() {
-    assert_eq!(sample_key(), sample_key());
-}
+fn cache_key_equality_and_inequality_across_identity_dimensions() {
+    let key = sample_key();
+    assert_eq!(key, sample_key(), "identical keys must be equal");
 
-#[test]
-fn cache_key_inequality_for_each_identity_dimension() {
-    let mut root = sample_key();
+    let mut root = key;
     root.identity.root = TemplateIrId::new(1);
-    assert_ne!(sample_key(), root);
+    assert_ne!(key, root, "different roots must be unequal");
 
-    let mut phase = sample_key();
+    let mut phase = key;
     phase.identity.phase = TemplateTirPhase::Formatted;
-    assert_ne!(sample_key(), phase);
+    assert_ne!(key, phase, "different phases must be unequal");
 
-    let mut overlay = sample_key();
+    let mut overlay = key;
     overlay.identity.context = TemplateViewContext {
         expression_overlay: Some(TirExpressionOverlayId::new(7)),
         ..TemplateViewContext::default()
     };
-    assert_ne!(sample_key(), overlay);
+    assert_ne!(
+        key, overlay,
+        "different expression overlays must be unequal"
+    );
 
-    let mut loop_limit = sample_key();
+    let mut loop_limit = key;
     loop_limit.loop_iteration_limit = 512;
-    assert_ne!(sample_key(), loop_limit);
+    assert_ne!(key, loop_limit, "different loop limits must be unequal");
 
-    let mut bindings = sample_key();
+    let mut bindings = key;
     bindings.bindings_empty = false;
-    assert_ne!(sample_key(), bindings);
+    assert_ne!(key, bindings, "different binding emptiness must be unequal");
 }
 
 #[test]
@@ -203,7 +204,7 @@ fn fold_view_matches_direct_template_fold_for_simple_text() {
 }
 
 #[test]
-fn fold_view_caches_empty_binding_result() {
+fn fold_view_caches_empty_binding_results_but_not_active_bindings() {
     let mut string_table = StringTable::new();
     let fixture = build_text_fixture(&mut string_table, "cached");
     let view = TirView::new(
@@ -214,36 +215,33 @@ fn fold_view_caches_empty_binding_result() {
     )
     .expect("view should construct");
 
-    let mut context = fold_context(&mut string_table);
-    let first = fold_prepared_view(&view, &mut context).expect("first fold should succeed");
-    let key = TirFoldCacheKey {
-        identity: TirViewIdentity {
-            root: fixture.template_id,
-            phase: TemplateTirPhase::Composed,
-            context: fixture.context,
-        },
-        loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
-        bindings_empty: true,
+    let cache_identity = TirViewIdentity {
+        root: fixture.template_id,
+        phase: TemplateTirPhase::Composed,
+        context: fixture.context,
     };
 
-    assert!(context.fold_cache.get(&key).is_some());
-    let second = fold_prepared_view(&view, &mut context).expect("cached fold should succeed");
-    assert_eq!(first, second);
-}
+    // Empty bindings are cached and reusable.
+    {
+        let mut empty_context = fold_context(&mut string_table);
+        let first = fold_prepared_view(&view, &mut empty_context)
+            .expect("empty-binding fold should succeed");
+        let empty_cache_key = TirFoldCacheKey {
+            identity: cache_identity,
+            loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
+            bindings_empty: true,
+        };
+        assert!(
+            empty_context.fold_cache.get(&empty_cache_key).is_some(),
+            "empty-binding fold must populate its cache entry"
+        );
+        let second =
+            fold_prepared_view(&view, &mut empty_context).expect("cached fold should succeed");
+        assert_eq!(first, second, "cached fold must equal the first fold");
+    };
 
-#[test]
-fn fold_view_does_not_cache_active_bindings() {
-    let mut string_table = StringTable::new();
-    let fixture = build_text_fixture(&mut string_table, "bound");
+    // Active bindings are never cached.
     let path = InternedPath::from_single_str("value", &mut string_table);
-    let view = TirView::new(
-        &fixture.store,
-        fixture.template_id,
-        TemplateTirPhase::Composed,
-        fixture.context,
-    )
-    .expect("view should construct");
-
     let resolver = crate::compiler_frontend::paths::path_resolution::ProjectPathResolver::new(
         std::env::temp_dir(),
         std::env::temp_dir(),
@@ -254,7 +252,7 @@ fn fold_view_does_not_cache_active_bindings() {
     let path_format =
         crate::compiler_frontend::paths::path_format::PathStringFormatConfig::default();
     let source_scope = InternedPath::new();
-    let mut context = TemplateFoldContext {
+    let mut active_context = TemplateFoldContext {
         string_table: &mut string_table,
         project_path_resolver: &resolver,
         path_format_config: &path_format,
@@ -266,18 +264,17 @@ fn fold_view_does_not_cache_active_bindings() {
         }],
         fold_cache: TirFoldCache::new(),
     };
-
-    fold_prepared_view(&view, &mut context).expect("active-binding fold should still succeed");
-    let active_binding_key = TirFoldCacheKey {
-        identity: TirViewIdentity {
-            root: fixture.template_id,
-            phase: TemplateTirPhase::Composed,
-            context: fixture.context,
-        },
+    fold_prepared_view(&view, &mut active_context)
+        .expect("active-binding fold should still succeed");
+    let active_cache_key = TirFoldCacheKey {
+        identity: cache_identity,
         loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
         bindings_empty: false,
     };
-    assert!(context.fold_cache.get(&active_binding_key).is_none());
+    assert!(
+        active_context.fold_cache.get(&active_cache_key).is_none(),
+        "active-binding fold must not populate the cache"
+    );
 }
 
 #[test]
@@ -365,7 +362,7 @@ fn foldable_preparation_accepts_simple_text() {
 }
 
 #[test]
-fn fold_view_with_resolved_slot_overlay_produces_filled_output() {
+fn fold_view_slot_overlay_resolves_filled_and_missing_to_empty() {
     let mut string_table = StringTable::new();
     let mut store = TemplateIrStore::new();
     let fill_text = string_table.intern("filled");
@@ -389,102 +386,57 @@ fn fold_view_with_resolved_slot_overlay_produces_filled_output() {
         TemplateIrSummary::default(),
         empty_location(),
     );
-    let slot_overlay_id = store.allocate_slot_resolution_overlay(TirSlotResolutionOverlay {
+
+    // A resolved slot overlay folds the fill template into the wrapper output.
+    let resolved_overlay_id = store.allocate_slot_resolution_overlay(TirSlotResolutionOverlay {
         resolutions: vec![(
             SlotOccurrenceId::new(0),
             TirSlotResolution::resolved(SlotKey::Default, vec![fill_template_id]),
         )],
     });
-    let context = TemplateViewContext {
+    let resolved_context = TemplateViewContext {
         expression_overlay: None,
-        slot_resolution: Some(slot_overlay_id),
+        slot_resolution: Some(resolved_overlay_id),
         wrapper_context: None,
     };
-    let view = TirView::new(
+    let resolved_view = TirView::new(
         &store,
         wrapper_template_id,
         TemplateTirPhase::Finalized,
-        context,
+        resolved_context,
     )
-    .expect("view should construct");
+    .expect("resolved view should construct");
     let mut context = fold_context(&mut string_table);
-    let emission =
-        fold_prepared_view(&view, &mut context).expect("slot overlay fold should succeed");
-
+    let resolved_emission = fold_prepared_view(&resolved_view, &mut context)
+        .expect("resolved slot overlay fold should succeed");
     assert_eq!(
-        emission,
-        TemplateEmission::Output(string_table.intern("filled"))
+        resolved_emission,
+        TemplateEmission::Output(fill_text),
+        "resolved slot overlay must fold the fill template into output"
     );
-}
 
-#[test]
-fn fold_view_with_missing_slot_overlay_produces_empty_output() {
-    let mut string_table = StringTable::new();
-    let mut store = TemplateIrStore::new();
-    let mut builder = TemplateIrBuilder::new(&mut store);
-    let slot_node = builder.push_slot_node(SlotKey::Default, empty_location());
-    let wrapper_template_id = builder.finish_template(
-        slot_node,
-        Style::default(),
-        TemplateType::String,
-        TemplateIrSummary::default(),
-        empty_location(),
-    );
-    let slot_overlay_id =
+    // An unresolved slot overlay folds to structural no-output.
+    let missing_overlay_id =
         store.allocate_slot_resolution_overlay(TirSlotResolutionOverlay::default());
-    let context = TemplateViewContext {
+    let missing_context = TemplateViewContext {
         expression_overlay: None,
-        slot_resolution: Some(slot_overlay_id),
+        slot_resolution: Some(missing_overlay_id),
         wrapper_context: None,
     };
-    let view = TirView::new(
+    let missing_view = TirView::new(
         &store,
         wrapper_template_id,
         TemplateTirPhase::Finalized,
-        context,
+        missing_context,
     )
-    .expect("view should construct");
-    let mut context = fold_context(&mut string_table);
-    let emission =
-        fold_prepared_view(&view, &mut context).expect("unresolved slot should fold to no output");
-    assert_eq!(emission, TemplateEmission::NoOutput);
-}
-
-#[test]
-fn child_template_cycle_is_rejected() {
-    let mut store = TemplateIrStore::new();
-    let template_id = TemplateIrId::new(store.template_count());
-    let child_reference = TemplateTirChildReference::new(
-        template_id,
-        TemplateTirPhase::Composed,
-        TemplateViewContext::default(),
+    .expect("missing view should construct");
+    let missing_emission = fold_prepared_view(&missing_view, &mut context)
+        .expect("unresolved slot should fold to no output");
+    assert_eq!(
+        missing_emission,
+        TemplateEmission::NoOutput,
+        "unresolved slot overlay must fold to structural no-output"
     );
-    let mut builder = TemplateIrBuilder::new(&mut store);
-    let child_node =
-        builder.push_child_template_node_with_reference(child_reference, empty_location());
-    let root = builder.push_sequence_node(vec![child_node], empty_location());
-    let actual_id = builder.finish_template(
-        root,
-        Style::default(),
-        TemplateType::String,
-        TemplateIrSummary::default(),
-        empty_location(),
-    );
-    assert_eq!(actual_id, template_id);
-
-    let view = TirView::new(
-        &store,
-        template_id,
-        TemplateTirPhase::Composed,
-        TemplateViewContext::default(),
-    )
-    .expect("view should construct");
-    let result = prepare_tir_view(&view, TemplatePreparationMode::Value);
-    assert!(matches!(
-        result,
-        Ok(PreparedTemplate::Runtime(runtime))
-            if matches!(runtime.reason, RuntimeTemplateReason::ChildTemplateCycle)
-    ));
 }
 
 // -------------------------

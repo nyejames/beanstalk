@@ -108,14 +108,15 @@ fn same_store_wrapper_reference_is_normalized_without_materialization() {
 }
 
 #[test]
-fn wrapper_with_missing_view_context_returns_error() {
+fn wrapper_reference_rejects_missing_view_context_and_missing_template() {
+    // A reference whose expression overlay does not exist in the store is rejected.
     let mut store = TemplateIrStore::new();
     let root = store.push_node(TemplateIrNode::new(
         TemplateIrNodeKind::Sequence { children: vec![] },
         empty_location(),
     ));
     let template_id = push_template_entry(&mut store, root, TemplateType::String);
-    let template = crate::compiler_frontend::ast::templates::template::Template {
+    let missing_context_template = crate::compiler_frontend::ast::templates::template::Template {
         tir_reference: TemplateTirReference {
             root: template_id,
             phase: TemplateTirPhase::Parsed,
@@ -126,14 +127,18 @@ fn wrapper_with_missing_view_context_returns_error() {
         },
         location: empty_location(),
     };
+    let missing_context_error = wrapper_reference_for_template(&missing_context_template, &store)
+        .expect_err("missing view context should be rejected");
+    assert!(
+        missing_context_error.msg.contains("expression overlay")
+            && missing_context_error.msg.contains("does not exist"),
+        "expected a missing-view-context error, got: {}",
+        missing_context_error.msg
+    );
 
-    assert!(wrapper_reference_for_template(&template, &store).is_err());
-}
-
-#[test]
-fn wrapper_with_missing_template_returns_error() {
-    let store = TemplateIrStore::new();
-    let template = crate::compiler_frontend::ast::templates::template::Template {
+    // A reference whose template root does not exist in the store is rejected.
+    let empty_store = TemplateIrStore::new();
+    let missing_template = crate::compiler_frontend::ast::templates::template::Template {
         tir_reference: TemplateTirReference {
             root: TemplateIrId::new(99),
             phase: TemplateTirPhase::Parsed,
@@ -141,8 +146,14 @@ fn wrapper_with_missing_template_returns_error() {
         },
         location: empty_location(),
     };
-
-    assert!(wrapper_reference_for_template(&template, &store).is_err());
+    let missing_template_error = wrapper_reference_for_template(&missing_template, &empty_store)
+        .expect_err("missing template should be rejected");
+    assert!(
+        missing_template_error.msg.contains("template")
+            && missing_template_error.msg.contains("was missing"),
+        "expected a missing-template error, got: {}",
+        missing_template_error.msg
+    );
 }
 
 #[test]
@@ -200,70 +211,103 @@ fn wrapper_candidates_reuse_parser_structural_child_template() {
 }
 
 #[test]
-fn sequence_children_rejects_missing_node() {
+fn sequence_children_rejects_missing_and_non_sequence_roots() {
     let store = TemplateIrStore::new();
-    assert!(sequence_children(&store, TemplateIrNodeId::new(99)).is_err());
-}
-
-#[test]
-fn sequence_children_rejects_non_sequence_root() {
-    let mut string_table = StringTable::new();
-    let mut store = TemplateIrStore::new();
-    let text_node = push_text_node(&mut store, &mut string_table, "leaf");
-
-    assert!(sequence_children(&store, text_node).is_err());
-}
-
-#[test]
-fn head_prefix_tir_nodes_rejects_missing_root_child() {
-    let store = TemplateIrStore::new();
-    assert!(head_prefix_tir_nodes(&store, &[TemplateIrNodeId::new(99)]).is_err());
-}
-
-#[test]
-fn head_prefix_tir_nodes_accepts_empty_prefix() {
-    let store = TemplateIrStore::new();
-    assert!(head_prefix_tir_nodes(&store, &[]).unwrap().is_empty());
-}
-
-#[test]
-fn trim_whitespace_rejects_missing_body_root() {
-    let string_table = StringTable::new();
-    let mut store = TemplateIrStore::new();
-
+    let missing_error = sequence_children(&store, TemplateIrNodeId::new(99))
+        .expect_err("missing node should be rejected");
     assert!(
-        trim_whitespace_before_loop_control_boundary(
-            TemplateIrNodeId::new(99),
-            &mut store,
-            &string_table,
-        )
-        .is_err()
+        missing_error.msg.contains("sequence-children lookup")
+            && missing_error.msg.contains("was missing"),
+        "expected a missing-node error, got: {}",
+        missing_error.msg
+    );
+
+    let mut string_table = StringTable::new();
+    let mut non_sequence_store = TemplateIrStore::new();
+    let text_node = push_text_node(&mut non_sequence_store, &mut string_table, "leaf");
+    let non_sequence_error = sequence_children(&non_sequence_store, text_node)
+        .expect_err("non-sequence root should be rejected");
+    assert!(
+        non_sequence_error.msg.contains("was not a Sequence root."),
+        "expected a non-sequence-root error, got: {}",
+        non_sequence_error.msg
     );
 }
 
 #[test]
-fn trim_whitespace_rejects_non_sequence_body_root() {
-    let mut string_table = StringTable::new();
-    let mut store = TemplateIrStore::new();
-    let text_node = push_text_node(&mut store, &mut string_table, "leaf");
+fn head_prefix_rejects_missing_child_and_accepts_empty_prefix() {
+    let store = TemplateIrStore::new();
+    let missing_error = head_prefix_tir_nodes(&store, &[TemplateIrNodeId::new(99)])
+        .expect_err("missing root child should be rejected");
+    assert!(
+        missing_error.msg.contains("head-prefix extraction")
+            && missing_error.msg.contains("was missing"),
+        "expected a missing-child error, got: {}",
+        missing_error.msg
+    );
 
     assert!(
-        trim_whitespace_before_loop_control_boundary(text_node, &mut store, &string_table).is_err()
+        head_prefix_tir_nodes(&store, &[])
+            .expect("empty prefix should succeed")
+            .is_empty(),
+        "empty prefix should produce no head-prefix nodes"
     );
 }
 
 #[test]
-fn trim_whitespace_rejects_missing_child_in_sequence() {
-    let string_table = StringTable::new();
-    let mut store = TemplateIrStore::new();
-    let body_root = store.push_node(TemplateIrNode::new(
+fn trim_whitespace_rejects_every_malformed_reference_branch() {
+    let mut string_table = StringTable::new();
+
+    // Missing body root.
+    let mut missing_root_store = TemplateIrStore::new();
+    let missing_root_error = trim_whitespace_before_loop_control_boundary(
+        TemplateIrNodeId::new(99),
+        &mut missing_root_store,
+        &string_table,
+    )
+    .expect_err("missing body root should be rejected");
+    assert!(
+        missing_root_error.msg.contains("loop-control trim")
+            && missing_root_error.msg.contains("body root")
+            && missing_root_error.msg.contains("was missing"),
+        "expected a missing-root error, got: {}",
+        missing_root_error.msg
+    );
+
+    // Non-sequence body root.
+    let mut non_sequence_store = TemplateIrStore::new();
+    let text_node = push_text_node(&mut non_sequence_store, &mut string_table, "leaf");
+    let non_sequence_error = trim_whitespace_before_loop_control_boundary(
+        text_node,
+        &mut non_sequence_store,
+        &string_table,
+    )
+    .expect_err("non-sequence body root should be rejected");
+    assert!(
+        non_sequence_error.msg.contains("was not a Sequence."),
+        "expected a non-sequence-root error, got: {}",
+        non_sequence_error.msg
+    );
+
+    // Missing child inside an otherwise valid sequence.
+    let mut missing_child_store = TemplateIrStore::new();
+    let body_root = missing_child_store.push_node(TemplateIrNode::new(
         TemplateIrNodeKind::Sequence {
             children: vec![TemplateIrNodeId::new(99)],
         },
         empty_location(),
     ));
-
+    let missing_child_error = trim_whitespace_before_loop_control_boundary(
+        body_root,
+        &mut missing_child_store,
+        &string_table,
+    )
+    .expect_err("missing child in sequence should be rejected");
     assert!(
-        trim_whitespace_before_loop_control_boundary(body_root, &mut store, &string_table).is_err()
+        missing_child_error.msg.contains("loop-control trim")
+            && missing_child_error.msg.contains("child node")
+            && missing_child_error.msg.contains("was missing"),
+        "expected a missing-child error, got: {}",
+        missing_child_error.msg
     );
 }

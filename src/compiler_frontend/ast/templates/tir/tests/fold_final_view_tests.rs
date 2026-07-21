@@ -32,7 +32,7 @@ use crate::compiler_frontend::ast::templates::tir::store::TemplateIrStore;
 use crate::compiler_frontend::ast::templates::tir::summary::TemplateIrSummary;
 use crate::compiler_frontend::ast::templates::tir::view::{TemplateTirPhase, TirView};
 use crate::compiler_frontend::ast::templates::tir::{
-    PreparedTemplate, TemplatePreparationMode, prepare_tir_view,
+    PreparedTemplate, RuntimeTemplateReason, TemplatePreparationMode, prepare_tir_view,
 };
 use crate::compiler_frontend::ast::templates::{
     OwnedRuntimeSlotApplicationHandoff, OwnedRuntimeTemplateNode,
@@ -376,9 +376,12 @@ fn final_view_fold_zero_iteration_loop_rejects_missing_body_authority() {
 }
 
 #[test]
-fn final_view_fold_loop_preserves_output_before_break() {
+fn final_view_fold_loop_preserves_output_before_break_and_continue() {
     let mut string_table = StringTable::new();
-    let fixture = build_final_view_fixture(&mut string_table, |string_table, store| {
+
+    // [break] stops the loop after the first iteration, preserving only the
+    // output produced before the break signal.
+    let break_fixture = build_final_view_fixture(&mut string_table, |string_table, store| {
         let mut builder = TemplateIrBuilder::new(store);
         let dot_text = string_table.intern(".");
         let after_text = string_table.intern("after");
@@ -392,21 +395,21 @@ fn final_view_fold_loop_preserves_output_before_break() {
             builder.push_sequence_node(vec![dot_node, break_node, after_node], empty_location());
         build_range_loop_template(string_table, store, 0, 3, body_root, None)
     });
-
-    let emission = fold_final_view_fixture(&fixture, &mut string_table, TemplateTirPhase::Composed)
-        .expect("final view fold should succeed");
-
+    let break_emission = fold_final_view_fixture(
+        &break_fixture,
+        &mut string_table,
+        TemplateTirPhase::Composed,
+    )
+    .expect("break fold should succeed");
     assert_eq!(
-        emission_to_string(emission, &string_table),
+        emission_to_string(break_emission, &string_table),
         ".",
-        "output before [break] should be preserved and iteration should stop"
+        "output before [break] should be preserved once and iteration should stop"
     );
-}
 
-#[test]
-fn final_view_fold_loop_preserves_output_before_continue() {
-    let mut string_table = StringTable::new();
-    let fixture = build_final_view_fixture(&mut string_table, |string_table, store| {
+    // [continue] skips the rest of the body but continues iterating, so the
+    // output before the continue signal accumulates across all iterations.
+    let continue_fixture = build_final_view_fixture(&mut string_table, |string_table, store| {
         let mut builder = TemplateIrBuilder::new(store);
         let dot_text = string_table.intern(".");
         let after_text = string_table.intern("after");
@@ -420,12 +423,14 @@ fn final_view_fold_loop_preserves_output_before_continue() {
             builder.push_sequence_node(vec![dot_node, continue_node, after_node], empty_location());
         build_range_loop_template(string_table, store, 0, 3, body_root, None)
     });
-
-    let emission = fold_final_view_fixture(&fixture, &mut string_table, TemplateTirPhase::Composed)
-        .expect("final view fold should succeed");
-
+    let continue_emission = fold_final_view_fixture(
+        &continue_fixture,
+        &mut string_table,
+        TemplateTirPhase::Composed,
+    )
+    .expect("continue fold should succeed");
     assert_eq!(
-        emission_to_string(emission, &string_table),
+        emission_to_string(continue_emission, &string_table),
         "...",
         "output before [continue] should be preserved each iteration"
     );
@@ -503,7 +508,7 @@ fn final_view_fold_validates_present_aggregate_wrapper_without_body_output() {
 }
 
 #[test]
-fn final_view_fold_aggregate_output_outside_wrapper_is_error() {
+fn final_view_aggregate_output_outside_wrapper_classifies_as_runtime() {
     let mut string_table = StringTable::new();
     let fixture = build_final_view_fixture(&mut string_table, |_string_table, store| {
         let aggregate_node = store.push_node(TemplateIrNode::new(
@@ -521,11 +526,25 @@ fn final_view_fold_aggregate_output_outside_wrapper_is_error() {
         )
     });
 
-    let result = fold_final_view_fixture(&fixture, &mut string_table, TemplateTirPhase::Composed);
-
+    // AggregateOutput outside an aggregate wrapper is not foldable: preparation
+    // classifies it as runtime so the fold path is never reached.
+    let store = fixture.store.borrow();
+    let view = TirView::new(
+        &store,
+        fixture.template_id,
+        TemplateTirPhase::Composed,
+        fixture.context,
+    )
+    .expect("view should construct");
+    let prepared = prepare_tir_view(&view, TemplatePreparationMode::Value)
+        .expect("preparation should classify AggregateOutput outside a wrapper");
     assert!(
-        result.is_err(),
-        "AggregateOutput outside an aggregate wrapper should be a fold error"
+        matches!(
+            prepared,
+            PreparedTemplate::Runtime(runtime)
+                if runtime.reason == RuntimeTemplateReason::AggregateOutput
+        ),
+        "AggregateOutput outside a wrapper should classify as runtime, got: {prepared:?}"
     );
 }
 
