@@ -1,8 +1,17 @@
+//! Tests for the `bean new html` file-writing scaffold.
+//!
+//! Each test owns one distinct scaffold contract. Same-family decision pairs
+//! and inventories share one labelled owner so failure localization stays clear,
+//! while the direct `write_scaffold` IO policy is kept separate from the
+//! end-to-end `create_html_project_template_with_prompt` orchestration that
+//! protects the no-write and force command boundaries.
+
 use crate::projects::html_project::new_html_project::prompt_tests::ScriptedPrompt;
 use crate::projects::html_project::new_html_project::scaffold::{
     SCAFFOLD_DIRECTORIES, existing_contains_dev_block, find_scaffold_conflicts,
     run_preflight_checks, write_scaffold,
 };
+use crate::projects::html_project::new_html_project::start_page_scaffolding;
 use crate::projects::html_project::new_html_project::target::ResolvedProjectTarget;
 use crate::projects::html_project::new_html_project::{
     NewHtmlProjectOptions, create_html_project_template_with_prompt,
@@ -18,71 +27,62 @@ fn empty_target(path: PathBuf) -> ResolvedProjectTarget {
     }
 }
 
-#[test]
-fn existing_scaffold_directories_are_not_conflicts() {
-    let temp = tempfile::tempdir().unwrap();
-    let project_dir = temp.path().to_path_buf();
-
-    for dir in SCAFFOLD_DIRECTORIES {
-        fs::create_dir_all(project_dir.join(dir)).unwrap();
+fn named_target(
+    project_dir: PathBuf,
+    project_name: &str,
+    non_empty: bool,
+) -> ResolvedProjectTarget {
+    ResolvedProjectTarget {
+        project_dir,
+        project_name: String::from(project_name),
+        target_was_non_empty: non_empty,
     }
-
-    let conflicts = find_scaffold_conflicts(&project_dir);
-    assert!(conflicts.is_empty());
 }
 
 #[test]
-fn existing_config_file_is_conflict() {
+fn find_scaffold_conflicts_reports_exact_owned_set_and_excludes_directories_and_gitignore() {
+    let temp = tempfile::tempdir().unwrap();
+    let project_dir = temp.path().to_path_buf();
+
+    // Scaffold-owned files are the exact conflict set, in declared order.
+    for file in [
+        "config.bst",
+        "src/#page.bst",
+        "dev/.beanstalk_manifest",
+        "release/.beanstalk_manifest",
+    ] {
+        if let Some(parent) = project_dir.join(file).parent() {
+            fs::create_dir_all(parent).unwrap();
+        }
+        fs::write(project_dir.join(file), b"old").unwrap();
+    }
+    assert_eq!(
+        find_scaffold_conflicts(&project_dir),
+        vec![
+            "config.bst",
+            "src/#page.bst",
+            "dev/.beanstalk_manifest",
+            "release/.beanstalk_manifest",
+        ]
+    );
+
+    // Scaffold-owned directories and a user .gitignore are never conflicts.
+    let clean = tempfile::tempdir().unwrap();
+    let clean_dir = clean.path().to_path_buf();
+    for dir in SCAFFOLD_DIRECTORIES {
+        fs::create_dir_all(clean_dir.join(dir)).unwrap();
+    }
+    fs::write(clean_dir.join(".gitignore"), b"old").unwrap();
+    assert!(find_scaffold_conflicts(&clean_dir).is_empty());
+}
+
+#[test]
+fn preflight_rejects_conflicts_without_force() {
     let temp = tempfile::tempdir().unwrap();
     let project_dir = temp.path().to_path_buf();
     fs::write(project_dir.join("config.bst"), b"old").unwrap();
 
-    let conflicts = find_scaffold_conflicts(&project_dir);
-    assert_eq!(conflicts, vec!["config.bst"]);
-}
-
-#[test]
-fn existing_page_file_is_conflict() {
-    let temp = tempfile::tempdir().unwrap();
-    let project_dir = temp.path().to_path_buf();
-    fs::create_dir(project_dir.join("src")).unwrap();
-    fs::write(project_dir.join("src/#page.bst"), b"old").unwrap();
-
-    let conflicts = find_scaffold_conflicts(&project_dir);
-    assert_eq!(conflicts, vec!["src/#page.bst"]);
-}
-
-#[test]
-fn existing_manifests_are_conflicts() {
-    let temp = tempfile::tempdir().unwrap();
-    let project_dir = temp.path().to_path_buf();
-    fs::create_dir(project_dir.join("dev")).unwrap();
-    fs::create_dir(project_dir.join("release")).unwrap();
-    fs::write(project_dir.join("dev/.beanstalk_manifest"), b"old").unwrap();
-    fs::write(project_dir.join("release/.beanstalk_manifest"), b"old").unwrap();
-
-    let conflicts = find_scaffold_conflicts(&project_dir);
-    assert!(conflicts.contains(&"dev/.beanstalk_manifest"));
-    assert!(conflicts.contains(&"release/.beanstalk_manifest"));
-}
-
-#[test]
-fn gitignore_is_not_a_conflict() {
-    let temp = tempfile::tempdir().unwrap();
-    let project_dir = temp.path().to_path_buf();
-    fs::write(project_dir.join(".gitignore"), b"old").unwrap();
-
-    let conflicts = find_scaffold_conflicts(&project_dir);
-    assert!(conflicts.is_empty());
-}
-
-#[test]
-fn preflight_fails_without_force_when_conflicts_exist() {
-    let temp = tempfile::tempdir().unwrap();
-    let project_dir = temp.path().to_path_buf();
-    fs::write(project_dir.join("config.bst"), b"old").unwrap();
-
-    let target = empty_target(project_dir.clone());
+    let target = empty_target(project_dir);
     let mut prompt = ScriptedPrompt::new(Vec::new());
 
     let error = run_preflight_checks(&target, false, &mut prompt).unwrap_err();
@@ -93,7 +93,7 @@ fn preflight_fails_without_force_when_conflicts_exist() {
 }
 
 #[test]
-fn preflight_succeeds_when_no_conflicts_exist() {
+fn preflight_succeeds_without_prompt_when_no_conflicts_exist() {
     let temp = tempfile::tempdir().unwrap();
     let project_dir = temp.path().to_path_buf();
 
@@ -101,65 +101,43 @@ fn preflight_succeeds_when_no_conflicts_exist() {
     let mut prompt = ScriptedPrompt::new(Vec::new());
 
     assert!(run_preflight_checks(&target, false, &mut prompt).is_ok());
+    assert!(prompt.messages.is_empty());
 }
 
 #[test]
-fn preflight_with_force_asks_second_confirmation() {
+fn preflight_force_confirmation_confirms_or_cancels() {
     let temp = tempfile::tempdir().unwrap();
     let project_dir = temp.path().to_path_buf();
     fs::write(project_dir.join("config.bst"), b"old").unwrap();
 
-    let target = empty_target(project_dir);
+    // Confirming proceeds and the warning lists the conflicting file.
+    let target = empty_target(project_dir.clone());
     let mut prompt = ScriptedPrompt::new(vec![String::from("y")]);
-
     assert!(run_preflight_checks(&target, true, &mut prompt).is_ok());
     assert!(prompt.messages[0].contains("WARNING: --force"));
     assert!(prompt.messages[0].contains("config.bst"));
-}
 
-#[test]
-fn preflight_with_force_cancels_on_decline() {
-    let temp = tempfile::tempdir().unwrap();
-    let project_dir = temp.path().to_path_buf();
-    fs::write(project_dir.join("config.bst"), b"old").unwrap();
-
-    let target = empty_target(project_dir);
+    // Declining cancels project creation.
     let mut prompt = ScriptedPrompt::new(vec![String::from("n")]);
-
     let error = run_preflight_checks(&target, true, &mut prompt).unwrap_err();
     assert_eq!(error, "Cancelled project creation.");
 }
 
 #[test]
-fn preflight_warns_about_non_empty_directory() {
+fn preflight_non_empty_warning_confirms_or_cancels() {
     let temp = tempfile::tempdir().unwrap();
     let project_dir = temp.path().to_path_buf();
     fs::write(project_dir.join("other.txt"), b"content").unwrap();
 
-    let target = ResolvedProjectTarget {
-        project_dir: project_dir.clone(),
-        project_name: String::from("test"),
-        target_was_non_empty: true,
-    };
-    let mut prompt = ScriptedPrompt::new(vec![String::from("y")]);
+    let target = named_target(project_dir, "test", true);
 
+    // Confirming proceeds after the non-empty warning.
+    let mut prompt = ScriptedPrompt::new(vec![String::from("y")]);
     assert!(run_preflight_checks(&target, false, &mut prompt).is_ok());
     assert!(prompt.messages[0].contains("not empty"));
-}
 
-#[test]
-fn preflight_non_empty_cancelled_performs_no_writes() {
-    let temp = tempfile::tempdir().unwrap();
-    let project_dir = temp.path().to_path_buf();
-    fs::write(project_dir.join("other.txt"), b"content").unwrap();
-
-    let target = ResolvedProjectTarget {
-        project_dir: project_dir.clone(),
-        project_name: String::from("test"),
-        target_was_non_empty: true,
-    };
+    // Declining cancels project creation and performs no writes.
     let mut prompt = ScriptedPrompt::new(vec![String::from("n")]);
-
     let error = run_preflight_checks(&target, false, &mut prompt).unwrap_err();
     assert_eq!(error, "Cancelled project creation.");
 }
@@ -212,18 +190,15 @@ fn end_to_end_force_overwrites_scaffold_owned_files_only() {
 }
 
 #[test]
-fn creates_full_default_scaffold_in_empty_temp_dir() {
+fn creates_full_default_scaffold_and_reports_every_path() {
     let temp = tempfile::tempdir().unwrap();
     let project_dir = temp.path().join("project");
-    let target = ResolvedProjectTarget {
-        project_dir: project_dir.clone(),
-        project_name: String::from("My Project"),
-        target_was_non_empty: false,
-    };
+    let target = named_target(project_dir.clone(), "My Project", false);
     let mut prompt = ScriptedPrompt::new(vec![String::from("y")]);
 
     let report = write_scaffold(&target, false, &mut prompt).unwrap();
 
+    // Every scaffold-owned path exists on disk.
     assert!(project_dir.join("config.bst").exists());
     assert!(project_dir.join("src/#page.bst").exists());
     assert!(project_dir.join("lib").exists());
@@ -231,6 +206,7 @@ fn creates_full_default_scaffold_in_empty_temp_dir() {
     assert!(project_dir.join("release/.beanstalk_manifest").exists());
     assert!(project_dir.join(".gitignore").exists());
 
+    // The default scaffold creates every path and replaces, updates, or skips nothing.
     assert!(report.created.contains(&PathBuf::from("config.bst")));
     assert!(report.created.contains(&PathBuf::from("src/#page.bst")));
     assert!(report.created.contains(&PathBuf::from("lib")));
@@ -245,182 +221,129 @@ fn creates_full_default_scaffold_in_empty_temp_dir() {
             .contains(&PathBuf::from("release/.beanstalk_manifest"))
     );
     assert!(report.created.contains(&PathBuf::from(".gitignore")));
-}
+    assert!(report.replaced.is_empty());
+    assert!(report.updated.is_empty());
+    assert!(report.skipped.is_empty());
 
-#[test]
-fn generated_config_exactly_matches_expected_content() {
-    let temp = tempfile::tempdir().unwrap();
-    let project_dir = temp.path().join("project");
-    let target = ResolvedProjectTarget {
-        project_dir: project_dir.clone(),
-        project_name: String::from("Test Site"),
-        target_was_non_empty: false,
-    };
-    let mut prompt = ScriptedPrompt::new(vec![String::from("y")]);
-
-    write_scaffold(&target, false, &mut prompt).unwrap();
-
-    let content = fs::read_to_string(project_dir.join("config.bst")).unwrap();
-    assert_eq!(
-        content,
-        super::start_page_scaffolding::config_template("Test Site")
-    );
-}
-
-#[test]
-fn generated_page_exactly_matches_expected_content() {
-    let temp = tempfile::tempdir().unwrap();
-    let project_dir = temp.path().join("project");
-    let target = ResolvedProjectTarget {
-        project_dir: project_dir.clone(),
-        project_name: String::from("Test Site"),
-        target_was_non_empty: false,
-    };
-    let mut prompt = ScriptedPrompt::new(vec![String::from("y")]);
-
-    write_scaffold(&target, false, &mut prompt).unwrap();
-
-    let content = fs::read_to_string(project_dir.join("src/#page.bst")).unwrap();
-    assert_eq!(content, super::start_page_scaffolding::page_template());
-}
-
-#[test]
-fn manifests_are_generated_under_dev_and_release() {
-    let temp = tempfile::tempdir().unwrap();
-    let project_dir = temp.path().join("project");
-    let target = ResolvedProjectTarget {
-        project_dir: project_dir.clone(),
-        project_name: String::from("Test Site"),
-        target_was_non_empty: false,
-    };
-    let mut prompt = ScriptedPrompt::new(vec![String::from("y")]);
-
-    write_scaffold(&target, false, &mut prompt).unwrap();
-
-    let dev_manifest = fs::read_to_string(project_dir.join("dev/.beanstalk_manifest")).unwrap();
-    let release_manifest =
-        fs::read_to_string(project_dir.join("release/.beanstalk_manifest")).unwrap();
-    assert_eq!(
-        dev_manifest,
-        super::start_page_scaffolding::manifest_template()
-    );
-    assert_eq!(
-        release_manifest,
-        super::start_page_scaffolding::manifest_template()
-    );
-}
-
-#[test]
-fn lib_is_created_and_empty() {
-    let temp = tempfile::tempdir().unwrap();
-    let project_dir = temp.path().join("project");
-    let target = ResolvedProjectTarget {
-        project_dir: project_dir.clone(),
-        project_name: String::from("Test Site"),
-        target_was_non_empty: false,
-    };
-    let mut prompt = ScriptedPrompt::new(vec![String::from("y")]);
-
-    write_scaffold(&target, false, &mut prompt).unwrap();
-
-    let lib = project_dir.join("lib");
-    assert!(lib.is_dir());
-    let mut entries = fs::read_dir(&lib).unwrap();
+    // The lib directory is created empty.
+    let mut entries = fs::read_dir(project_dir.join("lib")).unwrap();
     assert!(entries.next().is_none());
 }
 
 #[test]
-fn gitignore_is_created_by_default() {
+fn generated_files_exactly_match_templates() {
     let temp = tempfile::tempdir().unwrap();
     let project_dir = temp.path().join("project");
-    let target = ResolvedProjectTarget {
-        project_dir: project_dir.clone(),
-        project_name: String::from("Test Site"),
-        target_was_non_empty: false,
-    };
+    let target = named_target(project_dir.clone(), "Test Site", false);
     let mut prompt = ScriptedPrompt::new(vec![String::from("y")]);
 
-    let report = write_scaffold(&target, false, &mut prompt).unwrap();
+    write_scaffold(&target, false, &mut prompt).unwrap();
 
-    let content = fs::read_to_string(project_dir.join(".gitignore")).unwrap();
-    assert_eq!(content, super::start_page_scaffolding::gitignore_template());
-    assert!(report.created.contains(&PathBuf::from(".gitignore")));
+    assert_eq!(
+        fs::read_to_string(project_dir.join("config.bst")).unwrap(),
+        start_page_scaffolding::config_template("Test Site")
+    );
+    assert_eq!(
+        fs::read_to_string(project_dir.join("src/#page.bst")).unwrap(),
+        start_page_scaffolding::page_template()
+    );
+    assert_eq!(
+        fs::read_to_string(project_dir.join("dev/.beanstalk_manifest")).unwrap(),
+        start_page_scaffolding::manifest_template()
+    );
+    assert_eq!(
+        fs::read_to_string(project_dir.join("release/.beanstalk_manifest")).unwrap(),
+        start_page_scaffolding::manifest_template()
+    );
 }
 
 #[test]
-fn existing_gitignore_gets_append_block_when_confirmed() {
+fn gitignore_is_created_when_absent_and_confirmed_or_skipped_when_declined() {
+    // Absent .gitignore plus confirmation creates the exact default content.
+    let temp = tempfile::tempdir().unwrap();
+    let project_dir = temp.path().join("project");
+    fs::create_dir(&project_dir).unwrap();
+    let target = named_target(project_dir.clone(), "Test Site", true);
+    let mut prompt = ScriptedPrompt::new(vec![String::from("y")]);
+
+    let report = write_scaffold(&target, false, &mut prompt).unwrap();
+    assert_eq!(
+        fs::read_to_string(project_dir.join(".gitignore")).unwrap(),
+        start_page_scaffolding::gitignore_template()
+    );
+    assert!(report.created.contains(&PathBuf::from(".gitignore")));
+
+    // Absent .gitignore plus decline skips it and writes nothing.
+    let temp = tempfile::tempdir().unwrap();
+    let project_dir = temp.path().join("project");
+    fs::create_dir(&project_dir).unwrap();
+    let target = named_target(project_dir.clone(), "Test Site", true);
+    let mut prompt = ScriptedPrompt::new(vec![String::from("n")]);
+
+    let report = write_scaffold(&target, false, &mut prompt).unwrap();
+    assert!(!project_dir.join(".gitignore").exists());
+    assert!(report.skipped.contains(&PathBuf::from(".gitignore")));
+}
+
+#[test]
+fn gitignore_appends_when_present_without_dev_block_or_skips_when_declined() {
+    // Existing .gitignore without a /dev block: confirmation appends the block.
     let temp = tempfile::tempdir().unwrap();
     let project_dir = temp.path().join("project");
     fs::create_dir(&project_dir).unwrap();
     fs::write(project_dir.join(".gitignore"), "node_modules/\n").unwrap();
-
-    let target = ResolvedProjectTarget {
-        project_dir: project_dir.clone(),
-        project_name: String::from("Test Site"),
-        target_was_non_empty: true,
-    };
+    let target = named_target(project_dir.clone(), "Test Site", true);
     let mut prompt = ScriptedPrompt::new(vec![String::from("y")]);
 
     let report = write_scaffold(&target, false, &mut prompt).unwrap();
-
     let content = fs::read_to_string(project_dir.join(".gitignore")).unwrap();
     assert!(content.contains("node_modules/"));
     assert!(content.contains("# Beanstalk"));
     assert!(content.contains("/dev"));
     assert!(report.updated.contains(&PathBuf::from(".gitignore")));
-}
 
-#[test]
-fn existing_gitignore_is_unchanged_when_declined() {
+    // Existing .gitignore without a /dev block: decline leaves it unchanged.
     let temp = tempfile::tempdir().unwrap();
     let project_dir = temp.path().join("project");
     fs::create_dir(&project_dir).unwrap();
     fs::write(project_dir.join(".gitignore"), "node_modules/\n").unwrap();
-
-    let target = ResolvedProjectTarget {
-        project_dir: project_dir.clone(),
-        project_name: String::from("Test Site"),
-        target_was_non_empty: true,
-    };
+    let target = named_target(project_dir.clone(), "Test Site", true);
     let mut prompt = ScriptedPrompt::new(vec![String::from("n")]);
 
     let report = write_scaffold(&target, false, &mut prompt).unwrap();
-
-    let content = fs::read_to_string(project_dir.join(".gitignore")).unwrap();
-    assert_eq!(content, "node_modules/\n");
+    assert_eq!(
+        fs::read_to_string(project_dir.join(".gitignore")).unwrap(),
+        "node_modules/\n"
+    );
     assert!(report.skipped.contains(&PathBuf::from(".gitignore")));
 }
 
 #[test]
-fn existing_gitignore_with_dev_is_not_duplicated() {
-    let temp = tempfile::tempdir().unwrap();
-    let project_dir = temp.path().join("project");
-    fs::create_dir(&project_dir).unwrap();
-    fs::write(project_dir.join(".gitignore"), "/dev\n").unwrap();
+fn gitignore_is_skipped_when_dev_block_already_present() {
+    // Both exact /dev and trailing-slash /dev/ forms are recognised as present.
+    for existing in ["/dev\n", "/dev/\n"] {
+        let temp = tempfile::tempdir().unwrap();
+        let project_dir = temp.path().join("project");
+        fs::create_dir(&project_dir).unwrap();
+        fs::write(project_dir.join(".gitignore"), existing).unwrap();
+        let target = named_target(project_dir.clone(), "Test Site", true);
+        let mut prompt = ScriptedPrompt::new(Vec::new());
 
-    let target = ResolvedProjectTarget {
-        project_dir: project_dir.clone(),
-        project_name: String::from("Test Site"),
-        target_was_non_empty: true,
-    };
-    let mut prompt = ScriptedPrompt::new(Vec::new());
+        let report = write_scaffold(&target, false, &mut prompt).unwrap();
 
-    let report = write_scaffold(&target, false, &mut prompt).unwrap();
-
-    let content = fs::read_to_string(project_dir.join(".gitignore")).unwrap();
-    assert_eq!(content, "/dev\n");
-    assert!(report.skipped.contains(&PathBuf::from(".gitignore")));
+        assert_eq!(
+            fs::read_to_string(project_dir.join(".gitignore")).unwrap(),
+            existing
+        );
+        assert!(report.skipped.contains(&PathBuf::from(".gitignore")));
+    }
 }
 
 #[test]
 fn project_name_is_escaped_in_config() {
     let temp = tempfile::tempdir().unwrap();
     let project_dir = temp.path().join("project");
-    let target = ResolvedProjectTarget {
-        project_dir: project_dir.clone(),
-        project_name: String::from(r#"Say "hello"\back"#),
-        target_was_non_empty: false,
-    };
+    let target = named_target(project_dir.clone(), r#"Say "hello"\back"#, false);
     let mut prompt = ScriptedPrompt::new(vec![String::from("y")]);
 
     write_scaffold(&target, false, &mut prompt).unwrap();
@@ -447,11 +370,7 @@ fn force_replaces_scaffold_owned_files_only() {
     .unwrap();
     fs::write(project_dir.join("user-file.txt"), b"keep me").unwrap();
 
-    let target = ResolvedProjectTarget {
-        project_dir: project_dir.clone(),
-        project_name: String::from("Test Site"),
-        target_was_non_empty: true,
-    };
+    let target = named_target(project_dir.clone(), "Test Site", true);
     let mut prompt = ScriptedPrompt::new(vec![String::from("y"), String::from("y")]);
 
     let report = write_scaffold(&target, true, &mut prompt).unwrap();
@@ -474,17 +393,13 @@ fn force_replaces_scaffold_owned_files_only() {
 }
 
 #[test]
-fn gitignore_never_overwritten_even_with_force() {
+fn gitignore_is_never_overwritten_even_with_force() {
     let temp = tempfile::tempdir().unwrap();
     let project_dir = temp.path().join("project");
     fs::create_dir(&project_dir).unwrap();
     fs::write(project_dir.join(".gitignore"), b"custom\n").unwrap();
 
-    let target = ResolvedProjectTarget {
-        project_dir: project_dir.clone(),
-        project_name: String::from("Test Site"),
-        target_was_non_empty: true,
-    };
+    let target = named_target(project_dir.clone(), "Test Site", true);
     let mut prompt = ScriptedPrompt::new(vec![String::from("n")]);
 
     let report = write_scaffold(&target, true, &mut prompt).unwrap();
@@ -498,11 +413,7 @@ fn gitignore_never_overwritten_even_with_force() {
 fn write_failure_returns_precise_error() {
     let temp = tempfile::tempdir().unwrap();
     let project_dir = temp.path().join("project");
-    let target = ResolvedProjectTarget {
-        project_dir: project_dir.clone(),
-        project_name: String::from("Test Site"),
-        target_was_non_empty: false,
-    };
+    let target = named_target(project_dir.clone(), "Test Site", false);
     let mut prompt = ScriptedPrompt::new(vec![String::from("y")]);
 
     // Create a file where the project directory should be to force create_dir_all to fail.
@@ -513,40 +424,21 @@ fn write_failure_returns_precise_error() {
 }
 
 #[test]
-fn dev_block_recognizes_exact_rules() {
-    assert!(existing_contains_dev_block("/dev\n"));
-    assert!(existing_contains_dev_block("/dev/\n"));
-    assert!(existing_contains_dev_block("  /dev  \n"));
-    assert!(existing_contains_dev_block("noise\n/dev\nmore\n"));
-}
+fn existing_contains_dev_block_recognizes_exact_rules_and_rejects_near_matches() {
+    // Exact /dev and /dev/ lines, with surrounding whitespace or noise, are present.
+    for present in ["/dev\n", "/dev/\n", "  /dev  \n", "noise\n/dev\nmore\n"] {
+        assert!(existing_contains_dev_block(present), "{present:?}");
+    }
 
-#[test]
-fn dev_block_rejects_near_matches() {
-    assert!(!existing_contains_dev_block("/device\n"));
-    assert!(!existing_contains_dev_block("prefix/dev\n"));
-    assert!(!existing_contains_dev_block("/dev/**\n"));
-    assert!(!existing_contains_dev_block("# /dev\n"));
-    assert!(!existing_contains_dev_block("/dev/foo\n"));
-    assert!(!existing_contains_dev_block("dev\n"));
-}
-
-#[test]
-fn existing_gitignore_with_trailing_slash_dev_is_not_duplicated() {
-    let temp = tempfile::tempdir().unwrap();
-    let project_dir = temp.path().join("project");
-    fs::create_dir(&project_dir).unwrap();
-    fs::write(project_dir.join(".gitignore"), "/dev/\n").unwrap();
-
-    let target = ResolvedProjectTarget {
-        project_dir: project_dir.clone(),
-        project_name: String::from("Test Site"),
-        target_was_non_empty: true,
-    };
-    let mut prompt = ScriptedPrompt::new(Vec::new());
-
-    let report = write_scaffold(&target, false, &mut prompt).unwrap();
-
-    let content = fs::read_to_string(project_dir.join(".gitignore")).unwrap();
-    assert_eq!(content, "/dev/\n");
-    assert!(report.skipped.contains(&PathBuf::from(".gitignore")));
+    // Near matches that must not be treated as the Beanstalk /dev rule.
+    for absent in [
+        "/device\n",
+        "prefix/dev\n",
+        "/dev/**\n",
+        "# /dev\n",
+        "/dev/foo\n",
+        "dev\n",
+    ] {
+        assert!(!existing_contains_dev_block(absent), "{absent:?}");
+    }
 }

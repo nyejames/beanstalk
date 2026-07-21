@@ -1,4 +1,9 @@
-//! Tests for the scaffold prompt abstraction.
+//! Tests for the shared `ScriptedPrompt` test helper.
+//!
+//! `ScriptedPrompt` is shared by every `new_html_project` test module, so these
+//! tests own only the behaviour all of those modules depend on: ordered
+//! response consumption and exhaustion across `ask` and `confirm`, prompt
+//! message capture, yes/y/no normalisation, and the two empty-response defaults.
 
 use crate::projects::html_project::new_html_project::prompt::Prompt;
 
@@ -44,53 +49,64 @@ impl Prompt for ScriptedPrompt {
 }
 
 #[test]
-fn scripted_prompt_replays_ask_responses_in_order() {
-    let mut prompt = ScriptedPrompt::new(vec![String::from("first"), String::from("second")]);
+fn scripted_prompt_consumes_responses_in_order_and_exhausts() {
+    // The shared response queue is consumed in FIFO order across both ask and
+    // confirm, then exhaustion surfaces a distinct error per method.
+    let mut prompt = ScriptedPrompt::new(vec![
+        String::from("first"),
+        String::from("yes"),
+        String::from("second"),
+    ]);
 
     assert_eq!(prompt.ask("Q1?").unwrap(), "first");
+    assert!(prompt.confirm("Ok?", false).unwrap());
     assert_eq!(prompt.ask("Q2?").unwrap(), "second");
+
     assert!(prompt.ask("Q3?").is_err());
+    assert!(prompt.confirm("Ok?", false).is_err());
 }
 
 #[test]
-fn scripted_prompt_records_messages() {
+fn scripted_prompt_records_each_prompt_message() {
     let mut prompt = ScriptedPrompt::new(vec![String::from("answer")]);
 
     let _ = prompt.ask("Hello?");
+
     assert_eq!(prompt.messages, vec!["Hello?"]);
 }
 
 #[test]
-fn scripted_prompt_confirm_parses_yes() {
-    let mut prompt = ScriptedPrompt::new(vec![String::from("yes")]);
+fn scripted_prompt_confirm_normalizes_yes_y_and_rejects_other() {
+    // One labelled owner for the yes/y/no normalisation contract.
+    for (input, expected) in [
+        ("yes", true),
+        ("Yes", true),
+        ("Y", true),
+        ("y", true),
+        ("no", false),
+        ("n", false),
+        ("maybe", false),
+    ] {
+        let mut prompt = ScriptedPrompt::new(vec![String::from(input)]);
 
-    assert!(prompt.confirm("Ok?", false).unwrap());
+        assert_eq!(
+            prompt.confirm("Ok?", false).unwrap(),
+            expected,
+            "input {input:?}"
+        );
+    }
 }
 
 #[test]
-fn scripted_prompt_confirm_parses_y() {
-    let mut prompt = ScriptedPrompt::new(vec![String::from("Y")]);
+fn scripted_prompt_confirm_uses_default_on_empty_response() {
+    // One labelled owner for both empty-response defaults.
+    for default in [true, false] {
+        let mut prompt = ScriptedPrompt::new(vec![String::from("")]);
 
-    assert!(prompt.confirm("Ok?", false).unwrap());
-}
-
-#[test]
-fn scripted_prompt_confirm_rejects_no() {
-    let mut prompt = ScriptedPrompt::new(vec![String::from("no")]);
-
-    assert!(!prompt.confirm("Ok?", true).unwrap());
-}
-
-#[test]
-fn scripted_prompt_confirm_uses_default_true_on_empty_response() {
-    let mut prompt = ScriptedPrompt::new(vec![String::from("")]);
-
-    assert!(prompt.confirm("Ok?", true).unwrap());
-}
-
-#[test]
-fn scripted_prompt_confirm_uses_default_false_on_empty_response() {
-    let mut prompt = ScriptedPrompt::new(vec![String::from("")]);
-
-    assert!(!prompt.confirm("Ok?", false).unwrap());
+        assert_eq!(
+            prompt.confirm("Ok?", default).unwrap(),
+            default,
+            "default {default}"
+        );
+    }
 }
