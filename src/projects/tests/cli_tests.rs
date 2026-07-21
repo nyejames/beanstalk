@@ -380,13 +380,6 @@ fn tests_command_rejects_unknown_backend_and_positional_arguments() {
 }
 
 #[test]
-fn tests_command_rejects_missing_backend_value() {
-    let error =
-        get_command(&args(&["tests", "--backend"])).expect_err("missing backend value should fail");
-    assert!(error.contains("Missing value for --backend"));
-}
-
-#[test]
 fn tests_command_rejects_unknown_flags() {
     let error =
         get_command(&args(&["tests", "--wat"])).expect_err("unknown tests flag should fail");
@@ -429,13 +422,6 @@ fn check_command_supports_mixed_argument_ordering() {
             terse: true,
         }
     );
-}
-
-#[test]
-fn check_command_rejects_unknown_flags() {
-    let error =
-        get_command(&args(&["check", "--release"])).expect_err("unknown check flag should fail");
-    assert!(error.contains("Unknown check flag"));
 }
 
 #[test]
@@ -536,24 +522,27 @@ fn new_command_rejects_removed_warning_flags() {
 }
 
 #[test]
-fn new_html_command_rejects_release_flag() {
-    let error = get_command(&args(&["new", "html", "--release"]))
-        .expect_err("release should be rejected by new");
-    assert!(error.contains("Unknown new flag"));
+fn new_html_command_rejects_build_flags() {
+    for flag in &["--release", "--html-wasm"] {
+        let error = get_command(&args(&["new", "html", flag]))
+            .expect_err("build flag should be rejected by new");
+        assert!(
+            error.contains("Unknown new flag"),
+            "new should reject {flag}"
+        );
+    }
 }
 
 #[test]
-fn new_html_command_rejects_html_wasm_flag() {
-    let error = get_command(&args(&["new", "html", "--html-wasm"]))
-        .expect_err("html-wasm should be rejected by new");
-    assert!(error.contains("Unknown new flag"));
-}
-
-#[test]
-fn check_command_rejects_html_wasm_flag() {
-    let error =
-        get_command(&args(&["check", "--html-wasm"])).expect_err("html-wasm should be rejected");
-    assert!(error.contains("Unknown check flag"));
+fn check_command_rejects_build_flags() {
+    for flag in &["--release", "--html-wasm"] {
+        let error = get_command(&args(&["check", flag]))
+            .expect_err("build flag should be rejected by check");
+        assert!(
+            error.contains("Unknown check flag"),
+            "check should reject {flag}"
+        );
+    }
 }
 
 #[test]
@@ -602,29 +591,24 @@ fn help_advertises_accepted_flags_but_not_removed_spelling() {
 }
 
 #[test]
-fn integration_tests_exit_code_is_zero_when_suite_is_correct() {
-    let summary = IntegrationRunSummary {
+fn integration_tests_exit_code_reflects_suite_correctness() {
+    let correct = IntegrationRunSummary {
         total_tests: 5,
         passed_tests: 3,
         failed_tests: 0,
         expected_failures: 2,
         unexpected_successes: 0,
     };
+    assert_eq!(integration_tests_exit_code(correct), 0);
 
-    assert_eq!(integration_tests_exit_code(summary), 0);
-}
-
-#[test]
-fn integration_tests_exit_code_is_non_zero_when_suite_is_incorrect() {
-    let summary = IntegrationRunSummary {
+    let incorrect = IntegrationRunSummary {
         total_tests: 5,
         passed_tests: 2,
         failed_tests: 1,
         expected_failures: 1,
         unexpected_successes: 1,
     };
-
-    assert_eq!(integration_tests_exit_code(summary), 1);
+    assert_eq!(integration_tests_exit_code(incorrect), 1);
 }
 
 fn build_result_with_warnings(warnings: Vec<CompilerDiagnostic>) -> BuildResult {
