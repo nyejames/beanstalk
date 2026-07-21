@@ -18,7 +18,7 @@ use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::headers::beandown_prepare::prepare_beandown_file;
 use crate::compiler_frontend::headers::parse_file_headers::{
-    FileFrontendPrepareError, FileFrontendPrepareOutput, HeaderParseOptions, Headers,
+    BoundModuleHeaders, FileFrontendPrepareError, FileFrontendPrepareOutput, HeaderParseOptions,
     parse_file_headers_with_table,
 };
 use crate::compiler_frontend::headers::plain_markdown_prepare::{
@@ -269,7 +269,10 @@ impl CompilerFrontend {
     // ---------------------------
     //  DEPENDENCY SORTING
     // ---------------------------
-    pub fn sort_headers(&mut self, headers: Headers) -> Result<SortedHeaders, DiagnosticBag> {
+    pub fn sort_headers(
+        &mut self,
+        headers: BoundModuleHeaders,
+    ) -> Result<SortedHeaders, DiagnosticBag> {
         resolve_module_dependencies(headers, &mut self.string_table)
     }
 

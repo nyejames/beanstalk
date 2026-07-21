@@ -20,7 +20,7 @@ use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, Diagnostic
 use crate::compiler_frontend::headers::import_environment::HeaderImportEnvironment;
 use crate::compiler_frontend::headers::module_symbols::{ModuleSymbols, PublicExportEntry};
 use crate::compiler_frontend::headers::parse_file_headers::{
-    Header, HeaderKind, Headers, TopLevelConstFragment,
+    BoundModuleHeaders, Header, HeaderKind, TopLevelConstFragment,
 };
 use crate::compiler_frontend::instrumentation::{FrontendCounter, add_frontend_counter};
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
@@ -321,10 +321,10 @@ type VisitResult = Result<(), Box<CompilerDiagnostic>>;
 /// cannot be imported by other headers. All other headers are sorted by header-provided edges
 /// (type surfaces and constant initializer references) so AST sees dependencies first.
 pub fn resolve_module_dependencies(
-    parsed: Headers,
+    parsed: BoundModuleHeaders,
     string_table: &mut StringTable,
 ) -> Result<SortedHeaders, DiagnosticBag> {
-    let Headers {
+    let BoundModuleHeaders {
         headers,
         top_level_const_fragments,
         entry_runtime_fragment_count,

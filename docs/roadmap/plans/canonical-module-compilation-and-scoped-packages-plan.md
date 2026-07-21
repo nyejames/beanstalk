@@ -9,28 +9,29 @@ Replace entry-closure compilation with canonical project and package graphs, imm
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/canonical-module-compilation-and-scoped-packages-plan.md
 STATUS: active
-CURRENT_SLICE: Phase 3a accepted; checkpoint commit pending
-LAST_ACCEPTED_COMMIT: d33a72788 (Phase 2c stable exported declaration origins)
-WORKTREE: main at d33a72788 with accepted Phase 3a code, tests, index owner-map update and this plan update; unrelated user documentation work may appear and must be preserved
-REQUIRED_RELOADS: startup files, this plan, relevant language/import and borrow references, current source and diff
+CURRENT_SLICE: Phase 4a accepted; checkpoint commit pending
+LAST_ACCEPTED_COMMIT: a4e343596 (Phase 3a canonical source inventory and OwnedSourceSet ownership)
+WORKTREE: main at a4e343596 with accepted Phase 4a code, tests and this plan update; unrelated user documentation work may appear and must be preserved
+REQUIRED_RELOADS: startup files, this plan, relevant language/import and borrow references, current frontend/header source and diff
 RELEVANT_CONTEXT_NOW:
-- docs: build-system-design.md Source indexing and source sets; the later source-data-layout plan retains final dense SourceId/SourceDatabase ownership
-- code: source_tree_index.rs now inventories selected source kinds during its existing walk and classifies deterministic OwnedSourceSet/unrooted facts from ModuleIdentityTable
+- docs: compiler-design-overview.md Stage 2 and build-system-design.md Prepared-source orchestration require retained syntax before provider binding with no reparse
+- code: parse_file_headers.rs::parse_headers currently combines provider-independent aggregation/symbol collection with public-surface resolution, import binding and dependency canonicalization; ModuleIdentityTable already supplies the structural graph foundation
 ACCEPTANCE_CRITERIA:
-- Phase 3a diff and architecture audit are accepted with one traversal, one candidate inventory and one nearest-module classifier
-- StableOwnedSourceIdentity contains module origin plus validated non-empty portable module-relative source path, never absolute paths or dense SourceId
-- selected .bst/.bd/.md policy reuses SourceFileKindRegistry recognition; unknown, mismatched and unselected kinds stay excluded
-- deterministic OwnedSourceSet values include exact-once project-facade ownership; unrooted candidates retain portable logical ordering
-- SemanticSourceSet, check-only units and strict entry_root/package migration remain subsequent Phase 3 slices
+- PreparedHeaderSyntax is the provider-independent module aggregation boundary and retains parsed header/import shells, order-independent symbols, root metadata and statistics
+- bind_module_headers consumes PreparedHeaderSyntax and produces BoundModuleHeaders without retokenizing or reparsing declaration syntax
+- production, config, direct Beandown, dependency sorting and tests use the two explicit current APIs; obsolete Headers/parse_headers names and entry point are removed
+- focused boundary tests protect pre-binding syntax retention and completed file visibility after binding
+- later provider scheduling, final structural provider references and SemanticSourceSet derivation remain subsequent coherent slices
 VALIDATION_STATE:
-- Ollama focused gates: passed; 18 semantic identity tests, 40 Stage 0 filesystem identity tests and cargo check --tests
-- just validate: passed after one mechanical Clippy correction; cross-target Clippy, 3413 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases
-DOCS_IMPACT: index.md owner map updated; progress matrix unchanged because production import/compilation behavior did not change
-BLOCKERS_OR_OPEN_DECISIONS: none
+- Ollama focused gates: passed; 114 parse-file-header tests, 17 module-dependency tests, caller suites and cargo check --tests
+- parent focused gate after assertion corrections: passed; 114 parse-file-header tests
+- just validate: passed; cross-target Clippy, 3415 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases
+DOCS_IMPACT: current plan state refreshed; progress matrix unchanged for a behavior-preserving stage-boundary split
+BLOCKERS_OR_OPEN_DECISIONS: Phase 3b SemanticSourceSet cannot become the sole authority until retained syntax and structural provider edges can replace current per-entry reachability; this is a dependency-driven phase interleave, not a user blocker
 DELEGATION_DECISION: ollama - user requires Ollama for every worker slice
 NEXT_WORKER_ORDER: ollama only; no provider substitution for this run
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit Phase 3a, record its hash, then scope SemanticSourceSet derivation against current reachability owners
+NEXT_RESUME_ACTION: commit Phase 4a, record its hash, then scope temporal retention and structural provider-reference extraction for the next Phase 4/5 prerequisite slice
 ```
 
 ## Hard prerequisites
@@ -331,6 +332,21 @@ See `docs/compiler-design-overview.md` "Stage 2: header syntax and interface bin
 - `BoundModuleHeaders` is produced after required providers compile: stable imported identities, canonical types, final visibility, collision results.
 - Keep structural provider references (Stage 0), imported symbol bindings (visibility and AST) and local declaration-ordering edges (Stage 3) as separate data classes.
 - Binding does not retokenize source or reparse declaration syntax.
+
+Accepted Phase 4a checkpoint:
+
+- `prepare_header_syntax` consumes remapped per-file outputs and produces provider-independent
+  `PreparedHeaderSyntax` with retained header/import shells, order-independent symbol facts,
+  root-activity metadata and frontend statistics.
+- `bind_module_headers` consumes that retained value and produces `BoundModuleHeaders` with public
+  export resolution, bound file visibility and completed dependency facts. It has no source text or
+  tokenization input.
+- production module compilation, config compilation and the direct Beandown service use the two
+  explicit calls; the old combined `Headers` type and `parse_headers` entry point were removed
+  without aliases or wrappers.
+- the current production calls remain adjacent until Stage 0 retains prepared syntax across source
+  provider scheduling. Structural source-provider references and their separation from local
+  ordering hints remain the next prerequisite.
 
 ### Phase 5: Build deterministic project, package and provider graphs
 

@@ -9,7 +9,8 @@ use crate::builder_surface::external_import_providers::resolution_table::Externa
 use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::headers::parse_file_headers::{
-    HeaderParseOptions, Headers, parse_headers, prepare_file_from_tokens,
+    BoundModuleHeaders, HeaderParseOptions, bind_module_headers, prepare_file_from_tokens,
+    prepare_header_syntax,
 };
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::style_directives::{
@@ -150,7 +151,7 @@ impl FrontendProject {
             .expect("logical path should exist for fixture file")
     }
 
-    fn headers(&mut self) -> Headers {
+    fn headers(&mut self) -> BoundModuleHeaders {
         let tokenized_files = self.tokenize_all();
         let entry_file_id = self
             .frontend
@@ -184,14 +185,17 @@ impl FrontendProject {
             prepared_outputs.push(output);
         }
 
-        parse_headers(
-            prepared_outputs,
+        let prepared_syntax =
+            prepare_header_syntax(prepared_outputs, &mut self.frontend.string_table)
+                .expect("header syntax preparation should succeed");
+        bind_module_headers(
+            prepared_syntax,
             &self.frontend.external_package_registry,
             &ExternalImportResolutionTable::default(),
             options.project_path_resolver.as_ref(),
             &mut self.frontend.string_table,
         )
-        .expect("header parsing should succeed")
+        .expect("header binding should succeed")
     }
 
     fn sorted_headers(&mut self) -> crate::compiler_frontend::module_dependencies::SortedHeaders {

@@ -4,7 +4,9 @@ use crate::builder_surface::external_import_providers::resolution_table::Externa
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::headers::parse_file_headers::parse_file_headers_tests::parse_single_file_headers;
 use crate::compiler_frontend::headers::parse_file_headers::parse_file_headers_tests::prepare_single_file;
-use crate::compiler_frontend::headers::parse_file_headers::parse_headers;
+use crate::compiler_frontend::headers::parse_file_headers::{
+    bind_module_headers, prepare_header_syntax,
+};
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use std::path::PathBuf;
 
@@ -60,14 +62,17 @@ fn multi_file_declarations_are_aggregated() {
         &mut string_table,
     );
 
-    let headers = parse_headers(
-        vec![entry_output, helper_output],
+    let prepared_syntax =
+        prepare_header_syntax(vec![entry_output, helper_output], &mut string_table)
+            .expect("header syntax should prepare");
+    let headers = bind_module_headers(
+        prepared_syntax,
         &ExternalPackageRegistry::new(),
         &ExternalImportResolutionTable::default(),
         None,
         &mut string_table,
     )
-    .expect("headers should parse");
+    .expect("headers should bind");
 
     assert_eq!(headers.header_stats.functions, 1);
     assert_eq!(headers.header_stats.start_functions, 1);

@@ -18,11 +18,11 @@ use crate::builder_surface::external_import_providers::resolution_table::Externa
 use crate::compiler_frontend::ast::{Ast, AstBuildContext, AstBuildInput};
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages, SourceLocation};
 use crate::compiler_frontend::compiler_messages::{
-    CompilerDiagnostic, DiagnosticKind, InvalidConfigReason, RuleDiagnosticKind,
+    CompilerDiagnostic, DiagnosticBag, DiagnosticKind, InvalidConfigReason, RuleDiagnosticKind,
 };
 use crate::compiler_frontend::headers::parse_file_headers::{
-    FileFrontendPrepareOutput, Header, HeaderKind, HeaderParseOptions, Headers, parse_headers,
-    prepare_file_from_tokens,
+    FileFrontendPrepareOutput, Header, HeaderKind, HeaderParseOptions, bind_module_headers,
+    prepare_file_from_tokens, prepare_header_syntax,
 };
 use crate::compiler_frontend::module_dependencies::resolve_module_dependencies;
 use crate::compiler_frontend::paths::import_resolution::ImportPathResolutionError;
@@ -283,22 +283,19 @@ pub(super) fn parse_config_file(
     }
 
     // -------------------------
-    //  Header Aggregation
+    //  Header Syntax Preparation + Interface Binding
     // -------------------------
+    // WHY: syntax preparation is provider-independent and binding resolves retained shells
+    // against provider interfaces. Both phases share the same config-specific duplicate-key
+    // diagnostic routing, so the error path is extracted once.
     let headers_start = crate::timing::start_pipeline_timing();
-    let bag_result = parse_headers(
-        prepared_outputs,
-        &services.frontend_surface.binding_packages,
-        &ExternalImportResolutionTable::default(),
-        Some(&project_path_resolver),
-        string_table,
-    );
 
-    let parsed_headers = match bag_result {
-        Ok(headers) => headers,
-        Err(bag) => {
+    let collect_header_diagnostics =
+        |bag: DiagnosticBag,
+         errors: &mut Vec<CompilerDiagnostic>,
+         authored_scope: &InternedPath| {
             for diagnostic in bag.diagnostics() {
-                if is_authored_config_duplicate(diagnostic, &authored_scope) {
+                if is_authored_config_duplicate(diagnostic, authored_scope) {
                     errors.push(config_diagnostic(
                         None,
                         InvalidConfigReason::DuplicateKey,
@@ -308,6 +305,31 @@ pub(super) fn parse_config_file(
                     errors.push(diagnostic.clone());
                 }
             }
+        };
+
+    let prepared = match prepare_header_syntax(prepared_outputs, string_table) {
+        Ok(prepared) => prepared,
+        Err(bag) => {
+            collect_header_diagnostics(bag, &mut errors, &authored_scope);
+            log_config_stage_timing("config.parse.headers", headers_start);
+            log_config_stage_timing("config.parse.total", parse_total_start);
+            return Err(CompilerMessages::from_diagnostics(
+                errors,
+                string_table.clone(),
+            ));
+        }
+    };
+
+    let bound_headers = match bind_module_headers(
+        prepared,
+        &services.frontend_surface.binding_packages,
+        &ExternalImportResolutionTable::default(),
+        Some(&project_path_resolver),
+        string_table,
+    ) {
+        Ok(headers) => headers,
+        Err(bag) => {
+            collect_header_diagnostics(bag, &mut errors, &authored_scope);
             log_config_stage_timing("config.parse.headers", headers_start);
             log_config_stage_timing("config.parse.total", parse_total_start);
             return Err(CompilerMessages::from_diagnostics(
@@ -322,19 +344,8 @@ pub(super) fn parse_config_file(
     //  Dependency Sorting
     // -------------------------
     let dependency_sort_start = crate::timing::start_pipeline_timing();
-    let headers_for_sort = Headers {
-        headers: parsed_headers.headers,
-        top_level_const_fragments: parsed_headers.top_level_const_fragments,
-        entry_runtime_fragment_count: parsed_headers.entry_runtime_fragment_count,
-        const_fragment_count: parsed_headers.const_fragment_count,
-        has_non_trivial_root_body: parsed_headers.has_non_trivial_root_body,
-        token_stats: parsed_headers.token_stats,
-        header_stats: parsed_headers.header_stats,
-        module_symbols: parsed_headers.module_symbols,
-        import_environment: parsed_headers.import_environment,
-    };
 
-    let sorted = match resolve_module_dependencies(headers_for_sort, string_table) {
+    let sorted = match resolve_module_dependencies(bound_headers, string_table) {
         Ok(sorted) => sorted,
         Err(bag) => {
             errors.extend(bag.into_diagnostics());

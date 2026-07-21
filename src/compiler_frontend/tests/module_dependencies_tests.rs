@@ -12,7 +12,8 @@ use crate::compiler_frontend::compiler_messages::DiagnosticPayload;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::headers::module_symbols::{PublicExportEntry, PublicExportTarget};
 use crate::compiler_frontend::headers::parse_file_headers::{
-    HeaderKind, HeaderParseOptions, Headers, parse_headers, prepare_file_from_tokens,
+    BoundModuleHeaders, HeaderKind, HeaderParseOptions, bind_module_headers,
+    prepare_file_from_tokens, prepare_header_syntax,
 };
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
@@ -20,7 +21,10 @@ use crate::compiler_frontend::tokenizer::lexer::tokenize;
 use crate::compiler_frontend::tokenizer::tokens::TokenizerEntryMode;
 use std::path::PathBuf;
 
-fn parse_module_headers(files: &[(&str, &str)], entry_path: &str) -> (Headers, StringTable) {
+fn parse_module_headers(
+    files: &[(&str, &str)],
+    entry_path: &str,
+) -> (BoundModuleHeaders, StringTable) {
     let mut string_table = StringTable::new();
     let external_package_registry = ExternalPackageRegistry::new();
     let options = HeaderParseOptions::default();
@@ -61,14 +65,16 @@ fn parse_module_headers(files: &[(&str, &str)], entry_path: &str) -> (Headers, S
         prepared_outputs.push(output);
     }
 
-    let headers = parse_headers(
-        prepared_outputs,
+    let prepared_syntax = prepare_header_syntax(prepared_outputs, &mut string_table)
+        .expect("header syntax preparation should succeed");
+    let headers = bind_module_headers(
+        prepared_syntax,
         &external_package_registry,
         &ExternalImportResolutionTable::default(),
         options.project_path_resolver.as_ref(),
         &mut string_table,
     )
-    .expect("header parsing should succeed");
+    .expect("header binding should succeed");
 
     (headers, string_table)
 }
@@ -360,8 +366,10 @@ fn capacity_reference_same_file_forward_reference_is_rejected() {
     )
     .expect("preparation should succeed");
 
-    let result = parse_headers(
-        vec![output],
+    let prepared_syntax = prepare_header_syntax(vec![output], &mut string_table)
+        .expect("header syntax preparation should succeed");
+    let result = bind_module_headers(
+        prepared_syntax,
         &external_package_registry,
         &ExternalImportResolutionTable::default(),
         options.project_path_resolver.as_ref(),

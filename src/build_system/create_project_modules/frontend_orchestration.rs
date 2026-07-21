@@ -20,8 +20,8 @@ use crate::compiler_frontend::external_packages::{
     ExternalFunctionId, ExternalPackageId, ExternalPackageRegistry,
 };
 use crate::compiler_frontend::headers::parse_file_headers::{
-    FileFrontendPrepareError, FileFrontendPrepareOutput, HeaderKind, HeaderParseOptions, Headers,
-    parse_headers,
+    BoundModuleHeaders, FileFrontendPrepareError, FileFrontendPrepareOutput, HeaderKind,
+    HeaderParseOptions, bind_module_headers, prepare_header_syntax,
 };
 use crate::compiler_frontend::hir::module::HirModule;
 use crate::compiler_frontend::hir::reachability::collect_reachability_from_start;
@@ -411,7 +411,7 @@ impl FrontendModuleBuildContext<'_> {
         entry_file_path: &Path,
         external_import_resolution_table: &ExternalImportResolutionTable,
         source_byte_count: usize,
-    ) -> Result<(Headers, Vec<CompilerDiagnostic>), CompilerMessages> {
+    ) -> Result<(BoundModuleHeaders, Vec<CompilerDiagnostic>), CompilerMessages> {
         let entry_file_id = compiler
             .source_files
             .get_by_canonical_path(entry_file_path)
@@ -492,7 +492,7 @@ impl FrontendModuleBuildContext<'_> {
         base_len: usize,
         external_import_resolution_table: &ExternalImportResolutionTable,
         options: &HeaderParseOptions,
-    ) -> Result<(Headers, Vec<CompilerDiagnostic>), CompilerMessages> {
+    ) -> Result<(BoundModuleHeaders, Vec<CompilerDiagnostic>), CompilerMessages> {
         // Completion order is a scheduler detail. Merge order is the module input order encoded
         // by deterministic chunk indexes.
         timed_frontend_substep(
@@ -604,12 +604,26 @@ impl FrontendModuleBuildContext<'_> {
             .iter()
             .map(|output| output.token_count)
             .sum();
+        let prepared = timed_frontend_substep(
+            "file_prepare_header_syntax_preparation_ms",
+            "File preparation header syntax prepared in: ",
+            || prepare_header_syntax(prepared_outputs, &mut compiler.string_table),
+        )
+        .map_err(|bag| {
+            let mut messages = CompilerMessages::from_diagnostics(
+                bag.into_diagnostics(),
+                compiler.string_table.clone(),
+            );
+            messages.prepend_diagnostics_preserving_context(warnings.iter().cloned());
+            messages
+        })?;
+
         let headers = timed_frontend_substep(
-            "file_prepare_parse_headers_aggregation_ms",
-            "File preparation headers aggregated in: ",
+            "file_prepare_header_binding_ms",
+            "File preparation headers bound in: ",
             || {
-                parse_headers(
-                    prepared_outputs,
+                bind_module_headers(
+                    prepared,
                     compiler.external_package_registry.as_ref(),
                     external_import_resolution_table,
                     options.project_path_resolver.as_ref(),
@@ -733,7 +747,7 @@ impl FrontendModuleBuildContext<'_> {
 
     fn sort_headers(
         compiler: &mut CompilerFrontend,
-        module_headers: Headers,
+        module_headers: BoundModuleHeaders,
         warnings: &[CompilerDiagnostic],
     ) -> Result<SortedHeaders, CompilerMessages> {
         compiler.sort_headers(module_headers).map_err(|bag| {
@@ -957,7 +971,7 @@ fn record_file_preparation_strategy(
     }
 }
 
-fn record_header_counters(headers: &Headers) {
+fn record_header_counters(headers: &BoundModuleHeaders) {
     add_frontend_counter(FrontendCounter::HeaderCount, headers.headers.len());
 
     let import_count = headers
@@ -991,7 +1005,7 @@ fn record_header_counters(headers: &Headers) {
 fn record_frontend_capacity_estimate(
     source_file_count: usize,
     source_byte_count: usize,
-    headers: &Headers,
+    headers: &BoundModuleHeaders,
 ) -> FrontendArenaCapacityEstimate {
     let const_fragment_count = headers.const_fragment_count;
     let capacity = FrontendArenaCapacityEstimate::new(

@@ -2,9 +2,9 @@
 //!
 //! WHAT: validates declared names, builds per-file import/export maps, records generic declaration
 //! metadata, and stages builtin declarations during header parsing.
-//! WHY: this work depends only on parsed headers, not dependency order. Keeping it separate makes
-//! `parse_headers` orchestration-first and leaves dependency sorting as the owner of declaration
-//! ordering.
+//! WHY: this work depends only on parsed headers, not dependency order. Keeping it separate lets
+//! `prepare_header_syntax` stay orchestration-first and leaves dependency sorting as the owner of
+//! declaration ordering.
 
 use crate::compiler_frontend::builtins::casts::traits::is_core_cast_trait_name;
 use crate::compiler_frontend::builtins::error_type::{

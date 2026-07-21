@@ -104,10 +104,12 @@ pub(crate) struct GenericDeclarationMetadata {
 ///
 /// ## Field lifetimes
 ///
-/// - All order-independent maps are populated by `parse_headers` and stay unchanged thereafter.
-/// - `builtin_declarations` is populated by `parse_headers` and consumed (appended into
+/// - All order-independent maps are populated by `prepare_header_syntax` and stay unchanged
+///   thereafter.
+/// - `builtin_declarations` is populated by `prepare_header_syntax` and consumed (appended into
 ///   `declarations`) by `resolve_module_dependencies`.
-/// - `declarations` is empty after `parse_headers` and filled by `resolve_module_dependencies`.
+/// - `declarations` is empty after `prepare_header_syntax` and filled by
+///   `resolve_module_dependencies`.
 #[derive(Debug)]
 pub(crate) struct ModuleSymbols {
     // Declarations in sorted-header order.
@@ -223,7 +225,7 @@ impl ModuleSymbols {
     ///
     /// WHY: declarations must be in the same topological order as the sorted headers so that
     /// all AST passes see dependencies before dependents. The order-independent maps were already
-    /// built during `parse_headers`; only this Vec requires sorted input.
+    /// built during `prepare_header_syntax`; only this Vec requires sorted input.
     pub(crate) fn build_sorted_declarations(
         &mut self,
         sorted_headers: &[Header],

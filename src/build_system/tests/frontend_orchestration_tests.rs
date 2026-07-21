@@ -18,7 +18,8 @@ use crate::compiler_frontend::compiler_messages::{
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::headers::parse_file_headers::{
-    FileFrontendPrepareError, HeaderKind, HeaderParseOptions, parse_headers,
+    FileFrontendPrepareError, HeaderKind, HeaderParseOptions, bind_module_headers,
+    prepare_header_syntax,
 };
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::identity::SourceFileTable;
@@ -97,7 +98,7 @@ fn frontend_preparation_fixture(file_sources: &[(&str, &str)]) -> FrontendPrepar
 }
 
 fn header_source_file_names(
-    headers: &crate::compiler_frontend::headers::parse_file_headers::Headers,
+    headers: &crate::compiler_frontend::headers::parse_file_headers::BoundModuleHeaders,
     string_table: &StringTable,
 ) -> Vec<String> {
     headers
@@ -274,14 +275,17 @@ fn fused_preparation_merges_local_forks_and_resolves_source_and_generated_string
     );
 
     // Aggregate the remapped outputs.
-    let headers = parse_headers(
-        vec![output_a, output_b],
+    let prepared_syntax =
+        prepare_header_syntax(vec![output_a, output_b], &mut frontend.string_table)
+            .expect("header syntax preparation should succeed");
+    let headers = bind_module_headers(
+        prepared_syntax,
         &frontend.external_package_registry,
         &ExternalImportResolutionTable::default(),
         options.project_path_resolver.as_ref(),
         &mut frontend.string_table,
     )
-    .expect("header aggregation should succeed");
+    .expect("header binding should succeed");
 
     // Verify source text string "beta" resolves through the module table in file B headers.
     let beta_header = headers

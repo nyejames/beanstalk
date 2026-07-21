@@ -12,7 +12,7 @@ use crate::compiler_frontend::compiler_errors::{CompilerError, compiler_error_to
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::headers::parse_file_headers::{
-    HeaderParseOptions, parse_headers, prepare_file_from_tokens,
+    HeaderParseOptions, bind_module_headers, prepare_file_from_tokens, prepare_header_syntax,
 };
 use crate::compiler_frontend::module_dependencies::resolve_module_dependencies;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
@@ -71,8 +71,22 @@ pub(crate) fn parse_single_file_ast_result(
     )
     .map_err(|error| error.diagnostic)?;
 
-    let headers = parse_headers(
-        vec![output],
+    let prepared_syntax =
+        prepare_header_syntax(vec![output], &mut string_table).map_err(|bag| {
+            Box::new(
+                bag.into_diagnostics()
+                    .into_iter()
+                    .next()
+                    .unwrap_or_else(|| {
+                        compiler_error_to_diagnostic(&CompilerError::compiler_error(
+                            "unknown header syntax preparation error",
+                        ))
+                    }),
+            )
+        })?;
+
+    let headers = bind_module_headers(
+        prepared_syntax,
         external_package_registry.as_ref(),
         &ExternalImportResolutionTable::default(),
         options.project_path_resolver.as_ref(),
@@ -85,7 +99,7 @@ pub(crate) fn parse_single_file_ast_result(
                 .next()
                 .unwrap_or_else(|| {
                     compiler_error_to_diagnostic(&CompilerError::compiler_error(
-                        "unknown header parsing error",
+                        "unknown header binding error",
                     ))
                 }),
         )

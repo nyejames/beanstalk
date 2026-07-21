@@ -12,7 +12,9 @@ use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
-use crate::compiler_frontend::headers::parse_file_headers::{HeaderParseOptions, parse_headers};
+use crate::compiler_frontend::headers::parse_file_headers::{
+    HeaderParseOptions, bind_module_headers, prepare_header_syntax,
+};
 use crate::compiler_frontend::module_dependencies::SortedHeaders;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::source_packages::root_file::PreparedSourcePackageRoots;
@@ -72,8 +74,16 @@ fn compile_one_source(
     compiler.set_source_files(source_files);
 
     let prepared = prepare_source_file(&mut compiler, &source)?;
-    let headers = parse_headers(
-        vec![prepared],
+    let prepared_syntax = prepare_header_syntax(vec![prepared], &mut compiler.string_table)
+        .map_err(|bag| {
+            CompilerMessages::from_diagnostics(
+                bag.into_diagnostics(),
+                compiler.string_table.clone(),
+            )
+        })?;
+
+    let headers = bind_module_headers(
+        prepared_syntax,
         compiler.external_package_registry.as_ref(),
         &ExternalImportResolutionTable::default(),
         compiler.project_path_resolver.as_ref(),
@@ -176,7 +186,7 @@ fn prepare_source_file(
 
 fn sort_headers(
     compiler: &mut CompilerFrontend,
-    headers: crate::compiler_frontend::headers::parse_file_headers::Headers,
+    headers: crate::compiler_frontend::headers::parse_file_headers::BoundModuleHeaders,
 ) -> Result<SortedHeaders, CompilerMessages> {
     compiler.sort_headers(headers).map_err(|bag| {
         CompilerMessages::from_diagnostics(bag.into_diagnostics(), compiler.string_table.clone())

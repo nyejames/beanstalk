@@ -19,8 +19,8 @@ use crate::compiler_frontend::datatypes::parsed::ParsedTypeRef;
 use crate::compiler_frontend::declaration_syntax::binding_mode::BindingMode;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::headers::parse_file_headers::{
-    FileFrontendPrepareOutput, HeaderKind, HeaderParseOptions, parse_headers,
-    prepare_file_from_tokens,
+    FileFrontendPrepareOutput, HeaderKind, HeaderParseOptions, bind_module_headers,
+    prepare_file_from_tokens, prepare_header_syntax,
 };
 use crate::compiler_frontend::headers::types::{FileRole, HeaderExportMode};
 use crate::compiler_frontend::module_dependencies::resolve_module_dependencies;
@@ -130,14 +130,16 @@ fn ast_from_beandown_source(source: &str) -> (Ast, StringTable) {
         CompilerFrontend::prepare_file_frontend_local(&context, input, &mut string_table)
             .expect("Beandown source should prepare");
 
-    let headers = parse_headers(
-        vec![prepared_file],
+    let prepared_syntax = prepare_header_syntax(vec![prepared_file], &mut string_table)
+        .expect("Beandown header syntax should prepare");
+    let headers = bind_module_headers(
+        prepared_syntax,
         &external_package_registry,
         &ExternalImportResolutionTable::default(),
         Some(&project_path_resolver),
         &mut string_table,
     )
-    .expect("Beandown headers should parse");
+    .expect("Beandown headers should bind");
     let sorted_headers =
         resolve_module_dependencies(headers, &mut string_table).expect("headers should sort");
     let entry_dir = InternedPath::from_single_str("src/#page.bst", &mut string_table);
@@ -274,7 +276,8 @@ impl BeandownScopeFixture {
         &self,
         prepared_relative_paths: &[&str],
     ) -> Result<(Ast, StringTable), Box<CompilerDiagnostic>> {
-        let (headers, mut string_table) = self.parse_headers_for(prepared_relative_paths)?;
+        let (headers, mut string_table) =
+            self.prepare_and_bind_headers_for(prepared_relative_paths)?;
         let sorted_headers = resolve_module_dependencies(headers, &mut string_table)
             .map_err(first_diagnostic_from_bag)?;
         let entry_dir =
@@ -334,12 +337,12 @@ impl BeandownScopeFixture {
         );
     }
 
-    fn parse_headers_for(
+    fn prepare_and_bind_headers_for(
         &self,
         prepared_relative_paths: &[&str],
     ) -> Result<
         (
-            crate::compiler_frontend::headers::parse_file_headers::Headers,
+            crate::compiler_frontend::headers::parse_file_headers::BoundModuleHeaders,
             StringTable,
         ),
         Box<CompilerDiagnostic>,
@@ -383,8 +386,10 @@ impl BeandownScopeFixture {
             prepared_files.push(output);
         }
 
-        let headers = parse_headers(
-            prepared_files,
+        let prepared_syntax = prepare_header_syntax(prepared_files, &mut string_table)
+            .map_err(first_diagnostic_from_bag)?;
+        let headers = bind_module_headers(
+            prepared_syntax,
             &external_package_registry,
             &ExternalImportResolutionTable::default(),
             Some(&self.project_path_resolver),
@@ -805,7 +810,7 @@ fn beandown_body_sees_flat_exported_html_constants() {
 fn beandown_header_visibility_contains_implicit_html_constants() {
     let fixture = BeandownScopeFixture::new(&[("src/intro.bd", "[p]")]);
     let (headers, mut string_table) = fixture
-        .parse_headers_for(&["@html/#mod.bst", "src/intro.bd"])
+        .prepare_and_bind_headers_for(&["@html/#mod.bst", "src/intro.bd"])
         .expect("headers should parse");
     let beandown_canonical_path = fixture.project_root_path().join("src/intro.bd");
     let beandown_logical_path = fixture
@@ -1103,7 +1108,7 @@ fn imported_bd_file_produces_no_runtime_or_start_behavior() {
     ]);
 
     let (headers, string_table) = fixture
-        .parse_headers_for(&[
+        .prepare_and_bind_headers_for(&[
             "@html/#mod.bst",
             "src/intro.bd",
             "src/main.bst",
@@ -1322,14 +1327,16 @@ fn beandown_folded_output_matches_authored_markdown_template() {
     )
     .expect("test project path resolver should build");
 
-    let headers = parse_headers(
-        vec![prepared_file],
+    let prepared_syntax = prepare_header_syntax(vec![prepared_file], &mut string_table)
+        .expect("authored md header syntax should prepare");
+    let headers = bind_module_headers(
+        prepared_syntax,
         &external_package_registry,
         &ExternalImportResolutionTable::default(),
         Some(&project_path_resolver),
         &mut string_table,
     )
-    .expect("authored md headers should parse");
+    .expect("authored md headers should bind");
     let sorted_headers =
         resolve_module_dependencies(headers, &mut string_table).expect("headers should sort");
     let entry_dir = InternedPath::from_single_str("src/#page.bst", &mut string_table);

@@ -29,15 +29,18 @@ use crate::compiler_frontend::utilities::token_scan::InitializerReference;
 use std::collections::HashSet;
 use std::fmt::Display;
 
-/// Parsed headers for one module plus const-fragment placement metadata for the active module root.
+/// Provider-independent retained header syntax produced before provider interfaces exist.
 ///
-/// WHY: const fragments carry runtime insertion indices so the builder can merge them with the
-/// runtime fragment list returned by entry `start()`. Runtime fragments are not tracked here —
-/// they are evaluated directly inside `start()` in source order.
+/// WHAT: aggregates per-file declaration shells, import shells, order-independent local/module
+/// symbol facts, root-activity/fragment metadata, and token/header statistics from all prepared
+/// files in one module.
+/// WHY: syntax preparation is the only phase that reads token streams and discovers module-wide
+/// top-level declaration syntax. It must complete before provider interfaces are available so the
+/// build system can schedule binding later without retokenizing or reparsing source.
 ///
 /// `module_symbols` carries all order-independent top-level symbol metadata collected during
 /// header parsing. `declarations` inside it is empty until dependency sorting completes.
-pub struct Headers {
+pub struct PreparedHeaderSyntax {
     pub headers: Vec<Header>,
     pub top_level_const_fragments: Vec<TopLevelConstFragment>,
     /// Number of top-level runtime templates in the active module root.
@@ -63,14 +66,35 @@ pub struct Headers {
     ///       choice variants, and dependency edges.
     /// WHY: provides a policy-only seed for arena capacity heuristics.
     pub header_stats: HeaderStats,
-    /// Header-owned module symbol package.
+    /// Header-owned module symbol package with order-independent symbol facts.
     ///
-    /// WHY: top-level symbol discovery is owned by the header stage; dependency sorting and AST
-    /// construction consume this directly without a separate manifest-building step.
+    /// WHY: top-level symbol discovery is owned by the header preparation phase; binding
+    /// mutates this with public-surface entries, then dependency sorting and AST construction
+    /// consume it without a separate manifest-building step.
+    pub module_symbols: ModuleSymbols,
+}
+
+/// Bound module headers produced by consuming `PreparedHeaderSyntax` through interface binding.
+///
+/// WHAT: owns the completed public-surface/import environment and dependency facts required by
+/// dependency sorting and AST. Produced only by `bind_module_headers`, which resolves retained
+/// import shells against immutable provider interfaces, canonicalizes dependency edges, and
+/// completes constant initializer dependencies.
+/// WHY: binding does not retokenize source or reparse declaration syntax — it consumes the
+/// retained `PreparedHeaderSyntax` and adds the provider-dependent facts that cannot be known
+/// before the provider graph has compiled.
+pub struct BoundModuleHeaders {
+    pub headers: Vec<Header>,
+    pub top_level_const_fragments: Vec<TopLevelConstFragment>,
+    pub entry_runtime_fragment_count: usize,
+    pub const_fragment_count: usize,
+    pub has_non_trivial_root_body: bool,
+    pub token_stats: TokenStats,
+    pub header_stats: HeaderStats,
     pub module_symbols: ModuleSymbols,
     /// Header-built per-file import visibility environment.
     ///
-    /// WHY: import binding and visibility construction is owned by the header stage; AST
+    /// WHY: import binding and visibility construction is owned by the header binding phase; AST
     /// consumes this directly without rebuilding import bindings or rediscovering visibility.
     pub import_environment: HeaderImportEnvironment,
 }
@@ -446,7 +470,7 @@ impl FileRole {
 /// Per-file output produced by header parsing before module-wide aggregation.
 ///
 /// WHAT: carries all data produced from a single source file during header parsing so that
-/// `parse_headers` can aggregate per-file outputs deterministically instead of relying on
+/// `prepare_header_syntax` can aggregate per-file outputs deterministically instead of relying on
 /// shared mutable buffers during the file loop.
 /// WHY: explicit per-file boundaries are required before tokenization/header parsing can run
 /// in parallel; each file must be self-contained so later phases can merge/remap outputs.

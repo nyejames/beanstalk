@@ -20,6 +20,7 @@ use crate::compiler_frontend::declaration_syntax::signature_members::{
 };
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::headers::types::HeaderExportMode;
+use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -113,12 +114,30 @@ fn prepare_test_source_file(
     )
 }
 
-pub(crate) fn parse_single_file_headers(source: &str) -> Headers {
+/// Test helper: run both header preparation and binding, returning the raw result.
+fn prepare_and_bind_headers_result(
+    prepared_outputs: Vec<FileFrontendPrepareOutput>,
+    external_package_registry: &ExternalPackageRegistry,
+    external_import_resolution_table: &ExternalImportResolutionTable,
+    project_path_resolver: Option<&ProjectPathResolver>,
+    string_table: &mut StringTable,
+) -> Result<BoundModuleHeaders, DiagnosticBag> {
+    let prepared = prepare_header_syntax(prepared_outputs, string_table)?;
+    bind_module_headers(
+        prepared,
+        external_package_registry,
+        external_import_resolution_table,
+        project_path_resolver,
+        string_table,
+    )
+}
+
+pub(crate) fn parse_single_file_headers(source: &str) -> BoundModuleHeaders {
     let mut string_table = StringTable::new();
     let file_path = PathBuf::from("src/#page.bst");
     let output = prepare_single_file(source, &file_path, &file_path, &mut string_table);
 
-    parse_headers(
+    prepare_and_bind_headers_result(
         vec![output],
         &ExternalPackageRegistry::new(),
         &ExternalImportResolutionTable::default(),
@@ -131,7 +150,7 @@ pub(crate) fn parse_single_file_headers(source: &str) -> Headers {
 fn parse_single_file_headers_with_warnings(
     source: &str,
 ) -> (
-    Headers,
+    BoundModuleHeaders,
     Vec<crate::compiler_frontend::compiler_messages::CompilerDiagnostic>,
 ) {
     let mut string_table = StringTable::new();
@@ -139,7 +158,7 @@ fn parse_single_file_headers_with_warnings(
     let output = prepare_single_file(source, &file_path, &file_path, &mut string_table);
     let warnings = output.warnings.clone();
 
-    let headers = parse_headers(
+    let headers = prepare_and_bind_headers_result(
         vec![output],
         &ExternalPackageRegistry::new(),
         &ExternalImportResolutionTable::default(),
@@ -151,12 +170,12 @@ fn parse_single_file_headers_with_warnings(
     (headers, warnings)
 }
 
-fn parse_single_file_headers_with_table(source: &str) -> (Headers, StringTable) {
+fn parse_single_file_headers_with_table(source: &str) -> (BoundModuleHeaders, StringTable) {
     let mut string_table = StringTable::new();
     let file_path = PathBuf::from("src/#page.bst");
     let output = prepare_single_file(source, &file_path, &file_path, &mut string_table);
 
-    let headers = parse_headers(
+    let headers = prepare_and_bind_headers_result(
         vec![output],
         &ExternalPackageRegistry::new(),
         &ExternalImportResolutionTable::default(),
@@ -172,7 +191,7 @@ fn parse_single_file_headers_with_entry(
     source: &str,
     file_path: &str,
     entry_file_path: &str,
-) -> Result<Headers, HeaderTestDiagnostics> {
+) -> Result<BoundModuleHeaders, HeaderTestDiagnostics> {
     let mut string_table = StringTable::new();
     let file_path = PathBuf::from(file_path);
     let entry_file_path = PathBuf::from(entry_file_path);
@@ -210,7 +229,7 @@ fn parse_single_file_headers_with_entry(
         }
     };
 
-    parse_headers(
+    prepare_and_bind_headers_result(
         vec![output],
         &external_package_registry,
         &ExternalImportResolutionTable::default(),
@@ -223,7 +242,7 @@ fn parse_single_file_headers_with_entry(
 }
 
 fn expect_header_error(
-    result: Result<Headers, HeaderTestDiagnostics>,
+    result: Result<BoundModuleHeaders, HeaderTestDiagnostics>,
     message: &str,
 ) -> HeaderTestDiagnostics {
     match result {
@@ -232,7 +251,7 @@ fn expect_header_error(
     }
 }
 
-fn first_function_signature(headers: &Headers) -> &FunctionSignatureSyntax {
+fn first_function_signature(headers: &BoundModuleHeaders) -> &FunctionSignatureSyntax {
     headers
         .headers
         .iter()
@@ -243,7 +262,7 @@ fn first_function_signature(headers: &Headers) -> &FunctionSignatureSyntax {
         .expect("expected function header")
 }
 
-fn start_function_header(headers: &Headers) -> &Header {
+fn start_function_header(headers: &BoundModuleHeaders) -> &Header {
     headers
         .headers
         .iter()
@@ -251,7 +270,7 @@ fn start_function_header(headers: &Headers) -> &Header {
         .expect("expected start function header")
 }
 
-fn non_start_header_names(headers: &Headers, string_table: &StringTable) -> Vec<String> {
+fn non_start_header_names(headers: &BoundModuleHeaders, string_table: &StringTable) -> Vec<String> {
     headers
         .headers
         .iter()
@@ -276,6 +295,95 @@ fn symbol_tokens_in_header_body(header: &Header, string_table: &StringTable) -> 
             _ => None,
         })
         .collect()
+}
+
+#[test]
+fn prepare_header_syntax_produces_retained_syntax_without_provider_inputs() {
+    // WHAT: `prepare_header_syntax` must succeed with only a string table — no external package
+    //       registry, resolution table, or project path resolver is supplied.
+    // WHY: syntax preparation is provider-independent; it owns retained header/import shells,
+    //      order-independent symbol facts, and statistics before provider interfaces exist.
+    let mut string_table = StringTable::new();
+    let file_path = PathBuf::from("src/#page.bst");
+    let output = prepare_single_file(
+        "const_a #Int = 1\nimport_b |x Int| -> Int:\n    return x\n;\n",
+        &file_path,
+        &file_path,
+        &mut string_table,
+    );
+
+    let prepared = prepare_header_syntax(vec![output], &mut string_table)
+        .expect("header syntax preparation should succeed without provider inputs");
+
+    // Retained declaration shells are present.
+    assert!(
+        !prepared.headers.is_empty(),
+        "PreparedHeaderSyntax should retain parsed header shells"
+    );
+    // Order-independent symbol facts are present.
+    assert!(
+        !prepared.module_symbols.module_file_paths.is_empty(),
+        "PreparedHeaderSyntax should carry module symbol facts"
+    );
+    // Root-activity and statistics metadata are populated.
+    assert_eq!(
+        prepared.const_fragment_count,
+        prepared.top_level_const_fragments.len()
+    );
+    assert!(prepared.token_stats.total_tokens > 0);
+    assert!(prepared.header_stats.functions >= 1);
+    // No import environment exists yet — that is binding-phase output.
+    assert!(
+        prepared
+            .module_symbols
+            .source_package_public_exports
+            .is_empty()
+    );
+}
+
+#[test]
+fn bind_module_headers_consumes_prepared_syntax_and_produces_import_environment() {
+    // WHAT: `bind_module_headers` consumes `PreparedHeaderSyntax` and produces
+    //       `BoundModuleHeaders` with a completed import environment.
+    // WHY: binding is the only phase that resolves retained import shells against provider
+    //      interfaces. It must not retokenize or reparse — it consumes the retained output.
+    let mut string_table = StringTable::new();
+    let file_path = PathBuf::from("src/#page.bst");
+    let output = prepare_single_file(
+        "const_a #Int = 1\nimport_b |x Int| -> Int:\n    return x\n;\n",
+        &file_path,
+        &file_path,
+        &mut string_table,
+    );
+
+    let prepared = prepare_header_syntax(vec![output], &mut string_table)
+        .expect("header syntax preparation should succeed");
+    let header_count_before_binding = prepared.headers.len();
+    let source_file = prepared.headers[0].source_file.to_owned();
+
+    let bound = bind_module_headers(
+        prepared,
+        &ExternalPackageRegistry::new(),
+        &ExternalImportResolutionTable::default(),
+        None,
+        &mut string_table,
+    )
+    .expect("header binding should succeed");
+
+    // Binding preserves retained header shells — no retokenization or reparsing.
+    assert_eq!(
+        bound.headers.len(),
+        header_count_before_binding,
+        "binding must not add or remove header shells"
+    );
+    // Binding produces the import environment that preparation cannot.
+    assert!(
+        bound
+            .import_environment
+            .file_visibility_by_source
+            .contains_key(&source_file),
+        "BoundModuleHeaders should carry a completed import environment"
+    );
 }
 
 #[test]
@@ -2001,13 +2109,16 @@ fn constant_header_with_declared_type_captures_type_in_declaration() {
     );
 }
 
-/// Verifies that `parse_headers` correctly aggregates per-file outputs from multiple source files.
+/// Verifies that header preparation and binding correctly aggregate per-file outputs from multiple source files.
 ///
 /// WHAT: entry file contributes runtime templates, const templates, and a start function;
 ///       a non-entry package file contributes declarations; a module-root file contributes its
 ///       public surface.
 /// WHY: this is the primary observable boundary introduced by the per-file refactor.
-pub(crate) fn parse_multi_file_headers(sources: &[(String, String)], entry_path: &str) -> Headers {
+pub(crate) fn parse_multi_file_headers(
+    sources: &[(String, String)],
+    entry_path: &str,
+) -> BoundModuleHeaders {
     let mut string_table = StringTable::new();
     let entry_file_path = PathBuf::from(entry_path);
     let external_package_registry = ExternalPackageRegistry::new();
@@ -2041,7 +2152,7 @@ pub(crate) fn parse_multi_file_headers(sources: &[(String, String)], entry_path:
         prepared_outputs.push(output);
     }
 
-    parse_headers(
+    prepare_and_bind_headers_result(
         prepared_outputs,
         &external_package_registry,
         &ExternalImportResolutionTable::default(),
@@ -2098,7 +2209,7 @@ fn parse_multi_file_headers_with_result(
     sources: &[(String, String)],
     entry_path: &str,
 ) -> (
-    Result<Headers, DiagnosticBag>,
+    Result<BoundModuleHeaders, DiagnosticBag>,
     Vec<CompilerDiagnostic>,
     StringTable,
 ) {
@@ -2147,7 +2258,7 @@ fn parse_multi_file_headers_with_result(
         return (Err(diagnostic_bag), warnings, string_table);
     }
 
-    let result = parse_headers(
+    let result = prepare_and_bind_headers_result(
         prepared_outputs,
         &external_package_registry,
         &ExternalImportResolutionTable::default(),
@@ -2842,7 +2953,7 @@ fn capacity_references_extract_value_refs_without_treating_element_type_as_value
 ";
     let output = prepare_single_file(source, &file_path, &file_path, &mut string_table);
 
-    let headers = parse_headers(
+    let headers = prepare_and_bind_headers_result(
         vec![output],
         &ExternalPackageRegistry::new(),
         &ExternalImportResolutionTable::default(),

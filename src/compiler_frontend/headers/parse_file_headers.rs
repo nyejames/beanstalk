@@ -1,9 +1,10 @@
 //! Header parser entry point.
 //!
-//! WHAT: parses individual token streams into per-file header outputs, then aggregates prepared
-//! files into module-wide `Headers`.
-//! WHY: per-file parsing and module aggregation are separate boundaries so callers can merge and
-//! remap local string-table outputs before dependency sorting and AST construction.
+//! WHAT: parses individual token streams into per-file header outputs, then splits module-wide
+//! header work into two explicit phases: provider-independent `PreparedHeaderSyntax` and
+//! provider-dependent `BoundModuleHeaders`.
+//! WHY: syntax preparation must complete before provider interfaces exist, so callers prepare
+//! retained syntax first and bind it later without retokenizing or reparsing source.
 
 use crate::builder_surface::external_import_providers::resolution_table::ExternalImportResolutionTable;
 use crate::compiler_frontend::arena::{HeaderStats, TokenStats};
@@ -21,8 +22,8 @@ use crate::compiler_frontend::headers::public_exports::build_public_exports;
 use crate::compiler_frontend::headers::symbol_collection::build_module_symbols;
 use crate::compiler_frontend::headers::types::HeaderParseContext;
 pub use crate::compiler_frontend::headers::types::{
-    FileFrontendPrepareError, FileFrontendPrepareOutput, FileImport, FileRole, Header, HeaderKind,
-    HeaderParseOptions, Headers, TopLevelConstFragment,
+    BoundModuleHeaders, FileFrontendPrepareError, FileFrontendPrepareOutput, FileImport, FileRole,
+    Header, HeaderKind, HeaderParseOptions, PreparedHeaderSyntax, TopLevelConstFragment,
 };
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::source_packages::root_file::{
@@ -134,20 +135,20 @@ pub fn prepare_file_from_tokens(
     }
 }
 
-/// Aggregate per-file frontend preparation outputs into module-wide `Headers`.
+/// Aggregate per-file frontend preparation outputs into provider-independent
+/// `PreparedHeaderSyntax`.
 ///
-/// WHAT: consumes already-remapped `FileFrontendPrepareOutput` values and builds the module-wide
-/// symbol package, import environment, dependency graph, and public export data.
-/// WHY: module-wide aggregation must happen after all per-file outputs have been remapped into
-/// the global string table so that symbol paths and dependency edges resolve consistently.
-pub fn parse_headers(
+/// WHAT: consumes already-remapped `FileFrontendPrepareOutput` values, builds the module-wide
+/// symbol package, and collects retained header/import shells, root-activity/fragment metadata,
+/// and token/header statistics.
+/// WHY: this is the only phase that discovers module-wide top-level declaration syntax. It must
+/// complete before provider interfaces are available so binding can consume retained syntax
+/// without retokenizing or reparsing source.
+pub fn prepare_header_syntax(
     prepared_files: Vec<FileFrontendPrepareOutput>,
-    external_package_registry: &ExternalPackageRegistry,
-    external_import_resolution_table: &ExternalImportResolutionTable,
-    project_path_resolver: Option<&ProjectPathResolver>,
     string_table: &mut StringTable,
-) -> Result<Headers, DiagnosticBag> {
-    let mut module_symbols = build_module_symbols(&prepared_files, string_table)?;
+) -> Result<PreparedHeaderSyntax, DiagnosticBag> {
+    let module_symbols = build_module_symbols(&prepared_files, string_table)?;
 
     let mut headers: Vec<Header> = Vec::new();
     let mut top_level_const_fragments = Vec::new();
@@ -165,6 +166,48 @@ pub fn parse_headers(
         runtime_fragment_count += output.runtime_fragment_count;
         has_non_trivial_root_body |= output.has_non_trivial_root_body;
     }
+
+    let header_stats = HeaderStats::from_headers_and_symbols(&headers, &module_symbols);
+    let const_fragment_count = top_level_const_fragments.len();
+
+    Ok(PreparedHeaderSyntax {
+        headers,
+        top_level_const_fragments,
+        entry_runtime_fragment_count: runtime_fragment_count,
+        const_fragment_count,
+        has_non_trivial_root_body,
+        token_stats,
+        header_stats,
+        module_symbols,
+    })
+}
+
+/// Bind retained `PreparedHeaderSyntax` against provider interfaces to produce
+/// `BoundModuleHeaders`.
+///
+/// WHAT: resolves public exports, builds the import environment, canonicalizes dependency edges,
+/// and completes constant initializer dependencies. Does not retokenize source or reparse
+/// declaration syntax — it consumes only the retained `PreparedHeaderSyntax`.
+/// WHY: these facts depend on provider interfaces and the project path resolver, so they cannot
+/// be known during syntax preparation. Keeping binding separate lets the build system schedule
+/// it after required providers have compiled.
+pub fn bind_module_headers(
+    prepared: PreparedHeaderSyntax,
+    external_package_registry: &ExternalPackageRegistry,
+    external_import_resolution_table: &ExternalImportResolutionTable,
+    project_path_resolver: Option<&ProjectPathResolver>,
+    string_table: &mut StringTable,
+) -> Result<BoundModuleHeaders, DiagnosticBag> {
+    let PreparedHeaderSyntax {
+        mut headers,
+        top_level_const_fragments,
+        entry_runtime_fragment_count,
+        const_fragment_count,
+        has_non_trivial_root_body,
+        token_stats,
+        header_stats,
+        mut module_symbols,
+    } = prepared;
 
     if let Some(resolver) = project_path_resolver {
         build_public_exports(
@@ -202,13 +245,10 @@ pub fn parse_headers(
         string_table,
     })?;
 
-    let header_stats = HeaderStats::from_headers_and_symbols(&headers, &module_symbols);
-    let const_fragment_count = top_level_const_fragments.len();
-
-    Ok(Headers {
+    Ok(BoundModuleHeaders {
         headers,
         top_level_const_fragments,
-        entry_runtime_fragment_count: runtime_fragment_count,
+        entry_runtime_fragment_count,
         const_fragment_count,
         has_non_trivial_root_body,
         token_stats,
