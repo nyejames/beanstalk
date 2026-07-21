@@ -150,22 +150,18 @@ fn build_test_store() -> TestStore {
 // -------------------------
 
 #[test]
-fn phase_ordering_is_monotonic() {
+fn phase_ordering_and_is_at_least_are_monotonic() {
+    // The phase sequence Parsed -> Composed -> Formatted -> Finalized is the
+    // single owner for both the derived ordering and the is_at_least helper.
     assert!(TemplateTirPhase::Parsed < TemplateTirPhase::Composed);
     assert!(TemplateTirPhase::Composed < TemplateTirPhase::Formatted);
     assert!(TemplateTirPhase::Formatted < TemplateTirPhase::Finalized);
-}
 
-#[test]
-fn phase_is_at_least_succeeds_for_equal_or_higher() {
     assert!(TemplateTirPhase::Parsed.is_at_least(TemplateTirPhase::Parsed));
     assert!(TemplateTirPhase::Composed.is_at_least(TemplateTirPhase::Parsed));
     assert!(TemplateTirPhase::Formatted.is_at_least(TemplateTirPhase::Composed));
     assert!(TemplateTirPhase::Finalized.is_at_least(TemplateTirPhase::Formatted));
-}
 
-#[test]
-fn phase_is_at_least_fails_for_lower() {
     assert!(!TemplateTirPhase::Parsed.is_at_least(TemplateTirPhase::Composed));
     assert!(!TemplateTirPhase::Composed.is_at_least(TemplateTirPhase::Formatted));
     assert!(!TemplateTirPhase::Formatted.is_at_least(TemplateTirPhase::Finalized));
@@ -227,79 +223,71 @@ fn dynamic_expression_site_id(
 }
 
 #[test]
-fn effective_expression_for_site_returns_override_when_present() {
+fn effective_expression_for_site_resolves_override_and_none_cases() {
     let mut store = TemplateIrStore::new();
 
-    let (template_id, root_node) = { build_template_with_dynamic_expression(&mut store) };
+    let (template_id, root_node) = build_template_with_dynamic_expression(&mut store);
+    let site_id = dynamic_expression_site_id(&store, root_node);
 
-    let site_id = { dynamic_expression_site_id(&store, root_node) };
-
-    let expression_overlay_id = store.allocate_expression_overlay(TirExpressionOverlay {
+    // Override present: the site covered by the overlay resolves.
+    let present_overlay_id = store.allocate_expression_overlay(TirExpressionOverlay {
         overrides: vec![(site_id, Box::new(bool_expression()))],
     });
-    let context = TemplateViewContext {
-        expression_overlay: Some(expression_overlay_id),
-        slot_resolution: None,
-        wrapper_context: None,
-    };
-
-    let root_ref = template_id;
-    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, context)
-        .expect("view should construct");
-
+    let present_view = TirView::new(
+        &store,
+        template_id,
+        TemplateTirPhase::Parsed,
+        TemplateViewContext {
+            expression_overlay: Some(present_overlay_id),
+            slot_resolution: None,
+            wrapper_context: None,
+        },
+    )
+    .expect("view should construct");
     assert!(
-        view.effective_expression_for_site(site_id)
+        present_view
+            .effective_expression_for_site(site_id)
             .expect("expression lookup should succeed")
             .is_some(),
-        "override should be present for the site"
+        "override should be present for the covered site"
     );
-}
 
-#[test]
-fn effective_expression_for_site_returns_none_without_overlay() {
-    let mut store = TemplateIrStore::new();
-
-    let template_id = { build_empty_template(&mut store) };
-
-    let context = TemplateViewContext::default();
-    let root_ref = template_id;
-    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, context)
-        .expect("view should construct");
-
+    // No overlay: a site queried with an empty context returns Ok(None).
+    let none_view = TirView::new(
+        &store,
+        template_id,
+        TemplateTirPhase::Parsed,
+        TemplateViewContext::default(),
+    )
+    .expect("view should construct");
     assert!(
-        view.effective_expression_for_site(ExpressionSiteId::new(0))
+        none_view
+            .effective_expression_for_site(site_id)
             .expect("expression lookup should succeed")
             .is_none(),
         "no override should exist without an expression overlay"
     );
-}
 
-#[test]
-fn effective_expression_for_site_returns_none_for_uncovered_site() {
-    let mut store = TemplateIrStore::new();
-
-    let (template_id, root_node) = { build_template_with_dynamic_expression(&mut store) };
-
-    let site_id = { dynamic_expression_site_id(&store, root_node) };
-
-    // The overlay covers a different site than the one we query.
+    // Uncovered site: the overlay covers a different site, so this site is None.
     let other_site = store.next_expression_site_id();
     assert_ne!(other_site, site_id);
-    let expression_overlay_id = store.allocate_expression_overlay(TirExpressionOverlay {
+    let uncovered_overlay_id = store.allocate_expression_overlay(TirExpressionOverlay {
         overrides: vec![(other_site, Box::new(bool_expression()))],
     });
-    let context = TemplateViewContext {
-        expression_overlay: Some(expression_overlay_id),
-        slot_resolution: None,
-        wrapper_context: None,
-    };
-
-    let root_ref = template_id;
-    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, context)
-        .expect("view should construct");
-
+    let uncovered_view = TirView::new(
+        &store,
+        template_id,
+        TemplateTirPhase::Parsed,
+        TemplateViewContext {
+            expression_overlay: Some(uncovered_overlay_id),
+            slot_resolution: None,
+            wrapper_context: None,
+        },
+    )
+    .expect("view should construct");
     assert!(
-        view.effective_expression_for_site(site_id)
+        uncovered_view
+            .effective_expression_for_site(site_id)
             .expect("expression lookup should succeed")
             .is_none(),
         "no override should exist for an uncovered site"
@@ -307,69 +295,61 @@ fn effective_expression_for_site_returns_none_for_uncovered_site() {
 }
 
 #[test]
-fn effective_expression_for_node_returns_override_for_dynamic_expression() {
+fn effective_expression_for_node_resolves_override_and_none_cases() {
     let mut store = TemplateIrStore::new();
 
-    let (template_id, root_node) = { build_template_with_dynamic_expression(&mut store) };
-
-    let site_id = { dynamic_expression_site_id(&store, root_node) };
-
+    // Override present: a DynamicExpression node with a matching site override.
+    let (expression_template_id, expression_root) =
+        build_template_with_dynamic_expression(&mut store);
+    let expression_site = dynamic_expression_site_id(&store, expression_root);
     let expression_overlay_id = store.allocate_expression_overlay(TirExpressionOverlay {
-        overrides: vec![(site_id, Box::new(bool_expression()))],
+        overrides: vec![(expression_site, Box::new(bool_expression()))],
     });
-    let context = TemplateViewContext {
-        expression_overlay: Some(expression_overlay_id),
-        slot_resolution: None,
-        wrapper_context: None,
-    };
-
-    let root_ref = template_id;
-    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, context)
-        .expect("view should construct");
-
-    let node_ref = root_node;
+    let expression_view = TirView::new(
+        &store,
+        expression_template_id,
+        TemplateTirPhase::Parsed,
+        TemplateViewContext {
+            expression_overlay: Some(expression_overlay_id),
+            slot_resolution: None,
+            wrapper_context: None,
+        },
+    )
+    .expect("view should construct");
     assert!(
-        view.effective_expression_for_node(node_ref)
+        expression_view
+            .effective_expression_for_node(expression_root)
             .expect("expression lookup should succeed")
             .is_some(),
         "override should be present for the dynamic expression node"
     );
-}
 
-#[test]
-fn effective_expression_for_node_returns_none_for_non_expression_node() {
-    let mut store = TemplateIrStore::new();
-
-    let (template_id, root_node) = {
-        let mut string_table =
-            crate::compiler_frontend::symbols::string_interning::StringTable::new();
-        build_template_with_text_child(&mut store, string_table.intern("text"));
-        let template = store
-            .get_template(TemplateIrId::new(0))
-            .expect("template should exist")
-            .clone();
-        (TemplateIrId::new(0), template.root)
-    };
-
+    // None: the root node is a Sequence, not a DynamicExpression, so no override
+    // is returned even though the overlay has an entry for a different site.
+    let mut string_table = crate::compiler_frontend::symbols::string_interning::StringTable::new();
+    let text_template_id = build_template_with_text_child(&mut store, string_table.intern("text"));
+    let text_root = store
+        .get_template(text_template_id)
+        .expect("template should exist")
+        .root;
     let unused_site = store.next_expression_site_id();
-    let expression_overlay_id = store.allocate_expression_overlay(TirExpressionOverlay {
+    let unused_overlay_id = store.allocate_expression_overlay(TirExpressionOverlay {
         overrides: vec![(unused_site, Box::new(bool_expression()))],
     });
-    let context = TemplateViewContext {
-        expression_overlay: Some(expression_overlay_id),
-        slot_resolution: None,
-        wrapper_context: None,
-    };
-
-    let root_ref = template_id;
-    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, context)
-        .expect("view should construct");
-
-    // The root node is a Sequence, not a DynamicExpression, so no override
-    // should be returned even though the overlay has an entry for site 0.
-    let node_ref = root_node;
+    let text_view = TirView::new(
+        &store,
+        text_template_id,
+        TemplateTirPhase::Parsed,
+        TemplateViewContext {
+            expression_overlay: Some(unused_overlay_id),
+            slot_resolution: None,
+            wrapper_context: None,
+        },
+    )
+    .expect("view should construct");
     assert!(
-        view.effective_expression_for_node(node_ref)
+        text_view
+            .effective_expression_for_node(text_root)
             .expect("expression lookup should succeed")
             .is_none(),
         "no override for a non-DynamicExpression node"
@@ -377,49 +357,47 @@ fn effective_expression_for_node_returns_none_for_non_expression_node() {
 }
 
 #[test]
-fn effective_slot_resolution_returns_resolution_when_present() {
+fn effective_slot_resolution_resolves_present_and_none_cases() {
     let mut store = TemplateIrStore::new();
+    let template_id = build_empty_template(&mut store);
 
-    let template_id = { build_empty_template(&mut store) };
-
-    let source = template_id;
+    // Present: the typed resolution carries its exact source template.
     let occurrence_id = SlotOccurrenceId::new(0);
+    let source = template_id;
     let slot_overlay_id = store.allocate_slot_resolution_overlay(TirSlotResolutionOverlay {
         resolutions: vec![(
             occurrence_id,
             TirSlotResolution::resolved(SlotKey::Default, vec![source]),
         )],
     });
-    let context = TemplateViewContext {
-        expression_overlay: None,
-        slot_resolution: Some(slot_overlay_id),
-        wrapper_context: None,
-    };
-
-    let root_ref = template_id;
-    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, context)
-        .expect("view should construct");
-
-    let resolution = view
+    let present_view = TirView::new(
+        &store,
+        template_id,
+        TemplateTirPhase::Parsed,
+        TemplateViewContext {
+            expression_overlay: None,
+            slot_resolution: Some(slot_overlay_id),
+            wrapper_context: None,
+        },
+    )
+    .expect("view should construct");
+    let resolution = present_view
         .effective_slot_resolution(occurrence_id)
         .expect("slot resolution lookup should succeed")
         .expect("resolution should be present");
     assert_eq!(resolution.sources(), &[source]);
-}
 
-#[test]
-fn effective_slot_resolution_returns_none_without_overlay() {
-    let mut store = TemplateIrStore::new();
-
-    let template_id = { build_empty_template(&mut store) };
-
-    let context = TemplateViewContext::default();
-    let root_ref = template_id;
-    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, context)
-        .expect("view should construct");
-
+    // None: an empty context returns Ok(None) for any occurrence.
+    let none_view = TirView::new(
+        &store,
+        template_id,
+        TemplateTirPhase::Parsed,
+        TemplateViewContext::default(),
+    )
+    .expect("view should construct");
     assert!(
-        view.effective_slot_resolution(SlotOccurrenceId::new(0))
+        none_view
+            .effective_slot_resolution(SlotOccurrenceId::new(0))
             .expect("slot resolution lookup should succeed")
             .is_none(),
         "no resolution without a slot-resolution overlay"
@@ -427,11 +405,11 @@ fn effective_slot_resolution_returns_none_without_overlay() {
 }
 
 #[test]
-fn effective_wrapper_context_returns_context_when_present() {
+fn effective_wrapper_context_resolves_present_and_none_cases() {
     let mut store = TemplateIrStore::new();
+    let template_id = build_empty_template(&mut store);
 
-    let template_id = { build_empty_template(&mut store) };
-
+    // Present: the typed wrapper context carries its exact field values.
     let occurrence_id = ChildTemplateOccurrenceId::new(0);
     let wrapper_context = TirWrapperContext {
         inherited_wrapper_set: None,
@@ -441,66 +419,60 @@ fn effective_wrapper_context_returns_context_when_present() {
     let wrapper_overlay_id = store.allocate_wrapper_context_overlay(TirWrapperContextOverlay {
         contexts: vec![(occurrence_id, wrapper_context.clone())],
     });
-    let context = TemplateViewContext {
-        expression_overlay: None,
-        slot_resolution: None,
-        wrapper_context: Some(wrapper_overlay_id),
-    };
-
-    let root_ref = template_id;
-    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, context)
-        .expect("view should construct");
-
-    let found = view
+    let present_view = TirView::new(
+        &store,
+        template_id,
+        TemplateTirPhase::Parsed,
+        TemplateViewContext {
+            expression_overlay: None,
+            slot_resolution: None,
+            wrapper_context: Some(wrapper_overlay_id),
+        },
+    )
+    .expect("view should construct");
+    let found = present_view
         .effective_wrapper_context(occurrence_id)
         .expect("wrapper context lookup should succeed")
         .expect("wrapper context should be present");
     assert_eq!(found, &wrapper_context);
-}
 
-#[test]
-fn effective_wrapper_context_returns_none_without_overlay() {
-    let mut store = TemplateIrStore::new();
-
-    let template_id = { build_empty_template(&mut store) };
-
-    let context = TemplateViewContext::default();
-    let root_ref = template_id;
-    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, context)
-        .expect("view should construct");
-
+    // None without overlay: an empty context returns Ok(None).
+    let none_view = TirView::new(
+        &store,
+        template_id,
+        TemplateTirPhase::Parsed,
+        TemplateViewContext::default(),
+    )
+    .expect("view should construct");
     assert!(
-        view.effective_wrapper_context(ChildTemplateOccurrenceId::new(0))
+        none_view
+            .effective_wrapper_context(ChildTemplateOccurrenceId::new(0))
             .expect("wrapper context lookup should succeed")
             .is_none(),
         "no context without a wrapper-context overlay"
     );
-}
 
-#[test]
-fn effective_wrapper_context_returns_none_for_uncovered_occurrence() {
-    let mut store = TemplateIrStore::new();
-
-    let template_id = { build_empty_template(&mut store) };
-
-    let wrapper_overlay_id = store.allocate_wrapper_context_overlay(TirWrapperContextOverlay {
+    // None for uncovered occurrence: the overlay covers a different occurrence.
+    let uncovered_overlay_id = store.allocate_wrapper_context_overlay(TirWrapperContextOverlay {
         contexts: vec![(
             ChildTemplateOccurrenceId::new(1),
             TirWrapperContext::empty(),
         )],
     });
-    let context = TemplateViewContext {
-        expression_overlay: None,
-        slot_resolution: None,
-        wrapper_context: Some(wrapper_overlay_id),
-    };
-
-    let root_ref = template_id;
-    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, context)
-        .expect("view should construct");
-
+    let uncovered_view = TirView::new(
+        &store,
+        template_id,
+        TemplateTirPhase::Parsed,
+        TemplateViewContext {
+            expression_overlay: None,
+            slot_resolution: None,
+            wrapper_context: Some(uncovered_overlay_id),
+        },
+    )
+    .expect("view should construct");
     assert!(
-        view.effective_wrapper_context(ChildTemplateOccurrenceId::new(99))
+        uncovered_view
+            .effective_wrapper_context(ChildTemplateOccurrenceId::new(99))
             .expect("wrapper context lookup should succeed")
             .is_none(),
         "no context for an occurrence not covered by the overlay"
@@ -571,7 +543,7 @@ fn with_minimum_phase_fails_when_phase_is_below_minimum() {
 // -------------------------
 
 #[test]
-fn root_ref_returns_the_constructor_root() {
+fn constructor_accessors_return_exact_identity() {
     let TestStore {
         store,
         root_ref,
@@ -579,39 +551,13 @@ fn root_ref_returns_the_constructor_root() {
         ..
     } = build_test_store();
 
-    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, context)
-        .expect("view should construct");
-
-    assert_eq!(view.root_ref(), root_ref);
-}
-
-#[test]
-fn phase_returns_the_constructor_phase() {
-    let TestStore {
-        store,
-        root_ref,
-        context,
-        ..
-    } = build_test_store();
-
+    // One owner for the three constructor identity accessors: root_ref, phase
+    // and context each return the exact value supplied to the constructor.
     let view = TirView::new(&store, root_ref, TemplateTirPhase::Composed, context)
         .expect("view should construct");
 
+    assert_eq!(view.root_ref(), root_ref);
     assert_eq!(view.phase(), TemplateTirPhase::Composed);
-}
-
-#[test]
-fn context_returns_the_constructor_context() {
-    let TestStore {
-        store,
-        root_ref,
-        context,
-        ..
-    } = build_test_store();
-
-    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, context)
-        .expect("view should construct");
-
     assert_eq!(view.context(), context);
 }
 
@@ -933,155 +879,153 @@ fn resolved_slot_source_and_structural_helper_preserve_exact_parent_view() {
 // -------------------------
 
 #[test]
-fn overlay_dimension_accessors_return_none_for_empty_view_context() {
-    let TestStore {
-        store,
-        root_ref,
-        context,
-        ..
-    } = build_test_store();
-
-    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, context)
-        .expect("view should construct");
-
-    assert!(
-        view.expression_overlay()
-            .expect("expression overlay lookup should succeed")
-            .is_none()
-    );
-    assert!(
-        view.slot_resolution_overlay()
-            .expect("slot overlay lookup should succeed")
-            .is_none()
-    );
-    assert!(
-        view.wrapper_context_overlay()
-            .expect("wrapper overlay lookup should succeed")
-            .is_none()
-    );
-}
-
-#[test]
-fn expression_overlay_accessor_returns_the_entry_when_set() {
+fn overlay_dimension_accessors_resolve_each_dimension() {
     let mut store = TemplateIrStore::new();
+    let template_id = build_empty_template(&mut store);
 
-    let template_id = { build_empty_template(&mut store) };
+    // Seed index zero, then select a nonzero typed overlay in each dimension so
+    // the accessors must resolve the exact ID rather than merely return an entry.
+    store.allocate_expression_overlay(TirExpressionOverlay::default());
+    store.allocate_slot_resolution_overlay(TirSlotResolutionOverlay::default());
+    store.allocate_wrapper_context_overlay(TirWrapperContextOverlay::default());
 
     let expression_overlay_id = store.allocate_expression_overlay(TirExpressionOverlay::default());
-    let context = TemplateViewContext {
-        expression_overlay: Some(expression_overlay_id),
-        slot_resolution: None,
-        wrapper_context: None,
-    };
-
-    let root_ref = template_id;
-    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, context)
-        .expect("view should construct");
-
-    assert!(
-        view.expression_overlay()
-            .expect("expression overlay lookup should succeed")
-            .is_some()
-    );
-    assert!(
-        view.slot_resolution_overlay()
-            .expect("slot overlay lookup should succeed")
-            .is_none()
-    );
-    assert!(
-        view.wrapper_context_overlay()
-            .expect("wrapper overlay lookup should succeed")
-            .is_none()
-    );
-}
-
-#[test]
-fn slot_resolution_overlay_accessor_returns_the_entry_when_set() {
-    let mut store = TemplateIrStore::new();
-
-    let template_id = { build_empty_template(&mut store) };
-
     let slot_overlay_id =
         store.allocate_slot_resolution_overlay(TirSlotResolutionOverlay::default());
-    let context = TemplateViewContext {
-        expression_overlay: None,
-        slot_resolution: Some(slot_overlay_id),
-        wrapper_context: None,
-    };
-
-    let root_ref = template_id;
-    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, context)
-        .expect("view should construct");
-
-    assert!(
-        view.expression_overlay()
-            .expect("expression overlay lookup should succeed")
-            .is_none()
-    );
-    assert!(
-        view.slot_resolution_overlay()
-            .expect("slot overlay lookup should succeed")
-            .is_some()
-    );
-    assert!(
-        view.wrapper_context_overlay()
-            .expect("wrapper overlay lookup should succeed")
-            .is_none()
-    );
-}
-
-#[test]
-fn wrapper_context_overlay_accessor_returns_the_entry_when_set() {
-    let mut store = TemplateIrStore::new();
-
-    let template_id = { build_empty_template(&mut store) };
-
     let wrapper_overlay_id =
         store.allocate_wrapper_context_overlay(TirWrapperContextOverlay::default());
-    let context = TemplateViewContext {
-        expression_overlay: None,
-        slot_resolution: None,
-        wrapper_context: Some(wrapper_overlay_id),
-    };
 
-    let root_ref = template_id;
-    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, context)
-        .expect("view should construct");
-
+    // Empty context: every dimension accessor returns None.
+    let empty_view = TirView::new(
+        &store,
+        template_id,
+        TemplateTirPhase::Parsed,
+        TemplateViewContext::default(),
+    )
+    .expect("view should construct");
     assert!(
-        view.expression_overlay()
+        empty_view
+            .expression_overlay()
             .expect("expression overlay lookup should succeed")
             .is_none()
     );
     assert!(
-        view.slot_resolution_overlay()
+        empty_view
+            .slot_resolution_overlay()
             .expect("slot overlay lookup should succeed")
             .is_none()
     );
     assert!(
-        view.wrapper_context_overlay()
+        empty_view
+            .wrapper_context_overlay()
             .expect("wrapper overlay lookup should succeed")
-            .is_some()
+            .is_none()
     );
-}
 
-#[test]
-fn new_rejects_missing_expression_overlay_entry() {
-    let mut store = TemplateIrStore::new();
+    // Expression dimension set: expression overlay resolves, the other two None.
+    let expression_view = TirView::new(
+        &store,
+        template_id,
+        TemplateTirPhase::Parsed,
+        TemplateViewContext {
+            expression_overlay: Some(expression_overlay_id),
+            slot_resolution: None,
+            wrapper_context: None,
+        },
+    )
+    .expect("view should construct");
+    let expression_overlay = expression_view
+        .expression_overlay()
+        .expect("expression overlay lookup should succeed")
+        .expect("expression overlay should be present");
+    assert!(std::ptr::eq(
+        expression_overlay,
+        store
+            .expression_overlay(expression_overlay_id)
+            .expect("selected expression overlay should exist")
+    ));
+    assert!(
+        expression_view
+            .slot_resolution_overlay()
+            .expect("slot overlay lookup should succeed")
+            .is_none()
+    );
+    assert!(
+        expression_view
+            .wrapper_context_overlay()
+            .expect("wrapper overlay lookup should succeed")
+            .is_none()
+    );
 
-    let template_id = { build_empty_template(&mut store) };
+    // Slot-resolution dimension set: slot overlay resolves, the other two None.
+    let slot_view = TirView::new(
+        &store,
+        template_id,
+        TemplateTirPhase::Parsed,
+        TemplateViewContext {
+            expression_overlay: None,
+            slot_resolution: Some(slot_overlay_id),
+            wrapper_context: None,
+        },
+    )
+    .expect("view should construct");
+    assert!(
+        slot_view
+            .expression_overlay()
+            .expect("expression overlay lookup should succeed")
+            .is_none()
+    );
+    let slot_overlay = slot_view
+        .slot_resolution_overlay()
+        .expect("slot overlay lookup should succeed")
+        .expect("slot overlay should be present");
+    assert!(std::ptr::eq(
+        slot_overlay,
+        store
+            .slot_resolution_overlay(slot_overlay_id)
+            .expect("selected slot overlay should exist")
+    ));
+    assert!(
+        slot_view
+            .wrapper_context_overlay()
+            .expect("wrapper overlay lookup should succeed")
+            .is_none()
+    );
 
-    let context = TemplateViewContext {
-        expression_overlay: Some(TirExpressionOverlayId::new(99)),
-        slot_resolution: None,
-        wrapper_context: None,
-    };
-
-    let root_ref = template_id;
-    let error = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, context)
-        .expect_err("missing expression overlay entry should be rejected");
-
-    assert!(error.msg.contains("does not exist"));
+    // Wrapper-context dimension set: wrapper overlay resolves, the other two None.
+    let wrapper_view = TirView::new(
+        &store,
+        template_id,
+        TemplateTirPhase::Parsed,
+        TemplateViewContext {
+            expression_overlay: None,
+            slot_resolution: None,
+            wrapper_context: Some(wrapper_overlay_id),
+        },
+    )
+    .expect("view should construct");
+    assert!(
+        wrapper_view
+            .expression_overlay()
+            .expect("expression overlay lookup should succeed")
+            .is_none()
+    );
+    assert!(
+        wrapper_view
+            .slot_resolution_overlay()
+            .expect("slot overlay lookup should succeed")
+            .is_none()
+    );
+    let wrapper_overlay = wrapper_view
+        .wrapper_context_overlay()
+        .expect("wrapper overlay lookup should succeed")
+        .expect("wrapper overlay should be present");
+    assert!(std::ptr::eq(
+        wrapper_overlay,
+        store
+            .wrapper_context_overlay(wrapper_overlay_id)
+            .expect("selected wrapper overlay should exist")
+    ));
 }
 
 // -------------------------
@@ -1346,37 +1290,28 @@ fn build_template_with_conditional_loop(
 }
 
 #[test]
-fn source_location_for_slot_occurrence_returns_node_location() {
+fn source_location_for_slot_occurrence_resolves_present_and_missing() {
     let mut store = TemplateIrStore::new();
+    let (template_id, occurrence_id) = build_template_with_slot(&mut store, location_at(7, 12));
 
-    let (template_id, occurrence_id) = { build_template_with_slot(&mut store, location_at(7, 12)) };
+    let view = TirView::new(
+        &store,
+        template_id,
+        TemplateTirPhase::Parsed,
+        TemplateViewContext::default(),
+    )
+    .expect("view should construct");
 
-    let context = TemplateViewContext::default();
-    let root_ref = template_id;
-    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, context)
-        .expect("view should construct");
-
+    // Present: the slot node location is recovered.
     assert_location(
         view.source_location_for_slot_occurrence(occurrence_id),
         7,
         12,
     );
-}
 
-#[test]
-fn source_location_for_slot_occurrence_returns_none_for_missing_id() {
-    let mut store = TemplateIrStore::new();
-
-    let (template_id, _) = { build_template_with_slot(&mut store, location_at(7, 12)) };
-
-    let context = TemplateViewContext::default();
-    let root_ref = template_id;
-    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, context)
-        .expect("view should construct");
-
-    let missing = super::super::ids::SlotOccurrenceId::new(99);
+    // Missing: an unknown occurrence id returns Ok(None).
     assert!(
-        view.source_location_for_slot_occurrence(missing)
+        view.source_location_for_slot_occurrence(super::super::ids::SlotOccurrenceId::new(99))
             .expect("lookup should succeed")
             .is_none(),
         "missing slot occurrence should return Ok(None)"
@@ -1384,108 +1319,97 @@ fn source_location_for_slot_occurrence_returns_none_for_missing_id() {
 }
 
 #[test]
-fn source_location_for_child_template_occurrence_returns_node_location() {
+fn source_location_for_child_template_occurrence_resolves_present_and_missing() {
     let mut store = TemplateIrStore::new();
-
     let (parent_template_id, _child_template_id, occurrence_id) =
-        { build_template_with_child_template(&mut store, location_at(1, 1), location_at(9, 20)) };
+        build_template_with_child_template(&mut store, location_at(1, 1), location_at(9, 20));
 
-    let context = TemplateViewContext::default();
-    let root_ref = parent_template_id;
-    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, context)
-        .expect("view should construct");
+    let view = TirView::new(
+        &store,
+        parent_template_id,
+        TemplateTirPhase::Parsed,
+        TemplateViewContext::default(),
+    )
+    .expect("view should construct");
 
+    // Present: the child-template occurrence location is recovered.
     assert_location(
         view.source_location_for_child_template_occurrence(occurrence_id),
         9,
         20,
     );
-}
 
-#[test]
-fn source_location_for_child_template_occurrence_returns_none_for_missing_id() {
-    let mut store = TemplateIrStore::new();
-
-    let (parent_template_id, _, _) =
-        { build_template_with_child_template(&mut store, location_at(1, 1), location_at(9, 20)) };
-
-    let context = TemplateViewContext::default();
-    let root_ref = parent_template_id;
-    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, context)
-        .expect("view should construct");
-
-    let missing = super::super::ids::ChildTemplateOccurrenceId::new(99);
+    // Missing: an unknown occurrence id returns Ok(None).
     assert!(
-        view.source_location_for_child_template_occurrence(missing)
-            .expect("lookup should succeed")
-            .is_none(),
+        view.source_location_for_child_template_occurrence(
+            super::super::ids::ChildTemplateOccurrenceId::new(99)
+        )
+        .expect("lookup should succeed")
+        .is_none(),
         "missing child-template occurrence should return Ok(None)"
     );
 }
 
 #[test]
-fn source_location_for_expression_site_returns_dynamic_expression_location() {
+fn source_location_for_expression_site_resolves_each_node_kind_and_missing() {
     let mut store = TemplateIrStore::new();
 
-    let (template_id, site_id) =
-        { build_template_with_dynamic_expression_at(&mut store, location_at(11, 30)) };
+    // DynamicExpression site: location recovered from the expression node.
+    let (dynamic_template_id, dynamic_site_id) =
+        build_template_with_dynamic_expression_at(&mut store, location_at(11, 30));
+    let dynamic_view = TirView::new(
+        &store,
+        dynamic_template_id,
+        TemplateTirPhase::Parsed,
+        TemplateViewContext::default(),
+    )
+    .expect("view should construct");
+    assert_location(
+        dynamic_view.source_location_for_expression_site(dynamic_site_id),
+        11,
+        30,
+    );
 
-    let context = TemplateViewContext::default();
-    let root_ref = template_id;
-    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, context)
-        .expect("view should construct");
-
-    assert_location(view.source_location_for_expression_site(site_id), 11, 30);
-}
-
-#[test]
-fn source_location_for_expression_site_returns_branch_selector_location() {
-    let mut store = TemplateIrStore::new();
-
-    let (template_id, site_id) =
-        { build_template_with_branch_chain(&mut store, location_at(15, 8)) };
-
-    let context = TemplateViewContext::default();
-    let root_ref = template_id;
-    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, context)
-        .expect("view should construct");
-
-    assert_location(view.source_location_for_expression_site(site_id), 15, 8);
-}
-
-#[test]
-fn source_location_for_expression_site_returns_loop_header_location() {
-    let mut store = TemplateIrStore::new();
-
-    let (template_id, site_id) =
-        { build_template_with_conditional_loop(&mut store, location_at(21, 4)) };
-
-    let context = TemplateViewContext::default();
-    let root_ref = template_id;
-    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, context)
-        .expect("view should construct");
-
-    assert_location(view.source_location_for_expression_site(site_id), 21, 4);
-}
-
-#[test]
-fn source_location_for_expression_site_returns_none_for_missing_site() {
-    let mut store = TemplateIrStore::new();
-
-    let (template_id, _) =
-        { build_template_with_dynamic_expression_at(&mut store, location_at(11, 30)) };
-
-    let context = TemplateViewContext::default();
-    let root_ref = template_id;
-    let view = TirView::new(&store, root_ref, TemplateTirPhase::Parsed, context)
-        .expect("view should construct");
-
-    let missing = ExpressionSiteId::new(99);
+    // Missing: an unknown expression site returns Ok(None). Asserted here so the
+    // immutable view borrow ends before the next mutable template build.
     assert!(
-        view.source_location_for_expression_site(missing)
+        dynamic_view
+            .source_location_for_expression_site(ExpressionSiteId::new(99))
             .expect("lookup should succeed")
             .is_none(),
         "missing expression site should return Ok(None)"
+    );
+
+    // BranchChain selector site: location recovered from the branch node.
+    let (branch_template_id, branch_site_id) =
+        build_template_with_branch_chain(&mut store, location_at(15, 8));
+    let branch_view = TirView::new(
+        &store,
+        branch_template_id,
+        TemplateTirPhase::Parsed,
+        TemplateViewContext::default(),
+    )
+    .expect("view should construct");
+    assert_location(
+        branch_view.source_location_for_expression_site(branch_site_id),
+        15,
+        8,
+    );
+
+    // Loop header site: location recovered from the conditional loop node.
+    let (loop_template_id, loop_site_id) =
+        build_template_with_conditional_loop(&mut store, location_at(21, 4));
+    let loop_view = TirView::new(
+        &store,
+        loop_template_id,
+        TemplateTirPhase::Parsed,
+        TemplateViewContext::default(),
+    )
+    .expect("view should construct");
+    assert_location(
+        loop_view.source_location_for_expression_site(loop_site_id),
+        21,
+        4,
     );
 }
 
