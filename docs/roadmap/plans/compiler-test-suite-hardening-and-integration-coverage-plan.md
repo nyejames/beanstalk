@@ -30,21 +30,21 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 14C15d TIR expression-payload walker and body-root wrapper unit ownership review
-LAST_ACCEPTED_COMMIT: `86cc84bfb` (Phase 14C15c code)
+CURRENT_SLICE: Phase 14C15e TIR wrapper-context construction and fold unit ownership review
+LAST_ACCEPTED_COMMIT: `5d679061a` (Phase 14C15d code)
 WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; accepted code is committed; concurrent example-name work remains separately committed
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: unit-test ownership, pruning, compiler-stage boundaries, and final governance rules govern the next slice
-- code: all 437 retained tests across the reviewed Stage 0, frontend, build-system, project, CLI, dev-server, new-project, and final-TIR data/store/overlay/summary/builder/exact-view groups have distinct owners; expression-payload traversal and body-root wrapper units are next
+- code: all 468 retained tests across the reviewed Stage 0, frontend, build-system, project, CLI, dev-server, new-project, and final-TIR data/store/overlay/summary/builder/exact-view/expression-walker/body-root groups have distinct owners; wrapper-context construction and folding units are next
 ACCEPTANCE_CRITERIA:
 - every remaining full-source unit has a distinct hidden invariant, parser fact, stage boundary, or policy owner
 - units superseded by a stronger canonical integration primary are deleted with replacement evidence
 - stale test-only helpers or production APIs are removed with their final caller
 - HIR, build-system, backend, and final TIR units keep only their owning semantic relationships and hidden facts
 VALIDATION_STATE:
-- `just validate`: passed; cross-target Clippy, 3,387 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
-- Phase 14C15c focused group: passed; 26 TIR exact-view tests
+- `just validate`: passed; cross-target Clippy, 3,384 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
+- Phase 14C15d focused groups: passed; 26 expression-payload walker tests and five body-root wrapper tests
 - Phase 14B audit: passed; zero hard findings; 66 backend-only and 15 adversarial-only primary-less contract advisories
 - Priya expectation alignment: accepted at `6efac7012`; 13 stale Rust and integration expectation files now match renamed inputs
 DOCS_IMPACT: testing, validation, and contributor workflow aligned with final suite policy; progress matrix and index unchanged
@@ -52,7 +52,7 @@ BLOCKERS_OR_OPEN_DECISIONS: none; 81 contract families without a primary are int
 DELEGATION_DECISION: Ollama — bounded Phase 14 implementation slices
 NEXT_WORKER_ORDER: Ollama only; no provider substitution
 STOP_REASON: none
-NEXT_RESUME_ACTION: launch the TIR expression-payload walker and body-root wrapper unit group through Ollama
+NEXT_RESUME_ACTION: launch the TIR wrapper-context construction and fold unit group through Ollama
 
 ---
 
@@ -252,6 +252,7 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 14C15a TIR data, store, overlay, and summary units | `8e89329ce` | Accepted | Nine parallel round-trip, allocation, retrieval, default, and direct-field units were consolidated or removed in favor of labelled typed-ID, per-collection store, exact typed retrieval, complete empty-summary, record-helper, and merge owners; all nine compact-layout and typed-overlay tests remain distinct; 23 assigned units remain; 3,412 Rust tests and 1,793 integration executions |
 | Phase 14C15b TIR builder units | `e140e522a` | Accepted | Four empty-store, sequential-ID, and weak stored-ID pass-through units were removed in favor of store and document-order owners; four conditional/collection and range-step header units were consolidated into two variant-explicit owners; 17 exact payload, metadata, encapsulation, counter, derived-root, fresh-allocation, and shared-site owners remain; 3,406 Rust tests and 1,793 integration executions |
 | Phase 14C15c TIR exact-view units | `86cc84bfb` | Accepted | Parallel phase, effective-resolution, constructor-accessor, overlay-dimension, and source-location families were consolidated without merging named transition authority; one duplicate missing-expression-overlay constructor test was removed; exact nonzero overlay entry identity was strengthened; 26 phase, construction, invariant-error, resolution, transition, overlay, and location owners remain; 3,387 Rust tests and 1,793 integration executions |
+| Phase 14C15d TIR expression-payload walker and body-root wrapper units | `5d679061a` | Accepted | A count-only branch/dynamic collector duplicate was removed in favor of the exact five-position structural owner; range-header structural collection and mutation were consolidated while preserving site/value identity and proving all three expressions mutate; missing and non-sequence body roots now share one labelled owner with distinct infrastructure reasons; 26 walker and five body-root owners remain; 3,384 Rust tests and 1,793 integration executions |
 
 ---
 
@@ -1471,6 +1472,9 @@ Do not present lower counts or faster time as proof of correctness.
 | Parallel phase, effective-resolution, constructor-accessor, and overlay-accessor view tests consolidated in Phase 14C15c | Phase ordering, present/absent typed resolution, constructor identity, and all three exact overlay dimensions | `view_tests::{phase_ordering_and_is_at_least_are_monotonic,effective_expression_for_site_resolves_override_and_none_cases,effective_expression_for_node_resolves_override_and_none_cases,effective_slot_resolution_resolves_present_and_none_cases,effective_wrapper_context_resolves_present_and_none_cases,constructor_accessors_return_exact_identity,overlay_dimension_accessors_resolve_each_dimension}` | named structural, wrapper, resolved-slot, helper, and nested-value transition owners remain separate | `86cc84bfb` |
 | Eight per-kind present/missing TIR source-location tests consolidated in Phase 14C15c | Slot, child-template, dynamic-expression, branch-selector, and loop-header locations resolve without crossing referenced child roots | `view_tests::{source_location_for_slot_occurrence_resolves_present_and_missing,source_location_for_child_template_occurrence_resolves_present_and_missing,source_location_for_expression_site_resolves_each_node_kind_and_missing,source_location_lookup_does_not_cross_into_child_template}` | exact typed occurrence/site lookup and nested-root boundary remain explicit | `86cc84bfb` |
 | `view_tests::new_rejects_missing_expression_overlay_entry` | Missing expression overlay makes an exact view invalid | `view_tests::new_fails_for_missing_view_context` with the same expression-overlay and missing-entry message contract | missing root, minimum phase, structural-child context, and invalid-node invariant owners remain separate | `86cc84bfb` |
+| `expression_payload_walker_tests::structural_collection_includes_dynamic_and_branch_payloads` | Structural collection reaches dynamic expressions and branch selectors | `expression_payload_walker_tests::collects_dynamic_payloads_branch_selectors_and_loop_headers`, which also owns exact selector/header site identity and all five reachable positions | none | `5d679061a` |
+| `expression_payload_walker_tests::{mutates_range_loop_header_expression_positions,collects_range_loop_header_payloads_by_allocated_site_ids}` consolidated | Range start, end, and optional step positions participate in structural collection and mutation | `expression_payload_walker_tests::range_loop_header_positions_are_visited_by_mutation_and_collected_by_site_id` with exact site/value and post-mutation payload assertions | none | `5d679061a` |
+| `body_root_wrapper_tests::{apply_inherited_wrappers_rejects_missing_body_root_with_empty_wrappers,apply_inherited_wrappers_rejects_non_sequence_body_root_with_empty_wrappers}` consolidated | Body-root authority rejects missing and non-sequence roots before empty-wrapper short-circuiting | `body_root_wrapper_tests::apply_inherited_wrappers_rejects_malformed_body_roots`, with labelled infrastructure-variant and distinct reason assertions | none | `5d679061a` |
 
 ### Coverage gap and handoff ledger
 
