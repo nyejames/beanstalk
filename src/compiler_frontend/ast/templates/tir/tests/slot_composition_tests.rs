@@ -456,9 +456,12 @@ fn schema_from_named_slots() {
         collect_tir_slot_schema(&store, template_id).expect("schema extraction should succeed");
 
     assert!(!schema.has_default_slot);
-    assert!(schema.named_slots.contains(&name_alpha));
-    assert!(schema.named_slots.contains(&name_beta));
+    assert_eq!(
+        schema.named_slots,
+        [name_alpha, name_beta].into_iter().collect()
+    );
     assert!(schema.positional_slots.is_empty());
+    assert!(schema.has_any_slots());
 }
 
 #[test]
@@ -483,9 +486,8 @@ fn schema_from_positional_slots() {
 
     assert!(!schema.has_default_slot);
     assert!(schema.named_slots.is_empty());
-    assert!(schema.positional_slots.contains(&0));
-    assert!(schema.positional_slots.contains(&1));
-    assert!(schema.positional_slots.contains(&2));
+    assert_eq!(schema.positional_slots, [0, 1, 2].into_iter().collect());
+    assert!(schema.has_any_slots());
 }
 
 #[test]
@@ -515,8 +517,9 @@ fn schema_from_mixed_slot_types() {
         collect_tir_slot_schema(&store, template_id).expect("schema extraction should succeed");
 
     assert!(schema.has_default_slot);
-    assert!(schema.named_slots.contains(&name_id));
-    assert!(schema.positional_slots.contains(&0));
+    assert_eq!(schema.named_slots, [name_id].into_iter().collect());
+    assert_eq!(schema.positional_slots, [0].into_iter().collect());
+    assert!(schema.has_any_slots());
 }
 
 #[test]
@@ -549,7 +552,10 @@ fn schema_from_nested_child_template_containing_slot() {
     let schema = collect_tir_slot_schema(&store, parent_template_id)
         .expect("schema extraction should succeed");
 
-    assert!(schema.named_slots.contains(&name_id));
+    assert!(!schema.has_default_slot);
+    assert_eq!(schema.named_slots, [name_id].into_iter().collect());
+    assert!(schema.positional_slots.is_empty());
+    assert!(schema.has_any_slots());
 }
 
 #[test]
@@ -578,7 +584,10 @@ fn schema_from_branch_chain_containing_slot() {
     let schema =
         collect_tir_slot_schema(&store, template_id).expect("schema extraction should succeed");
 
-    assert!(schema.named_slots.contains(&name_id));
+    assert!(!schema.has_default_slot);
+    assert_eq!(schema.named_slots, [name_id].into_iter().collect());
+    assert!(schema.positional_slots.is_empty());
+    assert!(schema.has_any_slots());
 }
 
 #[test]
@@ -609,7 +618,10 @@ fn schema_from_loop_containing_slot() {
     let schema =
         collect_tir_slot_schema(&store, template_id).expect("schema extraction should succeed");
 
-    assert!(schema.named_slots.contains(&name_id));
+    assert!(!schema.has_default_slot);
+    assert_eq!(schema.named_slots, [name_id].into_iter().collect());
+    assert!(schema.positional_slots.is_empty());
+    assert!(schema.has_any_slots());
 }
 
 #[test]
@@ -642,6 +654,11 @@ fn loose_fill_target_prefers_later_positional_slot_across_branches() {
 
     let schema =
         collect_tir_slot_schema(&store, template_id).expect("schema extraction should succeed");
+
+    assert!(schema.has_default_slot);
+    assert!(schema.named_slots.is_empty());
+    assert_eq!(schema.positional_slots, [2].into_iter().collect());
+    assert!(schema.has_any_slots());
 
     assert_eq!(
         schema.loose_fill_target_key(),
@@ -678,6 +695,11 @@ fn loose_fill_target_prefers_aggregate_positional_slot_after_loop_body_default()
 
     let schema =
         collect_tir_slot_schema(&store, template_id).expect("schema extraction should succeed");
+
+    assert!(schema.has_default_slot);
+    assert!(schema.named_slots.is_empty());
+    assert_eq!(schema.positional_slots, [1].into_iter().collect());
+    assert!(schema.has_any_slots());
 
     assert_eq!(
         schema.loose_fill_target_key(),
@@ -745,12 +767,16 @@ fn ordered_slot_keys_returns_deterministic_order() {
         collect_tir_slot_schema(&store, template_id).expect("schema extraction should succeed");
 
     let ordered = schema.ordered_slot_keys(&string_table);
-    assert_eq!(ordered.len(), 5);
-    assert_eq!(ordered[0], SlotKey::Default);
-    assert_eq!(ordered[1], SlotKey::Positional(0));
-    assert_eq!(ordered[2], SlotKey::Positional(2));
-    assert_eq!(ordered[3], SlotKey::Named(name_a));
-    assert_eq!(ordered[4], SlotKey::Named(name_z));
+    assert_eq!(
+        ordered,
+        vec![
+            SlotKey::Default,
+            SlotKey::Positional(0),
+            SlotKey::Positional(2),
+            SlotKey::Named(name_a),
+            SlotKey::Named(name_z),
+        ]
+    );
 }
 
 #[test]
@@ -772,6 +798,9 @@ fn accepts_target_validates_correctly() {
     let unknown_name = string_table.intern("unknown");
     assert!(!schema.accepts_target(&SlotKey::Named(unknown_name)));
     assert!(!schema.accepts_target(&SlotKey::Positional(0)));
+
+    let no_default_schema = TirSlotSchema::default();
+    assert!(!no_default_schema.accepts_target(&SlotKey::Default));
 }
 
 #[test]
@@ -822,6 +851,9 @@ fn skipped_node_kinds_do_not_contribute_to_schema() {
     let schema =
         collect_tir_slot_schema(&store, template_id).expect("schema extraction should succeed");
 
+    assert!(!schema.has_default_slot);
+    assert!(schema.named_slots.is_empty());
+    assert!(schema.positional_slots.is_empty());
     assert!(!schema.has_any_slots());
 }
 
