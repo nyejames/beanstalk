@@ -30,29 +30,29 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 14E targeted mutation probes
-LAST_ACCEPTED_COMMIT: `d112011f3` (Phase 14D code); concurrent Priya alignment accepted at `9518662e1`
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; accepted inventory cleanup and Priya alignment are committed; concurrent generated `docs/release/docs/errors/index.html` output is separately owned and preserved
+CURRENT_SLICE: Phase 14F final measurements and documentation closure
+LAST_ACCEPTED_COMMIT: `d443c3a4f` (Phase 14D checkpoint); concurrent Priya alignment accepted at `9518662e1`
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; temporary detached mutation worktree is clean at `d443c3a4f`; concurrent generated `docs/release/docs/errors/index.html` output is separately owned and preserved
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: unit-test ownership, pruning, compiler-stage boundaries, and final governance rules govern the next slice
-- code: the final source-shaped-unit inventory is complete across AST, HIR, borrow, build, backend, and TIR owners; one definition-only dev-server render seam was removed, and all remaining low-count public test seams have concrete callers; nine representative mutation probes are next
+- docs: final measurement, workflow, progress, roadmap, and next-plan closure rules govern the next slice
+- code: all nine representative semantic mutations were caught by their intended primary integration or focused hidden-fact owners and fully restored; no deliberate fault or source diff remains
 ACCEPTANCE_CRITERIA:
-- every remaining full-source unit has a distinct hidden invariant, parser fact, stage boundary, or policy owner
-- units superseded by a stronger canonical integration primary are deleted with replacement evidence
-- stale test-only helpers or production APIs are removed with their final caller
-- HIR, build-system, backend, and final TIR units keep only their owning semantic relationships and hidden facts
+- record final Rust, integration, assertion-shape, role, golden, timing, and ownership-change measurements under the Phase 0 method
+- review and finalize authorized testing, validation, contributor, index, progress, roadmap, and next-plan state without inventing status changes
+- rebuild documentation when source documentation changes and preserve separately owned generated output
+- advance to the required final review only after closure evidence is complete
 VALIDATION_STATE:
 - `just validate`: passed; cross-target Clippy, 3,344 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
-- Phase 14D focused diagnostic-model group: passed; 70 tests
+- Phase 14E mutation probes: all nine primary filtered owners passed at baseline, failed for the intended semantic defect, passed after restoration, and left the detached worktree clean; no mutation score claimed
 - Phase 14B audit: passed; zero hard findings; 66 backend-only and 15 adversarial-only primary-less contract advisories
-- Priya expectation alignment: accepted at `6efac7012`; 13 stale Rust and integration expectation files now match renamed inputs
+- Priya expectation alignment: accepted at `9518662e1`; renamed inputs and expectations match
 DOCS_IMPACT: testing, validation, and contributor workflow aligned with final suite policy; progress matrix and index unchanged
 BLOCKERS_OR_OPEN_DECISIONS: none; 81 contract families without a primary are intentionally 66 backend-only and 15 adversarial-only families, with no ordinary orphan family
 DELEGATION_DECISION: Ollama — bounded Phase 14 implementation slices
 NEXT_WORKER_ORDER: Ollama only; no provider substitution
 STOP_REASON: none
-NEXT_RESUME_ACTION: create a temporary detached worktree and run the nine required semantic mutation probes without committing deliberate faults
+NEXT_RESUME_ACTION: run the final audit inventory and Phase 0-compatible timing/count measurements
 
 ---
 
@@ -267,6 +267,7 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 14C15p TIR single-pair slot-overlay test seam | `4335023aa` | Accepted | All three tests exercised only a `#[cfg(test)]` wrapper around already-covered routing, overlay materialization, and view-context primitives; the tests, final-caller wrapper, re-export/import, section prose, and stale future-state comment were removed; production remains owned by head-chain composition and merged overlay allocation; 56 slot-composition tests remain; 3,346 Rust tests and 1,793 integration executions |
 | Phase 14C15q TIR production head-chain overlay units | `493571e42` | Accepted | The single-receiver owner now proves the exact composed node tree and the exact occurrence/key/kind/source overlay against the same fill node with only the slot-resolution context dimension set; the no-slots owner retains the original-root plus `None` fast path; a trivial source-node non-mutation test and child-count-only structural parity test were removed with their dead explicit-reference helper/import; two production boundary owners and 54 slot-composition tests remain; 3,344 Rust tests and 1,793 integration executions |
 | Phase 14D final source-shaped-unit inventory and stale-helper closure | `d112011f3` | Accepted | All 3,344 current Rust tests were re-enumerated and cross-checked against the accepted AST, HIR, borrow, build, backend, and TIR ownership slices; retained source-shaped units protect parser/stage shape, semantic relationships, identities, side tables, policy, ABI, malformed invariants, or exact handoff facts; a public test-seam occurrence scan found one definition-only dev-server renderer wrapper, which was removed with its allowance/import while the exact context-aware test and production renderer remain; zero source-shaped units remain unclassified; 1,793 integration executions remain |
+| Phase 14E targeted semantic mutation probes | no code change after `d443c3a4f` | Accepted | Nine temporary production defects were caught by their intended primary owners across mutable-call classification, map and return aliases, fixed-capacity identity, exhaustiveness, numeric failure mode, imported roots, target reachability, and reactive invalidation; every defect was restored in a detached worktree; no mutation score is claimed |
 
 ---
 
@@ -1343,14 +1344,34 @@ Use a temporary branch/worktree and never commit deliberate faults. Probe at lea
 
 For each probe:
 
-- [ ] introduce one semantic defect
-- [ ] run the expected primary filtered test
-- [ ] confirm failure for the intended contract
-- [ ] revert the defect
-- [ ] record the primary owner and result
-- [ ] do not claim a general mutation score
+- [x] introduce one semantic defect
+- [x] run the expected primary filtered test
+- [x] confirm failure for the intended contract
+- [x] revert the defect
+- [x] record the primary owner and result
+- [x] do not claim a general mutation score
 
 A permanent mutation-testing dependency requires separate approval.
+
+### Phase 14E accepted probe evidence
+
+Each primary command passed before mutation, failed for the named contract under one temporary
+production defect, and passed after restoration. The detached worktree ended clean.
+
+| Semantic probe | Temporary production defect | Primary owner and intended failure |
+|---|---|---|
+| Mutable call-site access classification | `transfer_call_argument_access` skipped the `MayConsume` mutable-argument path | `borrow_checker_duplicate_mutable_args` unexpectedly succeeded without `BST-BORROW-0002` |
+| Map `get` alias creation | `map_result_alias` classified `get` as fresh | `map_get_alias_blocks_set_when_used_after_mutation` unexpectedly succeeded without `BST-BORROW-0007` |
+| Return-alias summary propagation | `transfer_call_result_alias` dropped `AliasArgs` roots | `facade_reexport_return_alias_live_blocks_mutation` unexpectedly succeeded without `BST-BORROW-0007` |
+| Fixed-capacity identity | `intern_collection` omitted fixed capacity from collection construction | `fixed_collection_exact_capacity_mismatch_rejected` unexpectedly succeeded without `BST-TYPE-0001` |
+| Match exhaustiveness | `enforce_match_exhaustiveness` accepted uncovered choice variants | `choice_match_non_exhaustive_failure` unexpectedly succeeded without `BST-RULE-0050` |
+| Checked numeric failure mode | `select_numeric_failure_mode` forced trap mode in a builtin `Error!` function | `checked_numeric_builtin_error_recovery` trapped on overflow instead of reaching the recoverable error channel |
+| Imported-root suppression | `finish_file_output` produced an implicit start header for an imported root | `imported_module_root_discards_root_body_but_keeps_exportable_headers` found the forbidden start header while exported declarations remained present |
+| Target reachability for unsupported features | target validation traversed every function instead of the selected start root | `wasm_feature_validation_ignores_unreachable_checked_numeric_ops` falsely rejected an unreachable checked numeric operation |
+| Reactive invalidation | `reactive_assignment_invalidations` returned no assignment fact | `reactive_subscription_followed_by_mutation_is_valid_and_dirtying` observed zero invalidations instead of one |
+
+These representative probes demonstrate owner sensitivity only. They are not a general mutation
+score, and no permanent mutation-testing dependency was added.
 
 ## Final measurements
 
