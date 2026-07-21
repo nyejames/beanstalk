@@ -3,7 +3,8 @@
 //! WHAT: validates typed exact/contains code contracts and message fragments at the compiler
 //!       render boundary.
 //! WHY: diagnostic matching must stay separate from warning, artifact and backend validation so
-//!      later matching-mode changes have one owner.
+//!      later matching-mode changes have one owner. Failure diagnostics select only error-severity
+//!      entries here; warning identity stays owned by `assertions/warnings.rs`.
 
 use super::super::{DiagnosticAssertion, DiagnosticMatchMode, FailureExpectation};
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerMessages;
@@ -12,7 +13,9 @@ use crate::compiler_frontend::compiler_messages::render::{
     resolve_source_file_path, terminal, terse,
 };
 use crate::compiler_frontend::compiler_messages::source_location::SourceLocation;
-use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, DiagnosticLabelStyle};
+use crate::compiler_frontend::compiler_messages::{
+    CompilerDiagnostic, DiagnosticLabelStyle, DiagnosticSeverity,
+};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
@@ -21,9 +24,15 @@ pub(super) fn validate_diagnostics(
     expectation: &FailureExpectation,
     fixture_root: &Path,
 ) -> Option<String> {
-    let diagnostic_codes: Vec<&str> = messages
-        .diagnostics()
-        .map(|diagnostic| diagnostic.identity().code)
+    // Failure diagnostics select only error-severity entries. Warnings remain owned by
+    // `assertions/warnings.rs` so a warning code or rendered warning can never satisfy an error
+    // diagnostic contract. `CompilerMessages::diagnostics()` still owns the complete ordered
+    // stream; this is a local selection owner, not a second boundary view.
+    let error_diagnostics = error_diagnostics_with_render_indices(messages);
+
+    let diagnostic_codes: Vec<&str> = error_diagnostics
+        .iter()
+        .map(|(_, diagnostic)| diagnostic.identity().code)
         .collect();
 
     if let Some(reason) = compare_diagnostic_code_multisets(
@@ -34,31 +43,43 @@ pub(super) fn validate_diagnostics(
         return Some(reason);
     }
 
-    if let Some(reason) =
-        validate_structured_diagnostic_assertions(messages, expectation, fixture_root)
-    {
+    if let Some(reason) = validate_structured_diagnostic_assertions(
+        &error_diagnostics,
+        messages,
+        expectation,
+        fixture_root,
+    ) {
         return Some(reason);
     }
 
-    // Message fragments are checked from typed render output rather than diagnostic debug text.
+    // Message fragments are checked from typed render output rather than diagnostic debug text,
+    // and only against error-severity diagnostics so a rendered warning cannot satisfy them.
     if !expectation.message_contains.is_empty() {
-        let mut rendered_messages: Vec<String> = messages
-            .diagnostics()
-            .enumerate()
+        let mut rendered_messages: Vec<String> = error_diagnostics
+            .iter()
             .map(|(diagnostic_index, diagnostic)| {
                 terminal::format_payload_guidance(
                     &diagnostic.payload,
-                    messages.diagnostic_render_context(diagnostic_index),
+                    messages.diagnostic_render_context(*diagnostic_index),
                 )
                 .join("\n")
             })
             .collect();
 
-        rendered_messages.extend(messages.diagnostics().flat_map(|diagnostic| {
+        rendered_messages.extend(error_diagnostics.iter().flat_map(|(_, diagnostic)| {
             terminal::format_label_messages(diagnostic, &messages.string_table)
         }));
 
-        rendered_messages.extend(terse::format_terse_compiler_messages(messages));
+        rendered_messages.extend(
+            error_diagnostics
+                .iter()
+                .map(|(diagnostic_index, diagnostic)| {
+                    terse::format_terse_diagnostic_with_context(
+                        diagnostic,
+                        messages.diagnostic_render_context(*diagnostic_index),
+                    )
+                }),
+        );
 
         if !rendered_messages.iter().any(|message| {
             super::contains_ordered_substrings(message, &expectation.message_contains)
@@ -73,7 +94,24 @@ pub(super) fn validate_diagnostics(
     None
 }
 
+/// Selects error-severity diagnostics paired with their original render-boundary index.
+///
+/// WHAT: filters `CompilerMessages::diagnostics()` to `DiagnosticSeverity::Error` and carries the
+///       original index so render-context lookups stay aligned with stored diagnostic positions.
+/// WHY: failure diagnostics are error-only; warnings are validated independently by
+///      `assertions/warnings.rs`. Keeping selection here gives the error contract one local owner.
+fn error_diagnostics_with_render_indices(
+    messages: &CompilerMessages,
+) -> Vec<(usize, &CompilerDiagnostic)> {
+    messages
+        .diagnostics()
+        .enumerate()
+        .filter(|(_, diagnostic)| diagnostic.severity == DiagnosticSeverity::Error)
+        .collect()
+}
+
 fn validate_structured_diagnostic_assertions(
+    error_diagnostics: &[(usize, &CompilerDiagnostic)],
     messages: &CompilerMessages,
     expectation: &FailureExpectation,
     fixture_root: &Path,
@@ -81,9 +119,12 @@ fn validate_structured_diagnostic_assertions(
     let mut mismatches = Vec::new();
 
     for assertion in &expectation.diagnostic_assertions {
-        let matching_diagnostics = messages
-            .diagnostics()
-            .filter(|diagnostic| diagnostic.identity().code == assertion.code)
+        // Structured assertions match error-severity diagnostics only, so a warning sharing a
+        // code can never satisfy a failure diagnostic contract.
+        let matching_diagnostics = error_diagnostics
+            .iter()
+            .filter(|(_, diagnostic)| diagnostic.identity().code == assertion.code)
+            .map(|(_, diagnostic)| *diagnostic)
             .collect::<Vec<_>>();
         let actual_count = matching_diagnostics.len();
 

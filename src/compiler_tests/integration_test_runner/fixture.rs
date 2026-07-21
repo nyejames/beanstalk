@@ -373,6 +373,26 @@ fn validate_fixture_contract(
                         backend_expectation.backend_id.as_str()
                     ));
                 }
+                // Failure backends never produce artifacts, so an authored golden_mode or any
+                // discovered file-backed golden is invalid. Reject before constructing
+                // ExpectedOutcome so the audit inventory cannot silently report the golden as
+                // absent while golden files linger on disk.
+                if backend_expectation.golden_mode.is_some() {
+                    return Err(format!(
+                        "Fixture '{}' backend '{}' uses mode = \"failure\" and must not author 'golden_mode'.",
+                        fixture_root.display(),
+                        backend_expectation.backend_id.as_str()
+                    ));
+                }
+                if has_golden_files {
+                    return Err(format!(
+                        "Fixture '{}' backend '{}' uses mode = \"failure\" but has golden artifacts in '{}'.",
+                        fixture_root.display(),
+                        backend_expectation.backend_id.as_str(),
+                        golden_dir_for_backend(fixture_root, backend_expectation.backend_id)
+                            .display()
+                    ));
+                }
             }
             ExpectationMode::Success => {
                 if backend_expectation.success_contract == Some(SuccessContract::AcceptanceOnly)

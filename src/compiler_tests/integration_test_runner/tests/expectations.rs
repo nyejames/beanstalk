@@ -63,6 +63,44 @@ fn failure_diagnostic_match_defaults_to_exact_and_is_retained() {
 }
 
 #[test]
+fn diagnostic_codes_reject_a_blank_identity_entry() {
+    let (root, case_root) = write_fixture(
+        "diagnostic_codes_blank",
+        "[backends.html]\nmode = \"failure\"\nwarnings = \"forbid\"\ndiagnostic_codes = [\"   \"]\n",
+    );
+
+    let Err(error) = load_canonical_case_specs(&case_root, None) else {
+        panic!("a blank diagnostic-code identity must be rejected");
+    };
+    assert!(
+        error.contains("empty 'diagnostic_codes' entry"),
+        "unexpected error: {error}"
+    );
+
+    fs::remove_dir_all(&root).expect("should clean up");
+}
+
+#[test]
+fn diagnostic_codes_keep_exact_multisets_and_duplicates() {
+    let (root, case_root) = write_fixture(
+        "diagnostic_codes_duplicates",
+        "[backends.html]\nmode = \"failure\"\nwarnings = \"forbid\"\ndiagnostic_codes = [\"BST-RULE-0044\", \"BST-RULE-0044\"]\n",
+    );
+
+    let cases = load_canonical_case_specs(&case_root, None)
+        .expect("duplicate diagnostic codes remain a valid exact multiset");
+    let super::super::types::ExpectedOutcome::Failure(expectation) = &cases[0].expected else {
+        panic!("case should have a failure expectation");
+    };
+    assert_eq!(
+        expectation.diagnostic_codes,
+        vec!["BST-RULE-0044".to_owned(), "BST-RULE-0044".to_owned()]
+    );
+
+    fs::remove_dir_all(&root).expect("should clean up");
+}
+
+#[test]
 fn structured_diagnostic_assertions_parse_and_normalize_locations() {
     let (root, case_root) = write_fixture(
         "structured_diagnostic_assertions",
@@ -334,22 +372,36 @@ fn exact_warning_codes_are_retained_as_a_typed_multiset_contract() {
 }
 
 #[test]
-fn exact_warning_codes_accept_an_authored_empty_multiset() {
+fn exact_warning_codes_reject_an_authored_empty_multiset() {
     let (root, case_root) = write_fixture(
         "exact_warning_codes_empty",
         "[backends.html]\nmode = \"success\"\nwarnings = \"exact\"\nwarning_codes = []\n",
     );
 
-    let cases = load_canonical_case_specs(&case_root, None)
-        .expect("an authored empty warning-code list should be accepted");
-    let super::super::types::ExpectedOutcome::Success(expectation) = &cases[0].expected else {
-        panic!("case should have a success expectation");
+    let Err(error) = load_canonical_case_specs(&case_root, None) else {
+        panic!("an authored empty warning-code list must not satisfy success completeness");
     };
-    assert_eq!(
-        expectation.warnings,
-        WarningExpectation::Exact(ExactWarningExpectation {
-            expected_codes: Vec::new(),
-        })
+    assert!(
+        error.contains("warnings = \"exact\"") && error.contains("empty"),
+        "unexpected error: {error}"
+    );
+
+    fs::remove_dir_all(&root).expect("should clean up");
+}
+
+#[test]
+fn exact_warning_codes_reject_a_blank_identity_entry() {
+    let (root, case_root) = write_fixture(
+        "exact_warning_codes_blank",
+        "[backends.html]\nmode = \"success\"\nwarnings = \"exact\"\nwarning_codes = [\"   \"]\n",
+    );
+
+    let Err(error) = load_canonical_case_specs(&case_root, None) else {
+        panic!("a blank warning-code identity must be rejected");
+    };
+    assert!(
+        error.contains("empty 'warning_codes' entry"),
+        "unexpected error: {error}"
     );
 
     fs::remove_dir_all(&root).expect("should clean up");

@@ -642,6 +642,52 @@ fn exact_warning_codes_match_warnings_retained_in_failed_compilation_messages() 
     let warning = CompilerDiagnostic::unreachable_match_arm(test_location(source_path.clone()));
     let error = CompilerDiagnostic::unexpected_trailing_comma(test_location(source_path));
     let messages = CompilerMessages::from_diagnostics(vec![error, warning], string_table);
+    // diagnostic_codes owns the error contract only; warning_codes independently owns the
+    // warning. A warning code must never appear in diagnostic_codes for a failed compilation.
+    let expectation = FailureExpectation {
+        warnings: exact_warning_expectation(&["BST-RULE-0022"]),
+        message_contains: Vec::new(),
+        diagnostic_codes: vec!["BST-SYNTAX-0003".to_owned()],
+        diagnostic_assertions: Vec::new(),
+        diagnostic_match: DiagnosticMatchMode::Exact,
+        diagnostic_match_reason: None,
+    };
+
+    let result = validate_failure_result(messages, &expectation, Path::new("."));
+
+    assert!(result.passed, "{:?}", result.failure_reason);
+}
+
+#[test]
+fn warnings_ignore_truly_ignores_warnings_on_a_failed_compilation() {
+    let mut string_table = StringTable::new();
+    let source_path = InternedPath::from_single_str("main.bst", &mut string_table);
+    let warning = CompilerDiagnostic::unreachable_match_arm(test_location(source_path.clone()));
+    let error = CompilerDiagnostic::unexpected_trailing_comma(test_location(source_path));
+    let messages = CompilerMessages::from_diagnostics(vec![error, warning], string_table);
+    let expectation = FailureExpectation {
+        warnings: WarningExpectation::Ignore,
+        message_contains: Vec::new(),
+        diagnostic_codes: vec!["BST-SYNTAX-0003".to_owned()],
+        diagnostic_assertions: Vec::new(),
+        diagnostic_match: DiagnosticMatchMode::Exact,
+        diagnostic_match_reason: None,
+    };
+
+    let result = validate_failure_result(messages, &expectation, Path::new("."));
+
+    assert!(result.passed, "{:?}", result.failure_reason);
+}
+
+#[test]
+fn warning_code_cannot_satisfy_failure_diagnostic_codes() {
+    let mut string_table = StringTable::new();
+    let source_path = InternedPath::from_single_str("main.bst", &mut string_table);
+    let warning = CompilerDiagnostic::unreachable_match_arm(test_location(source_path.clone()));
+    let error = CompilerDiagnostic::unexpected_trailing_comma(test_location(source_path));
+    let messages = CompilerMessages::from_diagnostics(vec![error, warning], string_table);
+    // Authoring the warning code as a diagnostic code must fail: the warning is not in the
+    // error-severity stream, so the multiset reports it as missing.
     let expectation = FailureExpectation {
         warnings: exact_warning_expectation(&["BST-RULE-0022"]),
         message_contains: Vec::new(),
@@ -653,7 +699,52 @@ fn exact_warning_codes_match_warnings_retained_in_failed_compilation_messages() 
 
     let result = validate_failure_result(messages, &expectation, Path::new("."));
 
-    assert!(result.passed, "{:?}", result.failure_reason);
+    assert!(
+        !result.passed,
+        "a warning code must not satisfy error diagnostic assertions"
+    );
+    let reason = result
+        .failure_reason
+        .as_deref()
+        .expect("a warning-as-error mismatch should report a reason");
+    assert!(
+        reason.contains("Missing codes") && reason.contains("BST-RULE-0022"),
+        "unexpected reason: {reason}"
+    );
+}
+
+#[test]
+fn warning_prose_cannot_satisfy_error_message_contains() {
+    let mut string_table = StringTable::new();
+    let source_path = InternedPath::from_single_str("main.bst", &mut string_table);
+    let warning = CompilerDiagnostic::unreachable_match_arm(test_location(source_path.clone()));
+    let error = CompilerDiagnostic::unexpected_trailing_comma(test_location(source_path));
+    let messages = CompilerMessages::from_diagnostics(vec![error, warning], string_table);
+    // The unreachable-match-arm warning prose must not satisfy message_contains because the
+    // fragment check only inspects error-severity diagnostics.
+    let expectation = FailureExpectation {
+        warnings: WarningExpectation::Ignore,
+        message_contains: vec!["Unreachable match arm".to_owned()],
+        diagnostic_codes: vec!["BST-SYNTAX-0003".to_owned()],
+        diagnostic_assertions: Vec::new(),
+        diagnostic_match: DiagnosticMatchMode::Exact,
+        diagnostic_match_reason: None,
+    };
+
+    let result = validate_failure_result(messages, &expectation, Path::new("."));
+
+    assert!(
+        !result.passed,
+        "warning prose must not satisfy error-only message_contains"
+    );
+    let reason = result
+        .failure_reason
+        .as_deref()
+        .expect("a warning-prose mismatch should report a reason");
+    assert!(
+        reason.contains("not found in any emitted error"),
+        "unexpected reason: {reason}"
+    );
 }
 
 // ─── Normalization unit tests ───────────────────────────────────────────────

@@ -193,6 +193,12 @@ fn parse_matrix_expectation_file(
         let flags = parse_case_flags(&backend_expectation.flags, path, &context)?;
         let artifact_assertions =
             parse_artifact_assertions(path, &context, &backend_expectation.artifact_assertions)?;
+        validate_code_identities(
+            path,
+            &context,
+            "diagnostic_codes",
+            &backend_expectation.diagnostic_codes,
+        )?;
         let diagnostic_assertions = parse_diagnostic_assertions(
             path,
             &context,
@@ -980,6 +986,16 @@ pub(crate) fn parse_warning_expectation(
                 ));
             };
 
+            if expected_codes.is_empty() {
+                return Err(format!(
+                    "Expectation file '{}' {}uses warnings = \"exact\" with an empty 'warning_codes' list; an exact warning contract must contain at least one warning identity.",
+                    path.display(),
+                    context_prefix
+                ));
+            }
+
+            validate_code_identities(path, context, "warning_codes", &expected_codes)?;
+
             Ok(WarningExpectation::Exact(ExactWarningExpectation {
                 expected_codes,
             }))
@@ -1046,4 +1062,34 @@ fn parse_artifacts_must_not_exist(
     }
 
     Ok(normalized)
+}
+
+/// Validates that every code identity is non-empty and non-whitespace.
+///
+/// WHAT: rejects blank `diagnostic_codes` entries while preserving exact multisets and duplicates.
+/// WHY: a blank diagnostic identity can never match a real compiler diagnostic code, so accepting
+///      it would let an authored contract pass without exercising the error stream.
+fn validate_code_identities(
+    path: &Path,
+    context: &str,
+    field_name: &str,
+    codes: &[String],
+) -> Result<(), String> {
+    let context_prefix = if context.is_empty() {
+        String::new()
+    } else {
+        format!("{context} ")
+    };
+
+    for code in codes {
+        if code.trim().is_empty() {
+            return Err(format!(
+                "Expectation file '{}' {}contains an empty '{field_name}' entry.",
+                path.display(),
+                context_prefix
+            ));
+        }
+    }
+
+    Ok(())
 }

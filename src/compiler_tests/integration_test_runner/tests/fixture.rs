@@ -529,12 +529,85 @@ fn accepts_success_fixture_with_exact_warning_contract() {
     fs::write(input_root.join("#page.bst"), "#[:ok]\n").expect("should write source");
     fs::write(
         case_root.join(EXPECT_FILE_NAME),
-        "[backends.html]\nmode = \"success\"\nwarnings = \"exact\"\nwarning_codes = []\n",
+        "[backends.html]\nmode = \"success\"\nwarnings = \"exact\"\nwarning_codes = [\"BST-RULE-0022\"]\n",
     )
     .expect("should write expect file");
 
     load_canonical_case_specs(&case_root, None)
-        .expect("exact-warning assertion-only fixture should be accepted");
+        .expect("a non-empty exact-warning contract should be accepted");
+
+    fs::remove_dir_all(&root).expect("should clean up");
+}
+
+#[test]
+fn rejects_failure_fixture_with_authored_golden_mode() {
+    let root = temp_dir("failure_golden_mode");
+    let case_root = root.join("case");
+    let input_root = case_root.join(INPUT_DIR_NAME);
+    let golden_root = case_root.join(GOLDEN_DIR_NAME).join("html");
+    fs::create_dir_all(&input_root).expect("should create input directory");
+    fs::create_dir_all(&golden_root).expect("should create golden directory");
+    fs::write(input_root.join("#page.bst"), "x = 1\n").expect("should write source");
+    fs::write(golden_root.join("index.html"), "<h1>ok</h1>\n").expect("should write golden file");
+    fs::write(
+        case_root.join(EXPECT_FILE_NAME),
+        "[backends.html]\nmode = \"failure\"\nwarnings = \"forbid\"\ndiagnostic_codes = [\"BST-RULE-0001\"]\ngolden_mode = \"strict\"\n",
+    )
+    .expect("should write expect file");
+
+    let Err(error) = load_canonical_case_specs(&case_root, None) else {
+        panic!("a failure backend with authored golden_mode must be rejected");
+    };
+    assert!(
+        error.contains("mode = \"failure\"") && error.contains("must not author 'golden_mode'"),
+        "unexpected error: {error}"
+    );
+
+    fs::remove_dir_all(&root).expect("should clean up");
+}
+
+#[test]
+fn rejects_failure_fixture_with_discovered_file_backed_golden() {
+    let root = temp_dir("failure_golden_files");
+    let case_root = root.join("case");
+    let input_root = case_root.join(INPUT_DIR_NAME);
+    let golden_root = case_root.join(GOLDEN_DIR_NAME).join("html");
+    fs::create_dir_all(&input_root).expect("should create input directory");
+    fs::create_dir_all(&golden_root).expect("should create golden directory");
+    fs::write(input_root.join("#page.bst"), "x = 1\n").expect("should write source");
+    fs::write(golden_root.join("index.html"), "<h1>ok</h1>\n").expect("should write golden file");
+    fs::write(
+        case_root.join(EXPECT_FILE_NAME),
+        "[backends.html]\nmode = \"failure\"\nwarnings = \"forbid\"\ndiagnostic_codes = [\"BST-RULE-0001\"]\n",
+    )
+    .expect("should write expect file");
+
+    let Err(error) = load_canonical_case_specs(&case_root, None) else {
+        panic!("a failure backend with discovered golden files must be rejected");
+    };
+    assert!(
+        error.contains("mode = \"failure\"") && error.contains("golden artifacts"),
+        "unexpected error: {error}"
+    );
+
+    fs::remove_dir_all(&root).expect("should clean up");
+}
+
+#[test]
+fn accepts_failure_fixture_without_any_golden() {
+    let root = temp_dir("failure_no_golden");
+    let case_root = root.join("case");
+    let input_root = case_root.join(INPUT_DIR_NAME);
+    fs::create_dir_all(&input_root).expect("should create input directory");
+    fs::write(input_root.join("#page.bst"), "x = 1\n").expect("should write source");
+    fs::write(
+        case_root.join(EXPECT_FILE_NAME),
+        "[backends.html]\nmode = \"failure\"\nwarnings = \"forbid\"\ndiagnostic_codes = [\"BST-RULE-0001\"]\n",
+    )
+    .expect("should write expect file");
+
+    load_canonical_case_specs(&case_root, None)
+        .expect("a failure backend without goldens should be accepted");
 
     fs::remove_dir_all(&root).expect("should clean up");
 }
