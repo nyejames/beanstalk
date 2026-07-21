@@ -100,35 +100,28 @@ fn empty_store_is_valid() {
 }
 
 #[test]
-fn store_with_valid_template_is_valid() {
+fn store_with_text_sequence_and_aggregate_output_roots_is_valid() {
     let mut store = TemplateIrStore::new();
     let mut string_table = StringTable::new();
 
-    let node_id = store.push_node(TemplateIrNode::new(
+    // Ordinary template/root: a single text node as the template root.
+    let text_root = store.push_node(TemplateIrNode::new(
         TemplateIrNodeKind::Text {
-            text: string_table.intern("test"),
+            text: string_table.intern("root"),
             byte_len: 4,
             origin: TemplateSegmentOrigin::Body,
         },
         empty_location(),
     ));
-
     store.push_template(TemplateIr::new(
-        node_id,
+        text_root,
         Style::default(),
         TemplateType::String,
         TemplateIrSummary::default(),
         empty_location(),
     ));
 
-    assert!(validate_tir_store(&store).is_none());
-}
-
-#[test]
-fn store_with_sequence_is_valid() {
-    let mut store = TemplateIrStore::new();
-    let mut string_table = StringTable::new();
-
+    // Sequence: a sequence root with two valid text children.
     let child_a = store.push_node(TemplateIrNode::new(
         TemplateIrNodeKind::Text {
             text: string_table.intern("a"),
@@ -137,7 +130,6 @@ fn store_with_sequence_is_valid() {
         },
         empty_location(),
     ));
-
     let child_b = store.push_node(TemplateIrNode::new(
         TemplateIrNodeKind::Text {
             text: string_table.intern("b"),
@@ -146,36 +138,27 @@ fn store_with_sequence_is_valid() {
         },
         empty_location(),
     ));
-
-    let sequence = store.push_node(TemplateIrNode::new(
+    let sequence_root = store.push_node(TemplateIrNode::new(
         TemplateIrNodeKind::Sequence {
             children: vec![child_a, child_b],
         },
         empty_location(),
     ));
-
     store.push_template(TemplateIr::new(
-        sequence,
+        sequence_root,
         Style::default(),
         TemplateType::StringFunction,
         TemplateIrSummary::default(),
         empty_location(),
     ));
 
-    assert!(validate_tir_store(&store).is_none());
-}
-
-#[test]
-fn store_with_aggregate_output_leaf_is_valid() {
-    let mut store = TemplateIrStore::new();
-
-    let aggregate_marker = store.push_node(TemplateIrNode::new(
+    // Aggregate-output leaf: an aggregate-output marker as the template root.
+    let aggregate_root = store.push_node(TemplateIrNode::new(
         TemplateIrNodeKind::AggregateOutput,
         empty_location(),
     ));
-
     store.push_template(TemplateIr::new(
-        aggregate_marker,
+        aggregate_root,
         Style::default(),
         TemplateType::String,
         TemplateIrSummary::default(),
@@ -522,9 +505,37 @@ fn populated_slot_site_render_root_out_of_bounds_is_invalid() {
 // -------------------------
 
 #[test]
-fn store_with_unique_slot_occurrence_ids_is_valid() {
+fn store_with_unique_occurrence_and_site_ids_is_valid() {
     let mut store = TemplateIrStore::new();
+    let mut string_table = StringTable::new();
+    let text_id = string_table.intern("");
 
+    // Two placeholder templates so child-template references resolve during
+    // node reference validation.
+    let placeholder_root = store.push_node(TemplateIrNode::new(
+        TemplateIrNodeKind::Text {
+            text: text_id,
+            byte_len: 0,
+            origin: TemplateSegmentOrigin::Body,
+        },
+        empty_location(),
+    ));
+    store.push_template(TemplateIr::new(
+        placeholder_root,
+        Style::default(),
+        TemplateType::String,
+        TemplateIrSummary::default(),
+        empty_location(),
+    ));
+    store.push_template(TemplateIr::new(
+        placeholder_root,
+        Style::default(),
+        TemplateType::String,
+        TemplateIrSummary::default(),
+        empty_location(),
+    ));
+
+    // Unique slot occurrence IDs (0 and 1) within one root.
     let slot_a = store.push_node(TemplateIrNode::new(
         TemplateIrNodeKind::Slot {
             placeholder: slot_placeholder(SlotKey::Default, SlotOccurrenceId::new(0)),
@@ -538,9 +549,53 @@ fn store_with_unique_slot_occurrence_ids_is_valid() {
         empty_location(),
     ));
 
+    // Unique child-template occurrence IDs (0 and 1) referencing distinct templates.
+    let child_a = store.push_node(TemplateIrNode::new(
+        TemplateIrNodeKind::ChildTemplate {
+            reference: TemplateTirChildReference::new(
+                TemplateIrId::new(0),
+                TemplateTirPhase::Parsed,
+                TemplateViewContext::default(),
+            ),
+            occurrence_id: ChildTemplateOccurrenceId::new(0),
+        },
+        empty_location(),
+    ));
+    let child_b = store.push_node(TemplateIrNode::new(
+        TemplateIrNodeKind::ChildTemplate {
+            reference: TemplateTirChildReference::new(
+                TemplateIrId::new(1),
+                TemplateTirPhase::Parsed,
+                TemplateViewContext::default(),
+            ),
+            occurrence_id: ChildTemplateOccurrenceId::new(1),
+        },
+        empty_location(),
+    ));
+
+    // Unique expression site IDs (0 and 1) within one root.
+    let expr_a = store.push_node(TemplateIrNode::new(
+        TemplateIrNodeKind::DynamicExpression {
+            expression: Box::new(bool_expression()),
+            origin: TemplateSegmentOrigin::Body,
+            reactive_subscription: None,
+            site_id: ExpressionSiteId::new(0),
+        },
+        empty_location(),
+    ));
+    let expr_b = store.push_node(TemplateIrNode::new(
+        TemplateIrNodeKind::DynamicExpression {
+            expression: Box::new(bool_expression()),
+            origin: TemplateSegmentOrigin::Body,
+            reactive_subscription: None,
+            site_id: ExpressionSiteId::new(1),
+        },
+        empty_location(),
+    ));
+
     let root = store.push_node(TemplateIrNode::new(
         TemplateIrNodeKind::Sequence {
-            children: vec![slot_a, slot_b],
+            children: vec![slot_a, slot_b, child_a, child_b, expr_a, expr_b],
         },
         empty_location(),
     ));
@@ -624,81 +679,6 @@ fn duplicate_slot_occurrence_in_unreachable_history_is_valid() {
 }
 
 #[test]
-fn store_with_unique_child_template_occurrence_ids_is_valid() {
-    let mut store = TemplateIrStore::new();
-
-    let mut string_table = StringTable::new();
-    let text_id = string_table.intern("");
-
-    // Two child-template nodes with distinct occurrence IDs and distinct
-    // template references. The templates must exist so reference validation
-    // passes.
-    let placeholder_root = store.push_node(TemplateIrNode::new(
-        TemplateIrNodeKind::Text {
-            text: text_id,
-            byte_len: 0,
-            origin: TemplateSegmentOrigin::Body,
-        },
-        empty_location(),
-    ));
-    store.push_template(TemplateIr::new(
-        placeholder_root,
-        Style::default(),
-        TemplateType::String,
-        TemplateIrSummary::default(),
-        empty_location(),
-    ));
-    store.push_template(TemplateIr::new(
-        placeholder_root,
-        Style::default(),
-        TemplateType::String,
-        TemplateIrSummary::default(),
-        empty_location(),
-    ));
-
-    let child_a_reference = TemplateTirChildReference::new(
-        TemplateIrId::new(0),
-        TemplateTirPhase::Parsed,
-        TemplateViewContext::default(),
-    );
-    let child_a = store.push_node(TemplateIrNode::new(
-        TemplateIrNodeKind::ChildTemplate {
-            reference: child_a_reference,
-            occurrence_id: ChildTemplateOccurrenceId::new(0),
-        },
-        empty_location(),
-    ));
-    let child_b_reference = TemplateTirChildReference::new(
-        TemplateIrId::new(1),
-        TemplateTirPhase::Parsed,
-        TemplateViewContext::default(),
-    );
-    let child_b = store.push_node(TemplateIrNode::new(
-        TemplateIrNodeKind::ChildTemplate {
-            reference: child_b_reference,
-            occurrence_id: ChildTemplateOccurrenceId::new(1),
-        },
-        empty_location(),
-    ));
-
-    let root = store.push_node(TemplateIrNode::new(
-        TemplateIrNodeKind::Sequence {
-            children: vec![child_a, child_b],
-        },
-        empty_location(),
-    ));
-    store.push_template(TemplateIr::new(
-        root,
-        Style::default(),
-        TemplateType::String,
-        TemplateIrSummary::default(),
-        empty_location(),
-    ));
-
-    assert!(validate_tir_store(&store).is_none());
-}
-
-#[test]
 fn store_with_duplicate_child_template_occurrence_ids_is_invalid() {
     let mut store = TemplateIrStore::new();
 
@@ -764,46 +744,6 @@ fn store_with_duplicate_child_template_occurrence_ids_is_invalid() {
     assert!(diagnostic.is_some());
     let msg = format!("{:?}", diagnostic.unwrap());
     assert!(msg.contains("duplicate child-template occurrence"));
-}
-
-#[test]
-fn store_with_unique_expression_site_ids_is_valid() {
-    let mut store = TemplateIrStore::new();
-
-    let expr_a = store.push_node(TemplateIrNode::new(
-        TemplateIrNodeKind::DynamicExpression {
-            expression: Box::new(bool_expression()),
-            origin: TemplateSegmentOrigin::Body,
-            reactive_subscription: None,
-            site_id: ExpressionSiteId::new(0),
-        },
-        empty_location(),
-    ));
-    let expr_b = store.push_node(TemplateIrNode::new(
-        TemplateIrNodeKind::DynamicExpression {
-            expression: Box::new(bool_expression()),
-            origin: TemplateSegmentOrigin::Body,
-            reactive_subscription: None,
-            site_id: ExpressionSiteId::new(1),
-        },
-        empty_location(),
-    ));
-
-    let root = store.push_node(TemplateIrNode::new(
-        TemplateIrNodeKind::Sequence {
-            children: vec![expr_a, expr_b],
-        },
-        empty_location(),
-    ));
-    store.push_template(TemplateIr::new(
-        root,
-        Style::default(),
-        TemplateType::String,
-        TemplateIrSummary::default(),
-        empty_location(),
-    ));
-
-    assert!(validate_tir_store(&store).is_none());
 }
 
 #[test]
