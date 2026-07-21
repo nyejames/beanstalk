@@ -30,13 +30,13 @@ Do not begin broad pruning while success intent, diagnostic multiplicity, warnin
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-coverage-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 14D final source-shaped-unit inventory and stale-helper closure
-LAST_ACCEPTED_COMMIT: `493571e42` (Phase 14C15q code)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; accepted code and plan checkpoint are committed; concurrent example-name work remains separately committed
+CURRENT_SLICE: Phase 14E targeted mutation probes
+LAST_ACCEPTED_COMMIT: `d112011f3` (Phase 14D code); concurrent Priya alignment accepted at `9518662e1`
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; accepted inventory cleanup and Priya alignment are committed; concurrent generated `docs/release/docs/errors/index.html` output is separately owned and preserved
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: unit-test ownership, pruning, compiler-stage boundaries, and final governance rules govern the next slice
-- code: the final TIR overlay group is complete; one exact coupled root/context owner and one exact no-slots fast-path owner remain, while two weak tests and their dead helper are removed; the complete source-shaped-unit inventory is next
+- code: the final source-shaped-unit inventory is complete across AST, HIR, borrow, build, backend, and TIR owners; one definition-only dev-server render seam was removed, and all remaining low-count public test seams have concrete callers; nine representative mutation probes are next
 ACCEPTANCE_CRITERIA:
 - every remaining full-source unit has a distinct hidden invariant, parser fact, stage boundary, or policy owner
 - units superseded by a stronger canonical integration primary are deleted with replacement evidence
@@ -44,7 +44,7 @@ ACCEPTANCE_CRITERIA:
 - HIR, build-system, backend, and final TIR units keep only their owning semantic relationships and hidden facts
 VALIDATION_STATE:
 - `just validate`: passed; cross-target Clippy, 3,344 Rust tests, 1,793 integration executions, docs check, and 28 benchmark cases
-- Phase 14C15q focused group: passed; 54 slot-composition tests
+- Phase 14D focused diagnostic-model group: passed; 70 tests
 - Phase 14B audit: passed; zero hard findings; 66 backend-only and 15 adversarial-only primary-less contract advisories
 - Priya expectation alignment: accepted at `6efac7012`; 13 stale Rust and integration expectation files now match renamed inputs
 DOCS_IMPACT: testing, validation, and contributor workflow aligned with final suite policy; progress matrix and index unchanged
@@ -52,7 +52,7 @@ BLOCKERS_OR_OPEN_DECISIONS: none; 81 contract families without a primary are int
 DELEGATION_DECISION: Ollama — bounded Phase 14 implementation slices
 NEXT_WORKER_ORDER: Ollama only; no provider substitution
 STOP_REASON: none
-NEXT_RESUME_ACTION: re-run the complete source-shaped-unit inventory, classify every remaining owner, and isolate any final stale-helper cleanup for Ollama
+NEXT_RESUME_ACTION: create a temporary detached worktree and run the nine required semantic mutation probes without committing deliberate faults
 
 ---
 
@@ -266,6 +266,7 @@ This file is a reloadable execution plan, not a command transcript.
 | Phase 14C15o TIR slot-overlay materialization and view-attachment units | `f3ac89d52` | Accepted | Named, positional, and repeated resolutions now assert exact occurrence identity, slot key, resolved kind, source identity, and store-owned source content; view attachment asserts the one-dimensional context and effective lookup boundary; two structural-expansion tests whose overlay/context results were unused were removed in favor of the exact six-node expansion owner; four overlay/view owners and 59 slot-composition tests remain; 3,349 Rust tests and 1,793 integration executions |
 | Phase 14C15p TIR single-pair slot-overlay test seam | `4335023aa` | Accepted | All three tests exercised only a `#[cfg(test)]` wrapper around already-covered routing, overlay materialization, and view-context primitives; the tests, final-caller wrapper, re-export/import, section prose, and stale future-state comment were removed; production remains owned by head-chain composition and merged overlay allocation; 56 slot-composition tests remain; 3,346 Rust tests and 1,793 integration executions |
 | Phase 14C15q TIR production head-chain overlay units | `493571e42` | Accepted | The single-receiver owner now proves the exact composed node tree and the exact occurrence/key/kind/source overlay against the same fill node with only the slot-resolution context dimension set; the no-slots owner retains the original-root plus `None` fast path; a trivial source-node non-mutation test and child-count-only structural parity test were removed with their dead explicit-reference helper/import; two production boundary owners and 54 slot-composition tests remain; 3,344 Rust tests and 1,793 integration executions |
+| Phase 14D final source-shaped-unit inventory and stale-helper closure | `d112011f3` | Accepted | All 3,344 current Rust tests were re-enumerated and cross-checked against the accepted AST, HIR, borrow, build, backend, and TIR ownership slices; retained source-shaped units protect parser/stage shape, semantic relationships, identities, side tables, policy, ABI, malformed invariants, or exact handoff facts; a public test-seam occurrence scan found one definition-only dev-server renderer wrapper, which was removed with its allowance/import while the exact context-aware test and production renderer remain; zero source-shaped units remain unclassified; 1,793 integration executions remain |
 
 ---
 
@@ -1310,11 +1311,21 @@ Resolve or explicitly document advisories for:
 
 ## Unit ownership final pass
 
-- [ ] Re-run the source-shaped-unit inventory.
-- [ ] Record why every remaining full-source unit exists.
-- [ ] Delete stale test-only helpers and production APIs.
-- [ ] Preserve final TIR exact-view/preparation/handoff owners without reopening architecture.
-- [ ] Confirm build-system units are policy-focused and HIR units assert semantic relationships.
+- [x] Re-run the source-shaped-unit inventory.
+- [x] Record why every remaining full-source unit exists.
+- [x] Delete stale test-only helpers and production APIs.
+- [x] Preserve final TIR exact-view/preparation/handoff owners without reopening architecture.
+- [x] Confirm build-system units are policy-focused and HIR units assert semantic relationships.
+
+### Phase 14D accepted inventory
+
+- Re-enumerated the 3,344 current Rust tests and cross-checked every source-shaped owner against the accepted Phase 7, Phase 8, Phase 13, and Phase 14C subsystem slices.
+- Retained frontend units own parser or stage shape, structured payloads, source mapping, semantic identity, and hidden environment facts.
+- Retained HIR and borrow units own CFG relationships, operation kinds, side-table transfer, joins, malformed invariants, and advisory ownership facts.
+- Retained build and backend units own discovery/orchestration policy, filesystem identity, target validation, lowering, helper demand, ABI, and artifact structure.
+- Retained TIR units own exact view identity, preparation, folding, wrapper and slot semantics, runtime handoff, and malformed internal authority without reopening accepted architecture.
+- A repository-wide `#[cfg(test)]` public-seam occurrence scan found one definition-only API. `render_diagnostics_html` and its dead-code allowance/import were removed at `d112011f3`; every remaining low-count seam has at least one concrete test owner.
+- Zero source-shaped units remain unclassified.
 
 ## Targeted mutation probes
 
@@ -1510,6 +1521,7 @@ Do not present lower counts or faster time as proof of correctness.
 | `slot_composition_tests::{overlay_materialization_preserves_structural_expansion,view_context_attachment_preserves_structural_expansion}` | Slot overlay allocation and context construction do not alter structural placeholder expansion | `slot_composition_tests::expand_preserves_non_slot_nodes`, which asserts the exact six-node output identity/order and the exact spliced contribution | `overlay_materializes_{named_slot_resolution,positional_slot_resolution,repeated_slot_sharing_source_list}` and `attach_view_context_carries_slot_resolution` retain the distinct overlay payload and view-read boundaries | `f3ac89d52` |
 | `slot_composition_tests::compose_tir_slot_resolution_context_{default_slot_matches_manual_sequence,named_slot_attaches_resolution,preserves_structural_expansion}` and the final-caller `compose_tir_slot_resolution_context` helper | A test-only single-pair wrapper bundled routing, overlay materialization, and context attachment | Production `compose_tir_head_chain_with_overlays` plus `allocate_slot_resolution_context`; accepted primitive overlay/view tests own the exact payload and one-dimensional context facts | `expand_preserves_non_slot_nodes` retains exact structural expansion independently | `4335023aa` |
 | `slot_composition_tests::{head_chain_preserves_the_effective_wrapper_view_identity,head_chain_with_overlays_preserves_structural_expansion}` and `build_child_template_node_with_reference` | Claimed wrapper-view preservation and structural parity at the production composed-root/context boundary | `head_chain_with_overlays_threads_slot_overlay_for_single_receiver`, strengthened to prove the exact composed structure and matching overlay occurrence/key/kind/source | exact `TirView` transition owners, accepted structural head-chain tests, and `expand_preserves_non_slot_nodes`; `head_chain_with_overlays_returns_none_when_no_slots_resolved` retains the distinct fast path | `493571e42` |
+| Test-only `compiler_messages::render::dev_server::render_diagnostics_html` wrapper | Constructed a plain diagnostic render context before delegating to the context-aware HTML renderer | `diagnostic_model_tests::diagnostic_code_and_severity_are_renderer_independent` calls `render_diagnostics_html_with_context`; production uses `render_compiler_messages_html` | none; the wrapper had no caller | `d112011f3` |
 
 ### Coverage gap and handoff ledger
 
