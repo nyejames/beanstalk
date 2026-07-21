@@ -32,7 +32,7 @@ ACTIVE_PLAN: `docs/roadmap/plans/compiler-test-suite-hardening-and-integration-c
 STATUS: active
 CURRENT_SLICE: Phase 14C15o TIR slot-overlay materialization and view-attachment ownership review
 LAST_ACCEPTED_COMMIT: `1adaf9ea2` (Phase 14C15n code)
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; accepted code is committed; this plan checkpoint is uncommitted; concurrent example-name work remains separately committed
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`; accepted code and plan checkpoint are committed; concurrent example-name work remains separately committed
 REQUIRED_RELOADS: startup files, this plan, and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: unit-test ownership, pruning, compiler-stage boundaries, and final governance rules govern the next slice
@@ -52,7 +52,7 @@ BLOCKERS_OR_OPEN_DECISIONS: none; 81 contract families without a primary are int
 DELEGATION_DECISION: Ollama — bounded Phase 14 implementation slices
 NEXT_WORKER_ORDER: Ollama only; no provider substitution
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit this plan checkpoint, then launch the six-test TIR slot-overlay materialization and view-attachment group through Ollama
+NEXT_RESUME_ACTION: launch the six-test TIR slot-overlay materialization and view-attachment group through Ollama
 
 ---
 
