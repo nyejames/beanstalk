@@ -1,27 +1,31 @@
 use super::super::ids::{TemplateIrId, TemplateIrNodeId, TemplateSlotPlanId, TemplateWrapperSetId};
 
 #[test]
-fn template_ir_id_round_trips_through_u32_bound() {
-    let id = TemplateIrId::new(42);
-    assert_eq!(id.index(), 42);
-}
+fn typed_ids_round_trip_through_u32_bound() {
+    // Each ID type owns a separate index space but shares one compact
+    // new(usize)/index() round-trip contract at the maximum compact value.
+    let maximum_index = u32::MAX as usize;
 
-#[test]
-fn template_ir_node_id_round_trips_through_u32_bound() {
-    let id = TemplateIrNodeId::new(0);
-    assert_eq!(id.index(), 0);
-}
-
-#[test]
-fn template_wrapper_set_id_round_trips_through_u32_bound() {
-    let id = TemplateWrapperSetId::new(100);
-    assert_eq!(id.index(), 100);
-}
-
-#[test]
-fn template_slot_plan_id_round_trips_through_u32_bound() {
-    let id = TemplateSlotPlanId::new(12);
-    assert_eq!(id.index(), 12);
+    assert_eq!(
+        TemplateIrId::new(maximum_index).index(),
+        maximum_index,
+        "TemplateIrId"
+    );
+    assert_eq!(
+        TemplateIrNodeId::new(maximum_index).index(),
+        maximum_index,
+        "TemplateIrNodeId"
+    );
+    assert_eq!(
+        TemplateWrapperSetId::new(maximum_index).index(),
+        maximum_index,
+        "TemplateWrapperSetId"
+    );
+    assert_eq!(
+        TemplateSlotPlanId::new(maximum_index).index(),
+        maximum_index,
+        "TemplateSlotPlanId"
+    );
 }
 
 #[test]

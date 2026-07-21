@@ -52,45 +52,12 @@ fn store_starts_empty() {
 }
 
 #[test]
-fn push_template_returns_sequential_ids() {
+fn push_returns_sequential_ids_per_collection() {
     let mut store = TemplateIrStore::new();
     let mut string_table = StringTable::new();
 
-    let node_id = store.push_node(TemplateIrNode::new(
-        TemplateIrNodeKind::Text {
-            text: string_table.intern("test"),
-            byte_len: 4,
-            origin: TemplateSegmentOrigin::Body,
-        },
-        empty_location(),
-    ));
-
-    let id_a = store.push_template(TemplateIr::new(
-        node_id,
-        Style::default(),
-        TemplateType::StringFunction,
-        TemplateIrSummary::default(),
-        empty_location(),
-    ));
-    let id_b = store.push_template(TemplateIr::new(
-        node_id,
-        Style::default(),
-        TemplateType::String,
-        TemplateIrSummary::default(),
-        empty_location(),
-    ));
-
-    assert_eq!(id_a.index(), 0);
-    assert_eq!(id_b.index(), 1);
-    assert_eq!(store.template_count(), 2);
-}
-
-#[test]
-fn push_node_returns_sequential_ids() {
-    let mut store = TemplateIrStore::new();
-    let mut string_table = StringTable::new();
-
-    let id_a = store.push_node(TemplateIrNode::new(
+    // Nodes allocate sequential TemplateIrNodeIds from their own index space.
+    let node_a = store.push_node(TemplateIrNode::new(
         TemplateIrNodeKind::Text {
             text: string_table.intern("abc"),
             byte_len: 3,
@@ -98,21 +65,40 @@ fn push_node_returns_sequential_ids() {
         },
         empty_location(),
     ));
-    let id_b = store.push_node(TemplateIrNode::new(
+    let node_b = store.push_node(TemplateIrNode::new(
         TemplateIrNodeKind::Sequence { children: vec![] },
         empty_location(),
     ));
-
-    assert_eq!(id_a.index(), 0);
-    assert_eq!(id_b.index(), 1);
+    assert_eq!(node_a.index(), 0);
+    assert_eq!(node_b.index(), 1);
     assert_eq!(store.node_count(), 2);
+
+    // Templates allocate sequential TemplateIrIds from a separate index space.
+    let template_a = store.push_template(TemplateIr::new(
+        node_a,
+        Style::default(),
+        TemplateType::StringFunction,
+        TemplateIrSummary::default(),
+        empty_location(),
+    ));
+    let template_b = store.push_template(TemplateIr::new(
+        node_a,
+        Style::default(),
+        TemplateType::String,
+        TemplateIrSummary::default(),
+        empty_location(),
+    ));
+    assert_eq!(template_a.index(), 0);
+    assert_eq!(template_b.index(), 1);
+    assert_eq!(store.template_count(), 2);
 }
 
 #[test]
-fn get_template_returns_stored_entry() {
+fn typed_retrieval_returns_stored_entry() {
     let mut store = TemplateIrStore::new();
     let mut string_table = StringTable::new();
 
+    // Template: round-trips the root node id through get_template.
     let node_id = store.push_node(TemplateIrNode::new(
         TemplateIrNodeKind::Text {
             text: string_table.intern(""),
@@ -121,33 +107,61 @@ fn get_template_returns_stored_entry() {
         },
         empty_location(),
     ));
-
-    let id = store.push_template(TemplateIr::new(
+    let template_id = store.push_template(TemplateIr::new(
         node_id,
         Style::default(),
         TemplateType::String,
         TemplateIrSummary::default(),
         empty_location(),
     ));
+    let retrieved_template = store
+        .get_template(template_id)
+        .expect("template should exist");
+    assert_eq!(retrieved_template.root, node_id);
 
-    let retrieved = store.get_template(id).expect("template should exist");
-    assert_eq!(retrieved.root, node_id);
-}
-
-#[test]
-fn get_node_returns_stored_entry() {
-    let mut store = TemplateIrStore::new();
-
-    let id = store.push_node(TemplateIrNode::new(
+    // Node: round-trips the exact node kind through get_node.
+    let sequence_node_id = store.push_node(TemplateIrNode::new(
         TemplateIrNodeKind::Sequence { children: vec![] },
         empty_location(),
     ));
-
-    let retrieved = store.get_node(id).expect("node should exist");
+    let retrieved_node = store.get_node(sequence_node_id).expect("node should exist");
     assert!(matches!(
-        retrieved.kind,
+        retrieved_node.kind,
         TemplateIrNodeKind::Sequence { .. }
     ));
+
+    // Wrapper set: round-trips effective wrapper refs through get_wrapper_set.
+    let wrapper_root = build_finalized_tir_template(&mut store);
+    let wrapper_set_id = store.push_wrapper_set(super::super::store::TemplateWrapperSet {
+        wrappers: vec![TemplateWrapperReference::new(
+            wrapper_root,
+            TemplateTirPhase::Finalized,
+            TemplateViewContext::default(),
+        )],
+    });
+    let retrieved_wrapper_set = store
+        .get_wrapper_set(wrapper_set_id)
+        .expect("wrapper set should exist");
+    assert_eq!(retrieved_wrapper_set.wrappers.len(), 1);
+    assert_eq!(retrieved_wrapper_set.wrappers[0].root, wrapper_root);
+
+    // Slot plan: round-trips the routing plan through get_slot_plan.
+    let slot_plan_id = store.push_slot_plan(runtime_slot_plan());
+    let retrieved_slot_plan = store
+        .get_slot_plan(slot_plan_id)
+        .expect("slot plan should exist");
+    assert_eq!(retrieved_slot_plan.location, empty_location());
+    assert!(retrieved_slot_plan.contribution_sources.is_empty());
+    assert_eq!(retrieved_slot_plan.slot_sites.len(), 1);
+    assert_eq!(retrieved_slot_plan.slot_sites[0].site, RuntimeSlotSiteId(0));
+    assert_eq!(retrieved_slot_plan.slot_sites[0].key, SlotKey::Default);
+    assert!(
+        retrieved_slot_plan.slot_sites[0]
+            .render_plan
+            .pieces
+            .is_empty()
+    );
+    assert_eq!(retrieved_slot_plan.slot_sites[0].location, empty_location());
 }
 
 #[test]
@@ -173,35 +187,6 @@ fn out_of_bounds_lookup_returns_none() {
             .get_slot_plan(super::super::ids::TemplateSlotPlanId::new(99))
             .is_none()
     );
-}
-
-#[test]
-fn get_wrapper_set_returns_stored_entry() {
-    let mut store = TemplateIrStore::new();
-
-    let wrapper_id = build_finalized_tir_template(&mut store);
-    let id = store.push_wrapper_set(super::super::store::TemplateWrapperSet {
-        wrappers: vec![TemplateWrapperReference::new(
-            wrapper_id,
-            TemplateTirPhase::Finalized,
-            TemplateViewContext::default(),
-        )],
-    });
-
-    let retrieved = store.get_wrapper_set(id).expect("wrapper set should exist");
-    assert_eq!(retrieved.wrappers.len(), 1);
-    assert_eq!(retrieved.wrappers[0].root, wrapper_id);
-}
-
-#[test]
-fn get_slot_plan_returns_stored_entry() {
-    let mut store = TemplateIrStore::new();
-
-    let id = store.push_slot_plan(runtime_slot_plan());
-
-    let retrieved = store.get_slot_plan(id).expect("slot plan should exist");
-    assert_eq!(retrieved.location, empty_location());
-    assert_eq!(retrieved.slot_sites.len(), 1);
 }
 
 #[test]
