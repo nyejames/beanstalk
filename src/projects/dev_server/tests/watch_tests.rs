@@ -73,7 +73,14 @@ fn directory_scope_watches_config_entry_root_and_package_folders() {
     let root = temp_dir("directory_scope");
     let output_dir = root.join("dev");
     fs::create_dir_all(root.join("src")).expect("should create src dir");
-    fs::create_dir_all(root.join("assets")).expect("should create assets dir");
+    fs::create_dir_all(root.join("assets/vendor")).expect("should create assets dir");
+    fs::write(root.join("src/helper.js"), "export function draw() {}")
+        .expect("should write entry-root js file");
+    fs::write(
+        root.join("assets/vendor/lib.js"),
+        "export function lib() {}",
+    )
+    .expect("should write nested package-folder js file");
     let canonical_root = root.canonicalize().expect("root should canonicalize");
 
     let mut config = Config::new(root.clone());
@@ -84,8 +91,11 @@ fn directory_scope_watches_config_entry_root_and_package_folders() {
 
     assert!(scope.watches_path(&canonical_root.join(CONFIG_FILE_NAME)));
     assert!(scope.watches_path(&canonical_root.join("src/main.bst")));
+    assert!(scope.watches_path(&canonical_root.join("src/helper.js")));
     assert!(scope.watches_path(&canonical_root.join("assets/logo.png")));
+    assert!(scope.watches_path(&canonical_root.join("assets/vendor/lib.js")));
     assert!(!scope.watches_path(&canonical_root.join("target/debug/app")));
+    assert!(!scope.watches_path(&canonical_root.join("dev/bundle.js")));
 
     fs::remove_dir_all(&root).expect("should remove temp test dir");
 }
@@ -162,46 +172,6 @@ fn manual_watch_session_coalesces_bursty_changes() {
         .wait_for_stable_change(0)
         .expect("manual watch session should settle");
     assert_eq!(seen_revision, 3);
-}
-
-#[test]
-fn directory_scope_watches_js_files_under_entry_root() {
-    let root = temp_dir("watch_js_entry_root");
-    let output_dir = root.join("dev");
-    fs::create_dir_all(root.join("src")).expect("should create src dir");
-    fs::write(root.join("src/helper.js"), "export function draw() {}").expect("should write js");
-    let canonical_root = root.canonicalize().expect("root should canonicalize");
-
-    let mut config = Config::new(root.clone());
-    config.entry_root = PathBuf::from("src");
-
-    let scope = WatchScope::derive(&root, Some(&config), &output_dir);
-
-    assert!(scope.watches_path(&canonical_root.join("src/helper.js")));
-    assert!(!scope.watches_path(&canonical_root.join("dev/bundle.js")));
-
-    fs::remove_dir_all(&root).expect("should remove temp test dir");
-}
-
-#[test]
-fn directory_scope_watches_js_files_under_package_folders() {
-    let root = temp_dir("watch_js_package");
-    let output_dir = root.join("dev");
-    fs::create_dir_all(root.join("src")).expect("should create src dir");
-    fs::create_dir_all(root.join("lib/vendor")).expect("should create lib dir");
-    fs::write(root.join("lib/vendor/lib.js"), "export function draw() {}")
-        .expect("should write js");
-    let canonical_root = root.canonicalize().expect("root should canonicalize");
-
-    let mut config = Config::new(root.clone());
-    config.entry_root = PathBuf::from("src");
-    config.package_folders = vec![PathBuf::from("lib")];
-
-    let scope = WatchScope::derive(&root, Some(&config), &output_dir);
-
-    assert!(scope.watches_path(&canonical_root.join("lib/vendor/lib.js")));
-
-    fs::remove_dir_all(&root).expect("should remove temp test dir");
 }
 
 #[test]

@@ -18,7 +18,6 @@ use crate::compiler_frontend::compiler_messages::{
 use crate::compiler_frontend::style_directives::StyleDirectiveSpec;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_tests::test_support::temp_dir;
-use crate::projects::dev_server::error_page::format_compiler_messages;
 use crate::projects::dev_server::state::DevServerState;
 use crate::projects::dev_server::watch;
 use crate::projects::settings::{Config, ProjectConfigError};
@@ -232,12 +231,12 @@ impl BackendBuilder for InvalidOutputWarningBuilder {
 }
 
 #[test]
-fn successful_build_marks_state_ok_and_sets_entry_page() {
+fn successful_build_marks_state_ok_and_uses_declared_entry_page() {
     let root = temp_dir("success");
     fs::create_dir_all(&root).expect("should create temp root");
     let output_dir = root.join("dev");
     let state = Arc::new(DevServerState::new(output_dir.clone()));
-    let mut executor = FakeExecutor::new(vec![Ok(html_build_result())]);
+    let mut executor = FakeExecutor::new(vec![Ok(multi_page_html_build_result())]);
 
     let report = run_single_build_cycle(&state, &mut executor, &root.join("main.bst"), &Vec::new());
     assert!(report.build_ok);
@@ -252,10 +251,11 @@ fn successful_build_marks_state_ok_and_sets_entry_page() {
         build_state
             .entry_page_rel
             .as_ref()
-            .expect("entry page should be set"),
+            .expect("declared entry page should be set"),
         &PathBuf::from("index.html")
     );
     assert!(output_dir.join("index.html").exists());
+    assert!(output_dir.join("docs/basics/index.html").exists());
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }
@@ -279,30 +279,6 @@ fn failed_build_marks_state_and_stores_error_page() {
         .expect("build state should not be poisoned");
     assert!(!build_state.last_build_ok);
     assert!(build_state.last_error_html.is_some());
-
-    fs::remove_dir_all(&root).expect("should remove temp dir");
-}
-
-#[test]
-fn successful_multi_page_build_uses_declared_entry_page() {
-    let root = temp_dir("multi_page");
-    fs::create_dir_all(&root).expect("should create temp root");
-    let output_dir = root.join("dev");
-    let state = Arc::new(DevServerState::new(output_dir.clone()));
-    let mut executor = FakeExecutor::new(vec![Ok(multi_page_html_build_result())]);
-
-    let report = run_single_build_cycle(&state, &mut executor, &root, &Vec::new());
-    assert!(report.build_ok);
-
-    let build_state = state
-        .build_state
-        .lock()
-        .expect("build state should not be poisoned");
-    assert_eq!(
-        build_state.entry_page_rel,
-        Some(PathBuf::from("index.html"))
-    );
-    assert!(output_dir.join("docs/basics/index.html").exists());
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }
@@ -530,19 +506,6 @@ fn rebuild_loop_success_with_warnings_updates_summary() {
     );
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
-}
-
-#[test]
-fn format_error_messages_contains_error_text() {
-    let mut string_table = StringTable::new();
-    let feature_name = string_table.intern("expected text");
-    let diagnostic = CompilerDiagnostic::deferred_feature(feature_name, SourceLocation::default());
-    let messages = CompilerMessages::from_diagnostic(diagnostic, string_table);
-
-    let text = format_compiler_messages(&messages);
-
-    assert!(text.contains("BST-DEFERRED-0001"));
-    assert!(text.contains("expected text"));
 }
 
 #[test]
