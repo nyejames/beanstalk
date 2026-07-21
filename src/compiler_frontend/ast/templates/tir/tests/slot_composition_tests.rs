@@ -1396,106 +1396,51 @@ fn mixed_explicit_inserts_and_loose_content_are_bucketed() {
 //  Expansion Tests
 // -------------------------
 
+/// Exercises all three slot-key replacement branches in declaration order.
 #[test]
-fn expand_default_slot_with_single_contribution() {
-    let mut string_table = StringTable::new();
-    let mut store = TemplateIrStore::new();
-
-    let wrapper = build_wrapper_with_slot_sequence(&mut store, vec![SlotKey::Default]);
-    let contribution = build_single_text_template(&mut store, &mut string_table, "filled");
-
-    let routed = RoutedTirSlotContributions {
-        schema: TirSlotSchema {
-            has_default_slot: true,
-            ..TirSlotSchema::default()
-        },
-        contributions: TirSlotContributions {
-            default_nodes: vec![template_root_node_id(contribution, &store)],
-            ..TirSlotContributions::default()
-        },
-    };
-
-    let expanded_root = expand_tir_slot_placeholders(&mut store, wrapper, &routed, &string_table)
-        .expect("expansion should succeed");
-
-    let child_kinds = root_child_kinds_for_node(expanded_root, &store);
-    assert_eq!(child_kinds.len(), 1);
-    assert!(
-        matches!(child_kinds[0], TemplateIrNodeKind::Text { .. }),
-        "default slot contribution should be spliced into the wrapper root"
-    );
-    assert_eq!(
-        text_node_text(
-            root_child_node_ids_for_node(expanded_root, &store)[0],
-            &store,
-            &string_table
-        ),
-        Some("filled".to_owned())
-    );
-}
-
-#[test]
-fn expand_named_slot_with_contribution() {
+fn expand_routes_each_slot_key_branch_to_its_contribution() {
     let mut string_table = StringTable::new();
     let name = string_table.intern("title");
     let mut store = TemplateIrStore::new();
 
-    let wrapper = build_wrapper_with_slot_sequence(&mut store, vec![SlotKey::Named(name)]);
-    let contribution = build_single_text_template(&mut store, &mut string_table, "heading");
-
-    let routed = RoutedTirSlotContributions {
-        schema: TirSlotSchema {
-            named_slots: [name].into_iter().collect(),
-            ..TirSlotSchema::default()
-        },
-        contributions: TirSlotContributions {
-            named_nodes: [(name, vec![template_root_node_id(contribution, &store)])]
-                .into_iter()
-                .collect(),
-            ..TirSlotContributions::default()
-        },
-    };
-
-    let expanded_root = expand_tir_slot_placeholders(&mut store, wrapper, &routed, &string_table)
-        .expect("expansion should succeed");
-
-    let sequence_children = children_of_sequence_node(expanded_root, &store);
-    assert_eq!(sequence_children.len(), 1);
-    assert_eq!(
-        text_node_text(sequence_children[0], &store, &string_table),
-        Some("heading".to_owned())
+    let wrapper = build_wrapper_with_slot_sequence(
+        &mut store,
+        vec![
+            SlotKey::Default,
+            SlotKey::Named(name),
+            SlotKey::Positional(0),
+        ],
     );
-}
 
-#[test]
-fn expand_positional_slot_with_contribution() {
-    let mut string_table = StringTable::new();
-    let mut store = TemplateIrStore::new();
-
-    let wrapper = build_wrapper_with_slot_sequence(&mut store, vec![SlotKey::Positional(0)]);
-    let contribution = build_single_text_template(&mut store, &mut string_table, "first");
+    let default_contribution = build_single_text_template(&mut store, &mut string_table, "filled");
+    let named_contribution = build_single_text_template(&mut store, &mut string_table, "heading");
+    let positional_contribution =
+        build_single_text_template(&mut store, &mut string_table, "first");
+    let default_node = template_root_node_id(default_contribution, &store);
+    let named_node = template_root_node_id(named_contribution, &store);
+    let positional_node = template_root_node_id(positional_contribution, &store);
 
     let routed = RoutedTirSlotContributions {
         schema: TirSlotSchema {
+            has_default_slot: true,
+            named_slots: [name].into_iter().collect(),
             positional_slots: [0].into_iter().collect(),
-            ..TirSlotSchema::default()
         },
         contributions: TirSlotContributions {
-            positional_nodes: [(0, vec![template_root_node_id(contribution, &store)])]
-                .into_iter()
-                .collect(),
-            ..TirSlotContributions::default()
+            default_nodes: vec![default_node],
+            named_nodes: [(name, vec![named_node])].into_iter().collect(),
+            positional_nodes: [(0, vec![positional_node])].into_iter().collect(),
         },
     };
 
     let expanded_root = expand_tir_slot_placeholders(&mut store, wrapper, &routed, &string_table)
         .expect("expansion should succeed");
 
-    let sequence_children = children_of_sequence_node(expanded_root, &store);
-    assert_eq!(sequence_children.len(), 1);
+    let children = root_child_node_ids_for_node(expanded_root, &store);
     assert_eq!(
-        text_node_text(sequence_children[0], &store, &string_table),
-        Some("first".to_owned())
+        children,
+        vec![default_node, named_node, positional_node],
+        "each slot must splice only its exact contribution in declaration order"
     );
 }
 
@@ -1518,11 +1463,21 @@ fn missing_slot_renders_as_empty() {
     let expanded_root = expand_tir_slot_placeholders(&mut store, wrapper, &routed, &string_table)
         .expect("expansion should succeed");
 
-    let sequence_children = children_of_sequence_node(expanded_root, &store);
-    assert!(
-        sequence_children.is_empty(),
-        "missing slot should expand to an empty Sequence node"
-    );
+    // A named slot with no routed contributions expands to a fresh empty
+    // Sequence node, not the original placeholder and not a dropped child.
+    match &store
+        .get_node(expanded_root)
+        .expect("expanded root should exist")
+        .kind
+    {
+        TemplateIrNodeKind::Sequence { children } => {
+            assert!(
+                children.is_empty(),
+                "missing slot should expand to an empty Sequence node"
+            );
+        }
+        other => panic!("expected empty Sequence root for a missing slot, found {other:?}"),
+    }
 }
 
 #[test]
@@ -1662,55 +1617,23 @@ fn repeated_slot_replays_same_contributions() {
     }
 }
 
+/// Proves the nested child-template clone/reuse decision in one parent tree.
 #[test]
-fn mixed_slots_and_text() {
-    let mut string_table = StringTable::new();
-    let mut store = TemplateIrStore::new();
-
-    let wrapper = build_text_slot_text_wrapper(&mut store, &mut string_table, SlotKey::Default);
-    let contribution = build_single_text_template(&mut store, &mut string_table, "body");
-
-    let routed = RoutedTirSlotContributions {
-        schema: TirSlotSchema {
-            has_default_slot: true,
-            ..TirSlotSchema::default()
-        },
-        contributions: TirSlotContributions {
-            default_nodes: vec![template_root_node_id(contribution, &store)],
-            ..TirSlotContributions::default()
-        },
-    };
-
-    let expanded_root = expand_tir_slot_placeholders(&mut store, wrapper, &routed, &string_table)
-        .expect("expansion should succeed");
-
-    let child_kinds = root_child_kinds_for_node(expanded_root, &store);
-    assert_eq!(child_kinds.len(), 3);
-    assert!(matches!(child_kinds[0], TemplateIrNodeKind::Text { .. }));
-    assert!(
-        matches!(child_kinds[1], TemplateIrNodeKind::Text { .. }),
-        "slot contribution should be spliced between the surrounding text nodes"
-    );
-    assert!(matches!(child_kinds[2], TemplateIrNodeKind::Text { .. }));
-
-    let root_children = root_child_node_ids_for_node(expanded_root, &store);
-    assert_eq!(
-        text_node_text(root_children[1], &store, &string_table),
-        Some("body".to_owned())
-    );
-}
-
-#[test]
-fn nested_child_template_with_slots_is_expanded() {
+fn nested_child_template_clone_vs_reuse_by_slot_presence() {
     let mut string_table = StringTable::new();
     let name = string_table.intern("inner");
     let mut store = TemplateIrStore::new();
 
-    let inner_wrapper = build_wrapper_with_slot_sequence(&mut store, vec![SlotKey::Named(name)]);
+    let slot_bearing_child =
+        build_wrapper_with_slot_sequence(&mut store, vec![SlotKey::Named(name)]);
+    let slot_less_child = build_single_text_template(&mut store, &mut string_table, "no slots");
+
     let parent_wrapper = {
         let mut builder = TemplateIrBuilder::new(&mut store);
-        let child_reference = builder.push_child_template_node(inner_wrapper, empty_location());
-        let root = builder.push_sequence_node(vec![child_reference], empty_location());
+        let slot_child_ref = builder.push_child_template_node(slot_bearing_child, empty_location());
+        let no_slot_child_ref = builder.push_child_template_node(slot_less_child, empty_location());
+        let root =
+            builder.push_sequence_node(vec![slot_child_ref, no_slot_child_ref], empty_location());
         builder.finish_template(
             root,
             Style::default(),
@@ -1720,9 +1643,8 @@ fn nested_child_template_with_slots_is_expanded() {
         )
     };
 
-    let contribution_template =
-        build_single_text_template(&mut store, &mut string_table, "inner text");
-    let contribution_node_id = template_root_node_id(contribution_template, &store);
+    let contribution = build_single_text_template(&mut store, &mut string_table, "inner text");
+    let contribution_node_id = template_root_node_id(contribution, &store);
 
     let routed = RoutedTirSlotContributions {
         schema: TirSlotSchema {
@@ -1740,84 +1662,57 @@ fn nested_child_template_with_slots_is_expanded() {
             .expect("expansion should succeed");
 
     let parent_children = root_child_node_ids_for_node(expanded_root, &store);
-    assert_eq!(parent_children.len(), 1);
+    assert_eq!(
+        parent_children.len(),
+        2,
+        "parent should keep both child template references in order"
+    );
 
-    let expanded_child_id = match &store
+    // With-slots child: expansion clones it into a new expanded template entry
+    // and splices the contribution into the cloned root.
+    let expanded_slot_child_template_id = match &store
         .get_node(parent_children[0])
-        .expect("child node should exist")
+        .expect("slot-bearing child node should exist")
         .kind
     {
         TemplateIrNodeKind::ChildTemplate { reference, .. } => reference.root,
-        other => panic!("expected ChildTemplate node, found {other:?}"),
+        other => panic!("expected ChildTemplate node for slot-bearing child, found {other:?}"),
     };
-
     assert_ne!(
-        expanded_child_id, inner_wrapper,
-        "child template should be a new expanded entry"
+        expanded_slot_child_template_id, slot_bearing_child,
+        "slot-bearing child should clone into a new expanded template entry"
     );
-
-    let expanded_child_root_children = root_child_kinds(expanded_child_id, &store);
-    assert_eq!(expanded_child_root_children.len(), 1);
+    let expanded_slot_child_children = root_child_kinds(expanded_slot_child_template_id, &store);
+    assert_eq!(expanded_slot_child_children.len(), 1);
     assert!(
         matches!(
-            expanded_child_root_children[0],
+            expanded_slot_child_children[0],
             TemplateIrNodeKind::Text { .. }
         ),
-        "inner slot contribution should be spliced into the child template root"
+        "inner slot contribution should be spliced into the cloned child root"
     );
     assert_eq!(
         text_node_text(
-            root_child_node_ids(expanded_child_id, &store)[0],
+            root_child_node_ids(expanded_slot_child_template_id, &store)[0],
             &store,
             &string_table
         ),
         Some("inner text".to_owned())
     );
-}
 
-#[test]
-fn nested_child_template_without_slots_is_unchanged() {
-    let mut string_table = StringTable::new();
-    let mut store = TemplateIrStore::new();
-
-    let inner_template = build_single_text_template(&mut store, &mut string_table, "no slots");
-    let parent_wrapper = {
-        let mut builder = TemplateIrBuilder::new(&mut store);
-        let child_reference = builder.push_child_template_node(inner_template, empty_location());
-        let root = builder.push_sequence_node(vec![child_reference], empty_location());
-        builder.finish_template(
-            root,
-            Style::default(),
-            TemplateType::String,
-            TemplateIrSummary::default(),
-            empty_location(),
-        )
-    };
-
-    let routed = RoutedTirSlotContributions {
-        schema: TirSlotSchema::default(),
-        contributions: TirSlotContributions::default(),
-    };
-
-    let expanded_root =
-        expand_tir_slot_placeholders(&mut store, parent_wrapper, &routed, &string_table)
-            .expect("expansion should succeed");
-
-    let parent_children = root_child_node_ids_for_node(expanded_root, &store);
-    assert_eq!(parent_children.len(), 1);
-
-    let child_id = match &store
-        .get_node(parent_children[0])
-        .expect("child node should exist")
+    // Without-slots child: expansion leaves the reference unchanged because
+    // the child has no slot composition work.
+    let unchanged_child_template_id = match &store
+        .get_node(parent_children[1])
+        .expect("slot-less child node should exist")
         .kind
     {
         TemplateIrNodeKind::ChildTemplate { reference, .. } => reference.root,
-        other => panic!("expected ChildTemplate node, found {other:?}"),
+        other => panic!("expected ChildTemplate node for slot-less child, found {other:?}"),
     };
-
     assert_eq!(
-        child_id, inner_template,
-        "child template without slots should keep its original ID"
+        unchanged_child_template_id, slot_less_child,
+        "slot-less child should keep its original template ID"
     );
 }
 
@@ -2053,10 +1948,10 @@ fn expand_preserves_non_slot_nodes() {
             children: vec![
                 text_node,
                 aggregate_node,
+                slot_node,
                 loop_control_node,
                 dynamic_node,
                 runtime_slot_site,
-                slot_node,
             ],
         },
         empty_location(),
@@ -2071,6 +1966,7 @@ fn expand_preserves_non_slot_nodes() {
     ));
 
     let contribution = build_single_text_template(&mut store, &mut string_table, "only slot");
+    let contribution_node = template_root_node_id(contribution, &store);
 
     let routed = RoutedTirSlotContributions {
         schema: TirSlotSchema {
@@ -2078,7 +1974,7 @@ fn expand_preserves_non_slot_nodes() {
             ..TirSlotSchema::default()
         },
         contributions: TirSlotContributions {
-            default_nodes: vec![template_root_node_id(contribution, &store)],
+            default_nodes: vec![contribution_node],
             ..TirSlotContributions::default()
         },
     };
@@ -2087,34 +1983,43 @@ fn expand_preserves_non_slot_nodes() {
         .expect("expansion should succeed");
 
     let child_kinds = root_child_kinds_for_node(expanded_root, &store);
+    let child_ids = root_child_node_ids_for_node(expanded_root, &store);
+    assert_eq!(
+        child_ids,
+        vec![
+            text_node,
+            aggregate_node,
+            contribution_node,
+            loop_control_node,
+            dynamic_node,
+            runtime_slot_site,
+        ],
+        "expansion must preserve every non-slot node identity and splice the exact contribution"
+    );
     assert_eq!(child_kinds.len(), 6);
     assert!(matches!(child_kinds[0], TemplateIrNodeKind::Text { .. }));
     assert!(matches!(
         child_kinds[1],
         TemplateIrNodeKind::AggregateOutput
     ));
+    assert!(
+        matches!(child_kinds[2], TemplateIrNodeKind::Text { .. }),
+        "slot contribution should be spliced between surrounding non-slot nodes without a nested sequence"
+    );
     assert!(matches!(
-        child_kinds[2],
+        child_kinds[3],
         TemplateIrNodeKind::LoopControl { .. }
     ));
     assert!(matches!(
-        child_kinds[3],
+        child_kinds[4],
         TemplateIrNodeKind::DynamicExpression { .. }
     ));
     assert!(matches!(
-        child_kinds[4],
+        child_kinds[5],
         TemplateIrNodeKind::RuntimeSlotSite { .. }
     ));
-    assert!(
-        matches!(child_kinds[5], TemplateIrNodeKind::Text { .. }),
-        "slot contribution should be spliced without wrapping it in a nested sequence"
-    );
     assert_eq!(
-        text_node_text(
-            root_child_node_ids_for_node(expanded_root, &store)[5],
-            &store,
-            &string_table
-        ),
+        text_node_text(child_ids[2], &store, &string_table),
         Some("only slot".to_owned())
     );
 }
