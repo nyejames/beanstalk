@@ -12,12 +12,13 @@ Use the [Progress Matrix](docs/src/docs/progress/#page.bst) as a reference for w
 ## Active implementation work
 
 - [Canonical module compilation and scoped packages](./plans/canonical-module-compilation-and-scoped-packages-plan.md)
-- [Compiler diagnostics improvements](./plans/compiler-diagnostics-improvement-plan.md)
 
 ## Queued implementation chain
 
+- [TIR follow up cleanup](docs/roadmap/plans/tir-corrections-and-simplification-plan.md)
 - [Project config, imported build values and anonymous records](./plans/import_values_anonymous_records_plan.md)
 - [Diagnostics and tokens optimised memory layout plan](docs/roadmap/plans/compiler-source-token-and-diagnostic-data-layout-plan.md)
+- [Compiler diagnostics improvements](./plans/compiler-diagnostics-improvement-plan.md)
 - [Entry-local config blocks and runtime title](./plans/entry-config-blocks-runtime-title-plan.md)
 - [Number and numeric semantics](./plans/number_type_numeric_plan.md)
 - [HTML mixed JavaScript and Wasm backend](./plans/html_project_backend_wasm_final_implementation_plan.md)
