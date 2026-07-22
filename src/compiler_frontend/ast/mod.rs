@@ -119,6 +119,7 @@ pub(crate) mod templates;
 pub use module_ast::build_context::AstBuildContext;
 pub(crate) use module_ast::environment::ResolvedPublicTypeRootTable;
 pub(crate) use module_ast::environment::TopLevelDeclarationTable;
+pub(crate) use module_ast::environment::{ResolvedPublicTypeRoot, ResolvedPublicTypeRootKind};
 pub use module_ast::scope_context::{ContextKind, ScopeContext};
 pub(crate) use receiver_methods::{ReceiverMethodCatalog, ReceiverMethodEntry};
 pub use templates::top_level_templates::AstDocFragment;
@@ -224,8 +225,9 @@ pub struct Ast {
     ///       synthetic AST fixtures use `ResolvedPublicTypeRootTable::default()`.
     /// WHY: carried in `Ast` so the semantic orchestration can take it immediately before HIR
     ///      lowering without reconstructing public semantics from HIR or source. Donor-local
-    ///      `TypeId`s stay inside this handoff and never enter a cross-module artefact.
-    #[allow(dead_code)]
+    ///      `TypeId`s stay inside this handoff and never enter a cross-module artefact. The
+    ///      orchestration consumes this table through `std::mem::take` before HIR lowering, so
+    ///      HIR never receives or reconstructs the transient root table.
     pub resolved_public_type_roots: ResolvedPublicTypeRootTable,
 }
 

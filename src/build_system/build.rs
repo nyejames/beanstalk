@@ -18,6 +18,7 @@ use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
+use crate::compiler_frontend::defined_public_type_surface::DefinedPublicTypeSurface;
 use crate::compiler_frontend::hir::module::HirModule;
 use crate::compiler_frontend::instrumentation::{FrontendCounter, increment_frontend_counter};
 use crate::compiler_frontend::module_metadata::{HirLoweringMetadata, ModuleDocFragment};
@@ -241,6 +242,16 @@ pub(crate) struct CompiledModuleResult {
     /// comment until the graph replaces the flat handoff.
     #[allow(dead_code)]
     pub defined_public_export_origins: DefinedPublicExportOrigins,
+
+    /// Stable type-only public surface for declarations defined directly in the active module
+    /// root, retained alongside the successful compile result so later graph/interface slices
+    /// can consume it. It carries only canonical type identities and owned names: no
+    /// `TypeId`, `NominalTypeId`, `GenericParameterId`, `InternedPath` or `StringId` crosses
+    /// this boundary. It is not part of the accepted three-lane `Module`; the legacy flat
+    /// `Vec<Module>` conversion boundary drops it locally with a migration comment until the
+    /// graph replaces the flat handoff. It is not the final `PublicSemanticInterface`.
+    #[allow(dead_code)]
+    pub defined_public_type_surface: DefinedPublicTypeSurface,
 }
 
 // -------------------------

@@ -8,6 +8,7 @@
 //! donor-local AST data consumed before HIR; it never enters `CompiledModuleResult`,
 //! `Module`, or a cross-module interface.
 
+use crate::compiler_frontend::ast::generic_functions::GenericFunctionTemplate;
 use crate::compiler_frontend::ast::module_ast::environment::TopLevelDeclarationTable;
 use crate::compiler_frontend::ast::module_ast::scope_context::ReceiverMethodCatalog;
 use crate::compiler_frontend::ast::receiver_methods::ReceiverMethodEntry;
@@ -16,7 +17,7 @@ use crate::compiler_frontend::ast::type_resolution::ResolvedFunctionSignature;
 use crate::compiler_frontend::ast::type_resolution::ResolvedTypeAnnotation;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::ReceiverKey;
-use crate::compiler_frontend::datatypes::ids::TypeId;
+use crate::compiler_frontend::datatypes::ids::{GenericParameterListId, TypeId};
 use crate::compiler_frontend::headers::parse_file_headers::{FileRole, Header, HeaderKind};
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -29,8 +30,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 /// resolved `TypeId` facts already produced by AST environment construction.
 /// WHY: keeps the handoff value-shaped and deterministic so later projection reads named
 /// roots and their resolved identities without re-scanning headers or HIR.
-/// Consumed by the next semantic-orchestration slice immediately before HIR lowering.
-#[allow(dead_code)]
+/// Consumed by the defined public type-surface projection immediately before HIR lowering.
 #[derive(Clone, Debug)]
 pub(crate) enum ResolvedPublicTypeRootKind {
     /// Public free function with resolved parameter and return `TypeId`s.
@@ -38,7 +38,10 @@ pub(crate) enum ResolvedPublicTypeRootKind {
     /// WHAT: carries the full resolved signature so parameter and return `TypeId`s, including
     /// generic-parameter `TypeId`s, remain intact for later projection. Receiver methods are
     /// not free roots; they are selected in a separate pass into `receiver_methods`.
-    Function { signature: FunctionSignature },
+    Function {
+        signature: FunctionSignature,
+        generic_parameter_list_id: Option<GenericParameterListId>,
+    },
 
     /// Public nominal struct with its canonical `TypeId`.
     Struct { type_id: TypeId },
@@ -59,8 +62,7 @@ pub(crate) enum ResolvedPublicTypeRootKind {
 }
 
 /// One named directly-defined active-root public type root.
-/// Consumed by the next semantic-orchestration slice immediately before HIR lowering.
-#[allow(dead_code)]
+/// Consumed by the defined public type-surface projection immediately before HIR lowering.
 #[derive(Clone, Debug)]
 pub(crate) struct ResolvedPublicTypeRoot {
     pub(crate) path: InternedPath,
@@ -75,9 +77,8 @@ pub(crate) struct ResolvedPublicTypeRoot {
 /// `export:` are admitted by receiver ownership rather than their own export binding.
 /// WHY: the semantic orchestration consumes this immediately before HIR lowering in the
 /// next slice. Donor-local `TypeId`s must not cross the module result boundary.
-/// Consumed by the next semantic-orchestration slice immediately before HIR lowering;
+/// Consumed by the defined public type-surface projection immediately before HIR lowering;
 /// retained as transient donor-local AST data that never crosses the module result boundary.
-#[allow(dead_code)]
 #[derive(Clone, Default)]
 pub(crate) struct ResolvedPublicTypeRootTable {
     pub(crate) roots: Vec<ResolvedPublicTypeRoot>,
@@ -97,6 +98,7 @@ pub(crate) struct BuildResolvedPublicTypeRootsInput<'a> {
     pub nominal_type_ids_by_path: &'a FxHashMap<InternedPath, TypeId>,
     pub resolved_type_aliases_by_path: &'a FxHashMap<InternedPath, ResolvedTypeAnnotation>,
     pub declaration_table: &'a TopLevelDeclarationTable,
+    pub generic_function_templates_by_path: &'a FxHashMap<InternedPath, GenericFunctionTemplate>,
     pub receiver_methods: &'a ReceiverMethodCatalog,
     pub string_table: &'a StringTable,
 }
@@ -126,6 +128,7 @@ pub(crate) fn build_resolved_public_type_roots(
         nominal_type_ids_by_path,
         resolved_type_aliases_by_path,
         declaration_table,
+        generic_function_templates_by_path,
         receiver_methods,
         string_table,
     } = input;
@@ -156,10 +159,15 @@ pub(crate) fn build_resolved_public_type_roots(
                     continue;
                 }
 
+                let generic_parameter_list_id = generic_function_templates_by_path
+                    .get(path)
+                    .map(|template| template.generic_parameter_list_id);
+
                 roots.push(ResolvedPublicTypeRoot {
                     path: path.to_owned(),
                     kind: ResolvedPublicTypeRootKind::Function {
                         signature: resolved.signature.clone(),
+                        generic_parameter_list_id,
                     },
                 });
             }

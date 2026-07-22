@@ -191,6 +191,7 @@ fn build_table(
         nominal_type_ids_by_path: &nominal_ids,
         resolved_type_aliases_by_path: &aliases,
         declaration_table: &declaration_table,
+        generic_function_templates_by_path: &FxHashMap::default(),
         receiver_methods: &receiver_methods,
         string_table,
     })
@@ -283,7 +284,7 @@ fn retains_every_public_root_category_in_sorted_header_order() {
     ));
 
     assert_eq!(table.roots[1].path, func_path);
-    let ResolvedPublicTypeRootKind::Function { signature } = &table.roots[1].kind else {
+    let ResolvedPublicTypeRootKind::Function { signature, .. } = &table.roots[1].kind else {
         panic!("expected Function root");
     };
     assert_eq!(signature.parameters.len(), 1);

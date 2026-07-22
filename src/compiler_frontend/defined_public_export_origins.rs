@@ -251,6 +251,155 @@ fn index_public_nominal_type_origins(
     Ok(nominal_type_origins)
 }
 
+/// Build the transient stable public source-nominal origin index for the type-surface projection.
+///
+/// WHAT: maps canonical declaration paths to stable [`OriginTypeId`] values for every
+///       `Struct`/`Choice` declaration whose canonical source path is targeted by at least one
+///       retained module-root or source-package public export entry, deriving each origin from
+///       the header's retained [`FileId`] through the [`SourceModuleOriginTable`]. This mirrors
+///       the AST `source_path_is_public_from_root_file` nameability owner: a nominal is public/
+///       nameable when a retained public export entry targets its source path. That single rule
+///       covers directly-defined active-root public nominal roots, imported project-graph public
+///       nominal roots (each targeted by its own module root's public export entry) and
+///       privately-authored nominals exposed through a public alias or re-export (a normal-file
+///       declaration targeted by a module-root public export entry). It excludes private
+///       nominal declarations with no public export target. Active-root nominals resolve to the
+///       active module origin; imported project-graph nominals resolve to their defining provider
+///       module origin, so a directly-defined public signature or field that references an
+///       imported public nominal projects to `SourceNominal(provider_origin)` rather than the
+///       active module origin. A source-package header whose `FileId` table entry is `None` (no
+///       project-module owner) is deliberately absent from the index: its nominals are not
+///       project-graph-owned and must not receive a fabricated origin, and a projected public type
+///       that requires one fails through the total nominal resolver with a precise `CompilerError`.
+/// WHY: the directly-defined active-root index kept on the draft for receiver-surface
+///      finalization excludes imported and alias-target nominals by design, because imported and
+///      alias-target receiver surfaces belong to their defining module and must not enter this
+///      module's [`DefinedPublicExportOrigins`]. Canonical type projection still has to resolve
+///      those nominal references, so this expanded index is built once from the already-sorted
+///      retained headers, the header-built public export maps and the per-file origin table
+///      without re-scanning source. It never invents a second visibility rule from `FileRole` and
+///      `export_mode` alone: the public export targeting fact already retained by
+///      `headers::public_exports` is the single authority. It is transient: it exists only to
+///      feed the projection and is not retained on the export component.
+///
+/// Rejects a missing `FileId`, an out-of-range table lookup, a duplicate canonical nominal path,
+/// a category inconsistency or a conflicting origin explicitly. It never silently overwrites an
+/// existing entry.
+pub(crate) fn build_public_source_nominal_origin_index(
+    source_module_origins: &SourceModuleOriginTable,
+    sorted_headers: &[Header],
+    module_symbols: &ModuleSymbols,
+    string_table: &StringTable,
+) -> Result<FxHashMap<InternedPath, OriginTypeId>, CompilerError> {
+    let mut origins: FxHashMap<InternedPath, OriginTypeId> = FxHashMap::default();
+
+    for header in sorted_headers {
+        if !is_public_export_targeted_nominal_declaration(header, module_symbols) {
+            continue;
+        }
+
+        // A public export-targeted declaration always carries a defining name recorded by the
+        // header parser. A missing name is an impossible metadata gap that must not silently
+        // omit a public nominal type from the transient resolver.
+        let Some(name) = header.tokens.src_path.name_str(string_table) else {
+            return Err(CompilerError::compiler_error(format!(
+                "defined public export-origin construction: a public export-targeted nominal type header has no resolvable defining name (path: {:?})",
+                header.tokens.src_path
+            )));
+        };
+
+        let category = match &header.kind {
+            HeaderKind::Struct { .. } => OriginTypeCategory::Struct,
+            HeaderKind::Choice { .. } => OriginTypeCategory::Choice,
+            _ => continue,
+        };
+
+        // Preparation assigns a retained FileId to every prepared file's tokens, so a public
+        // export-targeted header without one is an internal invariant violation rather than an
+        // intentional exclusion.
+        let Some(file_id) = header.tokens.file_id else {
+            return Err(CompilerError::compiler_error(format!(
+                "defined public export-origin construction: a public export-targeted nominal type header has no retained FileId (path: {:?})",
+                header.tokens.src_path
+            )));
+        };
+
+        // A source-package file outside the project module graph has an explicit None owning
+        // origin. It is deliberately absent from the index; a projected public type that requires
+        // its nominal fails through the total nominal resolver with a precise CompilerError
+        // rather than a path/display identity fallback.
+        let Some(module_origin) = source_module_origins.origin_for(file_id)? else {
+            continue;
+        };
+
+        let origin = OriginTypeId::new(module_origin.clone(), name.to_owned(), category);
+
+        // Canonical declaration paths are unique, so a duplicate path is a real conflict. Report
+        // both origins (which embed category) so a category inconsistency or conflicting provider
+        // origin is explicit, and never silently overwrite the first entry.
+        if let Some(existing) = origins.get(&header.tokens.src_path) {
+            return Err(CompilerError::compiler_error(format!(
+                "defined public export-origin construction: a duplicate canonical nominal path resolves to conflicting origins (path: {:?}; existing {:?}, new {:?})",
+                header.tokens.src_path, existing, origin
+            )));
+        }
+        origins.insert(header.tokens.src_path.clone(), origin);
+    }
+
+    Ok(origins)
+}
+
+/// Whether a header is a nominal-type declaration whose canonical source path is targeted by a
+/// retained public export entry.
+///
+/// WHAT: admits a `Struct`/`Choice` declaration when at least one retained module-root or
+///       source-package public export entry targets its canonical source path. This mirrors the
+///       AST `source_path_is_public_from_root_file` nameability owner using the shared
+///       [`PublicExportTarget::is_source_path`] predicate, so origin indexing and nameability
+///       cannot drift on what a public export targets. Unlike
+///       [`is_directly_defined_public_export`] this does not gate on `FileRole` or `export_mode`:
+///       a normal-file declaration with no public export of its own is admitted when a module-root
+///       public alias or re-export targets it, and an imported module-root public nominal is
+///       admitted because its own module root's public export entry targets it.
+fn is_public_export_targeted_nominal_declaration(
+    header: &Header,
+    module_symbols: &ModuleSymbols,
+) -> bool {
+    matches!(
+        &header.kind,
+        HeaderKind::Struct { .. } | HeaderKind::Choice { .. }
+    ) && any_retained_public_export_targets_source_path(module_symbols, &header.tokens.src_path)
+}
+
+/// Whether any retained module-root or source-package public export entry targets the given
+/// source declaration path.
+///
+/// WHAT: membership-only scan over the header-built public export maps. Both maps are retained
+///       header facts, so this is a header-owned query, not AST nameability policy: the AST owner
+///       keeps its per-root-file scoping and builtin visibility, and this index uses the same
+///       shared [`PublicExportTarget::is_source_path`] predicate for the entry-target match.
+fn any_retained_public_export_targets_source_path(
+    module_symbols: &ModuleSymbols,
+    path: &InternedPath,
+) -> bool {
+    module_symbols
+        .module_root_public_exports
+        .values()
+        .any(|entries| {
+            entries
+                .iter()
+                .any(|entry| entry.target.is_source_path(path))
+        })
+        || module_symbols
+            .source_package_public_exports
+            .values()
+            .any(|entries| {
+                entries
+                    .iter()
+                    .any(|entry| entry.target.is_source_path(path))
+            })
+}
+
 /// Collect the free-namespace export bindings for directly-defined public declarations.
 ///
 /// Receiver methods are excluded here: they are attached to their receiver surface by

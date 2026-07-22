@@ -12,12 +12,21 @@
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::{ReceiverMethodCatalog, ReceiverMethodEntry};
 use crate::compiler_frontend::datatypes::ReceiverKey;
-use crate::compiler_frontend::defined_public_export_origins::build_defined_public_export_origin_draft;
+use crate::compiler_frontend::defined_public_export_origins::{
+    build_defined_public_export_origin_draft, build_public_source_nominal_origin_index,
+};
+use crate::compiler_frontend::headers::module_symbols::{
+    ModuleSymbols, PublicExportEntry, PublicExportTarget,
+};
 use crate::compiler_frontend::headers::parse_file_headers::parse_file_headers_tests::parse_single_file_headers_with_table;
-use crate::compiler_frontend::headers::parse_file_headers::{BoundModuleHeaders, HeaderKind};
+use crate::compiler_frontend::headers::parse_file_headers::parse_file_headers_tests::prepare_single_file;
+use crate::compiler_frontend::headers::parse_file_headers::{
+    BoundModuleHeaders, FileRole, Header, HeaderKind,
+};
 use crate::compiler_frontend::semantic_identity::{
     DefinedPublicExportOrigins, ExportBinding, FunctionOriginKind, ModuleRootRole,
-    OriginDeclarationId, OriginTypeCategory, StableModuleOriginIdentity, StablePackageIdentity,
+    OriginDeclarationId, OriginTypeCategory, OriginTypeId, StableModuleOriginIdentity,
+    StablePackageIdentity,
 };
 use crate::compiler_frontend::source_module_origin::SourceModuleOriginTable;
 use crate::compiler_frontend::symbols::identity::{FileId, SourceFileTable};
@@ -746,5 +755,522 @@ alpha_first |this Alpha| -> Int:\n\
         method_names,
         vec!["alpha_first", "zoom"],
         "methods within a receiver surface must be ordered by method defining name"
+    );
+}
+
+// ---------------------------------------------------------------------------
+//  Transient expanded public source-nominal origin index (graph-derived origins)
+// ---------------------------------------------------------------------------
+
+/// Find the canonical declaration path of a struct header by defining name.
+fn struct_header_path(headers: &[Header], name: &str, string_table: &StringTable) -> InternedPath {
+    for header in headers {
+        if matches!(header.kind, HeaderKind::Struct { .. })
+            && header.tokens.src_path.name_str(string_table) == Some(name)
+        {
+            return header.tokens.src_path.clone();
+        }
+    }
+    panic!("no public struct header named `{name}` in test headers")
+}
+
+/// Build a `ModuleSymbols` whose retained module-root public exports target the given source
+/// paths, modelling the header-built public export maps without standing up a full project path
+/// resolver.
+///
+/// The origin index membership check is key-agnostic (it scans every retained entry's target), so
+/// all entries live under one representative module-root key. Each export name is the target
+/// path's defining name, matching the direct-public-declaration export shape produced by
+/// `headers::public_exports` pass 1.
+fn module_symbols_with_module_root_export_targets(
+    targets: &[InternedPath],
+    string_table: &mut StringTable,
+) -> ModuleSymbols {
+    let module_root_key = InternedPath::from_single_str("test-module-root", string_table);
+    let entries: rustc_hash::FxHashSet<PublicExportEntry> = targets
+        .iter()
+        .map(|target| PublicExportEntry {
+            export_name: target
+                .name()
+                .expect("an export target path must carry a defining name"),
+            target: PublicExportTarget::Source(target.clone()),
+        })
+        .collect();
+    let mut module_symbols = ModuleSymbols::empty();
+    module_symbols
+        .module_root_public_exports
+        .insert(module_root_key, entries);
+    module_symbols
+}
+
+/// Add a retained source-package public export entry targeting the given source path, modelling a
+/// source-backed package public surface without a full project path resolver.
+fn add_source_package_export_target(
+    module_symbols: &mut ModuleSymbols,
+    package_prefix: &str,
+    target: &InternedPath,
+) {
+    let entry = PublicExportEntry {
+        export_name: target
+            .name()
+            .expect("an export target path must carry a defining name"),
+        target: PublicExportTarget::Source(target.clone()),
+    };
+    module_symbols
+        .source_package_public_exports
+        .entry(package_prefix.to_owned())
+        .or_default()
+        .insert(entry);
+}
+
+#[test]
+fn public_source_nominal_origin_index_includes_imported_provider_origin() {
+    let mut string_table = StringTable::new();
+    let active_path = PathBuf::from("src/#page.bst");
+    let imported_path = PathBuf::from("src/#mod.bst");
+
+    // The active root is the entry file; the imported root is a hash-root file compiled only to
+    // validate its public declaration surface.
+    let active_output = prepare_single_file(
+        "export:\n    Local = | value Int |\n;\n",
+        &active_path,
+        &active_path,
+        &mut string_table,
+    );
+    let imported_output = prepare_single_file(
+        "export:\n    Imported = | value Int |\n;\n",
+        &imported_path,
+        &active_path,
+        &mut string_table,
+    );
+
+    assert_eq!(active_output.file_role, FileRole::ActiveModuleRoot);
+    assert_eq!(imported_output.file_role, FileRole::ImportedModuleRoot);
+
+    let source_files = SourceFileTable::build(
+        [active_path.clone(), imported_path.clone()],
+        &active_path,
+        None,
+        &mut string_table,
+    )
+    .expect("source file table should build for the two module-root files");
+    let active_file_id = source_files
+        .get_by_canonical_path(&active_path)
+        .expect("the active root file should be in the source file table")
+        .file_id;
+    let imported_file_id = source_files
+        .get_by_canonical_path(&imported_path)
+        .expect("the imported root file should be in the source file table")
+        .file_id;
+
+    let mut headers: Vec<Header> = Vec::new();
+    for mut header in active_output.headers {
+        header.tokens.file_id = Some(active_file_id);
+        headers.push(header);
+    }
+    for mut header in imported_output.headers {
+        header.tokens.file_id = Some(imported_file_id);
+        headers.push(header);
+    }
+
+    let active_origin = StableModuleOriginIdentity::from_portable_path(
+        StablePackageIdentity::project_local("test-project"),
+        "active".to_owned(),
+        ModuleRootRole::Normal,
+    );
+    let provider_origin = StableModuleOriginIdentity::from_portable_path(
+        StablePackageIdentity::project_local("test-project"),
+        "imported".to_owned(),
+        ModuleRootRole::Normal,
+    );
+    let mut origin_by_canonical_path = rustc_hash::FxHashMap::default();
+    origin_by_canonical_path.insert(active_path.clone(), active_origin.clone());
+    origin_by_canonical_path.insert(imported_path.clone(), provider_origin.clone());
+    let source_module_origins =
+        SourceModuleOriginTable::from_graph_ownership(&source_files, &origin_by_canonical_path);
+
+    // Each module root's retained public export targets its own public nominal's source path:
+    // the active root exports `Local` and the imported root exports `Imported`. The index admits
+    // a nominal when a retained public export entry targets its canonical source path, mirroring
+    // the AST `source_path_is_public_from_root_file` nameability owner.
+    let local_path = struct_header_path(&headers, "Local", &string_table);
+    let imported_path_decl = struct_header_path(&headers, "Imported", &string_table);
+    let module_symbols = module_symbols_with_module_root_export_targets(
+        &[local_path.clone(), imported_path_decl.clone()],
+        &mut string_table,
+    );
+
+    let index = build_public_source_nominal_origin_index(
+        &source_module_origins,
+        &headers,
+        &module_symbols,
+        &string_table,
+    )
+    .expect("the expanded nominal origin index should build for active plus imported roots");
+
+    // The active-root public nominal resolves to the active module origin.
+    assert_eq!(
+        index.get(&local_path),
+        Some(&OriginTypeId::new(
+            active_origin.clone(),
+            "Local".to_owned(),
+            OriginTypeCategory::Struct
+        )),
+        "an active-root public struct must resolve to the active module origin"
+    );
+
+    // The imported-root public nominal resolves to its defining provider module origin, not the
+    // active origin.
+    assert_eq!(
+        index.get(&imported_path_decl),
+        Some(&OriginTypeId::new(
+            provider_origin.clone(),
+            "Imported".to_owned(),
+            OriginTypeCategory::Struct
+        )),
+        "an imported public struct must resolve to its provider module origin, not the active \
+         module origin"
+    );
+}
+
+#[test]
+fn public_source_nominal_origin_index_rejects_missing_file_id() {
+    let mut string_table = StringTable::new();
+    let active_path = PathBuf::from("src/#page.bst");
+    let imported_path = PathBuf::from("src/#mod.bst");
+
+    let active_output = prepare_single_file(
+        "export:\n    Local = | value Int |\n;\n",
+        &active_path,
+        &active_path,
+        &mut string_table,
+    );
+    let imported_output = prepare_single_file(
+        "export:\n    Imported = | value Int |\n;\n",
+        &imported_path,
+        &active_path,
+        &mut string_table,
+    );
+
+    let source_files = SourceFileTable::build(
+        [active_path.clone(), imported_path.clone()],
+        &active_path,
+        None,
+        &mut string_table,
+    )
+    .expect("source file table should build");
+    let active_file_id = source_files
+        .get_by_canonical_path(&active_path)
+        .expect("active root file should be present")
+        .file_id;
+
+    let provider_origin = StableModuleOriginIdentity::from_portable_path(
+        StablePackageIdentity::project_local("test-project"),
+        "imported".to_owned(),
+        ModuleRootRole::Normal,
+    );
+    let mut origin_by_canonical_path = rustc_hash::FxHashMap::default();
+    origin_by_canonical_path.insert(imported_path.clone(), provider_origin.clone());
+    let source_module_origins =
+        SourceModuleOriginTable::from_graph_ownership(&source_files, &origin_by_canonical_path);
+
+    // The active root keeps its file id; the imported root's headers deliberately carry no file id.
+    let mut headers: Vec<Header> = Vec::new();
+    for mut header in active_output.headers {
+        header.tokens.file_id = Some(active_file_id);
+        headers.push(header);
+    }
+    for header in imported_output.headers {
+        // Imported headers keep file_id = None (unprepared identity), which must be rejected
+        // explicitly rather than silently skipped.
+        let mut header = header;
+        header.tokens.file_id = None;
+        headers.push(header);
+    }
+
+    // `Imported` is targeted by a retained module-root public export entry, so the index admits
+    // it; its missing retained FileId is then an internal invariant violation rather than a
+    // silent skip.
+    let imported_path_decl = struct_header_path(&headers, "Imported", &string_table);
+    let module_symbols =
+        module_symbols_with_module_root_export_targets(&[imported_path_decl], &mut string_table);
+
+    let result = build_public_source_nominal_origin_index(
+        &source_module_origins,
+        &headers,
+        &module_symbols,
+        &string_table,
+    );
+    assert!(
+        result.is_err(),
+        "a public export-targeted nominal header with no retained FileId must be a CompilerError"
+    );
+}
+
+#[test]
+fn public_source_nominal_origin_index_skips_unowned_source_package_nominal() {
+    let mut string_table = StringTable::new();
+    let active_path = PathBuf::from("src/#page.bst");
+    let package_path = PathBuf::from("src/#pkg.bst");
+
+    let active_output = prepare_single_file(
+        "export:\n    Local = | value Int |\n;\n",
+        &active_path,
+        &active_path,
+        &mut string_table,
+    );
+    // A source-package module root not owned by the project graph: deliberately absent from the
+    // origin map, so its table entry is None.
+    let package_output = prepare_single_file(
+        "export:\n    Pkg = | value Int |\n;\n",
+        &package_path,
+        &active_path,
+        &mut string_table,
+    );
+
+    let source_files = SourceFileTable::build(
+        [active_path.clone(), package_path.clone()],
+        &active_path,
+        None,
+        &mut string_table,
+    )
+    .expect("source file table should build");
+    let active_file_id = source_files
+        .get_by_canonical_path(&active_path)
+        .expect("active root file should be present")
+        .file_id;
+    let package_file_id = source_files
+        .get_by_canonical_path(&package_path)
+        .expect("package root file should be present")
+        .file_id;
+
+    let active_origin = StableModuleOriginIdentity::from_portable_path(
+        StablePackageIdentity::project_local("test-project"),
+        "active".to_owned(),
+        ModuleRootRole::Normal,
+    );
+    // Only the active root is owned; the package root maps to None.
+    let mut origin_by_canonical_path = rustc_hash::FxHashMap::default();
+    origin_by_canonical_path.insert(active_path.clone(), active_origin.clone());
+    let source_module_origins =
+        SourceModuleOriginTable::from_graph_ownership(&source_files, &origin_by_canonical_path);
+
+    let mut headers: Vec<Header> = Vec::new();
+    for mut header in active_output.headers {
+        header.tokens.file_id = Some(active_file_id);
+        headers.push(header);
+    }
+    for mut header in package_output.headers {
+        header.tokens.file_id = Some(package_file_id);
+        headers.push(header);
+    }
+
+    // `Local` is targeted by a retained module-root public export (admitted, owned, present).
+    // `Pkg` is targeted by a retained source-package public export (admitted, but its file maps
+    // to None ownership, so it is skipped rather than given a fabricated origin).
+    let local_path = struct_header_path(&headers, "Local", &string_table);
+    let pkg_path = struct_header_path(&headers, "Pkg", &string_table);
+    let mut module_symbols = module_symbols_with_module_root_export_targets(
+        std::slice::from_ref(&local_path),
+        &mut string_table,
+    );
+    add_source_package_export_target(&mut module_symbols, "pkg", &pkg_path);
+
+    let index = build_public_source_nominal_origin_index(
+        &source_module_origins,
+        &headers,
+        &module_symbols,
+        &string_table,
+    )
+    .expect("the index should build; the unowned package nominal is skipped, not an error");
+
+    // The active nominal is present; the unowned package nominal is deliberately absent.
+    assert!(
+        index.contains_key(&local_path),
+        "the active-root public nominal must be in the index"
+    );
+    assert!(
+        !index.contains_key(&pkg_path),
+        "a source-package nominal with no project-module owner (None) must be absent from the \
+         index, not assigned a fabricated origin"
+    );
+}
+
+/// A privately-authored nominal in a normal file is included when a module-root public export
+/// (an alias or re-export) targets its canonical source path, resolving to the normal file's
+/// graph-derived module origin.
+#[test]
+fn public_source_nominal_origin_index_includes_alias_targeted_normal_file_nominal() {
+    let mut string_table = StringTable::new();
+    let active_path = PathBuf::from("src/#page.bst");
+    let impl_path = PathBuf::from("src/impl.bst");
+
+    // The active module root carries an unrelated public constant; `Counter` is authored as a
+    // private struct in the normal file `impl.bst` and has no public export of its own. A
+    // module-root public alias (`PublicCounter as Counter`) re-exports it, so the retained
+    // module-root public export entry targets `Counter`'s canonical source path.
+    let active_output = prepare_single_file(
+        "export:\n    placeholder #= 1\n;\n",
+        &active_path,
+        &active_path,
+        &mut string_table,
+    );
+    let impl_output = prepare_single_file(
+        "Counter = | count Int |\n",
+        &impl_path,
+        &active_path,
+        &mut string_table,
+    );
+    assert_eq!(active_output.file_role, FileRole::ActiveModuleRoot);
+    assert_eq!(impl_output.file_role, FileRole::Normal);
+
+    let source_files = SourceFileTable::build(
+        [active_path.clone(), impl_path.clone()],
+        &active_path,
+        None,
+        &mut string_table,
+    )
+    .expect("source file table should build for the active root plus normal file");
+    let active_file_id = source_files
+        .get_by_canonical_path(&active_path)
+        .expect("the active root file should be in the source file table")
+        .file_id;
+    let impl_file_id = source_files
+        .get_by_canonical_path(&impl_path)
+        .expect("the normal file should be in the source file table")
+        .file_id;
+
+    let mut headers: Vec<Header> = Vec::new();
+    for mut header in active_output.headers {
+        header.tokens.file_id = Some(active_file_id);
+        headers.push(header);
+    }
+    for mut header in impl_output.headers {
+        header.tokens.file_id = Some(impl_file_id);
+        headers.push(header);
+    }
+
+    // The normal file inherits its nearest owning module origin from the project graph, the same
+    // module origin as the active root, so the alias-targeted nominal resolves to that origin.
+    let module_origin = StableModuleOriginIdentity::from_portable_path(
+        StablePackageIdentity::project_local("test-project"),
+        "active".to_owned(),
+        ModuleRootRole::Normal,
+    );
+    let mut origin_by_canonical_path = rustc_hash::FxHashMap::default();
+    origin_by_canonical_path.insert(active_path.clone(), module_origin.clone());
+    origin_by_canonical_path.insert(impl_path.clone(), module_origin.clone());
+    let source_module_origins =
+        SourceModuleOriginTable::from_graph_ownership(&source_files, &origin_by_canonical_path);
+
+    let counter_path = struct_header_path(&headers, "Counter", &string_table);
+    let module_symbols = module_symbols_with_module_root_export_targets(
+        std::slice::from_ref(&counter_path),
+        &mut string_table,
+    );
+
+    let index = build_public_source_nominal_origin_index(
+        &source_module_origins,
+        &headers,
+        &module_symbols,
+        &string_table,
+    )
+    .expect("the index should build; the alias-targeted normal-file nominal is included");
+
+    assert_eq!(
+        index.get(&counter_path),
+        Some(&OriginTypeId::new(
+            module_origin.clone(),
+            "Counter".to_owned(),
+            OriginTypeCategory::Struct
+        )),
+        "a privately-authored nominal exposed through a module-root public alias must resolve to its normal file's graph-derived module origin"
+    );
+}
+
+/// A privately-authored nominal in a normal file with no public export target remains absent
+/// from the index, while a directly-defined active-root public nominal targeted by its own export
+/// is present.
+#[test]
+fn public_source_nominal_origin_index_excludes_private_normal_file_nominal_without_target() {
+    let mut string_table = StringTable::new();
+    let active_path = PathBuf::from("src/#page.bst");
+    let impl_path = PathBuf::from("src/impl.bst");
+
+    // The active root exports `Local` publicly; `Counter` is a private struct in the normal file
+    // with no public export targeting it.
+    let active_output = prepare_single_file(
+        "export:\n    Local = | value Int |\n;\n",
+        &active_path,
+        &active_path,
+        &mut string_table,
+    );
+    let impl_output = prepare_single_file(
+        "Counter = | count Int |\n",
+        &impl_path,
+        &active_path,
+        &mut string_table,
+    );
+
+    let source_files = SourceFileTable::build(
+        [active_path.clone(), impl_path.clone()],
+        &active_path,
+        None,
+        &mut string_table,
+    )
+    .expect("source file table should build");
+    let active_file_id = source_files
+        .get_by_canonical_path(&active_path)
+        .expect("the active root file should be in the source file table")
+        .file_id;
+    let impl_file_id = source_files
+        .get_by_canonical_path(&impl_path)
+        .expect("the normal file should be in the source file table")
+        .file_id;
+
+    let mut headers: Vec<Header> = Vec::new();
+    for mut header in active_output.headers {
+        header.tokens.file_id = Some(active_file_id);
+        headers.push(header);
+    }
+    for mut header in impl_output.headers {
+        header.tokens.file_id = Some(impl_file_id);
+        headers.push(header);
+    }
+
+    let active_origin = StableModuleOriginIdentity::from_portable_path(
+        StablePackageIdentity::project_local("test-project"),
+        "active".to_owned(),
+        ModuleRootRole::Normal,
+    );
+    let mut origin_by_canonical_path = rustc_hash::FxHashMap::default();
+    origin_by_canonical_path.insert(active_path.clone(), active_origin.clone());
+    origin_by_canonical_path.insert(impl_path.clone(), active_origin.clone());
+    let source_module_origins =
+        SourceModuleOriginTable::from_graph_ownership(&source_files, &origin_by_canonical_path);
+
+    // Only `Local` is targeted by a retained module-root public export; `Counter` has no target.
+    let local_path = struct_header_path(&headers, "Local", &string_table);
+    let counter_path = struct_header_path(&headers, "Counter", &string_table);
+    let module_symbols = module_symbols_with_module_root_export_targets(
+        std::slice::from_ref(&local_path),
+        &mut string_table,
+    );
+
+    let index = build_public_source_nominal_origin_index(
+        &source_module_origins,
+        &headers,
+        &module_symbols,
+        &string_table,
+    )
+    .expect("the index should build");
+
+    assert!(
+        index.contains_key(&local_path),
+        "the directly-defined active-root public nominal must be in the index"
+    );
+    assert!(
+        !index.contains_key(&counter_path),
+        "a private normal-file nominal with no public export target must be absent from the index"
     );
 }

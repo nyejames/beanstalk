@@ -324,6 +324,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 nominal_type_ids_by_path: &self.nominal_type_ids_by_path,
                 resolved_type_aliases_by_path: &self.resolved_type_aliases_by_path,
                 declaration_table: self.declaration_table.as_ref(),
+                generic_function_templates_by_path: &self.generic_function_templates_by_path,
                 receiver_methods: receiver_methods.as_ref(),
                 string_table,
             })

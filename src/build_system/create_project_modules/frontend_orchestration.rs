@@ -18,6 +18,8 @@ use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages}
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::compiler_messages::ModuleDiagnostics;
 use crate::compiler_frontend::defined_public_export_origins::build_defined_public_export_origin_draft;
+use crate::compiler_frontend::defined_public_export_origins::build_public_source_nominal_origin_index;
+use crate::compiler_frontend::defined_public_type_surface::build_defined_public_type_surface;
 use crate::compiler_frontend::external_packages::{
     ExternalFunctionId, ExternalPackageId, ExternalPackageRegistry,
 };
@@ -878,6 +880,25 @@ impl FrontendModuleBuildContext<'_> {
             )
             .map_err(|error| CompilerMessages::from_error_ref(error, &compiler.string_table))?;
 
+            // Build the transient expanded public source-nominal origin index before `sorted`
+            // moves into AST construction. Each origin is derived from the header's retained
+            // FileId through the per-file SourceModuleOriginTable, so imported project-graph
+            // nominals resolve to their defining provider origin. The type-surface projection
+            // consumes this index to resolve imported nominal references in this module's public
+            // signatures and fields.
+            // The index mirrors the AST `source_path_is_public_from_root_file` nameability owner:
+            // a nominal is included when a retained module-root or source-package public export
+            // entry targets its canonical source path, so a privately-authored nominal exposed
+            // through a public alias resolves to its graph-derived module origin. The retained
+            // `module_symbols` is borrowed before `sorted` moves into AST construction.
+            let public_source_nominal_type_origins = build_public_source_nominal_origin_index(
+                &source_module_origins,
+                &sorted.headers,
+                &sorted.module_symbols,
+                &compiler.string_table,
+            )
+            .map_err(|error| CompilerMessages::from_error_ref(error, &compiler.string_table))?;
+
             // 3. Build the Abstract Syntax Tree (AST).
             let mut module_ast =
                 timed_frontend_stage("frontend.ast", "AST created in: ", module_label, || {
@@ -905,7 +926,52 @@ impl FrontendModuleBuildContext<'_> {
                     )
                 })?;
 
-            // 4. Resolve const fragment StringIds to strings before AST is consumed by HIR.
+            // Take the transient resolved public type-root table from the AST before HIR lowering
+            // consumes it, so HIR never receives or reconstructs the donor-local root table. The
+            // table was built from already-resolved AST facts; canonical projection consumes it
+            // immediately to produce the stable type-only surface below.
+            let resolved_public_type_roots =
+                std::mem::take(&mut module_ast.resolved_public_type_roots);
+
+            // 4. Finalize the stable defined-public-export identity component and build the stable
+            //    type-only public surface before HIR consumes the AST. Both components are built
+            //    from already-resolved facts (the receiver catalog, the resolved public type-root
+            //    table, the export-origin draft and the module TypeEnvironment) without a second
+            //    source scan or HIR scan. They are retained only on overall semantic success.
+            //
+            // The export-origin finalization projects receiver surface origins from the resolved
+            // AST receiver catalog. This runs after AST receiver validation succeeds, so valid
+            // generic receiver methods attach to their generic nominal base origin and invalid
+            // receiver declarations already failed in the AST diagnostic owner.
+            //
+            // The type-surface projection joins each resolved root to its stable export-binding
+            // origin and projects every required TypeId into canonical identities through the
+            // existing canonical_type_identity projection owner. The output carries only owned
+            // stable values; no donor-local TypeId, NominalTypeId, GenericParameterId or
+            // InternedPath crosses the module result boundary. It is not the final
+            // PublicSemanticInterface: folded constants, generic template bodies, bounds,
+            // access/effect summaries, provenance, re-export interfaces and cross-module call
+            // lowering remain for later phases.
+            // Finalize the export-origin component (receiver surfaces use the draft's
+            // directly-defined active-root nominal index), then build the stable type-only
+            // surface. The surface's transient nominal resolver consumes the expanded
+            // public source-nominal origin index built above, which includes direct public,
+            // imported project-graph and public-alias-target nominals.
+            let defined_public_export_origins = export_origin_draft
+                .finalize(resolved_receiver_catalog.as_ref(), &compiler.string_table)
+                .map_err(|error| CompilerMessages::from_error_ref(error, &compiler.string_table))?;
+
+            let defined_public_type_surface = build_defined_public_type_surface(
+                &resolved_public_type_roots,
+                &defined_public_export_origins,
+                &public_source_nominal_type_origins,
+                &module_ast.type_environment,
+                compiler.external_package_registry.as_ref(),
+                &compiler.string_table,
+            )
+            .map_err(|error| CompilerMessages::from_error_ref(error, &compiler.string_table))?;
+
+            // 5. Resolve const fragment StringIds to strings before AST is consumed by HIR.
             let const_top_level_fragments = module_ast
                 .const_top_level_fragments
                 .iter()
@@ -915,7 +981,7 @@ impl FrontendModuleBuildContext<'_> {
                 })
                 .collect::<Vec<_>>();
 
-            // 5. Lower AST to Higher-level Intermediate Representation (HIR).
+            // 6. Lower AST to Higher-level Intermediate Representation (HIR).
             let hir_lowering =
                 timed_frontend_stage("frontend.hir", "HIR generated in: ", module_label, || {
                     Self::lower_hir(&mut compiler, module_ast, &warnings)
@@ -1016,17 +1082,6 @@ impl FrontendModuleBuildContext<'_> {
             module_external_imports.sort_by_key(|import| import.package_id.0);
             module_external_imports.dedup_by_key(|import| import.package_id);
 
-            // Finalize the stable defined-public-export identity component by projecting receiver
-            // surface origins from the resolved AST receiver catalog. This runs after AST
-            // receiver validation succeeds, so valid generic receiver methods attach to their
-            // generic nominal base origin and invalid receiver declarations already failed in the
-            // AST diagnostic owner. It is not the final PublicSemanticInterface: canonical type
-            // shapes, folded constants, generic templates, trait/evidence, access/effect summaries,
-            // project-context provenance and source re-export origins remain for later.
-            let defined_public_export_origins = export_origin_draft
-                .finalize(resolved_receiver_catalog.as_ref(), &compiler.string_table)
-                .map_err(|error| CompilerMessages::from_error_ref(error, &compiler.string_table))?;
-
             Ok((
                 Module {
                     executable: ModuleExecutable {
@@ -1047,6 +1102,7 @@ impl FrontendModuleBuildContext<'_> {
                     ),
                 },
                 defined_public_export_origins,
+                defined_public_type_surface,
             ))
         })();
 
@@ -1056,13 +1112,14 @@ impl FrontendModuleBuildContext<'_> {
         // (an infrastructure failure recovered losslessly from its structured payload). This is
         // the single lossless ownership transfer; graph and render consumers never re-classify.
         match compile_result {
-            Ok((module, defined_public_export_origins)) => {
+            Ok((module, defined_public_export_origins, defined_public_type_surface)) => {
                 let string_table = compiler.string_table;
                 Ok(ModuleCompilationOutcome::Success(Box::new(
                     CompiledModuleResult {
                         module,
                         string_table,
                         defined_public_export_origins,
+                        defined_public_type_surface,
                     },
                 )))
             }

@@ -387,6 +387,7 @@ pub(crate) fn compile_single_file_frontend(
         mut module,
         string_table: _,
         defined_public_export_origins: _,
+        defined_public_type_surface: _,
     } = result;
     if !remap.is_identity() {
         module.remap_string_ids(&remap);
@@ -748,6 +749,7 @@ pub(crate) fn compile_directory_frontend(
             mut module,
             string_table: _,
             defined_public_export_origins: _,
+            defined_public_type_surface: _,
         } = success.compiled;
         if !remap.is_identity() {
             module.remap_string_ids(&remap);

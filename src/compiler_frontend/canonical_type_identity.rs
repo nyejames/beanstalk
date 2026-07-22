@@ -59,7 +59,6 @@ use crate::compiler_frontend::semantic_identity::{
 /// target `TypeId` before producing a canonical identity, so there is no alias variant here.
 /// Exported generic parameters project through the generic-parameter origin resolver so open
 /// exported type shapes recurse through the same projection owner as closed types.
-#[allow(dead_code)] // Consumed by the next plan slice: public semantic surface projection.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum CanonicalTypeIdentity {
     Builtin(CanonicalBuiltinType),
@@ -74,7 +73,6 @@ pub(crate) enum CanonicalTypeIdentity {
 }
 
 /// Builtin scalar canonical type identity, including the semantically seeded `None` identity.
-#[allow(dead_code)] // Consumed by the next plan slice: public semantic surface projection.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum CanonicalBuiltinType {
     Bool,
@@ -274,7 +272,6 @@ impl GenericInstanceTypeIdentity {
 /// existing origin vocabulary: `OriginFunctionId` for free functions and `OriginTypeId` for
 /// nominal types. The inner enum is private so no crate caller can bypass the validating
 /// constructors.
-#[allow(dead_code)] // Consumed by the next plan slice: public semantic surface projection.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct GenericDeclarationOrigin {
     inner: GenericDeclarationOriginInner,
@@ -291,7 +288,6 @@ impl GenericDeclarationOrigin {
     ///
     /// Compiler-internal: only structs and choices declare generic parameters. A transparent
     /// alias is not a generic declaration owner and must not appear as one.
-    #[allow(dead_code)]
     pub(crate) fn nominal_type(origin: OriginTypeId) -> Result<Self, CompilerError> {
         match origin.category() {
             OriginTypeCategory::Struct | OriginTypeCategory::Choice => Ok(Self {
@@ -308,7 +304,6 @@ impl GenericDeclarationOrigin {
     /// Compiler-internal: only free functions declare standalone exported generic parameters.
     /// A receiver method lives on its receiver type's surface and is not an independent generic
     /// declaration owner, so a `FunctionOriginKind::Receiver` origin must not appear here.
-    #[allow(dead_code)]
     pub(crate) fn free_function(origin: OriginFunctionId) -> Result<Self, CompilerError> {
         match origin.kind() {
             FunctionOriginKind::Free => Ok(Self {
@@ -333,7 +328,6 @@ impl GenericDeclarationOrigin {
 /// declaration origin and position, not by donor-local `GenericParameterId` values that differ
 /// across module compilations. Two parameters with the same owner, position and authored name
 /// share one identity even when their module-local `GenericParameterId` allocations differ.
-#[allow(dead_code)] // Consumed by the next plan slice: public semantic surface projection.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct ExportedGenericParameterIdentity {
     declaration_origin: GenericDeclarationOrigin,
@@ -348,7 +342,6 @@ impl ExportedGenericParameterIdentity {
     /// origin, the declaration-local parameter position and the owned authored name. The
     /// `GenericDeclarationOrigin` constructors already reject transparent aliases and receiver
     /// methods.
-    #[allow(dead_code)]
     pub(crate) fn new(
         declaration_origin: GenericDeclarationOrigin,
         position: u32,
@@ -426,7 +419,6 @@ pub(crate) trait GenericParameterOriginResolver {
 /// the external package registry. All three are borrowed for the duration of the projection.
 /// WHY: keeps the projection function's signature narrow and explicit about its three external
 /// dependencies. The projection itself owns no state.
-#[allow(dead_code)] // Consumed by the next plan slice: public semantic surface projection.
 pub(crate) struct CanonicalTypeProjectionContext<'a> {
     nominal_origins: &'a dyn NominalOriginResolver,
     generic_parameter_origins: &'a dyn GenericParameterOriginResolver,
@@ -438,7 +430,6 @@ impl<'a> CanonicalTypeProjectionContext<'a> {
     ///
     /// Compiler-internal: the public semantic surface projection owner builds this once per
     /// module compilation. Focused tests build it directly.
-    #[allow(dead_code)] // Consumed by the next plan slice: public semantic surface projection.
     pub(crate) fn new(
         nominal_origins: &'a dyn NominalOriginResolver,
         generic_parameter_origins: &'a dyn GenericParameterOriginResolver,
@@ -449,6 +440,11 @@ impl<'a> CanonicalTypeProjectionContext<'a> {
             generic_parameter_origins,
             external_registry,
         }
+    }
+
+    /// The nominal origin resolver used to map `NominalTypeId` to stable `OriginTypeId`.
+    pub(crate) fn nominal_origins(&self) -> &dyn NominalOriginResolver {
+        self.nominal_origins
     }
 }
 
@@ -478,7 +474,6 @@ impl<'a> CanonicalTypeProjectionContext<'a> {
 /// projection follows its resolved target `TypeId` and does not manufacture an alias variant.
 /// Exported generic parameters project through the generic-parameter origin resolver so open
 /// exported type shapes recurse through the same single projection path as closed types.
-#[allow(dead_code)] // Consumed by the next plan slice: public semantic surface projection.
 pub(crate) fn project_type_id_to_canonical_identity(
     type_id: TypeId,
     type_environment: &TypeEnvironment,

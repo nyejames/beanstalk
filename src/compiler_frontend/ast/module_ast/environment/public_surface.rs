@@ -17,7 +17,6 @@ use crate::compiler_frontend::compiler_messages::{
 };
 use crate::compiler_frontend::datatypes::definitions::TypeDefinition;
 use crate::compiler_frontend::datatypes::ids::{NominalTypeId, TypeConstructor, TypeId};
-use crate::compiler_frontend::headers::module_symbols::{PublicExportEntry, PublicExportTarget};
 use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind};
 use crate::compiler_frontend::instrumentation::{AstCounter, increment_ast_counter};
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
@@ -410,7 +409,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 .get(package_prefix)
             && entries
                 .iter()
-                .any(|entry| public_export_targets_source_path(entry, path))
+                .any(|entry| entry.target.is_source_path(path))
         {
             return true;
         }
@@ -425,7 +424,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 .get(module_root)
             && entries
                 .iter()
-                .any(|entry| public_export_targets_source_path(entry, path))
+                .any(|entry| entry.target.is_source_path(path))
         {
             return true;
         }
@@ -494,13 +493,6 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         }
 
         Ok(())
-    }
-}
-
-fn public_export_targets_source_path(entry: &PublicExportEntry, path: &InternedPath) -> bool {
-    match &entry.target {
-        PublicExportTarget::Source(exported_path) => exported_path == path,
-        PublicExportTarget::External(_) => false,
     }
 }
 

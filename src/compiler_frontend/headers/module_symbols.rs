@@ -56,6 +56,21 @@ pub enum PublicExportTarget {
     External(crate::compiler_frontend::external_packages::ExternalSymbolId),
 }
 
+impl PublicExportTarget {
+    /// Whether this target is the given source declaration path.
+    ///
+    /// WHAT: a `Source` target matches the canonical declaration path of an authored source
+    ///       symbol; an `External` package target never matches a source path.
+    /// WHY: the header-built public export maps are the single owner of which source declarations
+    ///      a module-root or source-package public surface exposes. The AST public-surface
+    ///      validator and the stable source-nominal origin index share this one predicate
+    ///      instead of duplicating the source/external match arms, so nameability and origin
+    ///      indexing cannot drift on what a public export targets.
+    pub(crate) fn is_source_path(&self, path: &InternedPath) -> bool {
+        matches!(self, PublicExportTarget::Source(exported_path) if exported_path == path)
+    }
+}
+
 /// One exported symbol in a module-root public surface.
 ///
 /// WHAT: records the name that external importers use and the resolved target.

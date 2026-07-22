@@ -27,7 +27,9 @@ pub(crate) use declaration_semantics::{DeclarationSemanticKind, DeclarationSeman
 pub(crate) use declaration_table::TopLevelDeclarationTable;
 pub(in crate::compiler_frontend::ast) use input::AstEnvironmentInput;
 pub(in crate::compiler_frontend::ast) use lookups::{AstModuleEnvironment, AstModuleLookups};
-pub(crate) use resolved_public_type_roots::ResolvedPublicTypeRootTable;
 pub(in crate::compiler_frontend::ast) use resolved_public_type_roots::{
     BuildResolvedPublicTypeRootsInput, build_resolved_public_type_roots,
+};
+pub(crate) use resolved_public_type_roots::{
+    ResolvedPublicTypeRoot, ResolvedPublicTypeRootKind, ResolvedPublicTypeRootTable,
 };
