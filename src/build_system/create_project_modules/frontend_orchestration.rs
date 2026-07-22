@@ -947,9 +947,10 @@ impl FrontendModuleBuildContext<'_> {
             //    retained only on overall semantic success. No
             //    donor-local TypeId, NominalTypeId, GenericParameterId, TraitId, CoreTraitKind
             //    or InternedPath crosses the module result boundary. It is not the final
-            //    PublicSemanticInterface: folded constants, generic template bodies, evidence,
+            //    PublicSemanticInterface: generic template bodies, evidence,
             //    access/effect summaries, provenance, re-export interfaces and cross-module call
-            //    lowering remain for later phases.
+            //    lowering remain for later phases. Folded constant values are now owned by each
+            //    constant declaration record.
             let public_interface_draft =
                 PublicInterfaceDraftBuilder::new(PublicInterfaceDraftBuilderInput {
                     export_origin_draft,
@@ -959,6 +960,7 @@ impl FrontendModuleBuildContext<'_> {
                     type_environment: &module_ast.type_environment,
                     external_registry: compiler.external_package_registry.as_ref(),
                     string_table: &compiler.string_table,
+                    module_constants: &module_ast.module_constants,
                 })
                 .build()
                 .map_err(|error| CompilerMessages::from_error_ref(error, &compiler.string_table))?;

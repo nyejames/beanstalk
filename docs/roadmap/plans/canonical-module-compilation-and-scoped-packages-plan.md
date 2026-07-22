@@ -20,28 +20,30 @@ This document replaces the previous incremental phase sequence at the same path.
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/canonical-module-compilation-and-scoped-packages-plan.md
 STATUS: active
-CURRENT_SLICE: R2b — project folded values for directly exported constants into declaration-centric draft records
-LAST_ACCEPTED_COMMIT: 350ec2b3a
-WORKTREE: main at 350ec2b3a
-REQUIRED_RELOADS: startup files, this plan, public-interface draft construction, finalized AST module constants and current diff
+CURRENT_SLICE: R2b complete — directly exported constant records own canonical folded values; checkpoint ready to commit before R2c
+LAST_ACCEPTED_COMMIT: 350ec2b3a (R2a; R2b is the pending checkpoint in this worktree)
+WORKTREE: main at 56c95e0ac with the reviewed R2b source, test and plan diff; intervening documentation commits are unrelated and already in history
+REQUIRED_RELOADS: startup files, this plan, public-interface draft construction, function/field default owners and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: compiler-design-overview.md owns one-time AST folding and owned provider values; build-system-design.md owns immutable provider binding
-- code: public_interface_draft.rs owns declaration records; finalized Ast::module_constants owns folded direct constant expressions before HIR; frontend_orchestration.rs joins them before AST consumption
+- docs: compiler-design-overview.md owns one-time AST folding and owned provider values; build-system-design.md owns immutable provider binding; R2 item 3 is next
+- code: public_interface_draft.rs owns the declaration records and public folded-value vocabulary; finalized Ast::module_constants remains the one fold owner; function and struct-field default projection owners must be inspected for R2c
 ACCEPTANCE_CRITERIA:
-- each directly exported constant record carries its fully folded value in one owned backend-neutral public-value vocabulary, including folded template strings and ordered recursive const-record fields
-- conversion consumes already-finalized AST module constants and never opens TIR, reparses, refolds or imports HIR-owned/local identity vocabulary into the draft
-- public folded values contain no TypeId, StringId, InternedPath, source location, AST/TIR identity, local choice tag or absolute path; strings and field/variant names are owned and stable
-- joins are total and deterministic: missing, duplicate, extra or unsupported folded facts fail with CompilerError instead of omission or fallback reconstruction
-- function/field defaults, evidence, provenance, borrow summaries, provider re-exports, generated functions and fingerprints remain outside R2b
+- directly exported constants retain canonical type identity and an owned recursive value covering scalars, folded template strings, collections, ordered const records, choices, ranges and options
+- exact transient defining paths join finalized AST constants once; private same-leaf constants remain unrelated and alias bindings sharing one origin consume one declaration value
+- non-finite Float and unsupported/missing/duplicate/unconsumed public facts fail with CompilerError; finite Float equality is canonical and negative zero normalizes to positive zero
+- no donor-local path, type/string ID, source location, AST/TIR identity or local choice tag crosses the draft boundary
+- defaults, evidence, provenance, borrow summaries, provider re-exports, generated functions and fingerprints remain outside R2b
 VALIDATION_STATE:
-- current slice: not run
-- accepted R2a checkpoint: just validate passed at 350ec2b3a
+- cargo fmt --all: passed
+- focused public-interface draft tests: passed, 44 tests
+- focused folded-value tests: passed, 20 tests
+- just validate: passed; cross-target Clippy, 3648 Rust tests, 1793 integration contracts, docs check and 28 benchmark cases
 DOCS_IMPACT: active plan only; progress matrix unchanged because R2b changes no user-visible support
 BLOCKERS_OR_OPEN_DECISIONS: none
 DELEGATION_DECISION: ollama - user requires Ollama for every worker slice
 NEXT_WORKER_ORDER: ollama only
 STOP_REASON: none
-NEXT_RESUME_ACTION: dispatch the bounded R2b value-projection slice through Ollama, then review the handoff and actual diff
+NEXT_RESUME_ACTION: commit the accepted R2b checkpoint, reload the plan and current source, then define and dispatch bounded R2c function/field default projection through Ollama
 ```
 
 Do not append worktree-specific notes, complete validation histories or worker transcripts to this plan. Keep this status block current and concise. Git history is the validation history.

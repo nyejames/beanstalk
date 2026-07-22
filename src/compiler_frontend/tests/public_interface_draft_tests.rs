@@ -14,6 +14,8 @@
 
 use crate::compiler_frontend::ast::AstPublicInterfaceProjectionInput;
 use crate::compiler_frontend::ast::ReceiverMethodCatalog;
+use crate::compiler_frontend::ast::ast_nodes::Declaration;
+use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::statements::functions::{FunctionSignature, ReturnChannel};
 use crate::compiler_frontend::ast::{
     ReceiverMethodEntry, ResolvedPublicTraitRoot, ResolvedPublicTypeRoot,
@@ -22,7 +24,7 @@ use crate::compiler_frontend::ast::{
     TraitReceiverAccessKind,
 };
 use crate::compiler_frontend::canonical_type_identity::{
-    CanonicalBuiltinType, CanonicalTypeIdentity,
+    CanonicalBuiltinType, CanonicalTypeIdentity, CanonicalTypeProjectionContext,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::ReceiverKey;
@@ -36,11 +38,12 @@ use crate::compiler_frontend::defined_public_type_surface::{
     DefinedPublicAliasTypeSurface, DefinedPublicConstantTypeSurface,
     DefinedPublicFunctionTypeSurface, DefinedPublicNominalTypeSurface,
     DefinedPublicReceiverMethodTypeSurface, DefinedPublicTypeSurface, PublicChoiceVariantSurface,
-    PublicFieldTypeSlot,
+    PublicFieldTypeSlot, TransientNominalOriginResolver,
 };
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::public_interface_draft::{
-    DefinedPublicTraitSurface, PublicDeclarationSemantics, PublicInterfaceDraftBuilder,
+    DefinedPublicTraitSurface, FoldedValueGenericParameterResolver, FoldedValueJoinContext,
+    PublicDeclarationRecord, PublicDeclarationSemantics, PublicInterfaceDraftBuilder,
     PublicInterfaceDraftBuilderInput, PublicTraitReceiverAccess, TraitSurfaceTypeIdentity,
     build_trait_surfaces, join_declaration_records,
 };
@@ -51,6 +54,7 @@ use crate::compiler_frontend::semantic_identity::{
 };
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::compiler_frontend::value_mode::ValueMode;
 
 use rustc_hash::FxHashMap;
@@ -344,6 +348,43 @@ fn type_surface(
         constants,
         receiver_methods,
     }
+}
+
+/// Wraps `join_declaration_records` with an empty folded-value context for tests that do not
+/// exercise constant folded-value projection.
+fn join_with_empty_constants(
+    export_bindings: &[ExportBinding],
+    type_surface: DefinedPublicTypeSurface,
+    trait_surfaces: Vec<DefinedPublicTraitSurface>,
+) -> Result<Vec<PublicDeclarationRecord>, CompilerError> {
+    let env = TypeEnvironment::new();
+    let string_table = StringTable::new();
+    let nominal_origins: FxHashMap<InternedPath, OriginTypeId> = FxHashMap::default();
+    let nominal_resolver = TransientNominalOriginResolver::new(&env, &nominal_origins);
+    let generic_resolver = FoldedValueGenericParameterResolver;
+    let registry = ExternalPackageRegistry::new();
+    let projection_context =
+        CanonicalTypeProjectionContext::new(&nominal_resolver, &generic_resolver, &registry);
+    let folded_value_context = FoldedValueJoinContext {
+        module_constants: &[],
+        type_environment: &env,
+        string_table: &string_table,
+        projection_context: &projection_context,
+    };
+    join_declaration_records(
+        export_bindings,
+        type_surface,
+        trait_surfaces,
+        &folded_value_context,
+    )
+}
+
+fn default_location() -> SourceLocation {
+    SourceLocation::default()
+}
+
+fn immutable() -> ValueMode {
+    ValueMode::ImmutableOwned
 }
 
 // ---------------------------------------------------------------------------
@@ -887,6 +928,12 @@ fn builder_produces_declaration_centric_draft_covering_every_category() {
         receiver_catalog: Some(std::rc::Rc::new(ReceiverMethodCatalog::default())),
     };
 
+    let max_size_constant = Declaration {
+        id: InternedPath::from_single_str("MaxSize", &mut string_table),
+        value: Expression::int(256, default_location(), immutable()),
+    };
+    let module_constants = vec![max_size_constant];
+
     let registry = ExternalPackageRegistry::new();
     let draft = PublicInterfaceDraftBuilder::new(PublicInterfaceDraftBuilderInput {
         export_origin_draft,
@@ -896,6 +943,7 @@ fn builder_produces_declaration_centric_draft_covering_every_category() {
         type_environment: &env,
         external_registry: &registry,
         string_table: &string_table,
+        module_constants: &module_constants,
     })
     .build()
     .expect("declaration-centric draft builds for all categories");
@@ -1041,6 +1089,7 @@ fn builder_attaches_receiver_methods_to_struct_record() {
         type_environment: &env,
         external_registry: &registry,
         string_table: &string_table,
+        module_constants: &[],
     })
     .build()
     .expect("draft with receiver method builds");
@@ -1080,6 +1129,7 @@ fn module_origin_survives_empty_public_surface() {
         type_environment: &env,
         external_registry: &registry,
         string_table: &string_table,
+        module_constants: &[],
     })
     .build()
     .expect("empty-surface draft builds");
@@ -1102,7 +1152,7 @@ fn join_rejects_binding_without_matching_type_surface_entry() {
     );
     let type_surface = type_surface(vec![], vec![], vec![], vec![], vec![]);
 
-    let result = join_declaration_records(std::slice::from_ref(&binding), type_surface, vec![]);
+    let result = join_with_empty_constants(std::slice::from_ref(&binding), type_surface, vec![]);
 
     assert!(result.is_err());
     let message = result.unwrap_err().msg.clone();
@@ -1120,7 +1170,7 @@ fn join_rejects_extra_type_surface_entry_without_binding() {
     };
     let type_surface = type_surface(vec![function], vec![], vec![], vec![], vec![]);
 
-    let result = join_declaration_records(&[], type_surface, vec![]);
+    let result = join_with_empty_constants(&[], type_surface, vec![]);
 
     assert!(result.is_err());
     let message = result.unwrap_err().msg.clone();
@@ -1144,7 +1194,7 @@ fn join_produces_one_record_per_origin() {
     };
     let type_surface = type_surface(vec![function], vec![], vec![], vec![], vec![]);
 
-    let records = join_declaration_records(std::slice::from_ref(&binding), type_surface, vec![])
+    let records = join_with_empty_constants(std::slice::from_ref(&binding), type_surface, vec![])
         .expect("join succeeds for one function");
 
     assert_eq!(records.len(), 1);
@@ -1248,7 +1298,7 @@ fn join_emits_one_record_when_two_bindings_share_one_origin() {
     };
     let type_surface = type_surface(vec![function], vec![], vec![], vec![], vec![]);
 
-    let records = join_declaration_records(&[binding_a, binding_b], type_surface, vec![])
+    let records = join_with_empty_constants(&[binding_a, binding_b], type_surface, vec![])
         .expect("join succeeds with one record for a shared origin");
 
     assert_eq!(records.len(), 1, "one record per unique origin");
@@ -1277,7 +1327,7 @@ fn join_rejects_duplicate_type_surface_origin() {
     };
     let type_surface = type_surface(vec![function, duplicate], vec![], vec![], vec![], vec![]);
 
-    let result = join_declaration_records(&[], type_surface, vec![]);
+    let result = join_with_empty_constants(&[], type_surface, vec![]);
 
     assert!(result.is_err());
     let message = result.unwrap_err().msg.clone();
@@ -1307,7 +1357,7 @@ fn join_rejects_struct_fact_containing_choice_variants() {
     };
     let type_surface = type_surface(vec![], vec![nominal], vec![], vec![], vec![]);
 
-    let result = join_declaration_records(std::slice::from_ref(&binding), type_surface, vec![]);
+    let result = join_with_empty_constants(std::slice::from_ref(&binding), type_surface, vec![]);
 
     assert!(result.is_err());
     let message = result.unwrap_err().msg.clone();
@@ -1337,7 +1387,7 @@ fn join_rejects_choice_fact_containing_struct_fields() {
     };
     let type_surface = type_surface(vec![], vec![nominal], vec![], vec![], vec![]);
 
-    let result = join_declaration_records(std::slice::from_ref(&binding), type_surface, vec![]);
+    let result = join_with_empty_constants(std::slice::from_ref(&binding), type_surface, vec![]);
 
     assert!(result.is_err());
     let message = result.unwrap_err().msg.clone();
@@ -1371,7 +1421,7 @@ fn join_rejects_duplicate_receiver_method_origin() {
 
     // A binding is not needed: the duplicate is caught while indexing receiver methods, before
     // the binding loop runs.
-    let result = join_declaration_records(&[], type_surface, vec![]);
+    let result = join_with_empty_constants(&[], type_surface, vec![]);
 
     assert!(result.is_err());
     let message = result.unwrap_err().msg.clone();
@@ -1380,3 +1430,10 @@ fn join_rejects_duplicate_receiver_method_origin() {
         "expected a duplicate method-origin diagnostic, got: {message}"
     );
 }
+
+// ---------------------------------------------------------------------------
+//  Folded-value projection tests live in a focused sibling module
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod folded_value_tests;

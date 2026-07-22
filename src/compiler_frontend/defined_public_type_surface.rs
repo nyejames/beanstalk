@@ -187,13 +187,19 @@ pub(crate) struct DefinedPublicAliasTypeSurface {
     pub(crate) target_type_identity: CanonicalTypeIdentity,
 }
 
-/// The type-only surface for one exported constant.
+/// The transient type-and-path surface for one exported constant.
 ///
-/// Only the canonical type is exposed in this slice; folded values remain for a later phase.
+/// WHAT: carries the stable constant origin, the canonical type identity and the exact
+/// defining [`InternedPath`] retained from the resolved public type root. The defining
+/// path is a transient join key: the declaration-centric draft consumes it to locate the
+/// matching finalized `Ast::module_constants` entry by exact declaration path, then the
+/// path does not survive the draft boundary. The folded value itself is owned by the
+/// declaration draft, not by this transient surface.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct DefinedPublicConstantTypeSurface {
     pub(crate) origin: OriginConstantId,
     pub(crate) type_identity: CanonicalTypeIdentity,
+    pub(crate) defining_path: InternedPath,
 }
 
 /// The type-only surface for one exported receiver method.
@@ -569,6 +575,7 @@ pub(crate) fn build_defined_public_type_surface(
                 constants.push(DefinedPublicConstantTypeSurface {
                     origin: constant_origin.clone(),
                     type_identity,
+                    defining_path: root.path.clone(),
                 });
             }
         }

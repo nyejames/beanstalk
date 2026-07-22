@@ -40,6 +40,8 @@
 //! It is not the final `PublicSemanticInterface`.
 
 use crate::compiler_frontend::ast::AstPublicInterfaceProjectionInput;
+use crate::compiler_frontend::ast::ast_nodes::Declaration;
+use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::statements::functions::ReturnChannel;
 use crate::compiler_frontend::ast::{
     ResolvedPublicTraitRoot, ResolvedTraitRequirementFact, TraitReceiverAccessKind,
@@ -138,9 +140,9 @@ pub(crate) struct DefinedPublicTraitSurface {
 ///
 /// WHAT: a distinct variant per directly-defined public declaration category. Struct and choice
 /// are separate variants so nominal meaning is never implicit in empty field/variant vectors.
-/// Each variant carries only the semantic facts already produced at R1; no folded values,
-/// evidence, provenance, borrow/effect summaries, generic template bodies or re-exports enter
-/// this enum.
+/// Each variant carries only the semantic facts already produced at R1; folded constant
+/// values are owned by the constant variant. Evidence, provenance, borrow/effect summaries,
+/// generic template bodies and re-exports remain outside this enum.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum PublicDeclarationSemantics {
     Function(PublicFunctionSemantics),
@@ -195,11 +197,105 @@ pub(crate) struct PublicAliasSemantics {
     pub(crate) target_type_identity: CanonicalTypeIdentity,
 }
 
-/// The semantic facts for one exported constant: the canonical type identity. Folded values
-/// remain for a later phase.
+/// The semantic facts for one exported constant: the canonical type identity and the owned
+/// fully folded value.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct PublicConstantSemantics {
     pub(crate) type_identity: CanonicalTypeIdentity,
+    pub(crate) folded_value: PublicFoldedValue,
+}
+
+/// One owned field inside a const record or choice variant payload.
+///
+/// WHAT: preserves the authored field name as an owned stable string and the recursively
+/// owned folded value. The name derives from the declaration path's last component while
+/// the donor-local string table is available, so the field survives after donor-local
+/// `StringId` and `InternedPath` identities are unavailable.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct PublicFoldedField {
+    pub(crate) name: String,
+    pub(crate) value: PublicFoldedValue,
+}
+
+/// A finite `f64` folded value with an equivalence relation consistent with Beanstalk
+/// semantics.
+///
+/// WHAT: a narrow validated wrapper that rejects non-finite input (`NaN`, `+inf`, `-inf`) and
+/// normalizes negative zero to positive zero at construction. Finiteness makes `PartialEq` a
+/// total equivalence relation, so the draft hierarchy can derive `Eq`.
+/// WHY: `f64` itself does not implement `Eq` because `NaN != NaN`. Beanstalk formatting renders
+/// negative zero as ordinary zero, so `-0.0` is unobservable as text; normalizing it keeps the
+/// folded value canonical and equality consistent with the accepted formatting contract.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct FiniteFloat(f64);
+
+impl FiniteFloat {
+    /// Construct a finite float, rejecting non-finite input and normalizing negative zero.
+    pub(crate) fn new(value: f64) -> Result<Self, CompilerError> {
+        if !value.is_finite() {
+            return Err(CompilerError::compiler_error(format!(
+                "public-interface draft folded-value projection: a non-finite Float value ({}) reached \
+             conversion; the AST must not materialize non-finite constants, so this is an \
+             internal invariant violation",
+                value
+            )));
+        }
+        // `-0.0 == 0.0` under ordinary float equality, so this branch normalizes both signs to
+        // positive zero. The accepted formatting contract renders negative zero as zero.
+        let normalized = if value == 0.0 { 0.0 } else { value };
+        Ok(Self(normalized))
+    }
+}
+
+impl Eq for FiniteFloat {}
+
+/// The owned, backend-neutral, recursive folded value for one directly exported constant.
+///
+/// WHAT: one explicit public-interface value vocabulary for the complete normalized constant
+/// shapes that can legally reach the draft boundary after AST constant normalization. Every
+/// leaf is an owned stable value: no `TypeId`, `NominalTypeId`, `StringId`,
+/// `InternedPath`, source location, AST/TIR identity, HIR ID, local choice tag/index or
+/// absolute path crosses this boundary. Choice variants carry a stable variant name
+/// derived from the donor-local type environment while it is available, not a local tag
+/// index. Option presence is modeled by the recursive `OptionSome`/`OptionNone` variants, not
+/// by a residual coercion operation: the interface contains values, not conversion
+/// instructions.
+///
+/// WHY: the public interface must own its folded values so downstream provider binding and
+/// cross-module consumers read one backend-neutral value shape instead of donor-local AST
+/// expression identity. The vocabulary is recursive so nested const-record fields, choice
+/// payloads, collection elements and option payloads all project through the same conversion.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum PublicFoldedValue {
+    Int(i32),
+    Float(FiniteFloat),
+    Bool(bool),
+    Char(char),
+    /// A folded template string or a plain string literal, resolved to an owned `String`.
+    String(String),
+    /// An ordered homogeneous collection of folded values.
+    Collection(Vec<PublicFoldedValue>),
+    /// A const record: ordered owned field names with recursively owned field values.
+    Record(Vec<PublicFoldedField>),
+    /// A choice variant with a stable variant name, the boxed choice type identity and
+    /// ordered owned payload fields. The type identity is boxed to keep the recursive value
+    /// enum small.
+    Choice {
+        type_identity: Box<CanonicalTypeIdentity>,
+        variant_name: String,
+        fields: Vec<PublicFoldedField>,
+    },
+    /// An inclusive range with folded start and end values.
+    Range {
+        start: Box<PublicFoldedValue>,
+        end: Box<PublicFoldedValue>,
+    },
+    /// A present option value wrapping a recursively folded inner value. Nested options
+    /// recurse through the same conversion, so `Option<Option<T>>` produces
+    /// `OptionSome(OptionSome(...))`.
+    OptionSome(Box<PublicFoldedValue>),
+    /// An absent option value.
+    OptionNone,
 }
 
 /// The semantic facts for one exported trait: its ordered requirements with receiver access,
@@ -229,9 +325,10 @@ pub(crate) struct PublicDeclarationRecord {
 /// values: no donor-local `TypeId`, `NominalTypeId`, `GenericParameterId`, `TraitId`,
 /// `InternedPath` or `StringId` crosses this boundary.
 ///
-/// It is deliberately not the final `PublicSemanticInterface`. Folded constant values, generic
-/// template bodies, evidence, access/effect summaries, provenance, re-export interfaces and
-/// cross-module call lowering remain for later phases.
+/// It is deliberately not the final `PublicSemanticInterface`. Generic template bodies,
+/// evidence, access/effect summaries, provenance, re-export interfaces and cross-module call
+/// lowering remain for later phases. Folded constant values are owned by each constant
+/// declaration record.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct PublicInterfaceDraft {
     pub(crate) module_origin: StableModuleOriginIdentity,
@@ -258,6 +355,14 @@ pub(crate) struct PublicInterfaceDraftBuilderInput<'a> {
     pub type_environment: &'a TypeEnvironment,
     pub external_registry: &'a ExternalPackageRegistry,
     pub string_table: &'a StringTable,
+    /// The finalized and normalized module constant declarations from the AST.
+    ///
+    /// WHAT: the already-folded `Ast::module_constants` consumed before HIR lowering. Each
+    /// entry carries the constant's exact defining `InternedPath` and its fully folded
+    /// expression. The draft builder joins each public constant surface to a finalized module
+    /// constant by that exact defining path and converts the expression to an owned
+    /// [`PublicFoldedValue`].
+    pub module_constants: &'a [Declaration],
 }
 
 /// Builds the one aggregate [`PublicInterfaceDraft`] from already-resolved pre-HIR facts.
@@ -290,7 +395,8 @@ impl<'a> PublicInterfaceDraftBuilder<'a> {
     /// 2. build the canonical type surface from the resolved root table,
     /// 3. build the corrected trait surfaces from the resolved trait roots,
     /// 4. join all three into [`PublicDeclarationRecord`] values, attaching receiver methods to
-    ///    their owning struct or choice record.
+    ///    their owning struct or choice record and joining each constant export binding to its
+    ///    finalized module constant folded value.
     ///
     /// Each step is total: a missing, duplicate, unmatched or malformed fact is a
     /// `CompilerError` rather than a silent omission. The intermediates are consumed before the
@@ -304,6 +410,7 @@ impl<'a> PublicInterfaceDraftBuilder<'a> {
             type_environment,
             external_registry,
             string_table,
+            module_constants,
         } = self.input;
 
         let AstPublicInterfaceProjectionInput {
@@ -342,13 +449,39 @@ impl<'a> PublicInterfaceDraftBuilder<'a> {
             string_table,
         )?;
 
+        // Build the folded-value projection context from the same nominal origin resolver
+        // and external registry already used by the type-surface and trait-surface
+        // projections. Folded constant values are concrete, so a generic parameter reaching
+        // this projection is an internal invariant violation rather than a legitimate
+        // exported shape.
+        let nominal_resolver = TransientNominalOriginResolver::new(
+            type_environment,
+            public_source_nominal_type_origins,
+        );
+        let generic_resolver = FoldedValueGenericParameterResolver;
+        let projection_context = CanonicalTypeProjectionContext::new(
+            &nominal_resolver,
+            &generic_resolver,
+            external_registry,
+        );
+        let folded_value_context = FoldedValueJoinContext {
+            module_constants,
+            type_environment,
+            string_table,
+            projection_context: &projection_context,
+        };
+
         // Consume the export-origin component after the borrowing projections finish.
-        // The module origin and export bindings move into the draft; the receiver surfaces were
-        // already projected into the type surface and are dropped here.
+        // The module origin and export bindings move into the draft; the receiver surfaces
+        // were already projected into the type surface and are dropped here.
         let (module_origin, export_bindings) =
             export_origins.into_module_origin_and_export_bindings();
-        let declarations =
-            join_declaration_records(&export_bindings, type_surface, trait_surfaces)?;
+        let declarations = join_declaration_records(
+            &export_bindings,
+            type_surface,
+            trait_surfaces,
+            &folded_value_context,
+        )?;
 
         Ok(PublicInterfaceDraft {
             module_origin,
@@ -356,6 +489,24 @@ impl<'a> PublicInterfaceDraftBuilder<'a> {
             declarations,
         })
     }
+}
+
+// ===========================================================================
+//  Folded-value projection context
+// ===========================================================================
+
+/// Context for projecting folded constant values during the declaration-centric join.
+///
+/// WHAT: bundles the finalized module constant declarations, the shared type environment,
+/// the string table and the canonical type projection context so the join does not take a
+/// long positional parameter list. The projection context is built once in the builder from
+/// the same nominal origin resolver and external registry already used by the type-surface
+/// and trait-surface projections.
+struct FoldedValueJoinContext<'a> {
+    module_constants: &'a [Declaration],
+    type_environment: &'a TypeEnvironment,
+    string_table: &'a StringTable,
+    projection_context: &'a CanonicalTypeProjectionContext<'a>,
 }
 
 // ===========================================================================
@@ -384,6 +535,7 @@ fn join_declaration_records(
     export_bindings: &[ExportBinding],
     type_surface: DefinedPublicTypeSurface,
     trait_surfaces: Vec<DefinedPublicTraitSurface>,
+    folded_value_context: &FoldedValueJoinContext,
 ) -> Result<Vec<PublicDeclarationRecord>, CompilerError> {
     let DefinedPublicTypeSurface {
         free_functions,
@@ -444,6 +596,25 @@ fn join_declaration_records(
                 "public-interface draft join: two constant type-surface entries share origin {:?}; a duplicate must not silently overwrite the first",
                 origin
             )));
+        }
+    }
+
+    // Index the finalized module constant declarations by their exact defining
+    // `InternedPath` so each constant export binding joins the one module constant declared
+    // at the same path. Joining by exact path, not by public-name spelling, keeps unrelated
+    // private constants with a shared leaf name from clashing and keeps aliased public
+    // bindings on one origin. A duplicate exact declaration path is an internal invariant
+    // violation, not a silent overwrite. Private constants that have no export binding
+    // remain in the index and are expected extras: they are not rejected after the join.
+    let mut module_constants_by_path: FxHashMap<&InternedPath, &Declaration> = FxHashMap::default();
+    for declaration in folded_value_context.module_constants {
+        if module_constants_by_path
+            .insert(&declaration.id, declaration)
+            .is_some()
+        {
+            return Err(CompilerError::compiler_error(
+                "public-interface draft join: two module constant declarations share the exact defining path; a duplicate must not silently overwrite the first",
+            ));
         }
     }
 
@@ -616,10 +787,18 @@ fn join_declaration_records(
                             binding.public_name()
                         ))
                     })?;
+
+                let folded_value = join_constant_folded_value(
+                    &constant.defining_path,
+                    &mut module_constants_by_path,
+                    folded_value_context,
+                )?;
+
                 declarations.push(PublicDeclarationRecord {
                     origin: binding.origin().clone(),
                     semantics: PublicDeclarationSemantics::Constant(PublicConstantSemantics {
                         type_identity: constant.type_identity,
+                        folded_value,
                     }),
                 });
             }
@@ -1008,6 +1187,277 @@ fn project_trait_surface_type_identity(
 
     let canonical = project_type_id_to_canonical_identity(type_id, type_environment, context)?;
     Ok(TraitSurfaceTypeIdentity::Concrete(Box::new(canonical)))
+}
+
+// ===========================================================================
+//  Folded-value conversion
+// ===========================================================================
+
+/// A generic-parameter resolver that rejects every request.
+///
+/// WHAT: folded constant values are concrete, so a `GenericParameterId` reaching the
+/// canonical type projection during folded-value conversion is an internal invariant
+/// violation. This resolver returns a precise `CompilerError` instead of inventing an
+/// identity.
+struct FoldedValueGenericParameterResolver;
+
+impl GenericParameterOriginResolver for FoldedValueGenericParameterResolver {
+    fn resolve_generic_parameter_origin(
+        &self,
+        parameter_id: GenericParameterId,
+    ) -> Result<ExportedGenericParameterIdentity, CompilerError> {
+        Err(CompilerError::compiler_error(format!(
+            "public-interface draft folded-value projection: GenericParameterId({}) reached \
+             canonical projection inside a folded constant value; folded constants are concrete \
+             so a generic parameter is an internal invariant violation",
+            parameter_id.0
+        )))
+    }
+}
+
+/// Join one public constant surface to its matching module constant declaration by exact
+/// defining path and convert the folded expression to an owned [`PublicFoldedValue`].
+///
+/// WHAT: looks up the surface's defining `InternedPath` in the module-constants-by-path index,
+/// removes the entry so the same constant cannot join twice, and converts the expression
+/// through the shared folded-value conversion. A missing match is a `CompilerError`: a public
+/// constant with no matching finalized declaration cannot be projected.
+fn join_constant_folded_value(
+    defining_path: &InternedPath,
+    module_constants_by_path: &mut FxHashMap<&InternedPath, &Declaration>,
+    context: &FoldedValueJoinContext,
+) -> Result<PublicFoldedValue, CompilerError> {
+    let declaration = module_constants_by_path
+        .remove(defining_path)
+        .ok_or_else(|| {
+            CompilerError::compiler_error(
+                "public-interface draft join: a constant export binding has no matching finalized \
+                 module constant declaration at its defining path; the folded value cannot be \
+                 projected without the donor-local AST expression",
+            )
+        })?;
+
+    convert_expression_to_folded_value(
+        &declaration.value,
+        context.type_environment,
+        context.string_table,
+        context.projection_context,
+    )
+}
+
+/// Convert one finalized and normalized AST constant expression to an owned
+/// [`PublicFoldedValue`].
+///
+/// WHAT: recursively walks the expression kind, resolving donor-local `StringId`s to owned
+/// `String`s, donor-local choice tag indexes to stable variant names through the type
+/// environment, and donor-local `TypeId`s to [`CanonicalTypeIdentity`] through the canonical
+/// type projection. Every leaf is an owned stable value with no donor-local identity.
+///
+/// A shape that cannot legally reach a normalized exported constant returns a deterministic
+/// `CompilerError` naming the invariant instead of silently omitting the value.
+fn convert_expression_to_folded_value(
+    expression: &Expression,
+    type_environment: &TypeEnvironment,
+    string_table: &StringTable,
+    projection_context: &CanonicalTypeProjectionContext,
+) -> Result<PublicFoldedValue, CompilerError> {
+    match &expression.kind {
+        ExpressionKind::Int(value) => Ok(PublicFoldedValue::Int(*value)),
+        ExpressionKind::Float(value) => Ok(PublicFoldedValue::Float(FiniteFloat::new(*value)?)),
+        ExpressionKind::Bool(value) => Ok(PublicFoldedValue::Bool(*value)),
+        ExpressionKind::Char(value) => Ok(PublicFoldedValue::Char(*value)),
+
+        ExpressionKind::StringSlice(string_id) => Ok(PublicFoldedValue::String(
+            string_table.resolve(*string_id).to_owned(),
+        )),
+
+        ExpressionKind::Collection(items) => {
+            let mut folded_items = Vec::with_capacity(items.len());
+            for item in items {
+                folded_items.push(convert_expression_to_folded_value(
+                    item,
+                    type_environment,
+                    string_table,
+                    projection_context,
+                )?);
+            }
+            Ok(PublicFoldedValue::Collection(folded_items))
+        }
+
+        ExpressionKind::StructInstance(fields) => {
+            let folded_fields = convert_declaration_fields_to_folded_fields(
+                fields,
+                type_environment,
+                string_table,
+                projection_context,
+            )?;
+            Ok(PublicFoldedValue::Record(folded_fields))
+        }
+
+        ExpressionKind::ChoiceConstruct { tag, fields, .. } => {
+            let type_identity = project_type_id_to_canonical_identity(
+                expression.type_id,
+                type_environment,
+                projection_context,
+            )?;
+
+            let variant_name = resolve_choice_variant_name(
+                expression.type_id,
+                *tag,
+                type_environment,
+                string_table,
+            )?;
+
+            let folded_fields = convert_declaration_fields_to_folded_fields(
+                fields,
+                type_environment,
+                string_table,
+                projection_context,
+            )?;
+
+            Ok(PublicFoldedValue::Choice {
+                type_identity: Box::new(type_identity),
+                variant_name,
+                fields: folded_fields,
+            })
+        }
+
+        ExpressionKind::Range(start, end) => {
+            let folded_start = convert_expression_to_folded_value(
+                start,
+                type_environment,
+                string_table,
+                projection_context,
+            )?;
+            let folded_end = convert_expression_to_folded_value(
+                end,
+                type_environment,
+                string_table,
+                projection_context,
+            )?;
+            Ok(PublicFoldedValue::Range {
+                start: Box::new(folded_start),
+                end: Box::new(folded_end),
+            })
+        }
+
+        ExpressionKind::Coerced { value, to_type } => {
+            // A `Coerced` node is legitimate for compile-time constants only as an
+            // option-present wrapper: `T` wrapped to `T?` after numeric literals have already
+            // materialized their own numeric coercion (`Int` -> `Float` is folded to a
+            // `Float` literal, not wrapped). Any other residual coercion reaching this
+            // boundary is an internal invariant violation.
+            let inner_type_id = value.type_id;
+            if type_environment.option_inner_type(*to_type) != Some(inner_type_id) {
+                return Err(CompilerError::compiler_error(format!(
+                    "public-interface draft folded-value projection: a Coerced expression with \
+                     target TypeId({}) and inner TypeId({}) is not an option-present wrap of the \
+                     inner type; only `T -> T?` coercion can legally reach this boundary",
+                    to_type.0, inner_type_id.0
+                )));
+            }
+            let folded_value = convert_expression_to_folded_value(
+                value,
+                type_environment,
+                string_table,
+                projection_context,
+            )?;
+            Ok(PublicFoldedValue::OptionSome(Box::new(folded_value)))
+        }
+
+        ExpressionKind::OptionNone => Ok(PublicFoldedValue::OptionNone),
+
+        ExpressionKind::Template(_) => Err(CompilerError::compiler_error(
+            "public-interface draft folded-value projection: a Template expression reached \
+             conversion; normalization folds renderable templates to StringSlice and filters \
+             slot-insert helpers, so only a loop-control signal could remain and it is not a \
+             data value",
+        )),
+
+        ExpressionKind::Reference(_) => Err(CompilerError::compiler_error(
+            "public-interface draft folded-value projection: a Reference expression reached \
+             conversion; constant references are resolved during AST folding, so an unresolved \
+             reference is an internal invariant violation",
+        )),
+
+        // Every remaining variant is not a compile-time constant shape and must not reach a
+        // normalized exported constant. Report the exact kind name so the invariant is clear.
+        kind => Err(CompilerError::compiler_error(format!(
+            "public-interface draft folded-value projection: expression kind {:?} is not a \
+             supported normalized constant value shape; only scalars, collections, const \
+             records, choices, ranges and option-present wraps can legally reach this \
+             boundary",
+            kind
+        ))),
+    }
+}
+
+/// Convert a slice of [`Declaration`] fields to owned [`PublicFoldedField`] values.
+///
+/// WHAT: resolves each field name from the declaration path's last component through the
+/// string table and recursively converts each field value. Preserves authored field order.
+fn convert_declaration_fields_to_folded_fields(
+    fields: &[Declaration],
+    type_environment: &TypeEnvironment,
+    string_table: &StringTable,
+    projection_context: &CanonicalTypeProjectionContext,
+) -> Result<Vec<PublicFoldedField>, CompilerError> {
+    let mut folded_fields = Vec::with_capacity(fields.len());
+    for field in fields {
+        let name = field
+            .id
+            .name_str(string_table)
+            .ok_or_else(|| {
+                CompilerError::compiler_error(
+                    "public-interface draft folded-value projection: a const-record or choice \
+             payload field declaration has no resolvable field name; the interned path \
+             is empty",
+                )
+            })?
+            .to_owned();
+
+        let value = convert_expression_to_folded_value(
+            &field.value,
+            type_environment,
+            string_table,
+            projection_context,
+        )?;
+
+        folded_fields.push(PublicFoldedField { name, value });
+    }
+    Ok(folded_fields)
+}
+
+/// Resolve a choice variant's stable name from the donor-local tag index.
+///
+/// WHAT: looks up the choice definition for the expression's `type_id` through the type
+/// environment, finds the variant with the matching tag, and resolves its `StringId` name to
+/// an owned `String`. This replaces the donor-local tag index with a stable variant name
+/// while the local type environment and string table are available.
+fn resolve_choice_variant_name(
+    type_id: TypeId,
+    tag: usize,
+    type_environment: &TypeEnvironment,
+    string_table: &StringTable,
+) -> Result<String, CompilerError> {
+    let variants = type_environment.variants_for(type_id).ok_or_else(|| {
+        CompilerError::compiler_error(format!(
+            "public-interface draft folded-value projection: the choice construct TypeId({}) \
+             has no choice definition in the TypeEnvironment; a ChoiceConstruct must \
+             resolve to a choice or generic choice instance",
+            type_id.0
+        ))
+    })?;
+
+    let variant = variants.iter().find(|v| v.tag == tag).ok_or_else(|| {
+        CompilerError::compiler_error(format!(
+            "public-interface draft folded-value projection: the choice construct TypeId({}) \
+             has no variant with tag {}; the tag is out of range",
+            type_id.0, tag
+        ))
+    })?;
+
+    Ok(string_table.resolve(variant.name).to_owned())
 }
 
 #[cfg(test)]
