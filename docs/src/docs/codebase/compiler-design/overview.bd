@@ -1,14 +1,14 @@
 # From Beanstalk source to a webpage
 
-A compiler does not wake up and spit machine code at a file. It grows a program through a sequence of representations. Each stage sheds one kind of ambiguity and passes a clearer form to the next.
+A compiler turns source text into something a machine can run or display. It does that in stages. Each stage removes one kind of ambiguity and hands a clearer structure to the next.
 
-This series follows that growth for one small Beanstalk project. You already write Rust. You know functions, enums, structs and ownership as a user. You may not yet own the words *intermediate representation*, *link plan* or *borrow validation*. That is fine. Each term arrives when the running example needs it.
+This series walks one small Beanstalk project from files on disk to a generated HTML page. If you write Rust, you already know functions, enums, structs and ownership as a user. You may not know terms like *intermediate representation*, *link plan* or *borrow validation* yet. That is fine. Each term shows up when the example needs it.
 
-These pages teach. They do not define compiler behaviour. Accepted architecture lives in the canonical design documents. Current support lives in the progress matrix. Sequencing lives in the roadmap. When those disagree with an old habit in the code, the design document wins for this tour.
+These pages teach. They do not define compiler behaviour. Accepted architecture lives in the design documents. Current support lives in the progress matrix. Sequencing lives in the roadmap. When code and design disagree, design wins for this tour.
 
 ## The project you will carry
 
-Keep this tree in your head for the whole series:
+Keep this tree in mind for the whole series:
 
 [codeblock, $code("text"):
 compiler_walkthrough/
@@ -42,17 +42,17 @@ visitor = "Priya"
 ]
 ]
 
-The final relevant fragment the series aims at:
+The final fragment the series aims at:
 
 [codeblock, $code("text"):
 <p>Hello, Priya!</p>
 ]
 
-Priya never changes. The file names never change. The fragment never changes. Side examples may branch away for a paragraph. They always return to this greeting.
+Priya never changes. The file names never change. The fragment never changes. Side examples may wander for a paragraph, then come back to this greeting.
 
 ## What each stage hands the next
 
-One strip of checkpoints runs through every article:
+One checkpoint strip runs through every article:
 
 [codeblock, $code("text"):
 project tree
@@ -75,14 +75,14 @@ project tree
 
 Each article opens with the incoming representation and closes with the outgoing one. If a page jumps ahead, you have left the chronological route.
 
-**Diagram placeholder:** Growth path of compiler representations from project tree to HTML output
+**Diagram placeholder:** Pipeline from project tree to HTML output
 
 *Caption: simplified Beanstalk walkthrough, not a universal compiler taxonomy.*
-*Question: which step still looks like source, and which first looks like a program a host can run?*
+*Question: which step still looks like source, and which first looks like something a host can run?*
 
 ## Four owners you will meet again
 
-**Build system.** Selects the command, discovers source, builds graphs, schedules modules, plans entries and owns writing files to disk.
+**Build system.** Selects the command, discovers source, builds graphs, schedules modules, plans entries and writes files to disk.
 
 **Compiler frontend and analysis.** Prepares syntax, binds interfaces, checks semantics, lowers HIR and validates access.
 
@@ -90,7 +90,7 @@ Each article opens with the incoming representation and closes with the outgoing
 
 **Target backends.** Lower validated functions and runtime needs into JavaScript, Wasm and glue.
 
-A fact has one owner. Later stages consume that fact. They do not rebuild it from source text for sport.
+A fact has one owner. Later stages consume that fact. They do not rebuild it from source text.
 
 ## How to read the series
 
@@ -139,4 +139,4 @@ The series links the progress matrix and roadmap. It does not paste either docum
 
 Educational pages explain those authorities. They do not outrank them.
 
-Start at the first shoot: what a compiler does between Priya's name and a paragraph on a page.
+Next: what a compiler does between Priya's name and a paragraph on a page.

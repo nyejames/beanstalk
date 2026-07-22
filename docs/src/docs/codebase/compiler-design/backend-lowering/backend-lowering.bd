@@ -1,6 +1,6 @@
 # Turning HIR into JavaScript and Wasm
 
-One HIR operation may become a JavaScript expression in one partition and a Wasm instruction sequence in another. The meaning stays Beanstalk. The spelling becomes target-native. Same genetics, different climates.
+One HIR operation may become a JavaScript expression in one partition and a Wasm instruction sequence in another. The meaning stays Beanstalk. The spelling becomes target-native. Same source meaning, different host climates.
 
 **Lowerers** translate validated inputs. They are not second language frontends.
 
@@ -114,4 +114,4 @@ User-facing target failures preferably die in validation, not mid-emission.
 
 ## Exit state
 
-You leave with JavaScript, Wasm, wrappers, runtime modules and asset records as data. The next question: how does the HTML builder assemble and own those outputs on disk, ending at `<p>Hello, Priya!</p>`?
+You leave with JavaScript, Wasm, wrappers, runtime modules and asset records as data. Next: how the HTML builder assembles and owns those outputs on disk, ending at `<p>Hello, Priya!</p>`.

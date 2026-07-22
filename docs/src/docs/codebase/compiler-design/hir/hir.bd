@@ -2,7 +2,7 @@
 
 Nested expressions are friendly to humans and slightly rude to machines. Evaluation order hides in tree shape. Early exits hide in nesting. A borrow checker that must rediscover all of that from sugar will rediscover it wrong.
 
-**HIR** (a high-level intermediate representation in Beanstalk's pipeline) lowers fully typed AST into the first **backend-facing semantic IR**. Meaning stays. Shape changes. The canopy of source sugar becomes an explicit branching structure analyses can walk.
+**HIR** (a high-level intermediate representation in Beanstalk's pipeline) lowers fully typed AST into the first **backend-facing semantic IR**. Meaning stays. Shape changes. Nested source sugar becomes an explicit branching structure analyses can walk.
 
 ## Lowering without changing meaning
 
@@ -124,4 +124,4 @@ Keep internal failures separate from source diagnostics. Authors did not "misuse
 
 ## Exit state
 
-You leave with validated HIR and per-function link facts. The next question: what memory guarantees can analysis derive from that control flow, and why does GC not replace borrow checking?
+You leave with validated HIR and per-function link facts. Next: what memory guarantees analysis can derive from that control flow, and why GC does not replace borrow checking.

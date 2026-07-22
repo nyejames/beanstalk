@@ -2,11 +2,11 @@
 
 Later stages need a coherent object, not a loose mutable AST and a prayer. One shared module must serve every entry that needs it without recompiling once per page.
 
-A successful module compilation produces an immutable **`CompiledModuleArtifact`**, a sealed growth ring the rest of the build can graft onto without cutting the trunk open again.
+A successful module compilation produces an immutable **`CompiledModuleArtifact`**. Think of a sealed growth ring: later stages can graft onto it without cutting the trunk open again.
 
 ## Four artefact lanes
 
-Think of four layers in one stem, plus rings that record what changed:
+Think of four layers plus records of what changed:
 
 **Public semantic interface.** What consumers may observe: exported identities, canonical types, folded constants, generic templates, traits, receiver surfaces, access and effect summaries, project-context provenance.
 
@@ -69,7 +69,7 @@ Base module artefacts remain immutable. Concrete generic functions live in **gen
 
 Each sidecar carries its request identity, type environment story, concrete HIR, borrow facts, link facts and fingerprints. A generated function may request further instances. The build system runs a worklist to a fixed point.
 
-This avoids mutating the declaring module every time a consumer monomorphises a call. New shoots grow beside the trunk. The trunk stays put.
+This avoids mutating the declaring module every time a consumer monomorphises a call. New concrete code grows beside the base. The base stays put.
 
 **Diagram placeholder:** A concrete function sidecar points to its base module request
 
@@ -113,4 +113,4 @@ The second build of the greeting project should reuse an unchanged `greeting` ar
 
 ## Exit state
 
-You leave with successful immutable module artefacts and fingerprints. The next question: which compiled roots and functions form one entry when the builder finally chooses what runs?
+You leave with successful immutable module artefacts and fingerprints. Next: which compiled roots and functions form one entry when the builder finally chooses what runs.

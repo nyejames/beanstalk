@@ -2,7 +2,7 @@
 
 `bean build` does not open `#page.bst` first. It asks a blunter question: which command, builder, profile and inputs should interpret this project at all?
 
-Until those answers settle, the compiler has no honest graph to walk. Soil and climate first. Then growth.
+Until those answers settle, the compiler has no honest graph to walk. Choose climate and soil first. Then grow the plant.
 
 ## Command and capability surface
 
@@ -28,7 +28,7 @@ The selected builder exposes a **capability surface** before config compilation:
 
 Frontend-owned directives and compiler-owned builtins join that surface. A builder cannot replace them.
 
-The command chooses the climate the project will grow in. That climate decides which source kinds, packages and targets the bed can host.
+The command chooses what kind of project this build is allowed to be. That choice decides which source kinds, packages and targets the project may use.
 
 **Diagram placeholder:** Command selection feeds builder, profile, overlays and target intent
 
@@ -95,7 +95,7 @@ That interface carries stable field identities, folded backend-neutral values, s
 
 Normal modules may import `@project` explicitly. Nothing injects it silently. Child modules, dependency aliases and packages cannot steal the `@project` root. Direct re-export of `@project` is forbidden.
 
-For the greeting walkthrough, record the values Stage 0 needs for entry discovery: project name, entry root and builder sections. Those folded facts become the bridge from files on disk to a project the graph can name.
+For the greeting walkthrough, record the values Stage 0 needs for entry discovery: project name, entry root and builder sections. Those folded facts bridge files on disk to a project the graph can name.
 
 **Diagram placeholder:** Resolved project fields enter ordinary module compilation through an immutable interface
 
@@ -157,4 +157,4 @@ When the walkthrough mentions config, label **current** versus **accepted** if t
 
 ## Exit state
 
-You leave with a validated command, a capability surface, folded project values and `@project`. The next question: which files become semantic modules, and how does a folder become a graph?
+You leave with a validated command, a capability surface, folded project values and `@project`. Next: which files become semantic modules, and how a folder becomes a graph.

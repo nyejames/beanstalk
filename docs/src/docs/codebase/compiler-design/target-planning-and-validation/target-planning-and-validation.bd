@@ -1,6 +1,6 @@
 # Deciding where code can run
 
-Semantically valid Beanstalk can still be unhostable on a chosen target. A function that touches the DOM does not belong in a pure Wasm partition that has no DOM. A shade plant fails in full desert light even when its genetics are fine. A backend should learn that **before** it emits half a module and shrugs.
+Semantically valid Beanstalk can still be unhostable on a chosen target. A function that touches the DOM does not belong in a pure Wasm partition that has no DOM. A backend should learn that **before** it emits half a module and shrugs.
 
 **Target planning** assigns functions. **Target validation** checks the assignment against capabilities.
 
@@ -26,7 +26,7 @@ For the greeting walkthrough, `start`, `greet` and any template runtime work arr
 
 Some functions are born with **affinity**. A JavaScript-owned `start` that must orchestrate page lifecycle wants the JS side. A DOM-touching helper wants JS. Neutral pure computation may default toward Wasm where the design supports it.
 
-Requirements **propagate backwards** along call edges, like a drought signal climbing from leaf to stem. If a callee needs the DOM, callers that must reach it inherit the constraint under the accepted propagation rules. Neutral callees can still sit in Wasm when callers bridge correctly.
+Requirements **propagate backwards** along call edges. If a callee needs the DOM, callers that must reach it inherit the constraint under the accepted propagation rules. Neutral callees can still sit in Wasm when callers bridge correctly.
 
 **Diagram placeholder:** A DOM requirement travels from callee to callers
 
@@ -101,4 +101,4 @@ Unsupported features in unreachable private functions should not fail validation
 
 ## Exit state
 
-You leave with validated target assignments, capabilities, imports and physical variants. The next question: how do lowerers turn these explicit inputs into JavaScript and Wasm without reopening source?
+You leave with validated target assignments, capabilities, imports and physical variants. Next: how lowerers turn these explicit inputs into JavaScript and Wasm without reopening source.

@@ -54,7 +54,7 @@ A lexer might emit a sequence in this spirit:
 
 Exact kind names live in the tokenizer. The teaching point stays fixed: boundaries enter here, meaning does not.
 
-Identifiers, delimiters, operators and literals each become discrete cells. The parser will arrange them. The type checker will judge them. The lexer only marks the cell walls.
+Identifiers, delimiters, operators and literals each become discrete pieces. The parser will arrange them. The type checker will judge them. The lexer only marks the boundaries.
 
 **Diagram placeholder:** Source characters become located token kinds
 
@@ -76,7 +76,7 @@ Tokenization attaches locations. It does not decide that `greet` is a function. 
 
 ## Code and document source kinds
 
-Not every file starts in the same lexical mood.
+Not every file starts in the same lexical mode.
 
 - Ordinary **`.bst`** starts in code mode.
 - **Beandown `.bd`** starts in an implicit template body while preserving original source locations.
@@ -86,7 +86,7 @@ Those paths converge. Beandown preparation synthesises an ordinary private `cont
 
 The greeting project uses `.bst` files. Document kinds still matter because the same compiler owners serve docs sites and content imports without a second semantic pipeline.
 
-**Diagram placeholder:** `.bst`, `.bd` and `.md` use different entry preparation then converge
+**Diagram placeholder:** bst, bd and md use different entry preparation then converge
 
 *Caption: teaching simplification.*
 *Question: why avoid duplicate pipelines for documents and code?*
@@ -143,4 +143,4 @@ Defer semantic errors to their owning stages. A good lexer stays humble.
 
 ## Exit state
 
-You leave with located tokens and source-kind prepared payloads. The next question: which declarations and import relationships do those tokens describe?
+You leave with located tokens and source-kind prepared payloads. Next: which declarations and import relationships those tokens describe.

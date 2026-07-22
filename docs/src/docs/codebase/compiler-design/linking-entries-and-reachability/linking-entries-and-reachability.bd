@@ -2,7 +2,7 @@
 
 Compilation and activation are different verbs.
 
-A module can compile completely, including its dormant top-level work, and still do nothing at runtime until an **entry** selects it. The seed can be fully formed and still sleep through winter. Imports do not secretly run initialisers because someone mentioned a name.
+A module can compile completely, including its dormant top-level work, and still do nothing at runtime until an **entry** selects it. The seed can be fully formed and still sleep. Imports do not secretly run initialisers because someone mentioned a name.
 
 ## Compile versus activate
 
@@ -71,7 +71,7 @@ Reachability here records syntactic function and CFG reachability. It does not p
 
 Link facts also carry capabilities and assets the entry will need.
 
-**Diagram placeholder:** Reachable nodes are highlighted from `start`, with an unreachable helper left aside
+**Diagram placeholder:** Reachable nodes are highlighted from start, with an unreachable helper left aside
 
 *Caption: teaching graph.*
 *Question: what reaches the backend?*
@@ -111,4 +111,4 @@ Target capability failures wait for the next article even when they appear adjac
 
 ## Exit state
 
-You leave with explicit roots, fragment metadata and a reachable function union. The next question: which target can host each reachable function?
+You leave with explicit roots, fragment metadata and a reachable function union. Next: which target can host each reachable function.

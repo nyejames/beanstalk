@@ -2,7 +2,7 @@
 
 A directory is a convenience for humans. It does not tell the compiler which files form one semantic unit, which root owns them or which module must compile before another can bind an import.
 
-Stage 0 answers those questions. It maps the greeting project's filesystem tree onto a **canonical source graph**: roots, branches and the edges that feed nutrients between them.
+Stage 0 answers those questions. It turns the greeting project's filesystem tree into a **canonical source graph**.
 
 ## Nodes and edges
 
@@ -14,11 +14,11 @@ A **graph** here means nodes plus directed edges with meaning.
 
 A **provider** supplies a public interface. A **consumer** binds against that interface after the provider succeeds.
 
-In the running example, `#page.bst` consumes `@greeting`. The edge names a provider relationship, a graft point rather than a copy. It does not clone `greet`'s body into the page module.
+In the running example, `#page.bst` consumes `@greeting`. The edge names a provider relationship. It does not copy `greet`'s body into the page module. Think of a graft point, not a clone.
 
 **Diagram placeholder:** Roots own files while imports create provider edges
 
-*Caption: exact running-example identities simplified.*
+*Caption: running-example identities simplified.*
 *Question: what does a folder mean to the compiler once Stage 0 finishes?*
 
 ## Roots, packages and ownership
@@ -53,9 +53,9 @@ Ownership does not inject disconnected declarations into a consumer. A file can 
 
 ## Provider-first scheduling
 
-After the graph finalises, the build system schedules **compile waves**, root-first growth rather than every branch racing the trunk.
+After the graph finalises, the build system schedules **compile waves**. Providers finish before consumers bind, root growth before branch binding.
 
-Providers finish before consumers bind. A module waits until every required provider interface exists. Binding-backed interfaces may appear earlier than source providers because they do not wait on Beanstalk module compilation.
+A module waits until every required provider interface exists. Binding-backed interfaces may appear earlier than source providers because they do not wait on Beanstalk module compilation.
 
 One physical module compiles **once** per project or package compilation boundary. Entries later activate roots. They do not recompile the same module once per page.
 
@@ -109,4 +109,4 @@ If current code still compiles a looser closure than the accepted module model, 
 
 ## Exit state
 
-You leave with a canonical source graph, source sets and ordered compile waves. The next question: how does the compiler prepare each selected source file once, starting from characters?
+You leave with a canonical source graph, source sets and ordered compile waves. Next: how the compiler prepares each selected source file once, starting from characters.

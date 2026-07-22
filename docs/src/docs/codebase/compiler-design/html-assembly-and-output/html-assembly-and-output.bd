@@ -1,6 +1,6 @@
 # Building and writing the final page
 
-Every earlier stage produced records. The HTML builder's job is to turn the right records into one working document and a safe output set without rediscovering source structure or letting each backend spray files into the tree. Harvest, not another season of growth from seed.
+Every earlier stage produced records. The HTML builder's job is to turn the right records into one working document and a safe output set without rediscovering source structure or letting each backend spray files into the tree. This is harvest time, not another season of growth from seed.
 
 This is the last primary stop on the chronological route. The fragment at the end is still:
 
@@ -33,13 +33,13 @@ If a fact is missing, an upstream owner failed. The builder should not open `gre
 
 Assembly plans route and document metadata, then builds a shell.
 
-**Compile-time fragments** insert at recorded indexes first. They are already strings. The greeting's static paragraph content wants this path when everything folded.
+**Compile-time fragments** insert at recorded indexes first. They are already strings. The greeting's static paragraph wants this path when everything folded.
 
 **Runtime path:** invoke `start` once for the activated root and hydrate runtime fragments in source order. Dynamic pieces fill reserved slots without scrambling author order.
 
-The result is a document anatomy: HTML shell, paragraph content, script tags, runtime references and whatever the entry needs to boot.
+The result is a document anatomy: HTML shell, paragraph text, script tags, runtime references and whatever the entry needs to boot.
 
-**Diagram placeholder:** Folded content enters first while runtime fragments hydrate in source order
+**Diagram placeholder:** Folded pieces enter first while runtime fragments hydrate in source order
 
 *Caption: conceptual sequence.*
 *Question: when does the paragraph appear?*
@@ -103,7 +103,7 @@ Open the HTML. Find the fragment:
 <p>Hello, Priya!</p>
 ]
 
-That string travelled a long way: characters, tokens, shells, bindings, types, folded constants, template handoff, diagnostics that stayed quiet, HIR, memory rules, artefacts, entry plans, target assignment, lowering and assembly. Each owner shed one ambiguity and refused to grow the previous owner's work again from bare soil.
+That string travelled a long way: characters, tokens, shells, bindings, types, folded constants, template handoff, diagnostics that stayed quiet, HIR, memory rules, artefacts, entry plans, target assignment, lowering and assembly. Each owner removed one ambiguity and refused to rebuild the previous owner's work from bare source.
 
 There is no later primary tutorial page in this series. Deep dives live in language, memory and progress authorities when you need the fine print.
 

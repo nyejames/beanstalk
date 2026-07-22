@@ -8,7 +8,7 @@ Look at the page fragment again:
 ]
 ]
 
-A template is not a string with holes poked by hope. It contains structure: wrappers, slots, child values, control flow and placement order. Flatten it too early and you lose the skeleton the checker and the runtime both need, the way crushing a leaf destroys the veins that carried water.
+A template is not a string with holes poked by hope. It contains structure: wrappers, slots, child values, control flow and placement order. Flatten it too early and you lose the skeleton the checker and the runtime both need.
 
 Beanstalk gives templates a first-class home and a temporary **Template IR (TIR)** that lives only while AST work runs.
 
@@ -67,11 +67,11 @@ AST finalisation walks prepared views and chooses a fate:
 - top-level page fragments emit **folded metadata** with insertion indexes
 - runtime templates become **neutral owned handoff payloads**
 
-Compile-time fragments never live in HIR. HIR receives ordinary string and control-flow work for runtime pieces only. The TIR store is shed before the completed AST leaves the stage, a temporary scaffold rather than permanent wood. No TIR id tours a public interface or backend.
+Compile-time fragments never live in HIR. HIR receives ordinary string and control-flow work for runtime pieces only. The TIR store drops before the completed AST leaves the stage. It is temporary scaffolding, not permanent structure. No TIR id tours a public interface or backend.
 
 For the greeting project, a fully static visitor and prefix can collapse toward the familiar fragment. If `visitor` were dynamic input, the structure would still check at compile time while runtime handoff carried the moving parts.
 
-**Diagram placeholder:** Static content becomes a string while dynamic content becomes neutral runtime handoff data
+**Diagram placeholder:** Static pieces become a string while dynamic pieces become neutral runtime handoff data
 
 *Caption: exact boundary, simplified shape.*
 *Question: what reaches HIR?*
@@ -85,7 +85,7 @@ Beandown `.bd` and Markdown `.md` files do not invent forever-parallel compilers
 
 Later ordering and folding treat both as ordinary compile-time constants. Return to the greeting project after that side path: `#page.bst` remains the star, and document kinds prove the "one semantic pipeline" bet.
 
-**Diagram placeholder:** `.bst`, `.bd` and `.md` reach one ordinary semantic path
+**Diagram placeholder:** bst, bd and md reach one ordinary semantic path
 
 *Caption: simplified source-kind map.*
 *Question: how does document content enter the compiler without a second IR forever?*
@@ -132,4 +132,4 @@ TIR ownership must stay distinct from AST finalisation and HIR validation. Post-
 
 ## Exit state
 
-You leave with finalised TIR handoff, folded fragments and neutral runtime template data. The next question: how should a failure travel through all these owners without turning into a stringly-typed mess?
+You leave with finalised TIR handoff, folded fragments and neutral runtime template data. Next: how a failure should travel through all these owners.

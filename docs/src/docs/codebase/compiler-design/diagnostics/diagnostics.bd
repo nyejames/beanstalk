@@ -8,7 +8,7 @@ import @greeting { great }
 
 The failure is not "something went wrong." It is a precise event: an unknown imported symbol at a known location, in a known stage, with a stable code a tool can recognise.
 
-Beanstalk treats diagnostics as **durable structured data**, seeds of failure rather than finished prose. Rendering into English is a later, separate act.
+Beanstalk treats diagnostics as **durable structured data**. Rendering into English is a later, separate act.
 
 ## The stage with the best context
 
@@ -85,7 +85,7 @@ Module outcomes split cleanly:
 - **Diagnosed** carries user diagnostics and **no partial public interface**
 - **CompilerError** aborts the owning project or package compilation because later results cannot be trusted
 
-Consumers blocked by a diagnosed required interface are not semantically compiled as if the provider half-worked. A dead root does not feed its branches. Independent graph branches may continue under build-system orchestration for `check` or tooling. A backend never receives a partial linkable project.
+Consumers blocked by a diagnosed required interface are not semantically compiled as if the provider half-worked. A failed root does not feed its dependents. Independent graph branches may continue under build-system orchestration for `check` or tooling. A backend never receives a partial linkable project.
 
 **Diagram placeholder:** One diagnosed module exposes no partial interface and a dependent waits
 
@@ -129,4 +129,4 @@ Exact wording in examples should track current constructors when you verify agai
 
 ## Exit state
 
-You leave knowing how failures travel, and what a trusted successful semantic result implies. The next question: how does successful meaning become explicit runtime control flow in HIR?
+You leave knowing how failures travel, and what a trusted successful semantic result implies. Next: how successful meaning becomes explicit runtime control flow in HIR.

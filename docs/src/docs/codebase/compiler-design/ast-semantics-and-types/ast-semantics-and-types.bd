@@ -17,7 +17,7 @@ A **semantic tree** (still often stored as AST nodes in Beanstalk) adds resolved
 
 **Name resolution** connects spellings to declarations. **Type checking** checks that operations and values agree under language rules. **Semantic identity** names the underlying declaration or type in a way that survives aliases and module boundaries.
 
-Before checking, the page call is a bud. After checking, it is a fact later stages may lower without reopening the import list.
+Before checking, the page call is unresolved shape. After checking, it is a fact later stages may lower without reopening the import list.
 
 **Diagram placeholder:** Unresolved names gain symbol, argument and return facts
 
@@ -116,4 +116,4 @@ Diagnostic transport and rendering wait for the diagnostics article. The semanti
 
 ## Exit state
 
-You leave with a typed AST, semantic identities and checked executable bodies. The next question: which static computations disappear before HIR, and which become explicit data?
+You leave with a typed AST, semantic identities and checked executable bodies. Next: which static computations disappear before HIR, and which become explicit data.

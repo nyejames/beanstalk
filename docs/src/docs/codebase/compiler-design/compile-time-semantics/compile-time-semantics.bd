@@ -1,6 +1,6 @@
 # Constants, generics, traits and casts before HIR
 
-HIR and backends should not re-solve the same compile-time questions on every function body. Work that can finish early should finish early, the way a plant stores starch before winter rather than inventing sugar on every cold night.
+HIR and backends should not re-solve the same compile-time questions on every function body. Work that can finish early should finish early.
 
 If a value never changes at runtime, fold it. If a generic call needs a concrete function, request one. If a trait bound needs evidence, resolve it. If a conversion needs a cast, emit an explicit operation.
 
@@ -33,7 +33,7 @@ A generic template lives in the declaring module as an immutable validated templ
 2. resolves required visible trait evidence
 3. emits a **module-local request** keyed by stable generic identity, canonical concrete types and evidence identities
 
-The build system aggregates, deduplicates and schedules requests. The compiler materialises each accepted request as a **generated sidecar** beside the base module, a new shoot from a fixed root rather than a rewrite of the root itself. Base artefacts stay immutable. Generated functions carry their own HIR, borrow facts and link facts.
+The build system aggregates, deduplicates and schedules requests. The compiler materialises each accepted request as a **generated sidecar** beside the base module. Base artefacts stay immutable. Generated functions carry their own HIR, borrow facts and link facts. New concrete code grows beside the original template. The template itself does not mutate.
 
 HIR and backends never infer generic arguments or consume unresolved template state. Concrete code appears before they look.
 
@@ -111,4 +111,4 @@ Do not re-teach diagnostic transport here. The semantic rejection is the point.
 
 ## Exit state
 
-You leave with folded constants, concrete requests, static evidence and finalised cast operations. The next question: why does the HTML template need a temporary structural IR before any of that becomes HIR runtime work?
+You leave with folded constants, concrete requests, static evidence and finalised cast operations. Next: why the HTML template needs a temporary structural IR before HIR runtime work.

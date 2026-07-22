@@ -1,24 +1,30 @@
 # Automatic memory management before the borrow checker
 
-Heap values must stay usable while something can still observe them. They must also release resources without letting code touch storage that already died. Those two sentences sound like one problem. They are at least two: keeping wood alive while it still feeds the canopy, and stopping two branches from tearing the same limb.
+Heap values must stay usable while something can still observe them. They must also release resources without letting code touch storage that already died. Those two needs sound like one problem. They are at least two.
 
-**Garbage collection** answers liveness. **Access validation** answers conflicting use. Beanstalk runs both stories on purpose.
+**Garbage collection** answers liveness: is this value still reachable? **Access validation** answers conflicting use: may two aliases overlap right now? Beanstalk runs both on purpose.
+
+## The sentence to keep
+
+**Beanstalk is reference-semantic by default, copy-explicit and move-inferred. It omits explicit reference types and lifetime syntax, not references themselves.**
+
+If you know Rust, that sentence is the pivot. Rust makes references and lifetimes part of the source surface. Beanstalk still has shared aliases and exclusive mutation. It does not ask you to write `&T`, `&mut T` or lifetime parameters. The compiler tracks the relationships. You write smaller source.
 
 ## Five memory strategies
 
 Compare strategies by *when storage ends*, not by marketing labels.
 
-**Manual allocation.** The programmer calls allocate and free. Maximum control. Maximum opportunity to free too early, free twice or forget entirely.
+**Manual allocation.** You call allocate and free. Maximum control. Maximum chance to free too early, free twice or forget entirely.
 
 **Reference counting.** Each alias bumps a count. When the count hits zero, storage frees. Cycles need special care. Costs sit on every alias edge.
 
-**Tracing GC.** A collector walks from roots and reclaims what it cannot reach. Programmers stop writing most frees. Pauses and throughput become runtime concerns.
+**Tracing GC.** A collector walks from roots and reclaims what it cannot reach. You stop writing most frees. Pauses and throughput become runtime concerns.
 
 **Ownership.** Each value has a unique owner responsible for destruction. Transfers move that duty. Alias rules get strict. Deterministic drops become natural.
 
-**Region or arena allocation.** Many values share a bulk lifetime. The region frees as a unit. Great for bursty workloads with clear epochs. Awkward when lifetimes tangle.
+**Region or arena allocation.** Many values share a bulk lifetime. The region frees as a unit. Great for bursty work with clear epochs. Awkward when lifetimes tangle.
 
-Real systems mix these. Beanstalk's semantic baseline is GC. Ownership-aware lowering may ride on top when proof exists.
+Real systems mix these. Beanstalk's semantic baseline is GC. Ownership-aware lowering may ride on top when proof exists. A deferred grouped-memory surface (`group` / `into`) aims at arena-style bulk lifetimes later. It is accepted design with implementation still deferred.
 
 **Diagram placeholder:** Five strategies show when values become reachable and reclaimable
 
@@ -27,7 +33,7 @@ Real systems mix these. Beanstalk's semantic baseline is GC. Ownership-aware low
 
 ## Failure modes
 
-Name the failure modes:
+Name the hazards:
 
 - **use after free** reads or writes storage that already ended
 - **double free** destroys the same storage twice
@@ -48,6 +54,7 @@ GC does **not** make this safe:
 
 [codeblock, $code("text"):
 // conceptual: shared reader plus overlapping exclusive mutation
+// both aliases can be live under GC and still conflict
 ]
 
 Live memory can still host a logic hazard. Access rules still matter.
@@ -57,11 +64,13 @@ Live memory can still host a logic hazard. Access rules still matter.
 *Caption: exact conceptual separation.*
 *Question: why need both?*
 
-## What ownership adds
+## What ownership and borrowing add
 
-Ownership thinking gives **deterministic destruction** and clearer resource release when the compiler can prove a last use. It also adds source complexity if you expose lifetimes and move keywords everywhere.
+Ownership thinking gives **deterministic destruction** and clearer resource release when the compiler can prove a last use. Borrow checking gives **alias safety**: many shared readers, or one exclusive writer, never both at once on conflicting places.
 
-Beanstalk refuses that source tax. There is no lifetime syntax and no move keyword in the language surface this series teaches. Moves are inferred. Copies are explicit. Existing values default to shared read-only access. Mutation needs explicit exclusive access through `~place`.
+Rust packages those ideas into source-visible types and lifetimes. Beanstalk refuses that source tax. There is no lifetime syntax and no move keyword. Moves are inferred. Copies are explicit. Existing values default to shared read-only access. Mutation needs explicit exclusive access through `~place`.
+
+Think of shared access as several vines reading the same stem. Exclusive access is one vine that may rewrite the stem. GC keeps the stem alive while anything still reads it. Borrow validation stops two vines from fighting over the same rewrite window.
 
 ## Beanstalk's semantic baseline
 
@@ -69,18 +78,28 @@ Hold these rules together:
 
 1. **GC is the semantic baseline** for all backends.
 2. **Borrow validation is mandatory**, even under GC.
-3. **Shared access** is the default for existing values.
-4. **`copy`** creates an independent value on purpose.
-5. **`~place`** requests temporary exclusive access to a mutable place.
-6. **Moves are inferred** at safe consumption points.
+3. **Shared access** is the default for existing values. Binding, passing, returning or storing an existing value creates a shared alias unless exclusive access or explicit copy applies.
+4. **`copy`** creates an independent value on purpose. Ordinary assignment does not clone.
+5. **`~place`** requests temporary exclusive access to an existing mutable place. It is not a move marker and not a type constructor.
+6. **Moves are inferred** at safe consumption points. Optional inferred transfer always backs off to borrowing when proof is unavailable.
 7. **Ownership-aware lowering** is optional optimisation layered over the same accepted programs.
 
 GC-only and ownership-aware backends must accept and reject the same source programs. Optimisation may not widen or shrink the language.
+
+Shared access is a source-semantic relationship. It does not require every scalar to be heap-allocated or represented by a pointer. A small integer can still follow shared-access rules at the language level while living in a register at runtime.
 
 **Diagram placeholder:** Source access rules flow through HIR and validation into GC or ownership-aware lowering
 
 *Caption: accepted architecture simplified.*
 *Question: where can optimisation change without changing meaning?*
+
+## How this differs from Rust and from plain GC languages
+
+**Versus Rust.** Rust puts references and lifetimes in the type system you write. Beanstalk keeps reference relationships in the compiler. Source stays smaller. You lose the ability to spell complex lifetime contracts in APIs. You gain APIs that do not carry lifetime parameters.
+
+**Versus JavaScript or Java.** Those languages lean on GC and mostly leave alias conflicts to the programmer. Beanstalk still validates shared versus exclusive access at compile time. GC alone is not the whole safety story.
+
+**Versus pure Rust-without-GC.** Beanstalk does not require every value to prove a unique owner at runtime. When proof is thin, GC remains correct. Ownership optimisation is a bonus, not a correctness requirement.
 
 ## Backend choices
 
@@ -105,6 +124,7 @@ In the greeting project, strings and template values cross runtime operations. U
 - unsafe aliasing remains invalid even when GC preserves allocation lifetime
 - conservative ownership evidence may retain values under GC longer than a perfect oracle would
 - do not imply deterministic destruction as a correctness requirement for source programs
+- lifetime-region analysis and grouped memory are accepted design with deferred implementation. Current borrow checking is not the full end-state topology story
 
 ## Why Beanstalk does it this way
 
@@ -112,19 +132,19 @@ In the greeting project, strings and template values cross runtime operations. U
 
 **Choice:** keep GC as the semantic fallback and validate access separately.
 
-**Benefit:** safer source rules with a backend escape route when proof is thin.
+**Benefit:** safer source rules with a backend escape route when proof is thin. Source APIs stay readable.
 
 **Cost:** collector work remains, and ownership-aware destruction cannot always prove a transfer.
 
 ## Roadmap and current status
 
-- **Accepted design:** GC is the semantic baseline for all backends.
-- **Current implementation:** memory and progress authorities for runtime coverage.
-- **Queued work:** ownership-aware backend work follows mixed backend plans.
-- **Deferred or outside scope:** current concurrency syntax, and deterministic destruction as a source-level guarantee.
+- **Accepted design:** GC is the semantic baseline for all backends. Reference-semantic defaults, explicit `copy`, exclusive `~place` and inferred moves.
+- **Current implementation:** memory and progress authorities for runtime coverage and current borrow-checker support.
+- **Queued work:** ownership-aware backend work follows mixed backend plans. Lifetime-region and escape-validation docs and implementation remain sequenced work.
+- **Deferred or outside scope:** current concurrency syntax, deterministic destruction as a source-level guarantee, and `group` / `into` bulk lifetimes until their implementation lands.
 
-Deep detail lives under `docs/src/docs/codebase/memory-management/`. This article only places the model on the chronological route.
+Deep detail lives under `docs/src/docs/codebase/memory-management/`. This article places the model on the chronological route.
 
 ## Exit state
 
-You leave with a memory model where GC preserves correctness and analysis enforces access rules. The next question: how does borrow validation compute those rules over HIR?
+You leave with a memory model where GC preserves correctness and analysis enforces access rules. Next: how borrow validation computes those rules over HIR.

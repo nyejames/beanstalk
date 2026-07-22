@@ -1,6 +1,6 @@
 # Borrow checking, race prevention and inferred destruction
 
-Two aliases may read the same value in peace. An overlapping mutation can poison every reader's assumptions while the bytes still sit in live memory. GC will not save you from that story. Live tissue can still be torn. **Borrow validation** will try.
+Two aliases may read the same value in peace. An overlapping mutation can poison every reader's assumptions while the bytes still sit in live memory. GC will not save you from that story. Live storage can still host a logic bug. **Borrow validation** catches the conflict at compile time.
 
 ## Access modes and roots
 
@@ -12,6 +12,8 @@ Beanstalk's access rule in plain form:
 
 Analysis reasons about **places** (locations), **storage roots** and **alias root sets**. A local, a field path or a temporary can participate. Fresh rvalues passed to mutable call slots materialise into hidden locals first so the checker sees ordinary local access.
 
+**Beanstalk is reference-semantic by default, copy-explicit and move-inferred.** Reading or binding an existing value creates a shared read-only alias. It does not implicitly copy.
+
 Side example, then back to greetings:
 
 [codeblock, $code("text"):
@@ -20,6 +22,8 @@ Side example, then back to greetings:
 ]
 
 The pattern is the lesson. The greeting project itself may stay simple. The rule still guards every module.
+
+Shared and exclusive aliases use **non-lexical**, control-flow-sensitive activity. A shared alias blocks overlapping mutation only until its last potential use on the relevant path. An unused shared alias does not block later mutation.
 
 **Diagram placeholder:** Shared reads overlap while an exclusive interval excludes them
 
@@ -35,9 +39,11 @@ Borrow validation is a **data-flow analysis** over HIR's control-flow graph. It 
 - exclusive versus shared state
 - conservative join results when paths meet
 
-On branches, facts split. At joins, they merge conservatively. On loops, the analysis revisits blocks until a **fixed point**, like water settling after rain: further iteration stops changing the facts.
+On branches, facts split. At joins, they merge conservatively. On loops, the analysis revisits blocks until a **fixed point**: further iteration stops changing the facts.
 
 Conservative means "when unsure, assume the more restrictive story." That can reject programs a smarter oracle might accept. It should not accept programs that are unsafe.
+
+Diagnostics should distinguish proven-invalid topology from topology that conservative analysis cannot prove legal. Both are failures for the programmer. They are not the same failure family for the compiler's wording.
 
 **Diagram placeholder:** Facts flow around a loop until the join stabilises
 
@@ -64,12 +70,24 @@ There is no move keyword. The compiler asks a sharper question: may this value b
 
 **Future-use analysis** answers. If a later path still needs the value, consumption is illegal. If this site is the last valid use on the paths that matter, an inferred transfer may proceed.
 
+Optional inferred transfer is an **optimisation path**. When proof is unavailable, the compiler backs off to borrowing. GC still keeps the value correct. Source legality never depends on a successful ownership proof.
+
 That design keeps source APIs small. It also means analysis precision limits how often ownership optimisation can fire.
 
 **Diagram placeholder:** Last valid use permits inferred transfer and later use forbids it
 
 *Caption: teaching rule.*
 *Question: when can ownership move?*
+
+## Aggregates, copies and exclusive access
+
+Existing values stored in structs, choices, collections, maps or templates are **shared aliases by default**. Storing a value does not automatically make the aggregate an independent owner of a duplicated child.
+
+**`copy place`** creates independent value semantics on purpose.
+
+**`~place`** requests exclusive mutation-capable access to an existing mutable place. It is not a move marker and not a type constructor. Fresh rvalues satisfy ordinary mutable parameters without source `~`. Mutable receiver methods still need an existing mutable place.
+
+Assignment through a mutable alias writes through to the referent. It must not silently detach or rebind the alias.
 
 ## Drops and backend use
 
@@ -109,7 +127,7 @@ Label that example carefully. It teaches why exclusivity exists. It does not cla
 - unsafe return alias
 - conservative joins that reject or retain more than an ideal analysis
 
-Do not claim current threaded or async execution as present tense support.
+Do not claim current threaded or async execution as present tense support. Do not claim full lifetime-region topology analysis as already shipped if the progress matrix still separates it from current borrow checking.
 
 ## Why Beanstalk does it this way
 
@@ -123,11 +141,11 @@ Do not claim current threaded or async execution as present tense support.
 
 ## Roadmap and current status
 
-- **Accepted design:** borrow validation reads HIR and writes side tables.
+- **Accepted design:** borrow validation reads HIR and writes side tables. Reference-semantic defaults, explicit copy, exclusive `~`, inferred moves.
 - **Current implementation:** memory and progress pages for supported checks.
-- **Queued work:** ownership-aware drops and backend ABI work.
-- **Deferred or outside scope:** current concurrency syntax, trait objects and source-visible references.
+- **Queued work:** ownership-aware drops, backend ABI work, lifetime-region and escape-validation implementation.
+- **Deferred or outside scope:** current concurrency syntax, trait objects, source-visible references and `group` / `into` bulk lifetimes until implementation lands.
 
 ## Exit state
 
-You leave with validated access facts, inferred ownership facts and advisory drop sites. The next question: how do these facts become one immutable module artefact the rest of the build can reuse?
+You leave with validated access facts, inferred ownership facts and advisory drop sites. Next: how these facts become one immutable module artefact the rest of the build can reuse.

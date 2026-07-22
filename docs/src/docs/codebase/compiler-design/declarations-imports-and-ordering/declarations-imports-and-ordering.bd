@@ -1,8 +1,8 @@
 # Finding the program's shape
 
-Bodies can wait. Before the compiler checks whether `greet(visitor)` type-checks, it needs the module's top-level skeleton: which declarations exist, which imports wait on providers and which local names depend on which other local names.
+Bodies can wait. Before the compiler checks whether `greet(visitor)` type-checks, it needs the module's top-level shape: which declarations exist, which imports wait on providers and which local names depend on which other local names.
 
-Header work finds that skeleton **once**, the way a stem sets nodes before leaves fill in. Later stages bind and consume retained syntax. They do not reparse the file from characters whenever a provider finishes.
+Header work finds that shape **once**. Later stages bind and consume retained syntax. They do not reparse the file from characters whenever a provider finishes.
 
 ## Prepared shells
 
@@ -49,7 +49,7 @@ After `@greeting` compiles successfully, the build system schedules the page mod
 
 Binding does not retokenize. It does not reparse declaration syntax. It fills in what only a finished provider can supply.
 
-Before binding, `greet` is a name in an import shell, a bud that has not opened. After binding, it is a stable origin identity with known type facts the AST can trust.
+Before binding, `greet` is a name in an import shell. After binding, it is a stable origin identity with known type facts the AST can trust.
 
 **Diagram placeholder:** Import shell gains stable provider identity and visible type facts
 
@@ -122,4 +122,4 @@ Final prose and rendering of diagnostics wait for the diagnostics article. Here 
 
 ## Exit state
 
-You leave with bound visibility, stable imported facts and ordered declarations. The next question: how does syntax acquire checked semantic meaning in the AST?
+You leave with bound visibility, stable imported facts and ordered declarations. Next: how syntax acquires checked semantic meaning in the AST.
