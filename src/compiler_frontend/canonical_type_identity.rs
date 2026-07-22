@@ -1,58 +1,65 @@
 //! Canonical cross-module type identity vocabulary and projection from module-local `TypeId`.
 //!
-//! WHAT: owns the owned, hashable, cross-build identity values for the closed types that a
-//! `TypeEnvironment` can fully resolve without exported generic-parameter ownership, plus the
-//! narrow projection owner that converts a module-local `TypeId` into one canonical identity.
+//! WHAT: owns the owned, hashable, cross-build identity values for the closed types and the
+//! exported generic parameters that a `TypeEnvironment` can resolve, plus the narrow projection
+//! owner that converts a module-local `TypeId` into one canonical identity.
 //! WHY: cross-module interfaces must compare canonical type identities rather than donor-local
-//! `TypeId` values. This module is the single owner of the canonical closed-type identity
-//! vocabulary and its projection, so later phases embed stable identities without leaking
-//! process-local IDs, source locations, absolute paths or rendered display names.
+//! `TypeId` values. This module is the single owner of the canonical type identity vocabulary
+//! and its projection, so later phases embed stable identities without leaking process-local IDs,
+//! source locations, absolute paths or rendered display names.
 //!
-//! Boundary: this module does not own `PublicSemanticInterface`, exported generic-parameter
-//! ownership, or any exported surface projection. The existing
-//! `datatypes::generic_identity_bridge::TypeIdentityKey` remains the module-local HIR/diagnostic
-//! bridge and is not repurposed here. The two are intentionally separate:
-//! `TypeIdentityKey` carries `InternedPath`, `StringId` and `ExternalTypeId` because HIR
-//! lowering and diagnostics operate inside one module's `TypeEnvironment` and `StringTable`.
+//! Boundary: this module does not own `PublicSemanticInterface` or the public semantic surface
+//! projection. It owns the exported generic-parameter identity and the generic-parameter origin
+//! resolver trait, but the production resolver implementation belongs to the public semantic
+//! surface projection owner. The existing `datatypes::generic_identity_bridge::TypeIdentityKey` remains the
+//! module-local HIR/diagnostic bridge and is not repurposed here. The two are intentionally
+//! separate: `TypeIdentityKey` carries `InternedPath`, `StringId` and `ExternalTypeId` because
+//! HIR lowering and diagnostics operate inside one module's `TypeEnvironment` and `StringTable`.
 //! `CanonicalTypeIdentity` carries only owned, stable, cross-build values because it crosses
 //! module boundaries. Consolidating their recursive shape-matching would blur the
 //! HIR/diagnostic bridge boundary, so the duplication is superficial and the owners remain
 //! separate.
 //!
 //! Dead-code allowance: the vocabulary and projection are permanent foundational types that do
-//! not yet have production wiring. They are consumed by the next plan slice (Phase 7c2:
-//! exported generic-parameter ownership and public semantic surface projection), which builds
-//! `PublicSemanticInterface` over these identities. No earlier production caller can construct a
-//! `CanonicalTypeProjectionContext` because the nominal-origin resolver is owned by the
-//! provider-interface binding work that follows this slice.
+//! not yet have production wiring. They are consumed by the next plan slice (public semantic
+//! surface projection), which builds `PublicSemanticInterface` over these identities. No earlier
+//! production caller can construct a `CanonicalTypeProjectionContext` because the nominal-origin
+//! and generic-parameter resolvers are owned by the public semantic surface projection work that
+//! follows this slice.
 
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::definitions::TypeDefinition;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::ids::{
-    BuiltinTypeConstructor, BuiltinTypeKey, NominalTypeId, TypeConstructor, TypeId,
+    BuiltinTypeConstructor, BuiltinTypeKey, GenericParameterId, NominalTypeId, TypeConstructor,
+    TypeId,
 };
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::external_packages::ExternalSymbolPath;
-use crate::compiler_frontend::semantic_identity::OriginTypeId;
+use crate::compiler_frontend::semantic_identity::{
+    FunctionOriginKind, OriginFunctionId, OriginTypeCategory, OriginTypeId,
+};
 
 // ---------------------------------------------------------------------------
-//  Canonical closed-type identity vocabulary
+//  Canonical type identity vocabulary
 // ---------------------------------------------------------------------------
 
-/// Owned, hashable, cross-build canonical identity for one closed type that a
-/// `TypeEnvironment` can fully resolve without exported generic-parameter ownership.
+/// Owned, hashable, cross-build canonical identity for one closed type or exported generic
+/// parameter that a `TypeEnvironment` can resolve.
 ///
 /// WHAT: carries only stable, owned values. It never embeds `TypeId`, `NominalTypeId`,
-/// `GenericParameterId`, `InternedPath`, `StringId`, `ExternalPackageId`, `ExternalTypeId`,
-/// source locations, absolute paths or rendered display names.
-/// WHY: this is the identity a cross-module consumer compares. Two types with the same
-/// canonical identity are the same semantic type across module boundaries, checkout roots and
-/// build invocations.
+/// `GenericParameterId`, `GenericParameterListId`, `InternedPath`, `StringId`,
+/// `ExternalPackageId`, `ExternalTypeId`, source locations, absolute paths or rendered display
+/// names.
+/// WHY: this is the identity a cross-module consumer compares. Two types with the same canonical
+/// identity are the same semantic type across module boundaries, checkout roots and build
+/// invocations.
 ///
 /// Transparent aliases are transparent by construction: the projection resolves an alias to its
 /// target `TypeId` before producing a canonical identity, so there is no alias variant here.
-#[allow(dead_code)] // Consumed by Phase 7c2 public semantic surface projection.
+/// Exported generic parameters project through the generic-parameter origin resolver so open
+/// exported type shapes recurse through the same projection owner as closed types.
+#[allow(dead_code)] // Consumed by the next plan slice: public semantic surface projection.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum CanonicalTypeIdentity {
     Builtin(CanonicalBuiltinType),
@@ -63,10 +70,11 @@ pub(crate) enum CanonicalTypeIdentity {
     Option(Box<CanonicalTypeIdentity>),
     FallibleCarrier(FallibleCarrierTypeIdentity),
     GenericInstance(GenericInstanceTypeIdentity),
+    GenericParameter(ExportedGenericParameterIdentity),
 }
 
 /// Builtin scalar canonical type identity, including the semantically seeded `None` identity.
-#[allow(dead_code)] // Consumed by Phase 7c2 public semantic surface projection.
+#[allow(dead_code)] // Consumed by the next plan slice: public semantic surface projection.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum CanonicalBuiltinType {
     Bool,
@@ -88,7 +96,7 @@ pub(crate) enum CanonicalBuiltinType {
 /// WHY: a binding-backed type is identified by where it lives in its package namespace, not by a
 /// build-local ID. Two builds that register the same opaque type under the same package and
 /// symbol path produce the same canonical identity.
-#[allow(dead_code)] // Consumed by Phase 7c2 public semantic surface projection.
+#[allow(dead_code)] // Consumed by the next plan slice: public semantic surface projection.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct ExternalOpaqueTypeIdentity {
     package_path: String,
@@ -123,7 +131,7 @@ impl ExternalOpaqueTypeIdentity {
 ///
 /// `fixed_capacity` is `None` for growable `{T}` and `Some(cap)` for fixed `{N T}`. Fixed
 /// capacity is semantic identity, not an allocation hint, so the two shapes are distinct.
-#[allow(dead_code)] // Consumed by Phase 7c2 public semantic surface projection.
+#[allow(dead_code)] // Consumed by the next plan slice: public semantic surface projection.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct CollectionTypeIdentity {
     element: Box<CanonicalTypeIdentity>,
@@ -156,7 +164,7 @@ impl CollectionTypeIdentity {
 
 /// Ordered map canonical identity. Key and value are stored directly so `{K = V}` order is
 /// preserved.
-#[allow(dead_code)] // Consumed by Phase 7c2 public semantic surface projection.
+#[allow(dead_code)] // Consumed by the next plan slice: public semantic surface projection.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct OrderedMapTypeIdentity {
     key: Box<CanonicalTypeIdentity>,
@@ -188,7 +196,7 @@ impl OrderedMapTypeIdentity {
 }
 
 /// Fallible carrier canonical identity. Success and error are stored in order.
-#[allow(dead_code)] // Consumed by Phase 7c2 public semantic surface projection.
+#[allow(dead_code)] // Consumed by the next plan slice: public semantic surface projection.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct FallibleCarrierTypeIdentity {
     success: Box<CanonicalTypeIdentity>,
@@ -224,7 +232,7 @@ impl FallibleCarrierTypeIdentity {
 /// WHAT: keyed by the stable base `OriginTypeId` plus recursively canonical concrete arguments.
 /// WHY: two instances of the same generic nominal with the same canonical arguments share one
 /// canonical identity across module boundaries.
-#[allow(dead_code)] // Consumed by Phase 7c2 public semantic surface projection.
+#[allow(dead_code)] // Consumed by the next plan slice: public semantic surface projection.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct GenericInstanceTypeIdentity {
     base: OriginTypeId,
@@ -253,6 +261,125 @@ impl GenericInstanceTypeIdentity {
     }
 }
 
+/// The stable origin of the generic declaration that owns one exported generic parameter.
+///
+/// WHAT: narrows the owning generic declaration to the legal exported generic-declaration
+/// owners: free functions and nominal types (structs and choices). Constants, traits,
+/// transparent aliases, receiver methods and synthetic trait `This` are not valid exported
+/// generic declaration owners and are unrepresentable.
+/// WHY: a generic parameter's cross-module identity must derive from its owning declaration's
+/// stable origin, not from a donor-local `GenericParameterId`. Keeping the owner domain narrow
+/// prevents a transparent alias, receiver method or constant from being mistaken for a generic
+/// declaration. The two-case internal shape is the narrowest representation consistent with the
+/// existing origin vocabulary: `OriginFunctionId` for free functions and `OriginTypeId` for
+/// nominal types. The inner enum is private so no crate caller can bypass the validating
+/// constructors.
+#[allow(dead_code)] // Consumed by the next plan slice: public semantic surface projection.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct GenericDeclarationOrigin {
+    inner: GenericDeclarationOriginInner,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+enum GenericDeclarationOriginInner {
+    FreeFunction(OriginFunctionId),
+    NominalType(OriginTypeId),
+}
+
+impl GenericDeclarationOrigin {
+    /// Construct a nominal-type generic declaration origin, rejecting transparent aliases.
+    ///
+    /// Compiler-internal: only structs and choices declare generic parameters. A transparent
+    /// alias is not a generic declaration owner and must not appear as one.
+    #[allow(dead_code)]
+    pub(crate) fn nominal_type(origin: OriginTypeId) -> Result<Self, CompilerError> {
+        match origin.category() {
+            OriginTypeCategory::Struct | OriginTypeCategory::Choice => Ok(Self {
+                inner: GenericDeclarationOriginInner::NominalType(origin),
+            }),
+            OriginTypeCategory::TransparentAlias => Err(CompilerError::compiler_error(
+                "a transparent alias is not a valid exported generic declaration owner; only structs and choices declare generic parameters",
+            )),
+        }
+    }
+
+    /// Construct a free-function generic declaration origin, rejecting receiver methods.
+    ///
+    /// Compiler-internal: only free functions declare standalone exported generic parameters.
+    /// A receiver method lives on its receiver type's surface and is not an independent generic
+    /// declaration owner, so a `FunctionOriginKind::Receiver` origin must not appear here.
+    #[allow(dead_code)]
+    pub(crate) fn free_function(origin: OriginFunctionId) -> Result<Self, CompilerError> {
+        match origin.kind() {
+            FunctionOriginKind::Free => Ok(Self {
+                inner: GenericDeclarationOriginInner::FreeFunction(origin),
+            }),
+            FunctionOriginKind::Receiver(_) => Err(CompilerError::compiler_error(
+                "a receiver method is not a valid exported generic declaration owner; only free \
+                 functions declare standalone generic parameters",
+            )),
+        }
+    }
+}
+
+/// Owned, hashable, cross-build canonical identity for one exported generic parameter.
+///
+/// WHAT: derives from the stable origin of the owning generic declaration, the
+/// declaration-local parameter position and the owned authored parameter name. It stores no
+/// `GenericParameterId`, `GenericParameterListId`, `TypeId`, `StringId`, `InternedPath`,
+/// source location, source file, declaration order outside the parameter list or rendered
+/// display name lookup.
+/// WHY: cross-module interfaces must compare exported generic parameters by their stable
+/// declaration origin and position, not by donor-local `GenericParameterId` values that differ
+/// across module compilations. Two parameters with the same owner, position and authored name
+/// share one identity even when their module-local `GenericParameterId` allocations differ.
+#[allow(dead_code)] // Consumed by the next plan slice: public semantic surface projection.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct ExportedGenericParameterIdentity {
+    declaration_origin: GenericDeclarationOrigin,
+    position: u32,
+    authored_name: String,
+}
+
+impl ExportedGenericParameterIdentity {
+    /// Construct the stable identity for one exported generic parameter.
+    ///
+    /// Compiler-internal: the resolver owner builds this from the owning declaration's stable
+    /// origin, the declaration-local parameter position and the owned authored name. The
+    /// `GenericDeclarationOrigin` constructors already reject transparent aliases and receiver
+    /// methods.
+    #[allow(dead_code)]
+    pub(crate) fn new(
+        declaration_origin: GenericDeclarationOrigin,
+        position: u32,
+        authored_name: String,
+    ) -> Self {
+        Self {
+            declaration_origin,
+            position,
+            authored_name,
+        }
+    }
+
+    /// The stable origin of the owning generic declaration.
+    #[allow(dead_code)]
+    pub(crate) fn declaration_origin(&self) -> &GenericDeclarationOrigin {
+        &self.declaration_origin
+    }
+
+    /// The declaration-local parameter position (zero-based index within the parameter list).
+    #[allow(dead_code)]
+    pub(crate) fn position(&self) -> u32 {
+        self.position
+    }
+
+    /// The owned authored parameter name.
+    #[allow(dead_code)]
+    pub(crate) fn authored_name(&self) -> &str {
+        &self.authored_name
+    }
+}
+
 // ---------------------------------------------------------------------------
 //  Projection context
 // ---------------------------------------------------------------------------
@@ -263,8 +390,8 @@ impl GenericInstanceTypeIdentity {
 /// to their stable cross-module origin without embedding donor-local `NominalTypeId` values in
 /// the canonical identity.
 /// WHY: a missing source nominal origin is a `CompilerError`, never a silently omitted fact. The
-/// resolver is supplied by the provider-interface binding owner (Phase 7c2), not by the
-/// projection itself. For focused tests a simple map-backed implementation is sufficient.
+/// resolver is supplied by the public semantic surface projection owner, not by the projection
+/// itself. For focused tests a simple map-backed implementation is sufficient.
 pub(crate) trait NominalOriginResolver {
     /// Returns the stable origin identity for a module-local nominal, or a `CompilerError` when
     /// the nominal has no exported origin.
@@ -274,30 +401,52 @@ pub(crate) trait NominalOriginResolver {
     ) -> Result<OriginTypeId, CompilerError>;
 }
 
+/// Resolves a module-local `GenericParameterId` to its stable exported generic-parameter
+/// identity.
+///
+/// WHAT: the projection receives this resolver so it can map an exported generic parameter to
+/// its stable cross-module identity without embedding donor-local `GenericParameterId` values
+/// in the canonical identity.
+/// WHY: a missing exported generic-parameter identity is a `CompilerError`, never a silently
+/// omitted fact or a guess from the parameter name alone. The resolver is supplied by the
+/// public semantic surface projection owner, not by the projection itself. For focused tests a
+/// simple map-backed implementation is sufficient.
+pub(crate) trait GenericParameterOriginResolver {
+    /// Returns the stable exported identity for a module-local generic parameter, or a
+    /// `CompilerError` when the parameter has no exported origin.
+    fn resolve_generic_parameter_origin(
+        &self,
+        parameter_id: GenericParameterId,
+    ) -> Result<ExportedGenericParameterIdentity, CompilerError>;
+}
+
 /// Explicit context for projecting a `TypeId` into a canonical identity.
 ///
-/// WHAT: carries the source-nominal origin resolver and the external package registry. Both are
-/// borrowed for the duration of the projection.
-/// WHY: keeps the projection function's signature narrow and explicit about its two external
+/// WHAT: carries the source-nominal origin resolver, the generic-parameter origin resolver and
+/// the external package registry. All three are borrowed for the duration of the projection.
+/// WHY: keeps the projection function's signature narrow and explicit about its three external
 /// dependencies. The projection itself owns no state.
-#[allow(dead_code)] // Consumed by Phase 7c2 public semantic surface projection.
+#[allow(dead_code)] // Consumed by the next plan slice: public semantic surface projection.
 pub(crate) struct CanonicalTypeProjectionContext<'a> {
     nominal_origins: &'a dyn NominalOriginResolver,
+    generic_parameter_origins: &'a dyn GenericParameterOriginResolver,
     external_registry: &'a ExternalPackageRegistry,
 }
 
 impl<'a> CanonicalTypeProjectionContext<'a> {
-    /// Construct the projection context from its two borrowed dependencies.
+    /// Construct the projection context from its three borrowed dependencies.
     ///
-    /// Compiler-internal: the provider-interface binding owner (Phase 7c2) builds this once per
+    /// Compiler-internal: the public semantic surface projection owner builds this once per
     /// module compilation. Focused tests build it directly.
-    #[allow(dead_code)] // Consumed by Phase 7c2 public semantic surface projection.
+    #[allow(dead_code)] // Consumed by the next plan slice: public semantic surface projection.
     pub(crate) fn new(
         nominal_origins: &'a dyn NominalOriginResolver,
+        generic_parameter_origins: &'a dyn GenericParameterOriginResolver,
         external_registry: &'a ExternalPackageRegistry,
     ) -> Self {
         Self {
             nominal_origins,
+            generic_parameter_origins,
             external_registry,
         }
     }
@@ -310,25 +459,26 @@ impl<'a> CanonicalTypeProjectionContext<'a> {
 /// Projects a module-local `TypeId` into a canonical cross-module type identity.
 ///
 /// WHAT: reads the `TypeDefinition` for `type_id` from `type_environment`, resolves source
-/// nominal origins through the context, resolves binding-backed opaque types through the
-/// external registry, and recursively projects constructed and generic-instance arguments.
+/// nominal origins through the context, resolves exported generic parameters through the
+/// generic-parameter origin resolver, resolves binding-backed opaque types through the external
+/// registry, and recursively projects constructed and generic-instance arguments.
 /// WHY: this is the single owner of the `TypeId -> CanonicalTypeIdentity` conversion. It
 /// returns `CompilerError` for every incomplete or unsupported state instead of returning
 /// `None`, using a sentinel, guessing from rendered names or panicking.
 ///
 /// The following states return `CompilerError` with precise invariant context:
 /// - missing source nominal origin (the nominal has no exported `OriginTypeId`)
+/// - missing exported generic-parameter identity (the `GenericParameterId` has no resolver entry)
 /// - missing external stable identity (the `ExternalTypeId` was never registered)
-/// - function types (not a closed canonical type)
+/// - function types (not a canonical type)
 /// - tuple and other internal-only constructed shapes
-/// - unresolved generic parameters
-/// - malformed constructed arity (wrong argument count for a builtin constructor)
-/// - malformed generic-instance arity (argument count differs from the base nominal's declared
-///   generic parameter count)
+/// - malformed arity (wrong argument count for a builtin constructor or a generic instance)
 ///
 /// Transparent aliases are transparent: if the `TypeEnvironment` ever stores an alias, the
 /// projection follows its resolved target `TypeId` and does not manufacture an alias variant.
-#[allow(dead_code)] // Consumed by Phase 7c2 public semantic surface projection.
+/// Exported generic parameters project through the generic-parameter origin resolver so open
+/// exported type shapes recurse through the same single projection path as closed types.
+#[allow(dead_code)] // Consumed by the next plan slice: public semantic surface projection.
 pub(crate) fn project_type_id_to_canonical_identity(
     type_id: TypeId,
     type_environment: &TypeEnvironment,
@@ -402,12 +552,19 @@ pub(crate) fn project_type_id_to_canonical_identity(
              type, which is not a closed canonical type identity",
             type_id.0
         ))),
-        TypeDefinition::GenericParameter(_) => Err(CompilerError::compiler_error(format!(
-            "canonical type projection does not support unresolved generic parameters; \
-             TypeId({}) is a generic parameter, which has no canonical closed-type identity \
-             without exported generic-parameter ownership",
-            type_id.0
-        ))),
+        TypeDefinition::GenericParameter(parameter) => {
+            let identity = context
+                .generic_parameter_origins
+                .resolve_generic_parameter_origin(parameter.id)
+                .map_err(|error| {
+                    CompilerError::compiler_error(format!(
+                        "canonical type projection could not resolve an exported generic-parameter identity for GenericParameterId({}): {error_msg}",
+                        parameter.id.0,
+                        error_msg = error.msg
+                    ))
+                })?;
+            Ok(CanonicalTypeIdentity::GenericParameter(identity))
+        }
     }
 }
 

@@ -11,8 +11,9 @@
 
 use crate::compiler_frontend::canonical_type_identity::{
     CanonicalBuiltinType, CanonicalTypeIdentity, CanonicalTypeProjectionContext,
-    CollectionTypeIdentity, ExternalOpaqueTypeIdentity, FallibleCarrierTypeIdentity,
-    GenericInstanceTypeIdentity, NominalOriginResolver, OrderedMapTypeIdentity,
+    CollectionTypeIdentity, ExportedGenericParameterIdentity, ExternalOpaqueTypeIdentity,
+    FallibleCarrierTypeIdentity, GenericDeclarationOrigin, GenericInstanceTypeIdentity,
+    GenericParameterOriginResolver, NominalOriginResolver, OrderedMapTypeIdentity,
     project_type_id_to_canonical_identity,
 };
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorType};
@@ -30,7 +31,7 @@ use crate::compiler_frontend::external_packages::{
     IO_INPUT_EXTERNAL_TYPE_ID,
 };
 use crate::compiler_frontend::semantic_identity::{
-    ModuleRootRole, OriginTypeCategory, OriginTypeId, StableModuleOriginIdentity,
+    ModuleRootRole, OriginFunctionId, OriginTypeCategory, OriginTypeId, StableModuleOriginIdentity,
     StablePackageIdentity,
 };
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
@@ -75,6 +76,41 @@ impl NominalOriginResolver for MapNominalOriginResolver {
     }
 }
 
+/// Map-backed generic-parameter origin resolver for focused tests.
+struct MapGenericParameterOriginResolver {
+    origins: FxHashMap<GenericParameterId, ExportedGenericParameterIdentity>,
+}
+
+impl MapGenericParameterOriginResolver {
+    fn new() -> Self {
+        Self {
+            origins: FxHashMap::default(),
+        }
+    }
+
+    fn register(
+        &mut self,
+        parameter_id: GenericParameterId,
+        identity: ExportedGenericParameterIdentity,
+    ) {
+        self.origins.insert(parameter_id, identity);
+    }
+}
+
+impl GenericParameterOriginResolver for MapGenericParameterOriginResolver {
+    fn resolve_generic_parameter_origin(
+        &self,
+        parameter_id: GenericParameterId,
+    ) -> Result<ExportedGenericParameterIdentity, CompilerError> {
+        self.origins.get(&parameter_id).cloned().ok_or_else(|| {
+            CompilerError::compiler_error(format!(
+                "no exported generic-parameter identity registered for GenericParameterId({})",
+                parameter_id.0
+            ))
+        })
+    }
+}
+
 fn module_origin(logical_path: &str) -> StableModuleOriginIdentity {
     StableModuleOriginIdentity::from_portable_path(
         StablePackageIdentity::project_local("test-project"),
@@ -96,6 +132,25 @@ fn choice_origin(name: &str) -> OriginTypeId {
         module_origin("shapes"),
         name.to_owned(),
         OriginTypeCategory::Choice,
+    )
+}
+
+fn free_function_origin(name: &str) -> OriginFunctionId {
+    OriginFunctionId::new_free(module_origin("functions"), name.to_owned())
+}
+
+/// Constructs an `ExportedGenericParameterIdentity` for a struct-owned parameter at position 0
+/// named `T`.
+fn struct_parameter_identity(
+    struct_name: &str,
+    position: u32,
+    param_name: &str,
+) -> ExportedGenericParameterIdentity {
+    ExportedGenericParameterIdentity::new(
+        GenericDeclarationOrigin::nominal_type(struct_origin(struct_name))
+            .expect("struct origin must be a valid generic declaration owner"),
+        position,
+        param_name.to_owned(),
     )
 }
 
@@ -210,9 +265,10 @@ fn builtin_registry() -> ExternalPackageRegistry {
 
 fn projection_context<'a>(
     resolver: &'a MapNominalOriginResolver,
+    generic_resolver: &'a MapGenericParameterOriginResolver,
     registry: &'a ExternalPackageRegistry,
 ) -> CanonicalTypeProjectionContext<'a> {
-    CanonicalTypeProjectionContext::new(resolver, registry)
+    CanonicalTypeProjectionContext::new(resolver, generic_resolver, registry)
 }
 
 // ---------------------------------------------------------------------------
@@ -223,8 +279,9 @@ fn projection_context<'a>(
 fn projects_every_builtin_scalar() {
     let env = TypeEnvironment::new();
     let resolver = MapNominalOriginResolver::new();
+    let generic_resolver = MapGenericParameterOriginResolver::new();
     let registry = ExternalPackageRegistry::new();
-    let context = projection_context(&resolver, &registry);
+    let context = projection_context(&resolver, &generic_resolver, &registry);
 
     let cases = [
         (env.builtins().bool, CanonicalBuiltinType::Bool),
@@ -254,8 +311,9 @@ fn projects_every_builtin_scalar() {
 fn builtin_none_identity_is_canonical() {
     let env = TypeEnvironment::new();
     let resolver = MapNominalOriginResolver::new();
+    let generic_resolver = MapGenericParameterOriginResolver::new();
     let registry = ExternalPackageRegistry::new();
-    let context = projection_context(&resolver, &registry);
+    let context = projection_context(&resolver, &generic_resolver, &registry);
 
     let none_identity = project_type_id_to_canonical_identity(env.builtins().none, &env, &context)
         .expect("None builtin should project");
@@ -280,7 +338,8 @@ fn projects_direct_struct_to_source_nominal_origin() {
     let mut resolver = MapNominalOriginResolver::new();
     resolver.register(nominal_id, struct_origin("Button"));
     let registry = ExternalPackageRegistry::new();
-    let context = projection_context(&resolver, &registry);
+    let generic_resolver = MapGenericParameterOriginResolver::new();
+    let context = projection_context(&resolver, &generic_resolver, &registry);
 
     let identity = project_type_id_to_canonical_identity(type_id, &env, &context)
         .expect("struct projection should succeed");
@@ -301,7 +360,8 @@ fn projects_direct_choice_to_source_nominal_origin() {
     let mut resolver = MapNominalOriginResolver::new();
     resolver.register(nominal_id, choice_origin("Status"));
     let registry = ExternalPackageRegistry::new();
-    let context = projection_context(&resolver, &registry);
+    let generic_resolver = MapGenericParameterOriginResolver::new();
+    let context = projection_context(&resolver, &generic_resolver, &registry);
 
     let identity = project_type_id_to_canonical_identity(type_id, &env, &context)
         .expect("choice projection should succeed");
@@ -331,11 +391,12 @@ fn struct_and_choice_with_same_origin_category_are_distinct() {
 fn projects_external_opaque_to_owned_package_and_symbol_path() {
     let mut env = TypeEnvironment::new();
     let registry = builtin_registry();
+    let generic_resolver = MapGenericParameterOriginResolver::new();
     let external_type_id = IO_INPUT_EXTERNAL_TYPE_ID;
     let type_id = env.intern_external(external_type_id);
 
     let resolver = MapNominalOriginResolver::new();
-    let context = projection_context(&resolver, &registry);
+    let context = projection_context(&resolver, &generic_resolver, &registry);
 
     let identity = project_type_id_to_canonical_identity(type_id, &env, &context)
         .expect("external opaque projection should succeed");
@@ -399,10 +460,11 @@ fn external_opaque_identity_distinguishes_different_packages() {
 fn projects_external_opaque_from_test_registry() {
     let mut env = TypeEnvironment::new();
     let registry = test_registry_with_canvas_type();
+    let generic_resolver = MapGenericParameterOriginResolver::new();
     let type_id = env.intern_external(ExternalTypeId(100));
 
     let resolver = MapNominalOriginResolver::new();
-    let context = projection_context(&resolver, &registry);
+    let context = projection_context(&resolver, &generic_resolver, &registry);
 
     let identity = project_type_id_to_canonical_identity(type_id, &env, &context)
         .expect("test external opaque projection should succeed");
@@ -430,8 +492,9 @@ fn projects_option_of_builtin() {
     let option_id = env.intern_option(int_id);
 
     let resolver = MapNominalOriginResolver::new();
+    let generic_resolver = MapGenericParameterOriginResolver::new();
     let registry = ExternalPackageRegistry::new();
-    let context = projection_context(&resolver, &registry);
+    let context = projection_context(&resolver, &generic_resolver, &registry);
 
     let identity = project_type_id_to_canonical_identity(option_id, &env, &context)
         .expect("option projection should succeed");
@@ -452,8 +515,9 @@ fn projects_growable_collection() {
     let collection_id = env.intern_collection(string_id, None);
 
     let resolver = MapNominalOriginResolver::new();
+    let generic_resolver = MapGenericParameterOriginResolver::new();
     let registry = ExternalPackageRegistry::new();
-    let context = projection_context(&resolver, &registry);
+    let context = projection_context(&resolver, &generic_resolver, &registry);
 
     let identity = project_type_id_to_canonical_identity(collection_id, &env, &context)
         .expect("growable collection projection should succeed");
@@ -476,8 +540,9 @@ fn projects_fixed_collection_distinct_from_growable() {
     let growable_id = env.intern_collection(int_id, None);
 
     let resolver = MapNominalOriginResolver::new();
+    let generic_resolver = MapGenericParameterOriginResolver::new();
     let registry = ExternalPackageRegistry::new();
-    let context = projection_context(&resolver, &registry);
+    let context = projection_context(&resolver, &generic_resolver, &registry);
 
     let fixed_identity = project_type_id_to_canonical_identity(fixed_id, &env, &context)
         .expect("fixed collection projection should succeed");
@@ -505,8 +570,9 @@ fn projects_ordered_map_preserving_key_value_order() {
     let map_id = env.intern_map(key_id, value_id);
 
     let resolver = MapNominalOriginResolver::new();
+    let generic_resolver = MapGenericParameterOriginResolver::new();
     let registry = ExternalPackageRegistry::new();
-    let context = projection_context(&resolver, &registry);
+    let context = projection_context(&resolver, &generic_resolver, &registry);
 
     let identity = project_type_id_to_canonical_identity(map_id, &env, &context)
         .expect("map projection should succeed");
@@ -538,8 +604,9 @@ fn projects_fallible_carrier_preserving_success_error_order() {
     let carrier_id = env.intern_fallible_carrier(success_id, error_id);
 
     let resolver = MapNominalOriginResolver::new();
+    let generic_resolver = MapGenericParameterOriginResolver::new();
     let registry = ExternalPackageRegistry::new();
-    let context = projection_context(&resolver, &registry);
+    let context = projection_context(&resolver, &generic_resolver, &registry);
 
     let identity = project_type_id_to_canonical_identity(carrier_id, &env, &context)
         .expect("fallible carrier projection should succeed");
@@ -582,7 +649,8 @@ fn projects_concrete_generic_nominal_instance() {
     let mut resolver = MapNominalOriginResolver::new();
     resolver.register(box_nominal_id, struct_origin("Box"));
     let registry = ExternalPackageRegistry::new();
-    let context = projection_context(&resolver, &registry);
+    let generic_resolver = MapGenericParameterOriginResolver::new();
+    let context = projection_context(&resolver, &generic_resolver, &registry);
 
     let identity = project_type_id_to_canonical_identity(instance_id, &env, &context)
         .expect("generic instance projection should succeed");
@@ -637,8 +705,9 @@ fn absent_nominal_origin_returns_compiler_error() {
     let (nominal_id, type_id) = register_struct(&mut env, &mut string_table, "Missing");
 
     let resolver = MapNominalOriginResolver::new();
+    let generic_resolver = MapGenericParameterOriginResolver::new();
     let registry = ExternalPackageRegistry::new();
-    let context = projection_context(&resolver, &registry);
+    let context = projection_context(&resolver, &generic_resolver, &registry);
 
     let error = project_type_id_to_canonical_identity(type_id, &env, &context)
         .expect_err("absent nominal origin must return an error");
@@ -664,8 +733,9 @@ fn absent_external_identity_returns_compiler_error() {
     let type_id = env.intern_external(unregistered_external_id);
 
     let resolver = MapNominalOriginResolver::new();
+    let generic_resolver = MapGenericParameterOriginResolver::new();
     let registry = ExternalPackageRegistry::new();
-    let context = projection_context(&resolver, &registry);
+    let context = projection_context(&resolver, &generic_resolver, &registry);
 
     let error = project_type_id_to_canonical_identity(type_id, &env, &context)
         .expect_err("absent external identity must return an error");
@@ -689,16 +759,18 @@ fn unresolved_generic_parameter_returns_compiler_error() {
         env.intern_generic_parameter(GenericParameterId(0), StringTable::new().intern("T"));
 
     let resolver = MapNominalOriginResolver::new();
+    let generic_resolver = MapGenericParameterOriginResolver::new();
     let registry = ExternalPackageRegistry::new();
-    let context = projection_context(&resolver, &registry);
+    let context = projection_context(&resolver, &generic_resolver, &registry);
 
     let error = project_type_id_to_canonical_identity(param_type_id, &env, &context)
         .expect_err("generic parameter must return an error");
 
     assert_eq!(error.error_type, ErrorType::Compiler);
     assert!(
-        error.msg.contains("generic parameter"),
-        "error should name the generic parameter state: {}",
+        error.msg.contains("exported generic-parameter")
+            && error.msg.contains("GenericParameterId"),
+        "error should name the missing exported generic-parameter identity: {}",
         error.msg
     );
 }
@@ -717,8 +789,9 @@ fn function_type_returns_compiler_error() {
     });
 
     let resolver = MapNominalOriginResolver::new();
+    let generic_resolver = MapGenericParameterOriginResolver::new();
     let registry = ExternalPackageRegistry::new();
-    let context = projection_context(&resolver, &registry);
+    let context = projection_context(&resolver, &generic_resolver, &registry);
 
     let error = project_type_id_to_canonical_identity(function_id, &env, &context)
         .expect_err("function type must return an error");
@@ -738,8 +811,9 @@ fn tuple_type_returns_compiler_error() {
     let tuple_id = env.intern_tuple(vec![int_id, int_id]);
 
     let resolver = MapNominalOriginResolver::new();
+    let generic_resolver = MapGenericParameterOriginResolver::new();
     let registry = ExternalPackageRegistry::new();
-    let context = projection_context(&resolver, &registry);
+    let context = projection_context(&resolver, &generic_resolver, &registry);
 
     let error = project_type_id_to_canonical_identity(tuple_id, &env, &context)
         .expect_err("tuple type must return an error");
@@ -764,8 +838,9 @@ fn malformed_collection_arity_returns_compiler_error() {
     );
 
     let resolver = MapNominalOriginResolver::new();
+    let generic_resolver = MapGenericParameterOriginResolver::new();
     let registry = ExternalPackageRegistry::new();
-    let context = projection_context(&resolver, &registry);
+    let context = projection_context(&resolver, &generic_resolver, &registry);
 
     let error = project_type_id_to_canonical_identity(malformed_id, &env, &context)
         .expect_err("malformed collection arity must return an error");
@@ -789,8 +864,9 @@ fn malformed_map_arity_returns_compiler_error() {
     );
 
     let resolver = MapNominalOriginResolver::new();
+    let generic_resolver = MapGenericParameterOriginResolver::new();
     let registry = ExternalPackageRegistry::new();
-    let context = projection_context(&resolver, &registry);
+    let context = projection_context(&resolver, &generic_resolver, &registry);
 
     let error = project_type_id_to_canonical_identity(malformed_id, &env, &context)
         .expect_err("malformed map arity must return an error");
@@ -817,7 +893,8 @@ fn malformed_generic_instance_arity_returns_compiler_error() {
     let mut resolver = MapNominalOriginResolver::new();
     resolver.register(box_nominal_id, struct_origin("Box"));
     let registry = ExternalPackageRegistry::new();
-    let context = projection_context(&resolver, &registry);
+    let generic_resolver = MapGenericParameterOriginResolver::new();
+    let context = projection_context(&resolver, &generic_resolver, &registry);
 
     let error = project_type_id_to_canonical_identity(malformed_id, &env, &context)
         .expect_err("malformed generic-instance arity must return an error");
@@ -846,7 +923,8 @@ fn generic_instance_of_non_generic_base_returns_compiler_error() {
     let mut resolver = MapNominalOriginResolver::new();
     resolver.register(plain_nominal_id, struct_origin("Thing"));
     let registry = ExternalPackageRegistry::new();
-    let context = projection_context(&resolver, &registry);
+    let generic_resolver = MapGenericParameterOriginResolver::new();
+    let context = projection_context(&resolver, &generic_resolver, &registry);
 
     let error = project_type_id_to_canonical_identity(instance_id, &env, &context)
         .expect_err("a generic instance of a non-generic base must return an error");
@@ -873,7 +951,8 @@ fn generic_instance_of_unknown_base_returns_compiler_error() {
     // and the base validation is what catches the missing nominal.
     resolver.register(unknown_base, struct_origin("Phantom"));
     let registry = ExternalPackageRegistry::new();
-    let context = projection_context(&resolver, &registry);
+    let generic_resolver = MapGenericParameterOriginResolver::new();
+    let context = projection_context(&resolver, &generic_resolver, &registry);
 
     let error = project_type_id_to_canonical_identity(instance_id, &env, &context)
         .expect_err("a generic instance of an unknown base must return an error");
@@ -909,7 +988,8 @@ fn generic_instance_with_missing_parameter_list_returns_compiler_error() {
     let mut resolver = MapNominalOriginResolver::new();
     resolver.register(dangling_nominal_id, struct_origin("Dangling"));
     let registry = ExternalPackageRegistry::new();
-    let context = projection_context(&resolver, &registry);
+    let generic_resolver = MapGenericParameterOriginResolver::new();
+    let context = projection_context(&resolver, &generic_resolver, &registry);
 
     let error = project_type_id_to_canonical_identity(instance_id, &env, &context)
         .expect_err("a generic instance whose parameter list is missing must return an error");
@@ -989,7 +1069,8 @@ fn recursive_generic_instance_arguments_are_canonical() {
     let mut resolver = MapNominalOriginResolver::new();
     resolver.register(box_nominal_id, struct_origin("Box"));
     let registry = ExternalPackageRegistry::new();
-    let context = projection_context(&resolver, &registry);
+    let generic_resolver = MapGenericParameterOriginResolver::new();
+    let context = projection_context(&resolver, &generic_resolver, &registry);
 
     let identity = project_type_id_to_canonical_identity(nested_instance_id, &env, &context)
         .expect("nested generic instance projection should succeed");
@@ -1003,5 +1084,338 @@ fn recursive_generic_instance_arguments_are_canonical() {
     assert_eq!(
         identity, expected,
         "Box<Option<Int>> must recursively project inner option to canonical identity"
+    );
+}
+
+// ---------------------------------------------------------------------------
+//  Exported generic-parameter identity and open-type projection
+// ---------------------------------------------------------------------------
+
+#[test]
+fn exported_generic_parameter_identity_is_equal_across_distinct_generic_parameter_ids() {
+    // Two environments allocate different GenericParameterId values for the same logical
+    // parameter. The stable identity must be equal because it derives from the declaration
+    // origin, position and authored name, not from the donor-local GenericParameterId.
+    let mut env_a = TypeEnvironment::new();
+    let mut env_b = TypeEnvironment::new();
+    let mut string_table = StringTable::new();
+
+    // Consume GenericParameterId(0) in env_a with a synthetic parameter so the real list's
+    // parameter gets GenericParameterId(1).
+    let _ = env_a.register_synthetic_generic_parameter(string_table.intern("dummy"));
+
+    use crate::compiler_frontend::datatypes::generic_parameters::{
+        GenericParameter, GenericParameterList, TypeParameterId,
+    };
+
+    let list = GenericParameterList {
+        parameters: vec![GenericParameter {
+            id: TypeParameterId(0),
+            name: string_table.intern("T"),
+            location: location(),
+            trait_bounds: Vec::new(),
+        }],
+    };
+
+    let registered_a = env_a.register_generic_parameter_list(&list, &FxHashMap::default());
+    let registered_b = env_b.register_generic_parameter_list(&list, &FxHashMap::default());
+
+    let param_id_a = registered_a.canonical_by_local[&TypeParameterId(0)];
+    let param_id_b = registered_b.canonical_by_local[&TypeParameterId(0)];
+
+    assert_ne!(
+        param_id_a, param_id_b,
+        "the two environments must allocate distinct GenericParameterId values"
+    );
+
+    let type_id_a = env_a
+        .type_id_for_generic_parameter(param_id_a)
+        .expect("env_a must have a TypeId for the parameter");
+    let type_id_b = env_b
+        .type_id_for_generic_parameter(param_id_b)
+        .expect("env_b must have a TypeId for the parameter");
+
+    let identity = struct_parameter_identity("Box", 0, "T");
+
+    let mut generic_resolver_a = MapGenericParameterOriginResolver::new();
+    generic_resolver_a.register(param_id_a, identity.clone());
+    let mut generic_resolver_b = MapGenericParameterOriginResolver::new();
+    generic_resolver_b.register(param_id_b, identity.clone());
+
+    let resolver = MapNominalOriginResolver::new();
+    let registry = ExternalPackageRegistry::new();
+
+    let context_a = projection_context(&resolver, &generic_resolver_a, &registry);
+    let context_b = projection_context(&resolver, &generic_resolver_b, &registry);
+
+    let projected_a = project_type_id_to_canonical_identity(type_id_a, &env_a, &context_a)
+        .expect("env_a generic parameter projection should succeed");
+    let projected_b = project_type_id_to_canonical_identity(type_id_b, &env_b, &context_b)
+        .expect("env_b generic parameter projection should succeed");
+
+    assert_eq!(
+        projected_a, projected_b,
+        "same owner, position and name must yield equal identity across distinct GenericParameterId allocations"
+    );
+
+    let mut set = HashSet::new();
+    set.insert(projected_a);
+    assert!(
+        set.contains(&projected_b),
+        "equal identity must hash to the same slot"
+    );
+}
+
+#[test]
+fn exported_generic_parameter_identity_distinguishes_owner_position_and_name() {
+    let struct_box = struct_parameter_identity("Box", 0, "T");
+    let struct_container = struct_parameter_identity("Container", 0, "T");
+    let struct_box_pos1 = struct_parameter_identity("Box", 1, "T");
+    let struct_box_name_u = struct_parameter_identity("Box", 0, "U");
+
+    // Different declaration owner.
+    assert_ne!(
+        struct_box, struct_container,
+        "different declaration owners must produce distinct identities"
+    );
+
+    // Different parameter position.
+    assert_ne!(
+        struct_box, struct_box_pos1,
+        "different parameter positions must produce distinct identities"
+    );
+
+    // Different authored name.
+    assert_ne!(
+        struct_box, struct_box_name_u,
+        "different authored names must produce distinct identities"
+    );
+}
+
+#[test]
+fn exported_generic_parameter_identity_distinguishes_free_function_from_nominal() {
+    let nominal_origin = GenericDeclarationOrigin::nominal_type(struct_origin("Box")).unwrap();
+    let function_origin = GenericDeclarationOrigin::free_function(free_function_origin("map"))
+        .expect("a free function must be a valid generic declaration origin");
+
+    let nominal_identity = ExportedGenericParameterIdentity::new(nominal_origin, 0, "T".to_owned());
+    let function_identity =
+        ExportedGenericParameterIdentity::new(function_origin, 0, "T".to_owned());
+
+    assert_ne!(
+        nominal_identity, function_identity,
+        "a free function and a nominal type with the same position and name must be distinct"
+    );
+}
+
+#[test]
+fn transparent_alias_cannot_be_a_generic_declaration_origin() {
+    let alias_origin = OriginTypeId::new(
+        module_origin("shapes"),
+        "Alias".to_owned(),
+        OriginTypeCategory::TransparentAlias,
+    );
+
+    let error = GenericDeclarationOrigin::nominal_type(alias_origin)
+        .expect_err("a transparent alias must not be a valid generic declaration origin");
+
+    assert_eq!(error.error_type, ErrorType::Compiler);
+    assert!(
+        error.msg.contains("transparent alias"),
+        "error should reject transparent alias as a generic declaration owner: {}",
+        error.msg
+    );
+}
+
+#[test]
+fn receiver_method_cannot_be_a_generic_declaration_origin() {
+    // The receiver type is a normal struct origin, but the function kind is Receiver.
+    let receiver_type = struct_origin("Widget");
+    let receiver_method = OriginFunctionId::new_receiver(
+        module_origin("functions"),
+        "process".to_owned(),
+        receiver_type,
+    );
+
+    let error = GenericDeclarationOrigin::free_function(receiver_method)
+        .expect_err("a receiver method must not be a valid generic declaration origin");
+
+    assert_eq!(error.error_type, ErrorType::Compiler);
+    assert!(
+        error.msg.contains("receiver method"),
+        "error should reject the receiver-method function kind, not the receiver type: {}",
+        error.msg
+    );
+}
+
+#[test]
+fn projects_option_of_exported_generic_parameter() {
+    let mut env = TypeEnvironment::new();
+    let mut string_table = StringTable::new();
+
+    let param_list_id = register_single_param_list(&mut env, &mut string_table);
+    let (box_nominal_id, _) =
+        register_generic_struct(&mut env, &mut string_table, "Box", param_list_id);
+
+    // Get the GenericParameterId and TypeId for the single parameter "T" before mutating env.
+    let (param_id, param_type_id) = {
+        let list = env
+            .generic_parameters(param_list_id)
+            .expect("parameter list must exist");
+        let param = &list.parameters[0];
+        let type_id = env
+            .type_id_for_generic_parameter(param.id)
+            .expect("TypeId must exist for the generic parameter");
+        (param.id, type_id)
+    };
+
+    // Option<T> — a nested constructed open shape around an exported parameter.
+    let option_id = env.intern_option(param_type_id);
+
+    let identity = struct_parameter_identity("Box", 0, "T");
+
+    let mut generic_resolver = MapGenericParameterOriginResolver::new();
+    generic_resolver.register(param_id, identity.clone());
+
+    let mut resolver = MapNominalOriginResolver::new();
+    resolver.register(box_nominal_id, struct_origin("Box"));
+    let registry = ExternalPackageRegistry::new();
+    let context = projection_context(&resolver, &generic_resolver, &registry);
+
+    let projected = project_type_id_to_canonical_identity(option_id, &env, &context)
+        .expect("Option<T> projection should succeed");
+
+    let expected =
+        CanonicalTypeIdentity::Option(Box::new(CanonicalTypeIdentity::GenericParameter(identity)));
+    assert_eq!(
+        projected, expected,
+        "Option<T> must recursively project the inner exported generic parameter"
+    );
+}
+
+#[test]
+fn projects_collection_of_exported_generic_parameter() {
+    let mut env = TypeEnvironment::new();
+    let mut string_table = StringTable::new();
+
+    let param_list_id = register_single_param_list(&mut env, &mut string_table);
+    let (_container_nominal_id, _) =
+        register_generic_struct(&mut env, &mut string_table, "Container", param_list_id);
+
+    let (param_id, param_type_id) = {
+        let list = env
+            .generic_parameters(param_list_id)
+            .expect("parameter list must exist");
+        let param = &list.parameters[0];
+        let type_id = env
+            .type_id_for_generic_parameter(param.id)
+            .expect("TypeId must exist for the generic parameter");
+        (param.id, type_id)
+    };
+
+    // {T} — a growable collection around an exported parameter.
+    let collection_id = env.intern_collection(param_type_id, None);
+
+    let identity = struct_parameter_identity("Container", 0, "T");
+
+    let mut generic_resolver = MapGenericParameterOriginResolver::new();
+    generic_resolver.register(param_id, identity.clone());
+
+    let resolver = MapNominalOriginResolver::new();
+    let registry = ExternalPackageRegistry::new();
+    let context = projection_context(&resolver, &generic_resolver, &registry);
+
+    let projected = project_type_id_to_canonical_identity(collection_id, &env, &context)
+        .expect("collection of generic parameter projection should succeed");
+
+    let expected = CanonicalTypeIdentity::Collection(CollectionTypeIdentity::new(
+        CanonicalTypeIdentity::GenericParameter(identity),
+        None,
+    ));
+    assert_eq!(
+        projected, expected,
+        "{{T}} must recursively project the inner exported generic parameter"
+    );
+}
+
+#[test]
+fn missing_generic_parameter_resolver_entry_returns_compiler_error() {
+    let mut env = TypeEnvironment::new();
+    let mut string_table = StringTable::new();
+
+    let param_list_id = register_single_param_list(&mut env, &mut string_table);
+    let (_box_nominal_id, _) =
+        register_generic_struct(&mut env, &mut string_table, "Box", param_list_id);
+
+    let param_type_id = {
+        let list = env
+            .generic_parameters(param_list_id)
+            .expect("parameter list must exist");
+        let param = &list.parameters[0];
+        env.type_id_for_generic_parameter(param.id)
+            .expect("TypeId must exist for the generic parameter")
+    };
+
+    // No entry in the generic-parameter resolver.
+    let resolver = MapNominalOriginResolver::new();
+    let generic_resolver = MapGenericParameterOriginResolver::new();
+    let registry = ExternalPackageRegistry::new();
+    let context = projection_context(&resolver, &generic_resolver, &registry);
+
+    let error = project_type_id_to_canonical_identity(param_type_id, &env, &context)
+        .expect_err("a missing resolver entry must return an error");
+
+    assert_eq!(error.error_type, ErrorType::Compiler);
+    assert!(
+        error.msg.contains("exported generic-parameter")
+            && error.msg.contains("GenericParameterId"),
+        "error should name the missing exported generic-parameter identity: {}",
+        error.msg
+    );
+}
+
+#[test]
+fn synthetic_generic_parameter_rejected_by_absence_from_resolver() {
+    let mut env = TypeEnvironment::new();
+    let mut string_table = StringTable::new();
+
+    // A synthetic parameter (e.g. trait `This`) is not an exported generic declaration parameter.
+    let synthetic_type_id = env.register_synthetic_generic_parameter(string_table.intern("This"));
+
+    let resolver = MapNominalOriginResolver::new();
+    let generic_resolver = MapGenericParameterOriginResolver::new();
+    let registry = ExternalPackageRegistry::new();
+    let context = projection_context(&resolver, &generic_resolver, &registry);
+
+    let error = project_type_id_to_canonical_identity(synthetic_type_id, &env, &context)
+        .expect_err("a synthetic parameter absent from the resolver must be rejected");
+
+    assert_eq!(error.error_type, ErrorType::Compiler);
+    assert!(
+        error.msg.contains("exported generic-parameter"),
+        "error should reject the synthetic parameter through the resolver: {}",
+        error.msg
+    );
+}
+
+#[test]
+fn generic_parameter_identity_carries_no_local_ids() {
+    let identity = struct_parameter_identity("Box", 0, "T");
+    let canonical = CanonicalTypeIdentity::GenericParameter(identity);
+    let debug = format!("{canonical:?}");
+
+    // Check for actual ID values (e.g. `GenericParameterId(0)`) rather than the struct name
+    // `ExportedGenericParameterIdentity`, which naturally contains the substring.
+    assert!(
+        !debug.contains("GenericParameterId(") && !debug.contains("GenericParameterListId("),
+        "canonical generic-parameter identity must not embed donor-local parameter IDs: {debug}"
+    );
+    assert!(
+        !debug.contains("TypeId(") && !debug.contains("StringId("),
+        "canonical generic-parameter identity must not embed TypeId or StringId: {debug}"
+    );
+    assert!(
+        !debug.contains("InternedPath"),
+        "canonical generic-parameter identity must not embed interned paths: {debug}"
     );
 }

@@ -9,19 +9,19 @@ Replace entry-closure compilation with canonical project and package graphs, imm
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/canonical-module-compilation-and-scoped-packages-plan.md
 STATUS: active
-CURRENT_SLICE: Phase 7c1 accepted; checkpoint commit pending
-LAST_ACCEPTED_COMMIT: b8119583f (Phase 7a/7b stable direct export origins)
-WORKTREE: main at b8119583f with accepted Phase 7c1 source, focused tests, index and this plan update; unrelated user documentation work may appear and must be preserved
+CURRENT_SLICE: Phase 7c2a accepted; checkpoint commit pending
+LAST_ACCEPTED_COMMIT: e4b61ceb4 (Phase 7c1 canonical closed type identities)
+WORKTREE: main at e4b61ceb4 with accepted Phase 7c2a source, focused tests and this plan update; unrelated user documentation work may appear and must be preserved
 REQUIRED_RELOADS: startup files, this plan, semantic identity and direct-export origins, TypeEnvironment and AST lookup owners, retained header binding, graph scheduling and current module-result owners
 RELEVANT_CONTEXT_NOW:
 - docs: build-system-design.md Project and package topology plus Deterministic scheduling define canonical graph nodes, strict support scope, facade placement and deterministic waves
 - code: graph/synthetic origins reach semantic compilation; DefinedPublicExportOrigins records direct free and receiver export bindings, but source re-exports and provider binding still require canonical type/value facts that contain no donor-local semantic IDs
 ACCEPTANCE_CRITERIA:
-- introduce the canonical cross-module identity vocabulary for closed builtin, source nominal, binding-backed opaque and constructed types without rendered-name equality or donor-local TypeId transport
-- map module-local TypeId values through an explicit stable source-nominal context and binding registry, returning CompilerError for missing origins, generic parameters and other unsupported incomplete states instead of inventing placeholders
-- keep the existing diagnostic/HIR TypeIdentityKey bridge separate; it remains module-local and is not repurposed as the public-interface identity
-- add stable binding-backed type identity lookup rooted in owned package and symbol paths rather than build-local package/type IDs
-- add focused tests for builtin, nominal, external, option, collection, fixed collection, map, fallible and concrete generic nominal projection; preserve user-visible behavior and backend output
+- stable exported generic-parameter identity derives from a validated free-function or struct/choice declaration origin plus declaration-local parameter position/name without retaining GenericParameterId or StringId
+- the existing canonical TypeId projector resolves open exported parameters through one explicit origin resolver and recursively projects open constructed shapes
+- missing, synthetic, receiver-method and transparent-alias ownership fails through CompilerError without name guessing or sentinels
+- every existing closed-type projection and the separate module-local TypeIdentityKey bridge remain unchanged
+- focused stability, owner-distinction, nested-open-shape and missing-owner tests pass without user-visible behavior changes
 VALIDATION_STATE:
 - Phase 4d just validate: passed; cross-target Clippy, 3419 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases
 - Phase 4e focused validation: passed; 2 import-scanning, 5 reachability, 178 module-discovery, 19 orchestration, 5 token-remap and 116 header tests plus cargo check --tests and git diff --check
@@ -42,12 +42,14 @@ VALIDATION_STATE:
 - Phase 7a/7b just validate: passed after resolved-receiver correction; cross-target Clippy, 3458 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases (-1ms average)
 - Phase 7c1 focused validation: passed after atomic reverse-identity and generic-base corrections; 78 canonical-type/external-registry tests plus cargo check --tests, cargo clippy --tests -D warnings, formatting and git diff --check
 - Phase 7c1 just validate: passed after clearing generated Cargo artifacts following a no-space environmental failure; cross-target Clippy, 3497 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases (0ms average)
+- Phase 7c2a focused validation: passed after closing receiver-method owner construction; 42 canonical identity tests plus cargo check --tests, cargo clippy --tests -D warnings, formatting and git diff --check
+- Phase 7c2a just validate: passed; cross-target Clippy, 3507 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases (-1ms average)
 DOCS_IMPACT: index.md names the canonical cross-module type identity and projection owner; progress matrix unchanged for internal interface groundwork
-BLOCKERS_OR_OPEN_DECISIONS: exported generic-parameter ownership and complete exported surface projection remain the next Phase 7c slice; do not create an incomplete PublicSemanticInterface or represent source re-exports before provider interfaces exist
+BLOCKERS_OR_OPEN_DECISIONS: Phase 7c2b must build the exact AST-to-semantic-boundary public type-surface snapshot from completed lookups without retaining the full AST environment or inventing a partial PublicSemanticInterface; source re-exports still wait for provider interfaces
 DELEGATION_DECISION: ollama - user requires Ollama for every worker slice
 NEXT_WORKER_ORDER: ollama only; no provider substitution for this run
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit the Phase 7c1 checkpoint, record its hash, then scope exported generic-parameter ownership and public type-surface projection through Ollama
+NEXT_RESUME_ACTION: commit the Phase 7c2a checkpoint, record its hash, then scope the direct public type-surface snapshot through Ollama
 ```
 
 ## Hard prerequisites
@@ -573,6 +575,19 @@ Accepted Phase 7c1 checkpoint:
 - exported generic-parameter ownership, complete public type surfaces and production provider
   interface wiring remain Phase 7c2; the current vocabulary has focused dead-code allowances that
   name that immediate consumer.
+
+Accepted Phase 7c2a checkpoint:
+
+- `ExportedGenericParameterIdentity` derives from an opaque validated generic-declaration origin,
+  the declaration-local parameter position and the owned authored name. Only free functions and
+  struct/choice origins can construct the owner; receiver methods and transparent aliases fail
+  through `CompilerError` and donor-local generic/type/string IDs never enter the value.
+- `CanonicalTypeProjectionContext` now receives an explicit generic-parameter origin resolver.
+  The existing `TypeId` projector uses it for open exported parameters, so nested collections,
+  options and other constructed public shapes recurse through the same canonical path as closed
+  types. Missing and synthetic parameters fail instead of falling back to name identity.
+- the module-local `TypeIdentityKey` bridge remains separate and every closed projection retains
+  its prior behavior. Production direct public type-surface projection remains Phase 7c2b.
 
 ### Phase 8: Add generated sidecars and the fixed-point worklist
 
