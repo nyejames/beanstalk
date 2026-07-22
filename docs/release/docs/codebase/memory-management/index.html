@@ -38,13 +38,13 @@
 
   /* Code block colours */
   --comment: #8e8e8e;
-  --keyword: #fa3f3f;
+  --keyword: #fdbe82;
   --string: #64d721;
   --number: #c09eea;
-  --operator: #9ec1ff;
-  --struct: #f293dc;
-  --type: #42a0f3;
-  --parenthesis: #d5c56d;
+  --operator: #a6a9fd;
+  --struct: #fca1e7;
+  --type: #46ceff;
+  --parenthesis: #dece74;
 }
 
 /* where: is used here for less specificity, allowing easier overriding */
@@ -446,7 +446,7 @@ body {
     "><code class='codeblock'>
     change<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>{</span><span class='bst-code-string'>&quot;fresh&quot;</span><span class='bst-code-parenthesis'>}</span><span class='bst-code-parenthesis'>)</span>
     </code></pre></section>
-    <section class="container"><h2>Lifetime owners</h2><p>Every runtime allocation has exactly one semantic lifetime owner. Multiple bindings or fields may alias that allocation without becoming additional owners.</p><p>An object may retain a reference only when the referenced allocation belongs to the same lifetime region or to a region statically known to outlive the retaining object.</p><p>The compiler rejects illegal sibling sharing and cross-region cycles even under GC. GC is a permitted representation for a statically legal topology, not a way to accept invalid retained edges.</p><p>Declared <code>group</code> / <code>into</code> syntax is accepted end-state design with implementation deferred. See the lifetime-regions page for the full topology model.</p></section>
+    <section class="container"><h2>Lifetime owners</h2><p>Every runtime allocation has exactly one semantic lifetime owner. Multiple bindings or fields may alias that allocation without becoming additional owners.</p><p>An object may retain a reference only when the referenced allocation belongs to the same lifetime region or to a region statically known to outlive the retaining object.</p><p>The compiler rejects illegal sibling sharing and cross-region cycles even under GC. GC is a permitted representation for a statically legal topology, not a way to accept invalid retained edges.</p><p>Declared <code>group</code> / <code>into</code> syntax is accepted end-state design with implementation deferred. See <a href="./declared-memory-groups">Declared memory groups</a> for the source contract and <a href="./lifetime-regions-and-escape-validation">Lifetime regions and escape validation</a> for the general topology model.</p></section>
     <section class="container"><h2>How the compiler layers it</h2><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
@@ -455,14 +455,14 @@ body {
         white-space: pre;
         overflow-x: auto;
     "><code class='codeblock'>
-    source access and copy rules
-        <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>AST</span> access<span class='bst-code-operator'>-</span>mode, placement and freshness validation
-        <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> validated <span class='bst-code-struct'>HIR</span> with explicit places and control flow
-        <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> borrow validation and optional transfer facts
-        <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> lifetime<span class='bst-code-operator'>-</span>region and escape validation
-        <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> build<span class='bst-code-operator'>-</span>owned reachability, lifecycle roots and target planning
-        <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>GC,</span> region, ownership<span class='bst-code-operator'>-</span>aware or other validated backend lowering
-    </code></pre></section>
+            source access and copy rules
+                -> AST access-mode, placement and freshness validation
+                -> validated HIR with explicit places and control flow
+                -> borrow validation and optional transfer facts
+                -> lifetime-region and escape validation
+                -> build-owned reachability, lifecycle roots and target planning
+                -> GC, region, ownership-aware or other validated backend lowering
+        </code></pre></section>
     <section class="container"><h2>Detailed pages</h2><ul><li><a href="./access-and-aliasing">Access and aliasing</a>: shared reads, explicit copies and <code>~</code> access</li><li><a href="./borrow-validation">Borrow validation</a>: roots, joins, optional transfer safety and facts</li><li><a href="./lifetime-regions-and-escape-validation">Lifetime regions and escape validation</a>: one owner, retained edges, escapes and region topology</li><li><a href="./declared-memory-groups">Declared memory groups</a>: accepted deferred <code>group</code> / <code>into</code> semantics and hard destination lifetimes</li><li><a href="./ownership-and-drops">Ownership and drops</a>: inferred transfer, unified ABI and conditional destruction</li><li><a href="./runtime-and-backend-lowering">Runtime and backend lowering</a>: GC baseline and ownership-aware backend paths</li></ul></section>
     <section class="container"><h2>Current support</h2><p>See <a href="../../progress">Progress matrix</a> for what is implemented today.</p></section>
     <script>

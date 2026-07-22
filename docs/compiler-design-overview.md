@@ -13,7 +13,7 @@ Companion authorities:
 - `docs/build-system-design.md` for project and build orchestration
 - `docs/language-overview.md` and `docs/src/docs/codebase/language/**` for source syntax and language semantics
 - `docs/src/docs/codebase/design-scope/overview.bd` for design bias and scope boundaries
-- `docs/src/docs/codebase/memory-management/overview.bd` for access, borrow, GC, ownership and destruction semantics
+- `docs/src/docs/codebase/memory-management/overview.bd` for reference semantics, borrow validation, lifetime topology, declared groups, ownership, GC and backend memory lowering
 - `docs/src/docs/codebase/style-guide/style-guide.bd` for implementation standards
 - `docs/src/docs/progress/#page.bst` for current support and backend coverage
 - `docs/roadmap/roadmap.md` and `docs/roadmap/plans/` for implementation order and genuinely deferred design
@@ -338,7 +338,11 @@ A public interface contains only facts a semantic consumer may observe:
 - exported traits and reusable conformance evidence
 - receiver surfaces and visible methods
 - function parameter access modes
-- mutation, possible consumption, return-alias and relevant reactive effect summaries
+- mutation, optional transfer eligibility and effect categories
+- return-alias and projection-alias summaries
+- retained-parameter and outlives summaries
+- external-boundary classifications
+- relevant reactive effect summaries
 - project-context provenance for every exported fact
 
 Backend planning facts do not belong in this interface. Per-function calls, helper requirements, runtime assets and target-gated features live in `ModuleLinkFacts`.
@@ -361,7 +365,7 @@ Semantic surface validation covers:
 - trait requirements
 - receiver methods
 - reusable conformance evidence
-- access and effect summaries
+- access, optional-transfer, alias, retention, outlives, external-boundary and reactive summaries
 
 An exported semantic surface cannot leak:
 
@@ -408,7 +412,8 @@ Covers the canonical semantic contents of `PublicSemanticInterface`:
 - generic template semantics and bounds
 - trait and conformance evidence
 - receiver surfaces
-- access and effect summaries
+- access, optional-transfer, alias, retention, outlives and external-boundary summaries
+- relevant reactive effect summaries
 - project-context provenance
 
 It excludes private bodies, source locations, warnings, formatting-only metadata and dormant root activity that is not public API.
@@ -467,6 +472,8 @@ Each generated function artefact owns:
 - a generated-local type environment or immutable canonical-to-local type delta
 - concrete validated HIR
 - generated borrow facts
+- generated lifetime-region and escape facts
+- generated exported lifetime and effect summaries
 - generated link facts
 - implementation, runtime and compatibility fingerprints
 
@@ -933,6 +940,8 @@ It enforces:
 Borrow validation reads validated HIR and writes read-only side tables. It does not rewrite HIR, decide lifetime topology or decide final runtime ownership.
 
 Optional inferred transfer is an optimisation path. When proof is unavailable on every relevant path, the operation remains a borrow. Failure to prove transfer must not reject an otherwise valid program. Immutable and mutable parameters may both receive inferred destruction responsibility at a proven final-use call site.
+
+Closed external boundary profiles override this general rule. WIT value-only calls and restricted host-value crossings are non-consuming. Mutable opaque-handle access does not transfer Beanstalk storage through the ordinary Beanstalk ownership ABI.
 
 Public function interfaces export:
 

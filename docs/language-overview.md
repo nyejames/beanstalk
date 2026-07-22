@@ -609,10 +609,10 @@ Rules:
   This is a language-owned map surface, not a general hashing abstraction.
 - `Float`, structs, choices, collections, hashmaps, traits, functions, external opaque types, templates as a distinct key type, and generic parameters are invalid keys.
 - Values follow the same runtime-storable rules as collection elements.
-- Maps own stored keys and values.
+- Maps own their entry structure. Existing keys and values stored in entries follow the ordinary shared-reference, explicit-copy and inferred-transfer rules.
 - `get`, `contains`, and `remove` borrow the lookup key.
 - `get` returns shared access to the stored value. Mutating the same map while that shared value is live is invalid.
-- `remove` returns the owned removed value.
+- `remove` removes the entry and returns the removed value under the normal lifetime and ownership rules.
 - `set` inserts or replaces a value and does not return the old value.
 - `get`, `set`, and `remove` are fallible and must be handled with postfix `!` or `catch:`.
 - `contains`, `length`, and `clear` are infallible.
@@ -1574,7 +1574,7 @@ Rules:
 - External packages do not expose receiver methods. Use free functions for raw external APIs, or a source-owned wrapper type when method-style ergonomics are wanted.
 - Existing Core, Builder and JavaScript-backed bindings use a restricted host-binding profile: ordinary Beanstalk values cross by value, host code may not retain references into ordinary Beanstalk storage, and opaque handles represent foreign identities rather than Beanstalk reference types.
 - Observable external resources require explicit close or teardown. Host finalization timing must not define language behaviour.
-- Future general Wasm library imports use a value-only WIT component profile. Supported arguments lower from shared reads into independent component values and results lift into fresh Beanstalk values. No Beanstalk alias, lifetime owner, ownership state or destruction responsibility crosses the component boundary.
+- Future general Wasm library imports use a value-only WIT component profile. Supported arguments lower from shared reads into independent component values and results lift into independent Beanstalk result graphs. No Beanstalk alias, lifetime owner, ownership state or destruction responsibility crosses the component boundary.
 - WIT resources, callbacks, async operations, futures, streams, shared-memory views, raw pointers, returned aliases and retained Beanstalk references are deferred beyond the V1 value-only profile.
 
 Initial optional core packages:

@@ -20,30 +20,28 @@ This document replaces the previous incremental phase sequence at the same path.
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/canonical-module-compilation-and-scoped-packages-plan.md
 STATUS: active
-CURRENT_SLICE: R2a complete — declaration-centric direct-record checkpoint reviewed, validated and ready to commit
-LAST_ACCEPTED_COMMIT: 3e8b0f20b
-WORKTREE: main at 3e8b0f20b; no known unrelated changes
-REQUIRED_RELOADS: startup files, this plan, current public-interface source and current diff
+CURRENT_SLICE: R2b — project folded values for directly exported constants into declaration-centric draft records
+LAST_ACCEPTED_COMMIT: 350ec2b3a
+WORKTREE: main at 350ec2b3a
+REQUIRED_RELOADS: startup files, this plan, public-interface draft construction, finalized AST module constants and current diff
 RELEVANT_CONTEXT_NOW:
-- docs: compiler-design-overview.md and build-system-design.md own the draft/final interface and orchestration boundaries
-- code: public_interface_draft.rs owns aggregation; semantic_identity.rs, defined_public_type_surface.rs and AST resolved public roots supply the existing direct facts
+- docs: compiler-design-overview.md owns one-time AST folding and owned provider values; build-system-design.md owns immutable provider binding
+- code: public_interface_draft.rs owns declaration records; finalized Ast::module_constants owns folded direct constant expressions before HIR; frontend_orchestration.rs joins them before AST consumption
 ACCEPTANCE_CRITERIA:
-- PublicInterfaceDraft owns module origin, all export bindings and exactly one direct declaration record per unique stable origin for every current public category
-- the draft stores only declaration-centric Public* semantics; DefinedPublic* containers and leaf vocabulary remain private projection intermediates consumed before the boundary
-- receiver methods attach deterministically to struct/choice records; duplicate origins/methods, wrong nominal shapes and every missing/extra/mismatched fact fail deterministically
-- multiple export bindings for one origin retain all bindings but produce one declaration record in first-binding order
-- folded values/defaults, evidence, provenance, borrow summaries, provider re-exports, generated functions and fingerprints remain outside R2a
+- each directly exported constant record carries its fully folded value in one owned backend-neutral public-value vocabulary, including folded template strings and ordered recursive const-record fields
+- conversion consumes already-finalized AST module constants and never opens TIR, reparses, refolds or imports HIR-owned/local identity vocabulary into the draft
+- public folded values contain no TypeId, StringId, InternedPath, source location, AST/TIR identity, local choice tag or absolute path; strings and field/variant names are owned and stable
+- joins are total and deterministic: missing, duplicate, extra or unsupported folded facts fail with CompilerError instead of omission or fallback reconstruction
+- function/field defaults, evidence, provenance, borrow summaries, provider re-exports, generated functions and fingerprints remain outside R2b
 VALIDATION_STATE:
-- cargo fmt --all: passed
-- focused public-interface and defined-public projection tests: passed; 25 and 67 tests
-- cargo check --tests and cargo clippy --tests -- -D warnings: passed
-- just validate: passed; cross-target Clippy, 3,629 Rust tests, 1,793 integration runs, docs check and 28 benchmark cases
-DOCS_IMPACT: active plan only; progress matrix unchanged because R2a changes no user-visible support
+- current slice: not run
+- accepted R2a checkpoint: just validate passed at 350ec2b3a
+DOCS_IMPACT: active plan only; progress matrix unchanged because R2b changes no user-visible support
 BLOCKERS_OR_OPEN_DECISIONS: none
 DELEGATION_DECISION: ollama - user requires Ollama for every worker slice
 NEXT_WORKER_ORDER: ollama only
 STOP_REASON: none
-NEXT_RESUME_ACTION: stage only the accepted R2a code, tests and this plan, commit the checkpoint, then refresh current state for R2b
+NEXT_RESUME_ACTION: dispatch the bounded R2b value-projection slice through Ollama, then review the handoff and actual diff
 ```
 
 Do not append worktree-specific notes, complete validation histories or worker transcripts to this plan. Keep this status block current and concise. Git history is the validation history.
@@ -270,9 +268,13 @@ module AST and validated base HIR
 -> enqueue generated requests
 -> materialise/deduplicate generated sidecars to a fixed point
 -> borrow-validate generated functions
+-> produce generated local lifetime constraints and summaries
 -> borrow-validate the requesting base module using resolved generated summaries
+-> produce base-module local lifetime constraints and summaries
 -> finalize module interface, link facts and artefact
 ```
+
+Complete lifetime topology is instantiated later by project/link planning over reachable functions and builder lifecycle roots. This plan preserves the accepted artefact lanes and summary boundaries without claiming that deferred lifetime-region analysis has been implemented.
 
 The worklist may process requests incrementally between graph waves. It remains build-owned and global to the project or package boundary.
 
@@ -374,7 +376,11 @@ Contains only semantic facts visible to a source consumer:
 - stable declaration origins and export bindings
 - canonical type shapes
 - function parameter names, access modes, defaults and canonical return channels
-- function mutation, possible-consumption, return-alias and reactive summaries
+- function mutation and optional-transfer eligibility/effect categories
+- return-alias and projection-alias summaries
+- retained-parameter and outlives summaries
+- external-boundary classifications
+- reactive summaries
 - folded exported constants and const-template values
 - struct fields and folded defaults
 - choice variants and payload fields
@@ -392,6 +398,9 @@ Contains module-local executable state only:
 - one local `TypeEnvironment`
 - validated module-local HIR
 - borrow facts
+- local lifetime-region and escape facts
+
+The accepted artefact lane reserves these facts conceptually. The current canonical-module milestone must preserve the lane and stable handoff without claiming the deferred lifetime analysis has landed.
 
 Normal modules may have an optional dormant `start`. Support roots and facades have none.
 
@@ -554,7 +563,7 @@ Implementation:
 9. Extend borrow analysis to retain public-call summaries keyed by local `FunctionId`:
    - parameter access mode
    - mutation effect
-   - possible consumption
+   - optional transfer eligibility and effect category
    - return alias summary
    - relevant reactive effect
 10. Finalize direct declaration records after borrow validation by joining stable function origins to local summaries exactly once.
@@ -601,6 +610,8 @@ Implementation:
 9. Associate each sidecar with its declaring module while keeping ownership in the consuming compilation boundary.
 10. Support private declaring-module helper calls without making private helpers source-visible identities.
 11. Delete AST-emitter materialisation and base-module mutation.
+
+Every generated sidecar carries generated-local type context, HIR, borrow facts, local lifetime facts and summaries, link facts and fingerprints.
 
 Tests:
 
@@ -829,7 +840,7 @@ Implementation:
 ### Fingerprints
 
 - finalize one canonical fingerprint encoder for all five module fingerprints
-- include access/effect summaries in public-interface fingerprints
+- include access/effect summaries in public-interface fingerprints, including optional-transfer summaries, alias/projection summaries, retained-parameter relationships, outlives constraints and external-boundary classifications
 - exclude docs-only facts from semantic/implementation fingerprints
 - include generated request-set changes in implementation/worklist invalidation
 - preserve package capability compatibility facts without implementing persistent caches

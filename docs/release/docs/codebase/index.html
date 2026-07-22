@@ -38,13 +38,13 @@
 
   /* Code block colours */
   --comment: #8e8e8e;
-  --keyword: #fa3f3f;
+  --keyword: #fdbe82;
   --string: #64d721;
   --number: #c09eea;
-  --operator: #9ec1ff;
-  --struct: #f293dc;
-  --type: #42a0f3;
-  --parenthesis: #d5c56d;
+  --operator: #a6a9fd;
+  --struct: #fca1e7;
+  --type: #46ceff;
+  --parenthesis: #dece74;
 }
 
 /* where: is used here for less specificity, allowing easier overriding */
@@ -405,18 +405,18 @@ body {
         white-space: pre;
         overflow-x: auto;
     "><code class='codeblock'>
-    project files
-        <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Stage</span> <span class='bst-code-number'>0</span><span class='bst-code-operator'>:</span> project structure and source discovery
-        <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Stage</span> <span class='bst-code-number'>1</span><span class='bst-code-operator'>:</span> tokenization
-        <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Stage</span> <span class='bst-code-number'>2</span><span class='bst-code-operator'>:</span> header parsing
-        <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Stage</span> <span class='bst-code-number'>3</span><span class='bst-code-operator'>:</span> dependency sorting
-        <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Stage</span> <span class='bst-code-number'>4</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>AST</span> construction
-        <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Stage</span> <span class='bst-code-number'>5</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>HIR</span> generation
-        <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Stage</span> <span class='bst-code-number'>6</span><span class='bst-code-operator'>:</span> borrow validation
-        <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> lifetime<span class='bst-code-operator'>-</span>region and escape validation
-        <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> build<span class='bst-code-operator'>-</span>owned link planning and backend lowering
-        <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> output files
-    </code></pre></section>
+            project files
+                -> Stage 0: project structure and source discovery
+                -> Stage 1: tokenization
+                -> Stage 2: header parsing
+                -> Stage 3: dependency sorting
+                -> Stage 4: AST construction
+                -> Stage 5: HIR generation
+                -> Stage 6: borrow validation
+                -> lifetime-region and escape validation
+                -> build-owned link planning and backend lowering
+                -> output files
+        </code></pre></section>
     <section class="container"><h2>Design docs vs current support</h2><p>Codebase pages describe accepted end-state architecture. Some pages define design that the compiler and backends are still converging on.</p><p>Use the <a href="../progress">progress matrix</a> to see what is implemented, partial, experimental or still missing. Use the <a href="https://github.com/nyejames/beanstalk/blob/main/docs/roadmap/roadmap.md">roadmap</a> for sequencing and proposals not yet accepted as design.</p></section>
     <script>
     function __bs_is_ref(value) {

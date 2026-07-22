@@ -302,15 +302,17 @@ A mutable binding declared into a group remains group-owned. Reassignment does n
 
 Group-owned values passed to ordinary functions are normally passed as borrowed. The callee may read or mutate according to the source access contract, but it must not individually destroy the group-owned allocation.
 
-Fresh results requested into the group use a hidden result destination. The hidden destination:
+Functions whose result root is fresh may allocate that root directly into a caller-selected destination. The function summary classifies the result root as fresh and records retained-edge constraints separately.
+
+A hidden destination:
 
 - is not part of the source signature
 - is not a region parameter visible to generics or callers
 - is not a source lifetime parameter
 - may be ignored by a GC backend
-- lets an optimising backend allocate the fresh result graph directly into the caller's region
+- lets an optimising backend allocate a fresh result root directly into the caller's region when every retained edge is legal for that destination
 
-A fresh-result summary must be backend-neutral and part of the function's semantic effect information.
+A fresh-result-root summary and its retained-edge constraints must be backend-neutral parts of the function's semantic effect information.
 
 The ownership bit records destruction responsibility only. It does not prove uniqueness, identify the final observer or establish lifetime legality. A group owns release responsibility for its storage family; an individual callee cannot release one group child merely because an owned bit exists.
 
@@ -387,4 +389,4 @@ Final-use extraction of one projected child from an allocation family is not acc
 - @../borrow-validation (Borrow validation): exclusivity and optional transfer safety
 - @../ownership-and-drops (Ownership and drops): destruction responsibility and the ownership bit
 - @../runtime-and-backend-lowering (Runtime and backend lowering): backend representation and external profiles
-- https://github.com/nyejames/beanstalk/blob/main/docs/roadmap/plans/grouped-memory-design.md: implementation sequencing and deferred investigations
+- @https://github.com/nyejames/beanstalk/blob/main/docs/roadmap/plans/grouped-memory-design.md (Grouped memory implementation roadmap): implementation sequencing and deferred investigations

@@ -389,7 +389,7 @@ select command, artefact builder, build profile and tooling overlays
    -> run AST semantics
    -> lower and validate HIR
    -> borrow-validate
-   -> produce local lifetime constraints and exported summaries
+   -> produce local lifetime constraints, lifetime facts and exported summaries
 -> complete the generated-function worklist
 -> assemble a success-only ProjectCompilation
 -> plan entry/package roots and exact reachable unions
@@ -533,7 +533,7 @@ Support modules and the project package facade are API-only:
 
 `export:` is the only public visibility marker.
 
-Every normal module in the command's semantic graph has dormant root work fully compiled and borrow-validated. Entry assembly activates already compiled work only.
+Every normal module in the command's semantic graph has dormant root work fully compiled, borrow-validated and locally lifetime-analysed. Entry assembly activates already compiled work only.
 
 ### Module-root-relative imports
 
@@ -826,9 +826,9 @@ receive retained syntax and completed provider interfaces
 -> order local declarations
 -> run AST semantics
 -> lower and validate HIR
-    -> borrow-validate
-    -> produce local lifetime constraints, lifetime facts and exported summaries
-    -> return Success or Diagnosed
+-> borrow-validate
+-> produce local lifetime constraints, lifetime facts and exported summaries
+-> return Success or Diagnosed
 ```
 
 Local module compilation cannot validate every cross-module or builder-lifecycle relationship by itself. Project and link planning instantiate lifetime summaries over the reachable call graph and builder-supplied lifecycle roots.
@@ -936,7 +936,7 @@ Tooling-only entry config never creates an artefact entry.
 
 ## Generated-function worklist
 
-The compiler owns generic template validation, call-site inference, request identity, generated HIR and generated borrow facts.
+The compiler owns generic template validation, call-site inference, request identity, generated HIR, generated borrow facts, and generated lifetime facts and summaries.
 
 The build system owns:
 
@@ -1109,8 +1109,6 @@ Each selected module variant has a generated JavaScript companion facade. Wasm i
 ### Link planning and lifetime topology
 
 Project and package link planning instantiates local lifetime summaries with builder lifecycle roots and validates the complete lifetime topology before target assignment. Linking does not reopen source or mutate HIR.
-
-`ProjectCompilation` or the link plan conceptually carries project-level validated lifetime topology. Exact Rust shape remains open.
 
 `ProjectCompilation` or the link plan conceptually carries project-level validated lifetime topology. Exact Rust shape remains open.
 

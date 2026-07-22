@@ -38,13 +38,13 @@
 
   /* Code block colours */
   --comment: #8e8e8e;
-  --keyword: #fa3f3f;
+  --keyword: #fdbe82;
   --string: #64d721;
   --number: #c09eea;
-  --operator: #9ec1ff;
-  --struct: #f293dc;
-  --type: #42a0f3;
-  --parenthesis: #d5c56d;
+  --operator: #a6a9fd;
+  --struct: #fca1e7;
+  --type: #46ceff;
+  --parenthesis: #dece74;
 }
 
 /* where: is used here for less specificity, allowing easier overriding */
@@ -525,101 +525,101 @@ body {
             </tr>
             
     </table><p>Each behavior should have one primary owner. Secondary coverage is justified only when it protects a distinct boundary, target, diagnostic lane or internal invariant.</p><h3>Test location and module layout</h3><ul><li>Tests do not live in production implementation files.</li><li>Module-specific tests belong under the module&#39;s test directory, for example:</li></ul><pre style=""><code class='codeblock'>
-    src<span class='bst-code-operator'>/</span>compiler_frontend<span class='bst-code-operator'>/</span>hir<span class='bst-code-operator'>/</span>tests<span class='bst-code-operator'>/</span>
+        src/compiler_frontend/hir/tests/
     </code></pre><ul><li>End-to-end or multi-module Rust harness tests belong under:</li></ul><pre style=""><code class='codeblock'>
-    src<span class='bst-code-operator'>/</span>compiler_tests<span class='bst-code-operator'>/</span>
+        src/compiler_tests/
     </code></pre><ul><li>Language and project integration cases belong under:</li></ul><pre style=""><code class='codeblock'>
-    tests<span class='bst-code-operator'>/</span>cases<span class='bst-code-operator'>/</span>
+        tests/cases/
     </code></pre><ul><li>Test-only utilities should live with the tests that own them.</li><li>Do not create broad shared test utility modules for one or two callers.</li><li>Split cross-stage test support only when actual ownership boundaries justify it.</li></ul><h3>Unit tests</h3><p>Retain unit tests for:</p><ul><li>pure data invariants</li><li>impossible states</li><li>side-table facts</li><li>transfer rules</li><li>backend planning policy not observable from artifacts</li><li>narrow parser or formatter algorithms</li></ul><p>Prefer integration tests for user-visible behavior. Once a subsystem is stable, prune superseded unit tests. Rewrite obsolete tests rather than preserving old API shapes. A unit test should name the invariant it protects. Do not use unit coverage as a substitute for an end-to-end case when user behavior changed.</p><h3>Integration cases</h3><ul><li><code>bean tests</code> runs the integration test runner.</li><li>Use real Beanstalk snippets.</li><li>Each canonical case is one self-contained scenario directory.</li><li>Keep helper source files inside the owning case&#39;s <code>input/</code> directory.</li><li>Do not let helper files become unintended standalone cases.</li><li>Add strong output assertions where behavior is visible.</li><li>Prefer top-level templates to simulate output.</li><li>Avoid <code>io.line(...)</code> unless console behavior is itself under test.</li></ul><h3>Successful backend intent</h3><p>Every successful HTML and HTML-Wasm backend run applies its universal backend baseline. The baseline protects harness and target invariants. It is not the case&#39;s authored semantic contract.</p><p>Use <code>success_contract = &quot;acceptance_only&quot;</code> only when that backend has no stronger case-specific semantic, artifact, golden, absence or expected-warning assertion.</p><pre style=""><code class='codeblock'>
-    <span class='bst-code-parenthesis'>[</span>backends.html<span class='bst-code-parenthesis'>]</span>
-    mode <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;success&quot;</span>
-    warnings <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;forbid&quot;</span>
-    success_contract <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;acceptance_only&quot;</span>
+        [backends.html]
+        mode = "success"
+        warnings = "forbid"
+        success_contract = "acceptance_only"
     </code></pre><p>Acceptance-only intent does not disable the baseline. The audit records both <code>baseline_applied = true</code> and <code>acceptance_only = true</code>, with <code>backend_baseline</code> and <code>acceptance_only</code> in <code>assertion_kinds</code>.</p><p>Do not combine acceptance-only intent with artifact assertions, golden mode, rendered-output assertions, artifact-absence assertions or an authored expected-warning contract. A whole case whose backends are all acceptance-only uses <code>role = &quot;smoke&quot;</code>. A mixed-backend case may use a boundary or backend role when another backend owns a stronger contract.</p><p>A successful backend with only the universal baseline is invalid. Typed fixture loading rejects it before policy evaluation, listing, audit, or execution.</p><p>For new type-system syntax, include:</p><ul><li>positive usage</li><li>value/type namespace misuse</li><li>import visibility</li><li>duplicates</li><li>cross-file resolution</li><li>target/backend rejection where relevant</li></ul><p>Canonical fixture shape:</p><pre style=""><code class='codeblock'>
-    tests<span class='bst-code-operator'>/</span>cases<span class='bst-code-operator'>/</span>
-    ├── manifest.toml
-    └── case_name<span class='bst-code-operator'>/</span>
-        ├── input<span class='bst-code-operator'>/</span>
-        │   ├── main.bst
-        │   └── helper.bst
-        ├── expect.toml
-        └── golden<span class='bst-code-operator'>/</span>
-            ├── html<span class='bst-code-operator'>/</span>
-            └── html_wasm<span class='bst-code-operator'>/</span>
+        tests/cases/
+        ├── manifest.toml
+        └── case_name/
+            ├── input/
+            │   ├── main.bst
+            │   └── helper.bst
+            ├── expect.toml
+            └── golden/
+                ├── html/
+                └── html_wasm/
     </code></pre><ul><li><code>manifest.toml</code> is the authoritative case order. Every case declares a unique canonical <code>id</code>, unique fixture <code>path</code> and at least one non-empty tag.</li><li>Manifest case paths are relative and may not contain absolute, platform-prefix, parent or current-directory components. Canonicalised fixture roots must remain inside <code>tests/cases/</code>, including through symlinks.</li><li>IDs, paths, tags, contracts, roles and configured entries reject leading or trailing whitespace. Tags within one case must be unique.</li><li>Every canonical case declares a <code>role</code>. Supported roles are <code>primary</code>, <code>boundary</code>, <code>backend</code>, <code>adversarial</code> and <code>smoke</code>.</li><li>Every non-smoke case declares a <code>contract</code>. A whole-case acceptance-only smoke may remain contractless because it has no case-specific semantic owner. Do not invent a contract for it.</li><li>A <code>primary</code> case requires a contract, and one contract may have at most one primary case.</li><li>A contract family without a primary is reported once in manifest order. Backend-only and adversarial-only families are deliberate advisories. Mixed or ordinary secondary-only families remain visible for ownership review.</li><li>Case IDs, tags, contracts and roles are retained as typed runner metadata. Do not reconstruct them from display text or fixture paths.</li><li>One case folder owns all inputs and expectations for that scenario.</li></ul><p>Manifest entry shape:</p><pre style=""><code class='codeblock'>
-    <span class='bst-code-parenthesis'>[</span><span class='bst-code-parenthesis'>[</span>case<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span>
-    id <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;borrow_conflict_resolved_by_reordering&quot;</span>
-    path <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;borrow_conflict_resolved_by_reordering&quot;</span>
-    tags <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-string'>&quot;integration&quot;</span>, <span class='bst-code-string'>&quot;borrows&quot;</span><span class='bst-code-parenthesis'>]</span>
-    contract <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;language.bindings.alias_final_use_allows_mutable_rebinding&quot;</span>
-    role <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;primary&quot;</span>
+        [[case]]
+        id = "borrow_conflict_resolved_by_reordering"
+        path = "borrow_conflict_resolved_by_reordering"
+        tags = ["integration", "borrows"]
+        contract = "language.bindings.alias_final_use_allows_mutable_rebinding"
+        role = "primary"
     </code></pre><h3>Focused integration selection and inventory</h3><p>Use the canonical case ID and retained metadata for local iteration:</p><pre style=""><code class='codeblock'>
-    cargo run <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span>quiet <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span> tests <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span>case arithmetic_operator_precedence <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span>backend html
-    cargo run <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span>quiet <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span> tests <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span>tag borrows <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span>tag diagnostics <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span>backend html
-    cargo run <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span>quiet <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span> tests <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span>contract <span class='bst-code-operator'>&lt;</span>contract<span class='bst-code-operator'>-</span>id<span class='bst-code-operator'>&gt;</span>
-    cargo run <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span>quiet <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span> tests <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span>list <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span>tag borrows
+        cargo run --quiet -- tests --case arithmetic_operator_precedence --backend html
+        cargo run --quiet -- tests --tag borrows --tag diagnostics --backend html
+        cargo run --quiet -- tests --contract <contract-id>
+        cargo run --quiet -- tests --list --tag borrows
     </code></pre><ul><li><code>--case</code> and <code>--contract</code> are exact matches.</li><li>Repeatable <code>--tag</code> filters compose as logical AND.</li><li>Case, tag, contract and backend filters compose and preserve manifest/backend order.</li><li><code>--list</code> accepts selection filters and reports canonical ID, selected backend blocks, tags, contract and role without compiling cases.</li><li>Duplicate singleton options, duplicate tag values, missing values, unknown flags and positional arguments are errors.</li></ul><p>Use the audit mode to validate and inventory the complete canonical suite without compiling cases:</p><pre style=""><code class='codeblock'>
-    cargo run <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span>quiet <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span> tests <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span>audit
+        cargo run --quiet -- tests --audit
     </code></pre><p>Audit writes its JSON inventory before returning hard-policy failure. Normal listing and execution use the same policy evaluator and reject hard findings before compiling a case. Missing roles, missing contracts on non-smoke cases, primary cases without contracts and duplicate primary owners are hard findings. Contractless whole-case acceptance-only smoke cases are valid.</p><p>Audit cannot be combined with filters or <code>--list</code>. It writes the reporting-owned JSON inventory to <code>target/test-reports/integration_suite_inventory.json</code>, including canonical metadata, backend expectation facts, hard-policy violations and primary-less contract-family advisories. The report is review input only; it never deletes, merges or rewrites fixtures.</p><p>The schema 6 inventory reports acceptance-only, rendered-output, artifact, golden, absence and expected-warning backend counts, plus the zero baseline-only invariant. It reports exact, ordered and exact-once runtime contracts separately. Per-backend fields keep <code>baseline_applied</code>, <code>acceptance_only</code>, <code>assertion_kinds</code>, <code>golden_present</code>, <code>golden_mode</code>, every rendered-output form, exact warning codes, diagnostic match mode and any contains-mode reason separate so the report matches what ran.</p><p>Hard policy has one suite-policy owner. Missing roles, missing non-smoke contracts, duplicate primary contracts, a primary without a contract and a whole-case acceptance-only fixture without <code>role = &quot;smoke&quot;</code> are hard findings. Normal list and execution modes reject hard findings before selection or compilation. Audit still writes the complete JSON report, then returns failure. Primary-less contract-family advisories remain non-fatal.</p><h3>Runtime output assertions</h3><p>Runtime assertions use one Node harness. It records console output and HTML fragment inserts in one event array when each event happens, then joins their text with newlines in that same order. Channel views are derived from the event array. They never reconstruct chronology after execution.</p><p>The harness runs only when a backend declares a rendered-output assertion. It executes the emitted page scripts and waits for one documented microtask tick so scheduled reactive updates can flush. Do not make extra scheduler turns or incidental microtask counts contractual.</p><p>Choose the narrowest field that owns the behaviour:</p><ul><li><code>rendered_output_exact</code> protects the complete combined output. It is mutually exclusive with the other rendered-output fields. Exact comparison normalizes line endings only and preserves every other whitespace difference.</li><li><code>rendered_output_contains_in_order</code> protects the relative order of two or more fragments.</li><li><code>rendered_output_contains_exactly_once</code> protects activation, mounting and helper output from duplication.</li><li><code>rendered_output_contains</code> and <code>rendered_output_not_contains</code> protect required and forbidden fragments when complete output isn&#39;t the contract.</li></ul><pre style=""><code class='codeblock'>
-    <span class='bst-code-parenthesis'>[</span>backends.html<span class='bst-code-parenthesis'>]</span>
-    mode <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;success&quot;</span>
-    warnings <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;forbid&quot;</span>
-    rendered_output_contains <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-string'>&quot;active-root&quot;</span><span class='bst-code-parenthesis'>]</span>
-    rendered_output_not_contains <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-string'>&quot;imported-root&quot;</span><span class='bst-code-parenthesis'>]</span>
-    rendered_output_contains_in_order <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-string'>&quot;before-loop&quot;</span>, <span class='bst-code-string'>&quot;after-loop&quot;</span><span class='bst-code-parenthesis'>]</span>
-    rendered_output_contains_exactly_once <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-string'>&quot;active-root&quot;</span>, <span class='bst-code-string'>&quot;mounted&quot;</span><span class='bst-code-parenthesis'>]</span>
+        [backends.html]
+        mode = "success"
+        warnings = "forbid"
+        rendered_output_contains = ["active-root"]
+        rendered_output_not_contains = ["imported-root"]
+        rendered_output_contains_in_order = ["before-loop", "after-loop"]
+        rendered_output_contains_exactly_once = ["active-root", "mounted"]
     </code></pre><p>Use exact output for small deterministic behaviours such as loop or map operation results. Use ordered and exact-once fragments when unrelated output may coexist. Prefer these runtime contracts over generated JavaScript text or a whole-page golden when execution is the real owner.</p><h3>Diagnostics assertions</h3><ul><li>Ordinary source/config/import/type/rule/borrow failures should assert stable <code>diagnostic_codes</code>.</li><li><code>diagnostic_codes</code> is an exact unordered multiset by default. Repeat a code when the diagnostic must occur more than once.</li><li>Add rendered message fragments only when wording or rendered labels are part of the contract.</li><li>Infrastructure-boundary tests may assert infrastructure <code>ErrorType</code>.</li><li>Preserve source location assertions where location behavior is important.</li><li>Do not use full rendered diagnostic snapshots when a stable code and structured assertion are sufficient.</li><li>Do not weaken a diagnostic case into a generic &quot;must fail&quot; assertion.</li></ul><pre style=""><code class='codeblock'>
-    <span class='bst-code-parenthesis'>[</span>backends.html<span class='bst-code-parenthesis'>]</span>
-    mode <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;failure&quot;</span>
-    warnings <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;forbid&quot;</span>
-    diagnostic_codes <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-string'>&quot;BST-RULE-0033&quot;</span>, <span class='bst-code-string'>&quot;BST-RULE-0033&quot;</span><span class='bst-code-parenthesis'>]</span>
+        [backends.html]
+        mode = "failure"
+        warnings = "forbid"
+        diagnostic_codes = ["BST-RULE-0033", "BST-RULE-0033"]
     </code></pre><p>Use <code>diagnostic_assertions</code> when a broad code needs a compiler-owned reason or when source remapping is part of the contract. Each table selects one diagnostic by stable code and one-based occurrence. A unique code may omit <code>occurrence</code>. Repeat the code in <code>diagnostic_codes</code> to preserve its exact multiplicity.</p><pre style=""><code class='codeblock'>
-    <span class='bst-code-parenthesis'>[</span><span class='bst-code-parenthesis'>[</span>backends.html.diagnostic_assertions<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span>
-    code <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;BST-RULE-0057&quot;</span>
-    reason <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;invalid_generic_instantiation.recursive_function_instantiation&quot;</span>
-    path <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;input/#page.bst&quot;</span>
-    line <span class='bst-code-operator'>=</span> <span class='bst-code-number'>3</span>
-    count <span class='bst-code-operator'>=</span> <span class='bst-code-number'>1</span>
+        [[backends.html.diagnostic_assertions]]
+        code = "BST-RULE-0057"
+        reason = "invalid_generic_instantiation.recursive_function_instantiation"
+        path = "input/#page.bst"
+        line = 3
+        count = 1
 
-    <span class='bst-code-parenthesis'>[</span><span class='bst-code-parenthesis'>[</span>backends.html.diagnostic_assertions.secondary_labels<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span>
-    occurrence <span class='bst-code-operator'>=</span> <span class='bst-code-number'>1</span>
-    path <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;input/helpers.bst&quot;</span>
-    line <span class='bst-code-operator'>=</span> <span class='bst-code-number'>2</span>
+        [[backends.html.diagnostic_assertions.secondary_labels]]
+        occurrence = 1
+        path = "input/helpers.bst"
+        line = 2
     </code></pre><ul><li>Reason keys come from the compiler payload identity. The runner must not invent a parallel reason taxonomy or derive identity from rendered text.</li><li>Paths are normalized relative to the owning fixture and lines are one-based display lines.</li><li>Assert columns only when exact token-span precision is the contract.</li><li>A secondary-label occurrence is one-based among that diagnostic&#39;s secondary labels in emitted order. Assert only the labels whose location or ordering is the behaviour owner.</li><li>Keep <code>message_contains</code> only when rendered wording or label prose is itself contractual.</li></ul><p>Use <code>diagnostic_match = &quot;contains&quot;</code> only when intentional independent recovery or cascades make additional diagnostics part of the accepted current behaviour. Every contains-mode block needs a substantive <code>diagnostic_match_reason</code>. The suite audit reports the reason and treats a missing or blank reason as a hard policy finding.</p><pre style=""><code class='codeblock'>
-    diagnostic_match <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;contains&quot;</span>
-    diagnostic_match_reason <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Independent recovery may emit additional diagnostics from another source unit.&quot;</span>
+        diagnostic_match = "contains"
+        diagnostic_match_reason = "Independent recovery may emit additional diagnostics from another source unit."
     </code></pre><p>Warnings use a separate backend-local contract:</p><ul><li><code>warnings = &quot;forbid&quot;</code> rejects every warning and accepts no <code>warning_codes</code> field.</li><li><code>warnings = &quot;ignore&quot;</code> deliberately makes warnings non-contractual and accepts no <code>warning_codes</code> field.</li><li><code>warnings = &quot;exact&quot;</code> requires <code>warning_codes</code> as an exact unordered multiset. Repeat duplicate codes to preserve their required count.</li></ul><pre style=""><code class='codeblock'>
-    <span class='bst-code-parenthesis'>[</span>backends.html<span class='bst-code-parenthesis'>]</span>
-    mode <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;success&quot;</span>
-    warnings <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;exact&quot;</span>
-    warning_codes <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-string'>&quot;BST-RULE-0022&quot;</span>, <span class='bst-code-string'>&quot;BST-RULE-0022&quot;</span><span class='bst-code-parenthesis'>]</span>
-    rendered_output_contains <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-string'>&quot;warning-contract result=one&quot;</span><span class='bst-code-parenthesis'>]</span>
+        [backends.html]
+        mode = "success"
+        warnings = "exact"
+        warning_codes = ["BST-RULE-0022", "BST-RULE-0022"]
+        rendered_output_contains = ["warning-contract result=one"]
     </code></pre><h3>Backend matrices and artifact assertions</h3><p>Use one <code>expect.toml</code> per case with backend-specific assertion blocks.</p><pre style=""><code class='codeblock'>
-    entry <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;.&quot;</span>
+        entry = "."
 
-    <span class='bst-code-parenthesis'>[</span>backends.html<span class='bst-code-parenthesis'>]</span>
-    mode <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;success&quot;</span>
-    warnings <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;forbid&quot;</span>
-    artifacts_must_not_exist <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-string'>&quot;unexpected.html&quot;</span><span class='bst-code-parenthesis'>]</span>
+        [backends.html]
+        mode = "success"
+        warnings = "forbid"
+        artifacts_must_not_exist = ["unexpected.html"]
 
-    <span class='bst-code-parenthesis'>[</span>backends.html_wasm<span class='bst-code-parenthesis'>]</span>
-    mode <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;success&quot;</span>
-    warnings <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;forbid&quot;</span>
+        [backends.html_wasm]
+        mode = "success"
+        warnings = "forbid"
 
-    <span class='bst-code-parenthesis'>[</span><span class='bst-code-parenthesis'>[</span>backends.html_wasm.artifact_assertions<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span>
-    path <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;page.wasm&quot;</span>
-    kind <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;wasm&quot;</span>
-    validate_wasm <span class='bst-code-operator'>=</span> true
-    must_export <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-string'>&quot;memory&quot;</span>, <span class='bst-code-string'>&quot;bst_str_ptr&quot;</span>, <span class='bst-code-string'>&quot;bst_str_len&quot;</span>, <span class='bst-code-string'>&quot;bst_release&quot;</span><span class='bst-code-parenthesis'>]</span>
+        [[backends.html_wasm.artifact_assertions]]
+        path = "page.wasm"
+        kind = "wasm"
+        validate_wasm = true
+        must_export = ["memory", "bst_str_ptr", "bst_str_len", "bst_release"]
     </code></pre><ul><li>Use backend-specific blocks within one case.</li><li><code>entry = &quot;.&quot;</code> is the one supported current-directory sentinel and selects the case&#39;s <code>input/</code> directory. Every other entry is a relative contained path with no absolute, platform-prefix, parent or current-directory component. Its canonical path must remain inside the owning <code>input/</code> directory, including through symlinks.</li><li>Store strict goldens in:</li></ul><pre style=""><code class='codeblock'>
-    golden<span class='bst-code-operator'>/</span><span class='bst-code-operator'>&lt;</span>backend<span class='bst-code-operator'>&gt;</span><span class='bst-code-operator'>/</span>
+        golden/<backend>/
     </code></pre><ul><li>Use artifact assertions for structure: file presence, Wasm validity, exports, imports, expected snippets, absence of forbidden output.</li><li>Use <code>artifacts_must_not_exist</code> for success cases whose contract requires an exact normalized output path to be absent. Paths reported as <code>NotBuilt</code> are ignored because they were never emitted.</li><li>Use strict goldens only where exact emitted text is contractual.</li><li>The canonical suite currently has no file-backed golden blocks. A future golden needs an explicit exact-artifact rationale that a runtime or narrow artifact assertion cannot express.</li><li>Golden discovery recursively counts actual files. Empty or directory-only golden trees do not create a contract. Nested files do.</li><li><code>golden_mode</code> without at least one discovered file is invalid. When files exist, strict is the default if no mode is authored. When no files exist, audit reports <code>golden_present = false</code> and <code>golden_mode = null</code>.</li><li>Prefer semantic or rendered-output assertions for behavior-first cases.</li><li>Strengthen artifact assertions when a golden can pass while structural behavior is wrong.</li><li>Do not require unsupported backends to succeed merely for matrix symmetry. Assert the intended rejection contract.</li></ul><h3>HIR and internal-IR assertions</h3><ul><li>Assert semantic relationships rather than incidental indexes.</li><li>Prefer branch joins, merge-local relationships, jump arguments, region ownership, side-table keys, stable call targets and required operation kinds.</li><li>Avoid exact block IDs or vector offsets unless exact layout is the invariant.</li><li>Do not make temporary lowering order part of the public test contract.</li><li>For HIR validation, distinguish malformed-HIR invariant tests from user-facing source diagnostic tests.</li></ul><h3>Fixtures and temporary files</h3><ul><li>Prefer <code>tempfile::tempdir()</code> for temporary directories and files.</li><li>Use unmanaged paths only when the test intentionally owns cleanup.</li><li>Keep fixtures local to their owner.</li><li>Do not commit generated <code>dev/</code> or <code>release/</code> outputs from test or benchmark projects.</li><li>Avoid shared fixture builders that hide important source shape.</li></ul><h3>Pruning and duplicate coverage</h3><ul><li>Remove tests tied only to deleted implementation paths.</li><li>Avoid several fixtures that differ only cosmetically.</li><li>Preserve duplicates only when they protect different stages, diagnostic reasons, backends, source locations or artifact contracts.</li><li>Localize one-caller fixtures.</li><li>When two tests overlap, identify the primary owner and either merge them, narrow each to a distinct invariant or delete the weaker one.</li><li>Do not preserve obsolete fixtures for historical compatibility.</li></ul><h3>Benchmarks are not correctness tests</h3><p>Benchmark fixtures are performance evidence, not correctness coverage.</p><p>Do not use benchmark coverage as a substitute for unit or integration tests. Negative diagnostics belong in <code>tests/cases</code>, not benchmark fixtures.</p><p>Use <code>bench-check</code> to detect broad performance regressions after correctness has already been established by ordinary tests.</p><h3>Testing checklist</h3><p>Before considering test coverage complete, check:</p><ul><li>The behavior has one clear primary test owner.</li><li>User-visible behavior has end-to-end integration coverage.</li><li>Internal-only invariants have focused unit coverage where needed.</li><li>Failure cases assert stable diagnostic codes.</li><li>Rendered text is asserted only when it is contractual.</li><li>Backend behavior uses the narrowest useful artifact assertions.</li><li>Goldens are used only where exact output is a contract.</li><li>HIR tests avoid incidental block and local numbering.</li><li>Multi-file fixtures remain inside one case directory.</li><li>Temporary files use owned cleanup.</li><li>No benchmark fixture is being used as a correctness substitute.</li><li>Redundant or obsolete coverage has been removed.</li></ul></section>
     <section class="container"><h2>Validation gates</h2><p>This document defines the technical gates a completed compiler or documentation slice must pass.</p><p>The required final gate depends on whether the slice changes implementation or is strictly documentation-only.</p><h3>Compiler invocation</h3><p>Use an up-to-date release build of the compiler when one is available. The <code>bean</code> command in PATH is the usual direct form:</p><pre style=""><code class='codeblock'>
-    bean check docs
-    bean build docs <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span>release
+        bean check docs
+        bean build docs --release
     </code></pre><p>If a suitable release build is not available, run the same operations through Cargo from the repository root:</p><pre style=""><code class='codeblock'>
-    cargo run <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span>quiet <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span> check docs
-    cargo run <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span>quiet <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span> build docs <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span>release
+        cargo run --quiet -- check docs
+        cargo run --quiet -- build docs --release
     </code></pre><h3>Choose the final gate by scope</h3><table style="">
             
             <tr style="">
@@ -637,7 +637,7 @@ body {
             </tr>
             
     </table><p>The <code>justfile</code> is the executable authority for the full code-bearing gate.</p><h3>Code-bearing final gate</h3><p>A slice is code-bearing if it changes Rust, compiler or build-system sources, libraries, tests, benchmarks, manifests, scripts, configuration or any other non-documentation implementation file.</p><p>Before declaring a non-trivial code-bearing slice complete, run:</p><pre style=""><code class='codeblock'>
-    just validate
+        just validate
     </code></pre><h4>What just validate runs</h4><table style="">
             
             <tr style="">
@@ -661,9 +661,9 @@ body {
             </tr>
             
     </table><ul><li><code>ci-clippy</code> uses the pinned Rust toolchain configured in the <code>justfile</code>.</li><li>Warnings are denied.</li><li>It checks the native host, Linux x64 and Windows x64 targets.</li><li>Benchmark checking must not update tracked benchmark history.</li></ul><p>The integration command loads the complete canonical suite and applies the shared hard-policy evaluator before selection or compilation. This makes missing ownership, duplicate primaries and other hard suite-policy findings part of the normal validation gate. Run the audit command when the JSON inventory under <code>target/test-reports/</code> is also required:</p><pre style=""><code class='codeblock'>
-    cargo run <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span>quiet <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span> tests <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span>audit
+        cargo run --quiet -- tests --audit
     </code></pre><h3>Documentation-only release-build gate</h3><p>A slice is documentation-only only when every modified file is documentation source or generated documentation.</p><p>Allowed examples include:</p><ul><li>files under <code>docs/**</code></li><li>an explicitly requested root documentation file such as <code>README.md</code>, <code>CONTRIBUTING.md</code> or <code>AGENTS.md</code></li><li>generated files under <code>docs/release/**</code></li></ul><p>A documentation-only slice must not change Rust, tests, libraries, build configuration, manifests, scripts, benchmark code or fixtures, compiler configuration or other executable project sources.</p><p>For a strictly documentation-only slice, run one documentation release build using a current compiler.</p><p>The direct release-binary form is:</p><pre style=""><code class='codeblock'>
-    bean build docs <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span>release
+        bean build docs --release
     </code></pre><p>If no suitable release build is available, use <code>cargo run --quiet -- build docs --release</code> instead.</p><p>Then:</p><ul><li>inspect every changed route</li><li>inspect the generated diff</li><li>verify links, tables and code examples</li><li>confirm generated output came from source changes</li><li>confirm the changed-file list contains documentation only.</li></ul><p>Do not additionally run <code>just validate</code>, Clippy, unit tests, integration tests or benchmark checks for a documentation-only slice. A Cargo invocation of the compiler is an alternative way to run the same documentation gate, not an extra gate.</p><p>If any non-documentation file changed, the documentation-only exception does not apply. Use the full code-bearing gate.</p><h3>Fast iteration commands</h3><table style="">
             
             <tr style="">
@@ -691,7 +691,7 @@ body {
             </tr>
             
     </table><p>Passing one targeted command does not imply a code-bearing slice passes the complete gate.</p><h3>Formatting</h3><ul><li>Run <code>cargo fmt</code> when Rust files changed.</li><li><code>just validate</code> does not currently format source automatically.</li><li>Do not solve formatting failures through lint suppression.</li><li>Documentation-only changes do not require Rust formatting.</li></ul><p>The <code>ship</code> recipe formats before validation, while <code>validate</code> itself does not.</p><h3>Generated documentation</h3><p>Do not edit files under <code>docs/release/**</code> directly.</p><p>The documentation release build is:</p><pre style=""><code class='codeblock'>
-    bean build docs <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span>release
+        bean build docs --release
     </code></pre><p>A generated diff must result from documentation source changes, not manual HTML edits.</p><h3>Manual architecture audits</h3><p>When a code-bearing slice changes stage ownership, frontend boundaries, HIR, diagnostics, types or backend handoff, perform a manual architecture audit in addition to the automated gate.</p><p>Audit that:</p><ul><li>stage ownership remains narrow</li><li>AST and HIR type representation still respect <code>TypeEnvironment</code> and <code>TypeId</code></li><li>user-facing failures use <code>CompilerDiagnostic</code></li><li>internal and infrastructure failures use <code>CompilerError</code></li><li>no obsolete API or duplicated path remains</li><li>no backend reparses source syntax</li><li>no analysis mutates HIR when its contract is side-table based</li><li>comments and documentation name the current owner</li><li>no compatibility shim preserves an obsolete path</li></ul><p>This full architecture audit is not required for a prose-only documentation change.</p><h3>Progress-matrix review</h3><p>Review the progress matrix whenever behavior, support, rejection, backend coverage or test coverage changes.</p><p>Update it when current status changed. Do not make a meaningless edit for a pure refactor or prose-only correction.</p><h3>Benchmark safety</h3><ul><li><code>just validate</code> uses non-recording <code>bench-check</code>.</li><li>Do not run or commit recording benchmark output unless performance history is intentionally being updated.</li><li>A benchmark fluctuation does not replace correctness evidence.</li><li>Generated benchmark history is outside this standards split.</li></ul><h3>Failure handling</h3><ul><li>Do not ignore or suppress a failed required gate.</li><li>Do not remove tests merely to make validation pass.</li><li>Do not use lint allowances without documented justification.</li><li>If a required command fails for environmental reasons, report the exact command, failure, completed checks and remaining uncertainty.</li><li>Do not claim full validation when only targeted commands or the documentation-only gate ran.</li></ul><h3>Code-bearing completion checklist</h3><p>Before declaring a non-trivial code-bearing slice complete, check:</p><ul><li>Rust source was formatted where applicable.</li><li>The changed code follows <code>style-guide.bd</code>.</li><li>Test selection and assertions follow <code>testing.bd</code>.</li><li>Relevant architecture boundaries were reviewed.</li><li>Diagnostics remain structured and stage appropriate.</li><li>The progress matrix was reviewed and updated when status changed.</li><li>Documentation was rebuilt when required.</li><li>Generated output was not edited manually.</li><li>Benchmark history was not changed accidentally.</li><li><code>just validate</code> passes.</li></ul><h3>Documentation-only completion checklist</h3><p>Before declaring a documentation-only slice complete, check:</p><ul><li>The changed-file list contains documentation only.</li><li>The documentation release build succeeds.</li><li>Changed routes, links, tables and examples were inspected.</li><li>Generated output was produced from source changes.</li><li>No generated HTML was edited manually.</li><li>No code, test, build, library, manifest, script, benchmark or configuration file changed.</li></ul></section>
     <script>
     function __bs_is_ref(value) {

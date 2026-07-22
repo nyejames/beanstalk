@@ -38,13 +38,13 @@
 
   /* Code block colours */
   --comment: #8e8e8e;
-  --keyword: #fa3f3f;
+  --keyword: #fdbe82;
   --string: #64d721;
   --number: #c09eea;
-  --operator: #9ec1ff;
-  --struct: #f293dc;
-  --type: #42a0f3;
-  --parenthesis: #d5c56d;
+  --operator: #a6a9fd;
+  --struct: #fca1e7;
+  --type: #46ceff;
+  --parenthesis: #dece74;
 }
 
 /* where: is used here for less specificity, allowing easier overriding */
@@ -877,9 +877,9 @@ body {
         <span class='bst-code-struct'>Body</span> content
     <span class='bst-code-parenthesis'>]</span>
     </code></pre><p>The default and named forms are:</p><pre style=""><code class='codeblock'>
-    <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>slot<span class='bst-code-parenthesis'>]</span>                 <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span> default slot
-    <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>slot<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;name&quot;</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>]</span>         <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span> named slot
-    <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>insert<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;name&quot;</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>:</span> ...<span class='bst-code-parenthesis'>]</span>  <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span> contribution to named slot
+        [$slot]                 -- default slot
+        [$slot("name")]         -- named slot
+        [$insert("name"): ...]  -- contribution to named slot
     </code></pre><p>The default slot is declared with dollar-slot. A named slot is declared with dollar-slot and a string name. A named insert contributes with dollar-insert and the same name.</p><h3>Positional slots</h3><p>Positive integer slots receive loose head contributions.</p><pre style=""><code class='codeblock'>
     image <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span>
         <span class='bst-code-operator'>&lt;</span>img src<span class='bst-code-operator'>=</span><span class='bst-code-string'>&quot;[$slot(1)]&quot;</span> alt<span class='bst-code-operator'>=</span><span class='bst-code-string'>&quot;[$slot]&quot;</span><span class='bst-code-operator'>&gt;</span>
@@ -1032,8 +1032,8 @@ body {
         <span class='bst-code-operator'>&lt;</span>p<span class='bst-code-operator'>&gt;</span><span class='bst-code-struct'>Hello</span> <span class='bst-code-parenthesis'>[</span>name<span class='bst-code-parenthesis'>]</span><span class='bst-code-operator'>&lt;</span><span class='bst-code-operator'>/</span>p<span class='bst-code-operator'>&gt;</span>
     <span class='bst-code-parenthesis'>]</span>
     </code></pre><p>Two structural controls are available inside a template loop:</p><pre style=""><code class='codeblock'>
-    <span class='bst-code-parenthesis'>[</span>break<span class='bst-code-parenthesis'>]</span>
-    <span class='bst-code-parenthesis'>[</span>continue<span class='bst-code-parenthesis'>]</span>
+        [break]
+        [continue]
     </code></pre><p>The first ends the loop. The second skips the rest of one iteration.</p><p>Template control flow builds output lazily at runtime unless a const template requires it to finish during compilation.</p>
     </div>
 

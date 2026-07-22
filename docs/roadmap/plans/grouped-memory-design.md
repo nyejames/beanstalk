@@ -41,7 +41,7 @@ Canonical design facts that must hold:
 - parent and sibling regions must not retain child-group values
 - group values and aliases must not escape
 - explicit `copy` creates independent lifetime under the full graph-level copy contract
-- fresh calls may allocate directly into a hidden caller-selected destination region
+- calls whose result root is fresh may allocate that root directly into a hidden caller-selected destination region when retained-edge constraints permit it
 - interior aliases remain rooted in their containing allocation family
 - cross-region cycles are invalid
 - same-region cycles are lifetime-safe, while direct source construction remains deferred
@@ -116,7 +116,7 @@ JavaScript may lower group allocation to ordinary host allocation, group release
 
 ### Hidden result destinations
 
-Fresh-result functions must support destination-directed lowering. The hidden result destination is not part of the source signature, not a region parameter visible to generics or callers, not a source lifetime parameter, may be ignored by a GC backend and lets an optimising backend allocate the fresh result graph directly into the caller's region. A fresh-result summary must be backend-neutral and part of the function's semantic effect information.
+Functions whose result root is fresh must support destination-directed lowering. The hidden result destination is not part of the source signature, not a region parameter visible to generics or callers, not a source lifetime parameter, may be ignored by a GC backend and lets an optimising backend allocate a fresh result root directly into the caller's region when retained-edge constraints permit it. A fresh-result-root summary plus its retained-edge constraints must be backend-neutral parts of the function's semantic effect information.
 
 ### Wasm group release markers
 
@@ -139,7 +139,7 @@ A later concrete implementation plan should separate:
 3. lifetime-region and escape validation for group and ungrouped topology
 4. borrow-validation access interaction with group-owned places
 5. JS no-op lowering with full semantic enforcement
-6. hidden fresh-result destination support
+6. hidden destination support for fresh result roots
 7. Wasm group release markers
 8. implicit region and ownership planning
 9. builder-owned page and mount regions

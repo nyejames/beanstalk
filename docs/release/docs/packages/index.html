@@ -38,13 +38,13 @@
 
   /* Code block colours */
   --comment: #8e8e8e;
-  --keyword: #fa3f3f;
+  --keyword: #fdbe82;
   --string: #64d721;
   --number: #c09eea;
-  --operator: #9ec1ff;
-  --struct: #f293dc;
-  --type: #42a0f3;
-  --parenthesis: #d5c56d;
+  --operator: #a6a9fd;
+  --struct: #fca1e7;
+  --type: #46ceff;
+  --parenthesis: #dece74;
 }
 
 /* where: is used here for less specificity, allowing easier overriding */
@@ -1026,11 +1026,11 @@ body {
 
 
             <p>Scoped support packages are <code>+*.bst</code> roots in the project source tree. The containing directory supplies the package name.</p><h3>A simple support package</h3><pre style=""><code class='codeblock'>
-    src<span class='bst-code-operator'>/</span>
-    ├── <span class='bst-code-operator'>#</span>site.bst
-    └── blog<span class='bst-code-operator'>/</span>
-        ├── <span class='bst-code-operator'>+</span>package.bst
-        └── helpers<span class='bst-code-operator'>/</span>dates.bst
+        src/
+        ├── #site.bst
+        └── blog/
+            ├── +package.bst
+            └── helpers/dates.bst
     </code></pre><p><code>+package.bst</code> makes <code>@blog</code> a scoped support package visible to <code>#site</code> and its sibling modules.</p><h3>Importing from a package</h3><pre style=""><code class='codeblock'>
     import <span class='bst-code-operator'>@</span>blog <span class='bst-code-parenthesis'>{</span>post_title<span class='bst-code-parenthesis'>}</span>
     </code></pre><p><code>@blog</code> resolves to the <code>blog</code> directory&#39;s support root. The package&#39;s public surface comes from its <code>export:</code> block.</p><h3>Remember</h3><ul><li><code>+package.bst</code> in a directory creates a scoped support package.</li><li>The package is visible to its nearest ancestor normal module and siblings.</li><li>Internal files are hidden unless re-exported.</li><li>Imported package roots do not become HTML routes.</li></ul>
@@ -1038,19 +1038,19 @@ body {
 
     <div class="doc-level__panel doc-level__panel--advanced">
         <p>Project-local source-backed packages are scoped <code>+*.bst</code> support packages discovered structurally from the project source tree. No config folder scanning or <code>package_folders</code> setting exists.</p><h3>Directory structure</h3><pre style=""><code class='codeblock'>
-    project<span class='bst-code-operator'>-</span>root<span class='bst-code-operator'>/</span>
-    ├── config.bst
-    ├── src<span class='bst-code-operator'>/</span>
-    │   ├── <span class='bst-code-operator'>#</span>site.bst
-    │   ├── markdown<span class='bst-code-operator'>/</span>
-    │   │   ├── <span class='bst-code-operator'>+</span>package.bst
-    │   │   ├── parser<span class='bst-code-operator'>/</span>
-    │   │   │   └── <span class='bst-code-operator'>#</span>parser.bst
-    │   │   └── rendering<span class='bst-code-operator'>/</span>
-    │   │       └── <span class='bst-code-operator'>#</span>rendering.bst
-    │   └── pages<span class='bst-code-operator'>/</span>
-    │       └── <span class='bst-code-operator'>#</span>pages.bst
-    └── <span class='bst-code-operator'>+</span>package.bst
+        project-root/
+        ├── config.bst
+        ├── src/
+        │   ├── #site.bst
+        │   ├── markdown/
+        │   │   ├── +package.bst
+        │   │   ├── parser/
+        │   │   │   └── #parser.bst
+        │   │   └── rendering/
+        │   │       └── #rendering.bst
+        │   └── pages/
+        │       └── #pages.bst
+        └── +package.bst
     </code></pre><p>The <code>markdown</code> directory contains a <code>+package.bst</code> root, making <code>@markdown</code> a scoped support package visible to <code>#site</code>, <code>#pages</code> and their descendants.</p><h3>Scoped visibility</h3><p>For a support package <code>S</code> whose nearest ancestor normal module is <code>P</code>:</p><ul><li><code>S</code> is visible to <code>P</code></li><li><code>S</code> is visible to normal sibling modules of <code>S</code> and their descendants</li><li><code>S</code> is not visible above <code>P</code></li><li><code>S</code> is not visible outside <code>P</code>&#39;s subtree</li><li><code>S</code> is not visible inside its own private implementation subtree</li><li>another support package in the same owner scope cannot import <code>S</code></li></ul><h3>Public surface</h3><p>Outside importers can only see declarations and grouped re-exports marked public by the support root&#39;s <code>export:</code> block. Internal implementation files are hidden unless the root re-exports them.</p><h3>Private subtrees</h3><p>The support facade may import ordinary files it owns, any descendant module in its private subtree, support packages from a strictly outer scope and registered packages. It may not import its parent, normal sibling consumers or same-scope support siblings.</p><p>Consumers see only the support facade&#39;s <code>export:</code> surface. They cannot address <code>@markdown/parser</code> or another implementation path.</p><h3>Imported package roots do not produce routes</h3><p>A support package root is imported rather than activated as an HTML route. Its top-level runtime body and page fragments remain inactive in the consuming project. It exports declarations but produces no HTML artifact. See <a href="../project-structure/#html-routing-and-artifacts">HTML routing and artifacts</a>.</p><h3>Origin and backing are separate</h3><p>Scoped <code>+*.bst</code> packages are ProjectLocal packages backed by Beanstalk source. <code>@html</code> is also source-backed but has Builder origin. <code>@core/math</code> and <code>@web/canvas</code> are binding-backed packages with Core and Builder origins respectively. See <a href="#package-origins-and-backing">Package origins and backing</a>.</p><h3>Related concepts</h3><ul><li>For module root rules see <a href="../project-structure/#module-roots">Module roots</a>.</li><li>For the export block see <a href="../project-structure/#public-api">Public API</a>.</li><li>For import path resolution see <a href="#import-paths">Import paths</a>.</li></ul>
     </div>
     </fieldset></section>

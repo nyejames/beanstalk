@@ -38,13 +38,13 @@
 
   /* Code block colours */
   --comment: #8e8e8e;
-  --keyword: #fa3f3f;
+  --keyword: #fdbe82;
   --string: #64d721;
   --number: #c09eea;
-  --operator: #9ec1ff;
-  --struct: #f293dc;
-  --type: #42a0f3;
-  --parenthesis: #d5c56d;
+  --operator: #a6a9fd;
+  --struct: #fca1e7;
+  --type: #46ceff;
+  --parenthesis: #dece74;
 }
 
 /* where: is used here for less specificity, allowing easier overriding */
@@ -1017,10 +1017,10 @@ body {
         <span class='bst-code-operator'>|</span>name<span class='bst-code-operator'>|</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io.line<span class='bst-code-parenthesis'>(</span>name<span class='bst-code-parenthesis'>)</span>
     ;
     </code></pre><p>Literal or relational option arms do not replace the unguarded present-value capture when <code>else =&gt;</code> is omitted.</p><h3>General capture</h3><p>A bare pattern name that is not a known choice variant binds the complete scrutinee value for that arm.</p><p>The binding is arm-local and may be used by the arm guard and body.</p><p>Use <code>else =&gt;</code> as the explicit full-match catch-all.</p><h3>Relational patterns</h3><pre style=""><code class='codeblock'>
-    <span class='bst-code-operator'>&lt;</span> value
-    <span class='bst-code-operator'>&lt;</span><span class='bst-code-operator'>=</span> value
-    <span class='bst-code-operator'>&gt;</span> value
-    <span class='bst-code-operator'>&gt;</span><span class='bst-code-operator'>=</span> value
+        < value
+        <= value
+        > value
+        >= value
     </code></pre><p>Relational patterns support <code>Int</code>, <code>Float</code>, <code>Char</code> and <code>String</code>.</p><p>String ordering is backend-defined in the current Alpha surface.</p><h3>Choice payload capture contract</h3><ul><li>Payload captures must list every declared field.</li><li>Captures stay in declaration order.</li><li>The source name before <code>as</code> must exactly match the declared field name.</li><li><code>as local_name</code> changes only the arm-local binding.</li><li>Duplicate local bindings are invalid.</li><li>Wildcard payload captures are not supported.</li><li>Named assignment syntax such as <code>Err(message = text)</code> is not payload-pattern syntax.</li><li>Nested payload patterns are deferred.</li></ul><h3>Exhaustiveness</h3><ul><li>An ordinary non-choice full match requires <code>else =&gt;</code>.</li><li>An option match may instead use unguarded <code>none</code> plus unguarded <code>|name|</code>.</li><li>A choice match may omit <code>else =&gt;</code> only when every variant is covered.</li><li>Any guarded choice arm requires <code>else =&gt;</code>.</li><li>The same choice variant cannot be matched more than once.</li><li>Payload exhaustiveness is tag-level. One valid payload capture arm covers every value of that variant.</li><li>A statement match may use bodyless <code>else =&gt;</code>.</li><li>A value-producing match must produce the required values on every selected path.</li></ul><p>Capture bindings are arm-local and follow the no-shadowing rule.</p>
     </div>
     </fieldset></section>

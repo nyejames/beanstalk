@@ -25,5 +25,4 @@ value.
     copied_title = copy page.title
 ]
 
-Do not add `copy` to literals, constructor calls or computed expressions. Those
-expressions already create fresh results.
+Do not apply `copy` directly to literals, constructor calls or computed expressions; `copy` accepts places only. Those expressions create new result roots, but existing values stored inside them still follow ordinary shared-reference rules.

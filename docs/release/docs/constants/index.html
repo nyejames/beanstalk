@@ -38,13 +38,13 @@
 
   /* Code block colours */
   --comment: #8e8e8e;
-  --keyword: #fa3f3f;
+  --keyword: #fdbe82;
   --string: #64d721;
   --number: #c09eea;
-  --operator: #9ec1ff;
-  --struct: #f293dc;
-  --type: #42a0f3;
-  --parenthesis: #d5c56d;
+  --operator: #a6a9fd;
+  --struct: #fca1e7;
+  --type: #46ceff;
+  --parenthesis: #dece74;
 }
 
 /* where: is used here for less specificity, allowing easier overriding */
@@ -970,7 +970,7 @@ body {
         <span class='bst-code-parenthesis'>[</span>item<span class='bst-code-parenthesis'>]</span>
     <span class='bst-code-parenthesis'>]</span>
     </code></pre><p>They use the project config guard:</p><pre style=""><code class='codeblock'>
-    template_const_loop_iteration_limit
+        template_const_loop_iteration_limit
     </code></pre><p>The default is <code>10_000</code>.</p><p>The maximum accepted configured value is <code>1_000_000</code>.</p><p>The configured value must be a positive folded <code>Int</code>. Zero, negative values and values above <code>1_000_000</code> are rejected.</p><p>A const conditional loop folds to no-output only when its condition is compile-time <code>false</code>.</p><p>A compile-time <code>true</code> condition and a runtime or unknown condition are rejected because the compiler does not prove loop termination.</p><p>Runtime template control flow remains owned by <a href="../templates/#template-control-flow">Template control flow</a>.</p>
     </div>
     </fieldset></section>

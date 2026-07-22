@@ -38,13 +38,13 @@
 
   /* Code block colours */
   --comment: #8e8e8e;
-  --keyword: #fa3f3f;
+  --keyword: #fdbe82;
   --string: #64d721;
   --number: #c09eea;
-  --operator: #9ec1ff;
-  --struct: #f293dc;
-  --type: #42a0f3;
-  --parenthesis: #d5c56d;
+  --operator: #a6a9fd;
+  --struct: #fca1e7;
+  --type: #46ceff;
+  --parenthesis: #dece74;
 }
 
 /* where: is used here for less specificity, allowing easier overriding */
@@ -719,9 +719,9 @@ body {
 
 
             <p>A <code>.md</code> file is plain Markdown. The compiler renders it and hands the HTML to the builder.</p><h3>The simplest content file</h3><pre style=""><code class='codeblock'>
-    <span class='bst-code-operator'>#</span> <span class='bst-code-struct'>Welcome</span>
+        # Welcome
 
-    <span class='bst-code-struct'>This</span> is <span class='bst-code-operator'>*</span><span class='bst-code-operator'>*</span>plain <span class='bst-code-struct'>Markdown</span><span class='bst-code-operator'>*</span><span class='bst-code-operator'>*</span>.
+        This is **plain Markdown**.
     </code></pre><h3>Why it is portable</h3><p>No Beanstalk syntax is interpreted. The file is pure Markdown. You can use it with any Markdown tool.</p><h3>Remember</h3><ul><li><code>.md</code> uses a separate renderer, not Beandown&#39;s <code>$md</code>.</li><li>No Beanstalk captures, directives or templates.</li><li>The result is a <code>content #String</code> constant.</li></ul>
     </div>
 

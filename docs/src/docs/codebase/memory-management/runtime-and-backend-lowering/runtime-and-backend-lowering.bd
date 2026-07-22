@@ -112,7 +112,7 @@ Unsupported interfaces must receive structured import diagnostics identifying:
 
 ### Required importer metadata
 
-The importer requires stable:
+The importer requires:
 
 - stable package identity
 - stable world identity
@@ -282,6 +282,6 @@ A missing optimisation is valid. A semantic divergence isn't. Unknown external r
 - @../ownership-and-drops (Ownership and drops): unified ABI and destruction
 - @../borrow-validation (Borrow validation): analysis facts
 - @../lifetime-regions-and-escape-validation (Lifetime regions and escape validation): topology legality
-- @../declared-memory-groups (Declared memory groups): group physical representation and group-to-group transfer
+- @../declared-memory-groups (Declared memory groups): declared lifetimes, placement, exits and group-crossing restrictions
 - @https://github.com/nyejames/beanstalk/blob/main/docs/compiler-design-overview.md (Compiler design overview)
 - @https://github.com/nyejames/beanstalk/blob/main/docs/build-system-design.md (Build-system design)

@@ -43,7 +43,7 @@ hashers or custom comparers.
 
 ### Storage and order
 
-Maps own their stored keys and values.
+Maps own their entry structure. Existing keys and values stored in entries follow the ordinary shared-reference, explicit-copy and inferred-transfer rules.
 
 Insertion order follows these rules:
 
@@ -78,7 +78,7 @@ Insertion order follows these rules:
 
 - mutable receiver
 - fallible
-- returns the owned removed value
+- removes the entry and returns the removed value under the normal lifetime and ownership rules
 
 `clear()`:
 

@@ -38,13 +38,13 @@
 
   /* Code block colours */
   --comment: #8e8e8e;
-  --keyword: #fa3f3f;
+  --keyword: #fdbe82;
   --string: #64d721;
   --number: #c09eea;
-  --operator: #9ec1ff;
-  --struct: #f293dc;
-  --type: #42a0f3;
-  --parenthesis: #d5c56d;
+  --operator: #a6a9fd;
+  --struct: #fca1e7;
+  --type: #46ceff;
+  --parenthesis: #dece74;
 }
 
 /* where: is used here for less specificity, allowing easier overriding */
@@ -797,9 +797,9 @@ body {
         white-space: pre;
         overflow-x: auto;
     "><code class='codeblock'>
-    <span class='bst-code-struct'>No</span> project path specified. <span class='bst-code-struct'>Current</span> directory<span class='bst-code-operator'>:</span> <span class='bst-code-operator'>/</span>your<span class='bst-code-operator'>/</span>path
-    <span class='bst-code-struct'>Create</span> the new <span class='bst-code-struct'>HTML</span> project <span class='bst-code-keyword'>in</span> this directory<span class='bst-code-operator'>?</span> y<span class='bst-code-operator'>/</span><span class='bst-code-struct'>N</span><span class='bst-code-operator'>:</span>
-    </code></pre><p>If the target directory already exists, you are given three choices:</p><pre style="
+            No project path specified. Current directory: /your/path
+            Create the new HTML project in this directory? y/N:
+        </code></pre><p>If the target directory already exists, you are given three choices:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -807,16 +807,16 @@ body {
         white-space: pre;
         overflow-x: auto;
     "><code class='codeblock'>
-    <span class='bst-code-struct'>Target</span> directory already exists<span class='bst-code-operator'>:</span>
-    <span class='bst-code-operator'>/</span>path<span class='bst-code-operator'>/</span>to<span class='bst-code-operator'>/</span>target
+            Target directory already exists:
+            /path/to/target
 
-    <span class='bst-code-struct'>What</span> <span class='bst-code-keyword'>do</span> you want to <span class='bst-code-keyword'>do</span><span class='bst-code-operator'>?</span>
-      <span class='bst-code-number'>1.</span> <span class='bst-code-struct'>Create</span> the project inside this directory
-      <span class='bst-code-number'>2.</span> <span class='bst-code-struct'>Create</span> a new child folder <span class='bst-code-keyword'>for</span> the project inside this directory
-      <span class='bst-code-number'>3.</span> <span class='bst-code-struct'>Cancel</span>
+            What do you want to do?
+              1. Create the project inside this directory
+              2. Create a new child folder for the project inside this directory
+              3. Cancel
 
-    <span class='bst-code-struct'>Choose</span> <span class='bst-code-number'>1</span><span class='bst-code-operator'>/</span><span class='bst-code-number'>2</span><span class='bst-code-operator'>/</span><span class='bst-code-number'>3</span><span class='bst-code-operator'>:</span>
-    </code></pre><p>If the path contains directories that do not exist, bean asks before creating them:</p><pre style="
+            Choose 1/2/3:
+        </code></pre><p>If the path contains directories that do not exist, bean asks before creating them:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -854,17 +854,17 @@ body {
         white-space: pre;
         overflow-x: auto;
     "><code class='codeblock'>
-    project<span class='bst-code-operator'>-</span>root<span class='bst-code-operator'>/</span>
-    ├── config.bst
-    ├── src<span class='bst-code-operator'>/</span>
-    │   └── <span class='bst-code-operator'>#</span>page.bst
-    ├── lib<span class='bst-code-operator'>/</span>
-    ├── dev<span class='bst-code-operator'>/</span>
-    │   └── .beanstalk_manifest
-    ├── release<span class='bst-code-operator'>/</span>
-    │   └── .beanstalk_manifest
-    └── .gitignore
-    </code></pre><ul><li><code>lib/</code> is created empty by default for project-local source-backed packages.</li><li><code>dev/</code> and <code>release/</code> are output folders.</li><li>.beanstalk_manifest files are build-system metadata for safe stale-output cleanup.</li><li><code>src/#page.bst</code> is the conventional module root with a starter page. The filename is cosmetic.</li></ul><h3>Using --force</h3><p>--force allows replacing scaffold-owned files when they already exist:</p><pre style="
+            project-root/
+            ├── config.bst
+            ├── src/
+            │   └── #page.bst
+            ├── lib/
+            ├── dev/
+            │   └── .beanstalk_manifest
+            ├── release/
+            │   └── .beanstalk_manifest
+            └── .gitignore
+        </code></pre><ul><li><code>lib/</code> is created empty by default for project-local source-backed packages.</li><li><code>dev/</code> and <code>release/</code> are output folders.</li><li>.beanstalk_manifest files are build-system metadata for safe stale-output cleanup.</li><li><code>src/#page.bst</code> is the conventional module root with a starter page. The filename is cosmetic.</li></ul><h3>Using --force</h3><p>--force allows replacing scaffold-owned files when they already exist:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -902,8 +902,8 @@ body {
         white-space: pre;
         overflow-x: auto;
     "><code class='codeblock'>
-    http<span class='bst-code-operator'>:</span><span class='bst-code-operator'>/</span><span class='bst-code-operator'>/</span><span class='bst-code-number'>127.0.0.1</span><span class='bst-code-operator'>:</span><span class='bst-code-number'>6342</span><span class='bst-code-operator'>/</span>
-    </code></pre><p>Useful dev-server options:</p><pre style="
+            http://127.0.0.1:6342/
+        </code></pre><p>Useful dev-server options:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -960,9 +960,9 @@ body {
         white-space: pre;
         overflow-x: auto;
     "><code class='codeblock'>
-    <span class='bst-code-struct'>E</span><span class='bst-code-operator'>|</span>type<span class='bst-code-operator'>|</span>src<span class='bst-code-operator'>/</span><span class='bst-code-operator'>#</span>page.bst<span class='bst-code-operator'>|</span><span class='bst-code-number'>4</span><span class='bst-code-operator'>:</span><span class='bst-code-number'>12</span><span class='bst-code-operator'>|</span><span class='bst-code-struct'>Expected</span> <span class='bst-code-struct'>Bool,</span> found <span class='bst-code-struct'>Int</span><span class='bst-code-operator'>|</span>help<span class='bst-code-operator'>=</span><span class='bst-code-struct'>Use</span> a <span class='bst-code-struct'>Bool</span> expression here.
-    <span class='bst-code-struct'>W</span><span class='bst-code-operator'>|</span>identifier_naming_convention<span class='bst-code-operator'>|</span>src<span class='bst-code-operator'>/</span>button.bst<span class='bst-code-operator'>|</span><span class='bst-code-number'>1</span><span class='bst-code-operator'>:</span><span class='bst-code-number'>1</span><span class='bst-code-operator'>|</span><span class='bst-code-struct'>Import</span> alias case mismatch
-    </code></pre></section>
+            E|type|src/#page.bst|4:12|Expected Bool, found Int|help=Use a Bool expression here.
+            W|identifier_naming_convention|src/button.bst|1:1|Import alias case mismatch
+        </code></pre></section>
     <section class="container"><h2>Reading compiler errors</h2><p>Beanstalk uses the same formatted diagnostic system across the compiler front end and backend builders. That means syntax errors, type errors, config errors, file errors, borrow-checker errors, dev-server errors, and backend errors use the same basic shape.</p><p>A normal diagnostic contains:</p><ul><li>the error kind</li><li>the main message</li><li>the source file path, line, and column</li><li>the source line when available</li><li>a caret underline for the offending span</li><li>guidance lines when the compiler has a useful suggestion</li></ul><p>Example shape:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
@@ -971,15 +971,15 @@ body {
         white-space: pre;
         overflow-x: auto;
     "><code class='codeblock'>
-    <span class='bst-code-struct'>Type</span> <span class='bst-code-struct'>Error</span> <span class='bst-code-parenthesis'>(</span>ಠ_ಠ<span class='bst-code-parenthesis'>)</span> 🔥
-    <span class='bst-code-struct'>Declaration</span> <span class='bst-code-string'>&#39;count&#39;</span> has incompatible initializer type. <span class='bst-code-struct'>Expected</span> <span class='bst-code-string'>&#39;Int&#39;</span>, but found <span class='bst-code-string'>&#39;String&#39;</span>.
+            Type Error (ಠ_ಠ) 🔥
+            Declaration 'count' has incompatible initializer type. Expected 'Int', but found 'String'.
 
-      <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> src<span class='bst-code-operator'>/</span><span class='bst-code-operator'>#</span>page.bst<span class='bst-code-operator'>:</span><span class='bst-code-number'>6</span><span class='bst-code-operator'>:</span><span class='bst-code-number'>17</span>
-        <span class='bst-code-operator'>|</span>
-      <span class='bst-code-number'>6</span> <span class='bst-code-operator'>|</span> count <span class='bst-code-struct'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;wrong&quot;</span>
-        <span class='bst-code-operator'>|</span>             <span class='bst-code-operator'>^</span><span class='bst-code-operator'>^</span><span class='bst-code-operator'>^</span><span class='bst-code-operator'>^</span><span class='bst-code-operator'>^</span><span class='bst-code-operator'>^</span><span class='bst-code-operator'>^</span>
-      <span class='bst-code-struct'>Use</span> an <span class='bst-code-struct'>Int</span> value here, or change the declaration type.
-    </code></pre><p>Read diagnostics from top to bottom:</p><ol><li>The kind tells you which part of the compiler rejected the program.</li><li>The message tells you the actual rule that failed.</li><li>The file/line/column points to the primary source location.</li><li>The caret shows the token or expression the compiler is complaining about.</li><li>The guidance lines are suggestions, not a separate error.</li></ol></section>
+              --> src/#page.bst:6:17
+                |
+              6 | count Int = "wrong"
+                |             ^^^^^^^
+              Use an Int value here, or change the declaration type.
+        </code></pre><p>Read diagnostics from top to bottom:</p><ol><li>The kind tells you which part of the compiler rejected the program.</li><li>The message tells you the actual rule that failed.</li><li>The file/line/column points to the primary source location.</li><li>The caret shows the token or expression the compiler is complaining about.</li><li>The guidance lines are suggestions, not a separate error.</li></ol></section>
     <section class="container"><h2>Error kinds</h2><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
 
         

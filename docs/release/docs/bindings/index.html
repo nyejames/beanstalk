@@ -38,13 +38,13 @@
 
   /* Code block colours */
   --comment: #8e8e8e;
-  --keyword: #fa3f3f;
+  --keyword: #fdbe82;
   --string: #64d721;
   --number: #c09eea;
-  --operator: #9ec1ff;
-  --struct: #f293dc;
-  --type: #42a0f3;
-  --parenthesis: #d5c56d;
+  --operator: #a6a9fd;
+  --struct: #fca1e7;
+  --type: #46ceff;
+  --parenthesis: #dece74;
 }
 
 /* where: is used here for less specificity, allowing easier overriding */
@@ -946,7 +946,7 @@ body {
     shared_names <span class='bst-code-operator'>=</span> names
     </code></pre><p>A normal assignment creates another shared view. <code>copy</code> creates an independent value.</p><p><code>copy</code> works on a stored name or field:</p><pre style=""><code class='codeblock'>
     copied_title <span class='bst-code-operator'>=</span> <span class='bst-code-keyword'>copy</span> page.title
-    </code></pre><p>Do not add <code>copy</code> to literals, constructor calls or computed expressions. Those expressions already create fresh results.</p>
+    </code></pre><p>Do not apply <code>copy</code> directly to literals, constructor calls or computed expressions; <code>copy</code> accepts places only. Those expressions create new result roots, but existing values stored inside them still follow ordinary shared-reference rules.</p>
     </div>
 
     <div class="doc-level__panel doc-level__panel--advanced">

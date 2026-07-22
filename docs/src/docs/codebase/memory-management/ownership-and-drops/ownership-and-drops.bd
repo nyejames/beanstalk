@@ -69,7 +69,7 @@ Closed external boundary profiles override this general rule. WIT value-only cal
 - The group owns release responsibility for its allocation family.
 - Ordinary calls normally borrow group-owned storage.
 - An individual callee cannot release one group child merely because an owned bit exists.
-- Hidden destination allocation may produce fresh results directly into a group.
+- Hidden destination allocation may produce a fresh result root directly in a group when every retained edge is legal for that destination.
 - Group-owned values may use grouped release rather than individual drop when the region ends.
 
 ## Unified ownership ABI

@@ -6,7 +6,7 @@ A module can compile completely, including its dormant top-level work, and still
 
 ## Compile versus activate
 
-Every normal root may carry dormant top-level runtime work and page fragments. That work is parsed, type-checked, lowered and borrow-validated **before** any entry activates it.
+Every normal root may carry dormant top-level runtime work and page fragments. That work is parsed, type-checked, lowered, borrow-validated and locally lifetime-analysed **before** any entry activates it.
 
 The compiler synthesises an implicit **`start`** for a normal root. Properties that matter:
 

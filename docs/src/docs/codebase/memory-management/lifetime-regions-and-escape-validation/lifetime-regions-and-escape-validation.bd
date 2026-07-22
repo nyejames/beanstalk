@@ -235,7 +235,7 @@ Reactive storage that outlives a lexical function must still satisfy one lifetim
 
 External bindings use closed semantic boundary profiles. They do not expose arbitrary user-defined lifetime graphs.
 
-**WIT value-only V1 profile.** Beanstalk imports general external Wasm libraries through a value-only WIT component profile. Supported arguments are lowered from shared reads into independent component values, and results are lifted into fresh Beanstalk values. No Beanstalk alias, lifetime owner, ownership state or destruction responsibility crosses the component boundary.
+**WIT value-only V1 profile.** Beanstalk imports general external Wasm libraries through a value-only WIT component profile. Supported arguments are lowered from shared reads into independent component values, and results are lifted into independent Beanstalk result graphs. No Beanstalk alias, lifetime owner, ownership state or destruction responsibility crosses the component boundary.
 
 **Restricted host-binding profile.** Existing Core, Builder and JavaScript-backed bindings use a restricted host-binding profile. Ordinary Beanstalk values cross by value, host code may not retain references into ordinary Beanstalk storage, and opaque handles represent foreign identities rather than Beanstalk reference types.
 

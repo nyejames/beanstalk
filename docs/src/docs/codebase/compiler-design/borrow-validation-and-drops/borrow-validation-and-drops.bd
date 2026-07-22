@@ -43,7 +43,7 @@ On branches, facts split. At joins, they merge conservatively. On loops, the ana
 
 Conservative means "when unsure, assume the more restrictive story." That can reject programs a smarter oracle might accept. It should not accept programs that are unsafe.
 
-Diagnostics should distinguish proven-invalid topology from topology that conservative analysis cannot prove legal. Both are failures for the programmer. They are not the same failure family for the compiler's wording.
+Borrow diagnostics distinguish concrete access conflicts from conservative access-analysis limitations. The later lifetime-region analysis separately distinguishes topology proven invalid from topology it cannot prove legal.
 
 **Diagram placeholder:** Facts flow around a loop until the join stabilises
 
