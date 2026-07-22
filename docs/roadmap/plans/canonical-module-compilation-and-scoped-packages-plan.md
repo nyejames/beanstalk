@@ -9,19 +9,19 @@ Replace entry-closure compilation with canonical project and package graphs, imm
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/canonical-module-compilation-and-scoped-packages-plan.md
 STATUS: active
-CURRENT_SLICE: Phase 7c2b2 complete; accepted checkpoint ready to commit
-LAST_ACCEPTED_COMMIT: e45d743a2 (Phase 7c2b1 transient AST-owned resolved public type roots)
-WORKTREE: main at a76770e1b; unrelated docs-only commit above e45d743a2 preserved; accepted Phase 7c2b2 code/tests plus this plan checkpoint are unstaged
+CURRENT_SLICE: Phase 7c2c complete; accepted checkpoint ready to commit
+LAST_ACCEPTED_COMMIT: fdbb1fc46 (Phase 7c2b2 canonical public type surfaces)
+WORKTREE: main at fdbb1fc46; clean accepted compiler checkpoint; unrelated docs-only commit a76770e1b preserved in history
 REQUIRED_RELOADS: startup files, this plan, semantic identity and direct-export origins, TypeEnvironment and AST lookup owners, retained header binding, graph scheduling and current module-result owners
 RELEVANT_CONTEXT_NOW:
-- docs: compiler-design-overview.md makes AST the owner of public-interface validation and canonical export projection; donor-local TypeIds must not cross the module result boundary
-- code: Ast now carries required ResolvedPublicTypeRootTable plus TypeEnvironment before HIR; DefinedPublicExportOriginDraft carries stable declaration origins and receiver origins finalize from the same resolved receiver catalog
+- docs: compiler-design-overview.md requires exported generic templates to use stable declaration and parameter identities; trait bounds need stable trait/evidence identities and remain later
+- code: ResolvedPublicTypeRootTable retains free-function generic list IDs, nominal definitions retain their list IDs and TransientGenericParameterOriginResolver already maps each local parameter to ExportedGenericParameterIdentity
 ACCEPTANCE_CRITERIA:
-- met: one production type-only public-surface projector consumes retained AST roots, stable export origins and canonical type projection before HIR
-- met: nominal and generic-parameter origin joins are total; missing, duplicate, ambiguous and category-mismatched facts fail through CompilerError
-- met: free functions, nominal fields/variants, aliases, constants and receiver methods project deterministically to owned canonical values
-- met: retained public export targets admit direct, imported and public-alias-target nominals without exposing private alias-target receiver methods
-- met: donor-local public roots are taken before HIR and only the stable type surface is retained beside a successful module result
+- met: the existing DefinedPublicTypeSurface owner exposes ordered stable generic parameter lists without a parallel identity path or premature aggregate interface
+- met: free-function and struct/choice surfaces use the retained exact list; non-generic declarations expose an empty list
+- met: every entry resolves through TransientGenericParameterOriginResolver and must match the enclosing stable declaration owner; missing, wrong-owner and duplicate facts are CompilerError
+- met: no donor-local generic/list/type/string/path ID enters the stable result and receiver methods add no independent generic declaration owner
+- met: focused tests cover non-generic, multiple ordered parameters, free-function and nominal ownership, wrong-owner/duplicate rejection and proven donor-local allocation independence
 VALIDATION_STATE:
 - Phase 4d just validate: passed; cross-target Clippy, 3419 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases
 - Phase 4e focused validation: passed; 2 import-scanning, 5 reachability, 178 module-discovery, 19 orchestration, 5 token-remap and 116 header tests plus cargo check --tests and git diff --check
@@ -52,12 +52,14 @@ VALIDATION_STATE:
 - Phase 7c2b1 just validate: passed; cross-target Clippy, 3530 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases (+1ms average)
 - Phase 7c2b2 focused validation: passed; 17 defined-export-origin, 28 defined-public-type-surface, 7 public-surface, 9 resolved-root, 42 canonical-identity and 21 frontend-orchestration tests; alias/private-receiver regression 1/1; cargo check --tests, cargo clippy --tests -D warnings, formatting and git diff --check
 - Phase 7c2b2 just validate: passed; cross-target Clippy, 3563 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases (+1ms average)
+- Phase 7c2c focused validation: passed; 35 defined-public-type-surface and 42 canonical-identity tests plus cargo check --tests, cargo clippy --tests -D warnings, formatting and git diff --check
+- Phase 7c2c just validate: passed; cross-target Clippy, 3570 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases (no measurable change, +1ms average)
 DOCS_IMPACT: index.md names the canonical cross-module type identity and projection owner; progress matrix unchanged for internal interface groundwork
-BLOCKERS_OR_OPEN_DECISIONS: trait/evidence identities, folded constant values, access/effect summaries, provenance and provider interface binding remain later PublicSemanticInterface facts; no blocker for this checkpoint
+BLOCKERS_OR_OPEN_DECISIONS: trait bounds require a stable TraitId-to-OriginTraitId bridge and remain later; generic template bodies, folded values, evidence, access/effect summaries, provenance and provider binding also remain later; no blocker for this checkpoint
 DELEGATION_DECISION: ollama - user requires Ollama for every worker slice
 NEXT_WORKER_ORDER: ollama only; no provider substitution for this run
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit the accepted Phase 7c2b2 checkpoint, reload startup/plan/source and select the next bounded Phase 7 PublicSemanticInterface slice through Ollama
+NEXT_RESUME_ACTION: commit Phase 7c2c, reload startup/plan/source and select the next bounded Phase 7 interface prerequisite through Ollama
 ```
 
 ## Hard prerequisites
@@ -659,6 +661,19 @@ Accepted Phase 7c2b2 checkpoint:
   `DefinedPublicExportOrigins` plus `DefinedPublicTypeSurface` on a successful module result.
   Folded values, generic template bodies and bounds, trait evidence, access/effect summaries,
   provenance, provider interfaces and cross-module calls remain later Phase 7 slices.
+
+Accepted Phase 7c2c checkpoint:
+
+- free-function and struct/choice type surfaces now carry their ordered
+  `ExportedGenericParameterIdentity` lists. Non-generic declarations carry an empty list and
+  receiver methods continue to reuse their receiver nominal's parameters rather than becoming
+  independent generic declaration owners.
+- list projection resolves each local parameter through the same total resolver already used by
+  open canonical type shapes, then validates the exact stable declaration owner and rejects
+  missing, wrong-owner or duplicate identities through `CompilerError`.
+- focused coverage proves declaration-local order, free-function and nominal ownership,
+  non-generic emptiness and stable identity across explicitly different donor-local parameter ID
+  allocations. Trait bounds and stable trait/evidence identities remain the next prerequisite.
 
 ### Phase 8: Add generated sidecars and the fixed-point worklist
 

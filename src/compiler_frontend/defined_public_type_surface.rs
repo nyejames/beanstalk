@@ -169,6 +169,7 @@ impl DefinedPublicReturnTypeSlot {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct DefinedPublicFunctionTypeSurface {
     origin: OriginFunctionId,
+    generic_parameters: Vec<ExportedGenericParameterIdentity>,
     parameters: Vec<DefinedPublicParameterTypeSlot>,
     returns: Vec<DefinedPublicReturnTypeSlot>,
     error_return: Option<CanonicalTypeIdentity>,
@@ -179,6 +180,15 @@ impl DefinedPublicFunctionTypeSurface {
     #[allow(dead_code)] // Test-only: asserted by focused surface projection tests.
     pub(crate) fn origin(&self) -> &OriginFunctionId {
         &self.origin
+    }
+
+    /// The exported generic parameter identities in declaration-local order.
+    ///
+    /// Empty for a non-generic free function. Each identity is resolved through the existing
+    /// total `TransientGenericParameterOriginResolver` and names this function's stable origin.
+    #[allow(dead_code)] // Test-only: asserted by focused surface projection tests.
+    pub(crate) fn generic_parameters(&self) -> &[ExportedGenericParameterIdentity] {
+        &self.generic_parameters
     }
 
     /// The parameter type slots in authored order.
@@ -246,6 +256,7 @@ impl DefinedPublicChoiceVariantTypeSurface {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct DefinedPublicNominalTypeSurface {
     origin: OriginTypeId,
+    generic_parameters: Vec<ExportedGenericParameterIdentity>,
     fields: Vec<DefinedPublicFieldTypeSlot>,
     variants: Vec<DefinedPublicChoiceVariantTypeSurface>,
 }
@@ -255,6 +266,16 @@ impl DefinedPublicNominalTypeSurface {
     #[allow(dead_code)] // Test-only: asserted by focused surface projection tests.
     pub(crate) fn origin(&self) -> &OriginTypeId {
         &self.origin
+    }
+
+    /// The exported generic parameter identities in declaration-local order.
+    ///
+    /// Empty for a non-generic struct or choice. Each identity is resolved through the existing
+    /// total `TransientGenericParameterOriginResolver` and names this nominal's stable origin.
+    /// Receiver methods reuse their receiver nominal's parameters and expose no independent list.
+    #[allow(dead_code)] // Test-only: asserted by focused surface projection tests.
+    pub(crate) fn generic_parameters(&self) -> &[ExportedGenericParameterIdentity] {
+        &self.generic_parameters
     }
 
     /// The struct field type slots in authored order. Empty for choices.
@@ -634,13 +655,14 @@ pub(crate) fn build_defined_public_type_surface(
         match &root.kind {
             ResolvedPublicTypeRootKind::Function {
                 signature,
-                generic_parameter_list_id: _,
+                generic_parameter_list_id,
             } => {
                 let OriginDeclarationId::Function(function_origin) = binding.origin() else {
                     return Err(origin_category_mismatch_error("function", binding));
                 };
                 free_functions.push(project_free_function(
                     function_origin.clone(),
+                    *generic_parameter_list_id,
                     signature,
                     type_environment,
                     &projection_context,
@@ -862,14 +884,81 @@ fn register_nominal_generic_origins(
     Ok(())
 }
 
+/// Project one root's exported generic parameter identities in declaration-local order.
+///
+/// WHAT: iterates the retained `GenericParameterList` in declaration-local order and resolves
+/// each `GenericParameterId` through the already-built total
+/// `TransientGenericParameterOriginResolver`. A non-generic declaration (`list_id` is `None`)
+/// exposes an empty list. Each resolved identity must name the `expected_origin`: a wrong-owner,
+/// missing, duplicate or inconsistent parameter is a `CompilerError` rather than a silent
+/// omission. The output carries only owned stable identities; no `GenericParameterId`,
+/// `GenericParameterListId`, `StringId` or `InternedPath` crosses the boundary.
+fn project_exported_generic_parameter_identities(
+    generic_parameter_list_id: Option<GenericParameterListId>,
+    type_environment: &TypeEnvironment,
+    generic_resolver: &dyn GenericParameterOriginResolver,
+    expected_origin: &GenericDeclarationOrigin,
+) -> Result<Vec<ExportedGenericParameterIdentity>, CompilerError> {
+    let Some(list_id) = generic_parameter_list_id else {
+        return Ok(Vec::new());
+    };
+
+    let list = type_environment.generic_parameters(list_id).ok_or_else(|| {
+        CompilerError::compiler_error(format!(
+            "defined public type-surface projection: GenericParameterListId({}) is missing from the TypeEnvironment while projecting exported generic parameter identities",
+            list_id.0
+        ))
+    })?;
+
+    let mut identities = Vec::with_capacity(list.parameters.len());
+    for parameter in &list.parameters {
+        let identity = generic_resolver.resolve_generic_parameter_origin(parameter.id)?;
+
+        // Validate exact owner identity. The resolver already registers each parameter under
+        // the correct declaration origin, so a mismatch means a list was joined to the wrong
+        // root or the owner table is inconsistent. Both are internal `CompilerError` failures.
+        if identity.declaration_origin() != expected_origin {
+            return Err(CompilerError::compiler_error(format!(
+                "defined public type-surface projection: an exported generic parameter resolved to declaration origin {:?} but its root owner is {:?}; a wrong-owner parameter must not enter the public type surface",
+                identity.declaration_origin(),
+                expected_origin,
+            )));
+        }
+
+        // Reject a duplicate resolved identity. Two distinct `GenericParameterId`s that resolve
+        // to the same owner, position and name signal an inconsistent owner table rather than a
+        // legitimate second declaration.
+        if identities.contains(&identity) {
+            return Err(CompilerError::compiler_error(format!(
+                "defined public type-surface projection: two exported generic parameters resolved to the same identity {:?}; a duplicate parameter identity must not enter the public type surface",
+                identity,
+            )));
+        }
+
+        identities.push(identity);
+    }
+
+    Ok(identities)
+}
+
 /// Project one free-function signature into the stable type surface.
 fn project_free_function(
     function_origin: OriginFunctionId,
+    generic_parameter_list_id: Option<GenericParameterListId>,
     signature: &FunctionSignature,
     type_environment: &TypeEnvironment,
     context: &CanonicalTypeProjectionContext,
     string_table: &StringTable,
 ) -> Result<DefinedPublicFunctionTypeSurface, CompilerError> {
+    let expected_origin = GenericDeclarationOrigin::free_function(function_origin.clone())?;
+
+    let generic_parameters = project_exported_generic_parameter_identities(
+        generic_parameter_list_id,
+        type_environment,
+        context.generic_parameter_origins(),
+        &expected_origin,
+    )?;
+
     let parameters = signature
         .parameters
         .iter()
@@ -895,6 +984,7 @@ fn project_free_function(
 
     Ok(DefinedPublicFunctionTypeSurface {
         origin: function_origin,
+        generic_parameters,
         parameters,
         returns,
         error_return,
@@ -987,10 +1077,20 @@ fn project_struct(
         )));
     }
 
+    let expected_origin = GenericDeclarationOrigin::nominal_type(type_origin.clone())?;
+
+    let generic_parameters = project_exported_generic_parameter_identities(
+        struct_definition.generic_parameters,
+        type_environment,
+        context.generic_parameter_origins(),
+        &expected_origin,
+    )?;
+
     let fields = project_fields(struct_definition, type_environment, context, string_table)?;
 
     Ok(DefinedPublicNominalTypeSurface {
         origin: type_origin,
+        generic_parameters,
         fields,
         variants: Vec::new(),
     })
@@ -1037,11 +1137,21 @@ fn project_choice(
         )));
     }
 
+    let expected_origin = GenericDeclarationOrigin::nominal_type(type_origin.clone())?;
+
+    let generic_parameters = project_exported_generic_parameter_identities(
+        choice_definition.generic_parameters,
+        type_environment,
+        context.generic_parameter_origins(),
+        &expected_origin,
+    )?;
+
     let variants =
         project_choice_variants(choice_definition, type_environment, context, string_table)?;
 
     Ok(DefinedPublicNominalTypeSurface {
         origin: type_origin,
+        generic_parameters,
         fields: Vec::new(),
         variants,
     })

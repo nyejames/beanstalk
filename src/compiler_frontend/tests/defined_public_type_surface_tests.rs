@@ -288,17 +288,32 @@ fn register_single_param_list(
     string_table: &mut StringTable,
     param_name: &str,
 ) -> GenericParameterListId {
+    register_param_list(env, string_table, &[param_name])
+}
+
+/// Register a generic parameter list with one or more parameters in the given order.
+///
+/// Each parameter name becomes one declaration-local entry, so tests can assert
+/// declaration-local ordering on the projected surface.
+fn register_param_list(
+    env: &mut TypeEnvironment,
+    string_table: &mut StringTable,
+    param_names: &[&str],
+) -> GenericParameterListId {
     use crate::compiler_frontend::datatypes::generic_parameters::{
         GenericParameter, GenericParameterList, TypeParameterId,
     };
-    let list = GenericParameterList {
-        parameters: vec![GenericParameter {
-            id: TypeParameterId(0),
-            name: string_table.intern(param_name),
+    let parameters = param_names
+        .iter()
+        .enumerate()
+        .map(|(position, name)| GenericParameter {
+            id: TypeParameterId(position as u32),
+            name: string_table.intern(name),
             location: location(),
             trait_bounds: Vec::new(),
-        }],
-    };
+        })
+        .collect();
+    let list = GenericParameterList { parameters };
     env.register_generic_parameter_list(&list, &FxHashMap::default())
         .list_id
 }
@@ -754,19 +769,31 @@ fn projects_open_exported_generic_function_parameter() {
     .expect("generic function projection should succeed");
 
     let function = &surface.free_functions()[0];
+    let expected_origin =
+        crate::compiler_frontend::canonical_type_identity::GenericDeclarationOrigin::free_function(
+            free_function_origin("identity"),
+        )
+        .expect("free function must be a valid generic declaration owner");
     let expected_identity =
         crate::compiler_frontend::canonical_type_identity::ExportedGenericParameterIdentity::new(
-            crate::compiler_frontend::canonical_type_identity::GenericDeclarationOrigin::free_function(
-                free_function_origin("identity"),
-            )
-            .expect("free function must be a valid generic declaration owner"),
+            expected_origin.clone(),
             0,
             "T".to_owned(),
         );
     assert_eq!(
         function.parameters()[0].type_identity(),
-        &CanonicalTypeIdentity::GenericParameter(expected_identity),
+        &CanonicalTypeIdentity::GenericParameter(expected_identity.clone()),
         "open exported generic parameter must project to its stable identity"
+    );
+    assert_eq!(
+        function.generic_parameters(),
+        &[expected_identity],
+        "the generic free function must expose its single ordered exported generic parameter identity"
+    );
+    assert_eq!(
+        function.generic_parameters()[0].declaration_origin(),
+        &expected_origin,
+        "the exported generic parameter must name the function's stable origin"
     );
 }
 
@@ -809,19 +836,421 @@ fn projects_generic_struct_field_with_open_generic_parameter() {
 
     let nominal = &surface.nominal_types()[0];
     assert_eq!(nominal.fields().len(), 1);
+    let expected_origin =
+        crate::compiler_frontend::canonical_type_identity::GenericDeclarationOrigin::nominal_type(
+            struct_origin("Box"),
+        )
+        .expect("struct origin must be a valid generic declaration owner");
     let expected_identity =
         crate::compiler_frontend::canonical_type_identity::ExportedGenericParameterIdentity::new(
-            crate::compiler_frontend::canonical_type_identity::GenericDeclarationOrigin::nominal_type(
-                struct_origin("Box"),
-            )
-            .expect("struct origin must be a valid generic declaration owner"),
+            expected_origin.clone(),
             0,
             "T".to_owned(),
         );
     assert_eq!(
         nominal.fields()[0].type_identity(),
-        &CanonicalTypeIdentity::GenericParameter(expected_identity),
+        &CanonicalTypeIdentity::GenericParameter(expected_identity.clone()),
         "generic struct field must project the open parameter to its nominal-owned identity"
+    );
+    assert_eq!(
+        nominal.generic_parameters(),
+        &[expected_identity],
+        "the generic struct must expose its single ordered exported generic parameter identity"
+    );
+    assert_eq!(
+        nominal.generic_parameters()[0].declaration_origin(),
+        &expected_origin,
+        "the exported generic parameter must name the struct's stable origin"
+    );
+}
+
+// ---------------------------------------------------------------------------
+//  Ordered exported generic parameter identities
+// ---------------------------------------------------------------------------
+
+#[test]
+fn non_generic_free_function_exposes_empty_generic_parameter_list() {
+    let env = TypeEnvironment::new();
+    let mut string_table = StringTable::new();
+    let int_id = env.builtins().int;
+
+    let param = param_declaration("value", int_id, &mut string_table);
+    let signature = free_function_signature(vec![param], vec![int_id]);
+    let root = function_root("plain", signature, None, &mut string_table);
+
+    let root_table = ResolvedPublicTypeRootTable {
+        roots: vec![root],
+        receiver_methods: vec![],
+    };
+
+    let binding = export_binding(
+        "plain",
+        OriginDeclarationId::Function(free_function_origin("plain")),
+    );
+    let origins = build_origins(vec![binding], vec![]);
+
+    let surface = build_surface(
+        &root_table,
+        &origins,
+        &FxHashMap::default(),
+        &env,
+        &string_table,
+    )
+    .expect("non-generic free function projection should succeed");
+
+    assert!(
+        surface.free_functions()[0].generic_parameters().is_empty(),
+        "a non-generic free function must expose an empty generic parameter list"
+    );
+}
+
+#[test]
+fn non_generic_struct_exposes_empty_generic_parameter_list() {
+    let mut env = TypeEnvironment::new();
+    let mut string_table = StringTable::new();
+    let int_id = env.builtins().int;
+
+    let fields = Box::new([field_def("count", int_id, &mut string_table)]);
+    let (_nominal_id, type_id) =
+        register_struct(&mut env, &mut string_table, "Counter", fields, None);
+
+    let root = struct_root("Counter", type_id, &mut string_table);
+    let root_table = ResolvedPublicTypeRootTable {
+        roots: vec![root],
+        receiver_methods: vec![],
+    };
+
+    let binding = export_binding(
+        "Counter",
+        OriginDeclarationId::Type(struct_origin("Counter")),
+    );
+    let origins = build_origins(vec![binding], vec![]);
+    let nominal_map = nominal_origins_map(
+        vec![("Counter", struct_origin("Counter"))],
+        &mut string_table,
+    );
+
+    let surface = build_surface(&root_table, &origins, &nominal_map, &env, &string_table)
+        .expect("non-generic struct projection should succeed");
+
+    assert!(
+        surface.nominal_types()[0].generic_parameters().is_empty(),
+        "a non-generic struct must expose an empty generic parameter list"
+    );
+}
+
+#[test]
+fn generic_free_function_exposes_ordered_generic_parameter_identities() {
+    let mut env = TypeEnvironment::new();
+    let mut string_table = StringTable::new();
+    let param_list_id = register_param_list(&mut env, &mut string_table, &["Key", "Value"]);
+
+    let key_type_id = env
+        .type_id_for_generic_parameter(
+            env.generic_parameters(param_list_id).unwrap().parameters[0].id,
+        )
+        .expect("first generic parameter must have a TypeId");
+    let value_type_id = env
+        .type_id_for_generic_parameter(
+            env.generic_parameters(param_list_id).unwrap().parameters[1].id,
+        )
+        .expect("second generic parameter must have a TypeId");
+
+    let key_param = param_declaration("key", key_type_id, &mut string_table);
+    let value_param = param_declaration("value", value_type_id, &mut string_table);
+    let signature = free_function_signature(vec![key_param, value_param], vec![value_type_id]);
+    let root = function_root("pair", signature, Some(param_list_id), &mut string_table);
+
+    let root_table = ResolvedPublicTypeRootTable {
+        roots: vec![root],
+        receiver_methods: vec![],
+    };
+
+    let binding = export_binding(
+        "pair",
+        OriginDeclarationId::Function(free_function_origin("pair")),
+    );
+    let origins = build_origins(vec![binding], vec![]);
+
+    let surface = build_surface(
+        &root_table,
+        &origins,
+        &FxHashMap::default(),
+        &env,
+        &string_table,
+    )
+    .expect("generic function projection should succeed");
+
+    let function = &surface.free_functions()[0];
+    let expected_origin =
+        crate::compiler_frontend::canonical_type_identity::GenericDeclarationOrigin::free_function(
+            free_function_origin("pair"),
+        )
+        .expect("free function must be a valid generic declaration owner");
+    let expected_first =
+        crate::compiler_frontend::canonical_type_identity::ExportedGenericParameterIdentity::new(
+            expected_origin.clone(),
+            0,
+            "Key".to_owned(),
+        );
+    let expected_second =
+        crate::compiler_frontend::canonical_type_identity::ExportedGenericParameterIdentity::new(
+            expected_origin.clone(),
+            1,
+            "Value".to_owned(),
+        );
+
+    assert_eq!(
+        function.generic_parameters(),
+        &[expected_first, expected_second],
+        "the generic free function must expose its parameters in declaration-local order"
+    );
+}
+
+#[test]
+fn generic_choice_exposes_ordered_generic_parameter_identities() {
+    let mut env = TypeEnvironment::new();
+    let mut string_table = StringTable::new();
+    let param_list_id = register_param_list(&mut env, &mut string_table, &["T", "U"]);
+
+    let first_type_id = env
+        .type_id_for_generic_parameter(
+            env.generic_parameters(param_list_id).unwrap().parameters[0].id,
+        )
+        .expect("first generic parameter must have a TypeId");
+    let second_type_id = env
+        .type_id_for_generic_parameter(
+            env.generic_parameters(param_list_id).unwrap().parameters[1].id,
+        )
+        .expect("second generic parameter must have a TypeId");
+
+    let variant_fields = Box::new([
+        field_def("first", first_type_id, &mut string_table),
+        field_def("second", second_type_id, &mut string_table),
+    ]);
+    let variant = record_variant("Pair", variant_fields, &mut string_table);
+    let (_nominal_id, type_id) = register_choice(
+        &mut env,
+        &mut string_table,
+        "Result",
+        Box::new([variant]),
+        Some(param_list_id),
+    );
+
+    let root = choice_root("Result", type_id, &mut string_table);
+    let root_table = ResolvedPublicTypeRootTable {
+        roots: vec![root],
+        receiver_methods: vec![],
+    };
+
+    let binding = export_binding("Result", OriginDeclarationId::Type(choice_origin("Result")));
+    let origins = build_origins(vec![binding], vec![]);
+    let nominal_map =
+        nominal_origins_map(vec![("Result", choice_origin("Result"))], &mut string_table);
+
+    let surface = build_surface(&root_table, &origins, &nominal_map, &env, &string_table)
+        .expect("generic choice projection should succeed");
+
+    let nominal = &surface.nominal_types()[0];
+    let expected_origin =
+        crate::compiler_frontend::canonical_type_identity::GenericDeclarationOrigin::nominal_type(
+            choice_origin("Result"),
+        )
+        .expect("choice origin must be a valid generic declaration owner");
+    let expected_first =
+        crate::compiler_frontend::canonical_type_identity::ExportedGenericParameterIdentity::new(
+            expected_origin.clone(),
+            0,
+            "T".to_owned(),
+        );
+    let expected_second =
+        crate::compiler_frontend::canonical_type_identity::ExportedGenericParameterIdentity::new(
+            expected_origin.clone(),
+            1,
+            "U".to_owned(),
+        );
+
+    assert_eq!(
+        nominal.generic_parameters(),
+        &[expected_first, expected_second],
+        "the generic choice must expose its parameters in declaration-local order"
+    );
+}
+
+#[test]
+fn generic_parameter_identities_are_stable_across_donor_local_allocation() {
+    // Two independent TypeEnvironments register the same single-parameter generic list, but one
+    // environment first registers a throwaway generic parameter list through the ordinary
+    // registration owner so its target parameter is allocated from a higher donor-local counter.
+    // The donor-local GenericParameterId allocations must differ, yet the projected
+    // ExportedGenericParameterIdentity must be identical because it derives from the stable
+    // declaration origin and declaration-local position, not the donor-local id.
+    let function_name = "identity";
+    let make_surface = |perturb: bool| {
+        let mut env = TypeEnvironment::new();
+        let mut string_table = StringTable::new();
+        if perturb {
+            // Push the donor-local allocation counter ahead through the ordinary owner before
+            // registering the target list, so the target parameter gets a different
+            // GenericParameterId without constructing or mutating private IDs directly.
+            let _ = register_single_param_list(&mut env, &mut string_table, "Perturb");
+        }
+        let param_list_id = register_single_param_list(&mut env, &mut string_table, "T");
+        let target_local_id = env
+            .generic_parameters(param_list_id)
+            .expect("target generic parameter list must resolve")
+            .parameters[0]
+            .id;
+        let generic_type_id = env
+            .type_id_for_generic_parameter(target_local_id)
+            .expect("generic parameter must have a TypeId");
+
+        let param = param_declaration("value", generic_type_id, &mut string_table);
+        let signature = free_function_signature(vec![param], vec![generic_type_id]);
+        let root = function_root(
+            function_name,
+            signature,
+            Some(param_list_id),
+            &mut string_table,
+        );
+
+        let root_table = ResolvedPublicTypeRootTable {
+            roots: vec![root],
+            receiver_methods: vec![],
+        };
+
+        let binding = export_binding(
+            function_name,
+            OriginDeclarationId::Function(free_function_origin(function_name)),
+        );
+        let origins = build_origins(vec![binding], vec![]);
+
+        let surface = build_surface(
+            &root_table,
+            &origins,
+            &FxHashMap::default(),
+            &env,
+            &string_table,
+        )
+        .expect("projection should succeed");
+        (surface, target_local_id)
+    };
+
+    let (surface_a, local_id_a) = make_surface(false);
+    let (surface_b, local_id_b) = make_surface(true);
+
+    assert_ne!(
+        local_id_a, local_id_b,
+        "the two environments must allocate different donor-local GenericParameterIds for the target parameter so the stability premise is real"
+    );
+    assert_eq!(
+        surface_a.free_functions()[0].generic_parameters(),
+        surface_b.free_functions()[0].generic_parameters(),
+        "exported generic parameter identities must be stable across donor-local GenericParameterId allocation"
+    );
+}
+
+// ---------------------------------------------------------------------------
+//  Wrong-owner and duplicate exported generic parameter identities
+// ---------------------------------------------------------------------------
+
+/// A test-only `GenericParameterOriginResolver` that returns a fixed identity for every
+/// `GenericParameterId`, so the projection helper's owner and duplicate invariants can be
+/// exercised without constructing a full root table.
+struct FixedGenericParameterOriginResolver {
+    identity: crate::compiler_frontend::canonical_type_identity::ExportedGenericParameterIdentity,
+}
+
+impl crate::compiler_frontend::canonical_type_identity::GenericParameterOriginResolver
+    for FixedGenericParameterOriginResolver
+{
+    fn resolve_generic_parameter_origin(
+        &self,
+        _parameter_id: crate::compiler_frontend::datatypes::ids::GenericParameterId,
+    ) -> Result<
+        crate::compiler_frontend::canonical_type_identity::ExportedGenericParameterIdentity,
+        crate::compiler_frontend::compiler_errors::CompilerError,
+    > {
+        Ok(self.identity.clone())
+    }
+}
+
+#[test]
+fn wrong_owner_generic_parameter_identity_is_compiler_error() {
+    let mut env = TypeEnvironment::new();
+    let mut string_table = StringTable::new();
+    let param_list_id = register_single_param_list(&mut env, &mut string_table, "T");
+
+    let wrong_origin =
+        crate::compiler_frontend::canonical_type_identity::GenericDeclarationOrigin::free_function(
+            free_function_origin("other"),
+        )
+        .expect("wrong-owner origin must be constructible");
+    let wrong_identity =
+        crate::compiler_frontend::canonical_type_identity::ExportedGenericParameterIdentity::new(
+            wrong_origin,
+            0,
+            "T".to_owned(),
+        );
+
+    let resolver = FixedGenericParameterOriginResolver {
+        identity: wrong_identity,
+    };
+
+    let expected_origin =
+        crate::compiler_frontend::canonical_type_identity::GenericDeclarationOrigin::free_function(
+            free_function_origin("identity"),
+        )
+        .expect("expected origin must be constructible");
+
+    let result = super::project_exported_generic_parameter_identities(
+        Some(param_list_id),
+        &env,
+        &resolver,
+        &expected_origin,
+    );
+
+    assert!(
+        result.is_err(),
+        "an exported generic parameter whose declaration origin does not match the root owner must be a CompilerError, not silently admitted"
+    );
+}
+
+#[test]
+fn duplicate_resolved_generic_parameter_identity_is_compiler_error() {
+    let mut env = TypeEnvironment::new();
+    let mut string_table = StringTable::new();
+    let param_list_id = register_param_list(&mut env, &mut string_table, &["T", "T"]);
+
+    let expected_origin =
+        crate::compiler_frontend::canonical_type_identity::GenericDeclarationOrigin::free_function(
+            free_function_origin("identity"),
+        )
+        .expect("expected origin must be constructible");
+
+    // Both parameters resolve to the same identity (same owner, position 0, name "T"), so the
+    // second entry is a duplicate.
+    let duplicate_identity =
+        crate::compiler_frontend::canonical_type_identity::ExportedGenericParameterIdentity::new(
+            expected_origin.clone(),
+            0,
+            "T".to_owned(),
+        );
+
+    let resolver = FixedGenericParameterOriginResolver {
+        identity: duplicate_identity,
+    };
+
+    let result = super::project_exported_generic_parameter_identities(
+        Some(param_list_id),
+        &env,
+        &resolver,
+        &expected_origin,
+    );
+
+    assert!(
+        result.is_err(),
+        "two exported generic parameters resolving to the same identity must be a CompilerError"
     );
 }
 

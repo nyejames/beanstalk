@@ -446,6 +446,17 @@ impl<'a> CanonicalTypeProjectionContext<'a> {
     pub(crate) fn nominal_origins(&self) -> &dyn NominalOriginResolver {
         self.nominal_origins
     }
+
+    /// The generic-parameter origin resolver used to map `GenericParameterId` to stable
+    /// `ExportedGenericParameterIdentity`.
+    ///
+    /// WHAT: lets the public type-surface projection owner project each exported generic
+    /// parameter list entry in declaration-local order through the same total resolver that
+    /// already backs open-parameter canonical type projection, without reconstructing identity
+    /// from name or position a second time.
+    pub(crate) fn generic_parameter_origins(&self) -> &dyn GenericParameterOriginResolver {
+        self.generic_parameter_origins
+    }
 }
 
 // ---------------------------------------------------------------------------
