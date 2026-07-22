@@ -103,7 +103,10 @@ impl TemplateFormatter for CodeTemplateFormatter {
             match piece {
                 FormatterInputPiece::Text(text_piece) => {
                     let text = string_table.resolve(text_piece.text);
-                    let highlighted = highlight_code_html(text, self.language);
+                    let highlighted = match self.language {
+                        CodeLanguage::Text => text.to_owned(),
+                        _ => highlight_code_html(text, self.language),
+                    };
 
                     // Wrap the first text piece with the opening <code> tag.
                     let wrapped = if !first_text_emitted {

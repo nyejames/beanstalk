@@ -138,14 +138,14 @@ page_head #= language_theme_head
 
     If you omit the path, bean asks for confirmation in the current directory:
 
-    [codeblock, $code("bash"):
+    [codeblock, $code("text"):
         No project path specified. Current directory: /your/path
         Create the new HTML project in this directory? y/N:
     ]
 
     If the target directory already exists, you are given three choices:
 
-    [codeblock, $code("bash"):
+    [codeblock, $code("text"):
         Target directory already exists:
         /path/to/target
 
