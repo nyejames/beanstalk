@@ -70,7 +70,7 @@ The one semantic region responsible for keeping an allocation alive and eventual
     ;
 ]
 
-[codeblock, $code("text"):
+[codeblock, $code("beanstalk"):
     name [access/type] into group_name = expression
 ]
 

@@ -52,7 +52,7 @@ That property underwrites Beanstalk's semantic promise: correctness does not dep
 
 GC does **not** make this safe:
 
-[codeblock, $code("text"):
+[codeblock, $code("beanstalk"):
 // conceptual: shared reader plus overlapping exclusive mutation
 // both aliases can be live under GC and still conflict
 ]

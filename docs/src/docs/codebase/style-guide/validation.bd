@@ -11,7 +11,7 @@ is strictly documentation-only.
 Use an up-to-date release build of the compiler when one is available. The
 `bean` command in PATH is the usual direct form:
 
-[codeblock, $code("text"):
+[codeblock, $code("bash"):
     bean check docs
     bean build docs --release
 ]
@@ -19,7 +19,7 @@ Use an up-to-date release build of the compiler when one is available. The
 If a suitable release build is not available, run the same operations through
 Cargo from the repository root:
 
-[codeblock, $code("text"):
+[codeblock, $code("bash"):
     cargo run --quiet -- check docs
     cargo run --quiet -- build docs --release
 ]
@@ -53,7 +53,7 @@ non-documentation implementation file.
 
 Before declaring a non-trivial code-bearing slice complete, run:
 
-[codeblock, $code("text"):
+[codeblock, $code("bash"):
     just validate
 ]
 
@@ -107,7 +107,7 @@ evaluator before selection or compilation. This makes missing ownership, duplica
 other hard suite-policy findings part of the normal validation gate. Run the audit command when the
 JSON inventory under `target/test-reports/` is also required:
 
-[codeblock, $code("text"):
+[codeblock, $code("bash"):
     cargo run --quiet -- tests --audit
 ]
 
@@ -132,7 +132,7 @@ using a current compiler.
 
 The direct release-binary form is:
 
-[codeblock, $code("text"):
+[codeblock, $code("bash"):
     bean build docs --release
 ]
 
@@ -217,7 +217,7 @@ Do not edit files under `docs/release/**` directly.
 
 The documentation release build is:
 
-[codeblock, $code("text"):
+[codeblock, $code("bash"):
     bean build docs --release
 ]
 
