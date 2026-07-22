@@ -1,0 +1,43 @@
+### Accepted deferred syntax
+
+The following is accepted end-state syntax. Implementation is deferred and must not be treated as current source support.
+
+### Declared memory groups
+
+`group name:` creates a declared hard lifetime region. A declaration can target a group with the `into` keyword.
+
+[codeblock, $code("text"):
+    group name:
+        name [access/type] into group_name = expression
+    ;
+]
+
+Rules:
+
+- destination-group lexical ownership and visibility follow the declaration point through the remainder of the destination group
+- a declaration targeting an ancestor group is legal only from a straight-line nested `block:` or nested `group:` that executes at most once
+- targeting is invalid directly inside `if` branches, match arms, `catch` branches, loops or any construct that may execute zero or multiple times
+- group identity is not part of types or signatures
+
+### V1 restrictions
+
+- no expression-site placement
+- no `into group` syntax on reassignment
+- no extraction
+- no unrestricted group-to-group adoption
+- a mutable binding already owned by a group may be reassigned only with a fresh result root valid for that group, an independent copy allocated into that group, or a same-group value transferred at a proven final use
+
+### Why groups exist
+
+Groups give authors explicit control over allocation lifetime without exposing reference types, pointer syntax or manual memory management. The compiler validates group topology as part of its mandatory lifetime-region analysis.
+
+### Read next
+
+- @#reference-semantics (Reference semantics)
+- @#copy-and-exclusive-access (Copy and exclusive access)
+- @#lifetimes-and-result-shapes (Lifetimes and result shapes)
+
+For the formal group semantics, see
+@../../codebase/memory-management/declared-memory-groups (Declared memory groups).
+For implementation sequencing, see
+@../../../../roadmap/plans/grouped-memory-design.md (Grouped memory design plan).

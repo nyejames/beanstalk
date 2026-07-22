@@ -876,9 +876,9 @@ body {
     </code></pre><p>Division has two forms:</p><pre style=""><code class='codeblock'>
     real_result <span class='bst-code-operator'>=</span> <span class='bst-code-number'>5</span> <span class='bst-code-operator'>/</span> <span class='bst-code-number'>2</span>
     whole_result <span class='bst-code-operator'>=</span> <span class='bst-code-number'>5</span> <span class='bst-code-operator'>/</span><span class='bst-code-operator'>/</span> <span class='bst-code-number'>2</span>
-    </code></pre><p><code>/</code> produces a real <code>Float</code> result. <code>//</code> performs integer division and produces an <code>Int</code>.</p><p>Plain string slices can be joined with <code>+</code>:</p><pre style=""><code class='codeblock'>
-    greeting <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Hello, &quot;</span> <span class='bst-code-operator'>+</span> <span class='bst-code-string'>&quot;Priya&quot;</span>
-    </code></pre><p>Use templates when text needs interpolation or a larger structure.</p>
+    </code></pre><p><code>/</code> produces a real <code>Float</code> result. <code>//</code> performs integer division and produces an <code>Int</code>.</p><p>Use templates to join text:</p><pre style=""><code class='codeblock'>
+    greeting <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-string'>&quot;Hello, &quot;</span>, <span class='bst-code-string'>&quot;Priya&quot;</span><span class='bst-code-parenthesis'>]</span>
+    </code></pre><p>Templates handle all string joining and interpolation. <code>+</code> is for numbers only.</p>
     </div>
 
     <div class="doc-level__panel doc-level__panel--advanced">

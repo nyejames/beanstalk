@@ -13,7 +13,7 @@ A literal pattern must be compatible with the scrutinee type.
     ;
 ]
 
-One statically typed match cannot mix unrelated `Int`, `String` and `Bool`
+One statically typed match can't mix unrelated `Int`, `String` and `Bool`
 literal patterns.
 
 ### Choice variants
@@ -57,17 +57,8 @@ An option match may omit `else =>` only when it has both:
     ;
 ]
 
-Literal or relational option arms do not replace the unguarded present-value
+Literal or relational option arms don't replace the unguarded present-value
 capture when `else =>` is omitted.
-
-### General capture
-
-A bare pattern name that is not a known choice variant binds the complete
-scrutinee value for that arm.
-
-The binding is arm-local and may be used by the arm guard and body.
-
-Use `else =>` as the explicit full-match catch-all.
 
 ### Relational patterns
 
@@ -78,9 +69,20 @@ Use `else =>` as the explicit full-match catch-all.
     >= value
 ]
 
-Relational patterns support `Int`, `Float`, `Char` and `String`.
+Relational patterns support `Int`, `Float` and `Char`.
 
-String ordering is backend-defined in the current Alpha surface.
+### The catch-all arm
+
+`else =>` is the only full-match catch-all. A bare unknown name in choice
+pattern position is treated as an unknown or invalid variant. A bare name in
+other full-match pattern positions is invalid syntax.
+
+[codeblock, $code("bst"):
+    if value is:
+        0 => io.line("zero")
+        else => io.line("other")
+    ;
+]
 
 ### Choice payload capture contract
 
@@ -89,8 +91,8 @@ String ordering is backend-defined in the current Alpha surface.
 - The source name before `as` must exactly match the declared field name.
 - `as local_name` changes only the arm-local binding.
 - Duplicate local bindings are invalid.
-- Wildcard payload captures are not supported.
-- Named assignment syntax such as `Err(message = text)` is not payload-pattern syntax.
+- Wildcard payload captures aren't supported.
+- Named assignment syntax such as `Err(message = text)` isn't payload-pattern syntax.
 - Nested payload patterns are deferred.
 
 ### Exhaustiveness
@@ -99,9 +101,7 @@ String ordering is backend-defined in the current Alpha surface.
 - An option match may instead use unguarded `none` plus unguarded `|name|`.
 - A choice match may omit `else =>` only when every variant is covered.
 - Any guarded choice arm requires `else =>`.
-- The same choice variant cannot be matched more than once.
+- The same choice variant can't be matched more than once.
 - Payload exhaustiveness is tag-level. One valid payload capture arm covers every value of that variant.
 - A statement match may use bodyless `else =>`.
 - A value-producing match must produce the required values on every selected path.
-
-Capture bindings are arm-local and follow the no-shadowing rule.

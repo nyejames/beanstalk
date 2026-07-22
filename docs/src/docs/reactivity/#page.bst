@@ -136,7 +136,7 @@ page_head #= language_theme_head
     [doc_pager:
         [$insert("previous_path"):../traits/]
         [$insert("previous_title"):Traits]
-        [$insert("next_path"):../project-structure/]
-        [$insert("next_title"):Project Structure]
+        [$insert("next_path"):../memory/]
+        [$insert("next_title"):Memory and lifetimes]
     ]
 ]

@@ -16,8 +16,6 @@ Exported compile-time constants and const records from the same-directory module
     # Welcome to [site_name]
 ]
 
-Same-directory module root constants override `@html` constants on name collision.
-
 ### Builder-provided compile-time helpers
 
 Exported compile-time constants and const records from `@html` are visible flat inside a `.bd` file. This includes helpers such as `p`, `codeblock` and other HTML builder constants.
@@ -28,6 +26,26 @@ Exported compile-time constants and const records from `@html` are visible flat 
 
     [codeblock, $code("bst"): value = 42]
 ]
+
+### Collision semantics
+
+`@html` constants and same-directory module root constants don't shadow each
+other. If both surfaces expose the same visible name, compilation fails with a
+visible-name collision diagnostic. The collision identifies both sources where
+location data is available.
+
+Authors resolve collisions by renaming the module-root export.
+
+[codeblock, $code("bst"):
+    -- docs/#docs.bst
+    export:
+        -- If @html already exposes `p`, this creates a collision.
+        -- Rename to avoid it:
+        my_p #= [p: Custom paragraph]
+    ;
+]
+
+This follows the same no-shadowing model as ordinary source visibility.
 
 ### Nested templates
 

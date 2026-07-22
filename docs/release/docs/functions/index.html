@@ -814,7 +814,7 @@ body {
     ;
     </code></pre><p>Each parameter has a name and a type.</p><p>A default makes a parameter optional at the call site:</p><pre style=""><code class='codeblock'>
     describe <span class='bst-code-operator'>|</span>prefix <span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;item&quot;</span>, subject <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-keyword'>return</span> prefix <span class='bst-code-operator'>+</span> <span class='bst-code-string'>&quot;: &quot;</span> <span class='bst-code-operator'>+</span> subject
+        <span class='bst-code-keyword'>return</span> <span class='bst-code-parenthesis'>[</span>prefix, <span class='bst-code-string'>&quot;: &quot;</span>, subject<span class='bst-code-parenthesis'>]</span>
     ;
 
     label <span class='bst-code-operator'>=</span> describe<span class='bst-code-parenthesis'>(</span>subject <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;apple&quot;</span><span class='bst-code-parenthesis'>)</span>
@@ -824,7 +824,7 @@ body {
     <div class="doc-level__panel doc-level__panel--advanced">
         <p>Every function parameter has a name and an explicit type.</p><pre style=""><code class='codeblock'>
     describe <span class='bst-code-operator'>|</span>prefix <span class='bst-code-struct'>String,</span> subject <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-keyword'>return</span> prefix <span class='bst-code-operator'>+</span> <span class='bst-code-string'>&quot;: &quot;</span> <span class='bst-code-operator'>+</span> subject
+        <span class='bst-code-keyword'>return</span> <span class='bst-code-parenthesis'>[</span>prefix, <span class='bst-code-string'>&quot;: &quot;</span>, subject<span class='bst-code-parenthesis'>]</span>
     ;
     </code></pre><h3>Parameter forms</h3><pre style=""><code class='codeblock'>
     name <span class='bst-code-struct'>Type</span>
@@ -832,7 +832,7 @@ body {
     name <span class='bst-code-struct'>Type</span> <span class='bst-code-operator'>=</span> default
     </code></pre><ul><li><code>name Type</code> declares a shared parameter.</li><li><code>name ~Type</code> declares a mutable or exclusive parameter.</li><li><code>= default</code> provides a value when the caller omits that slot.</li><li>Parameter names follow the no-shadowing rule.</li><li>Each parameter name must be unique in the signature.</li></ul><p>Reactive parameters use <code>$Type</code> and are documented by <a href="../reactivity">Reactivity</a>.</p><h3>Defaults</h3><p>A default belongs to the declaration.</p><pre style=""><code class='codeblock'>
     describe <span class='bst-code-operator'>|</span>prefix <span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;item&quot;</span>, subject <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-keyword'>return</span> prefix <span class='bst-code-operator'>+</span> <span class='bst-code-string'>&quot;: &quot;</span> <span class='bst-code-operator'>+</span> subject
+        <span class='bst-code-keyword'>return</span> <span class='bst-code-parenthesis'>[</span>prefix, <span class='bst-code-string'>&quot;: &quot;</span>, subject<span class='bst-code-parenthesis'>]</span>
     ;
     </code></pre><p>A caller can omit a defaulted parameter.</p><p>Named arguments can skip an earlier default:</p><pre style=""><code class='codeblock'>
     label <span class='bst-code-operator'>=</span> describe<span class='bst-code-parenthesis'>(</span>subject <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;apple&quot;</span><span class='bst-code-parenthesis'>)</span>
@@ -840,7 +840,7 @@ body {
     <span class='bst-code-struct'>DEFAULT_PREFIX</span> <span class='bst-code-operator'>#</span><span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;item&quot;</span>
 
     describe <span class='bst-code-operator'>|</span>prefix <span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>DEFAULT_PREFIX,</span> subject <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-keyword'>return</span> prefix <span class='bst-code-operator'>+</span> <span class='bst-code-string'>&quot;: &quot;</span> <span class='bst-code-operator'>+</span> subject
+        <span class='bst-code-keyword'>return</span> <span class='bst-code-parenthesis'>[</span>prefix, <span class='bst-code-string'>&quot;: &quot;</span>, subject<span class='bst-code-parenthesis'>]</span>
     ;
     </code></pre><p>Rejected:</p><ul><li>runtime bindings</li><li>runtime function calls</li><li>references to other parameters</li></ul><p>Struct fields share the same <code>= default</code> syntax, but struct defaults have their own compile-time rule. Choice payload fields do not support defaults.</p>
     </div>

@@ -243,7 +243,7 @@ Function parameters and struct fields share default-value syntax:
 
 ```beanstalk
 describe |prefix String = "item", subject String| -> String:
-    return prefix + ":" + subject
+    return [prefix, ":", subject]
 ;
 
 Config = |
@@ -944,7 +944,7 @@ Inside compiler-integrated HTML project builds, a `.bd` body sees a restricted f
 - exported compile-time constants and const records from `@html`, such as `[p: body]`;
 - exported compile-time constants and const records from the same-directory module root, when one exists.
 
-Same-directory module-root constants override `@html` constants on name collision. Functions, structs, choices, type aliases, traits, methods, external/runtime APIs, and the generated self `content` constant are not visible in the `.bd` body.
+Same-directory module-root constants and `@html` constants don't shadow each other. If both surfaces expose the same visible name, compilation fails with a visible-name collision diagnostic. Authors resolve collisions by renaming the module-root export. Functions, structs, choices, type aliases, traits, methods, external/runtime APIs, and the generated self `content` constant are not visible in the `.bd` body.
 
 Module roots can re-export Beandown content explicitly:
 
@@ -1043,12 +1043,9 @@ Supported patterns:
 - choice variants: `Ready`, `Status::Ready`
 - choice payload captures: `Err(message)`, `Pending(retry_count, message)`
 - renamed payload captures: `Err(message as error_text)`
-- general capture: `captured` binds the matched scrutinee value for that arm
 - relational scalar patterns: `< 0`, `<= 10`, `> 0`, `>= 100`
 
-Payload capture names must match declared field names unless renamed with `as`. Payload exhaustiveness is tag-level. Relational patterns support ordered scalar scrutinees: `Int`, `Float`, `Char`, and `String`; string ordering is backend-defined in Alpha. Nested choice payload patterns are deferred.
-
-A general capture doesn't currently satisfy final exhaustiveness on its own. The checker still requires explicit coverage or `else =>`. This is a known compiler mismatch.
+Payload capture names must match declared field names unless renamed with `as`. Payload exhaustiveness is tag-level. Relational patterns support ordered scalar scrutinees: `Int`, `Float`, and `Char`. Nested choice payload patterns are deferred.
 
 ## Loops
 
@@ -1306,7 +1303,7 @@ render type Item is DISPLAY_TEXT |item Item| -> String:
 ;
 
 render_pair type A is DISPLAY_TEXT, B is DISPLAY_TEXT |left A, right B| -> String:
-    return left.display() + right.display()
+    return [left.display(), right.display()]
 ;
 ```
 

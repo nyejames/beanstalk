@@ -135,8 +135,8 @@ page_head #= language_theme_head
 
 #[section:
     [doc_pager:
-        [$insert("previous_path"):../reactivity/]
-        [$insert("previous_title"):Reactivity]
+        [$insert("previous_path"):../memory/]
+        [$insert("previous_title"):Memory and lifetimes]
         [$insert("next_path"):../packages/]
         [$insert("next_title"):Packages and imports]
     ]

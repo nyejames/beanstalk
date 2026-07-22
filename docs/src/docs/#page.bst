@@ -33,6 +33,7 @@ page_head #= theme_head
     16. @./generics (Generics)
     17. @./traits (Traits)
     18. @./reactivity (Reactivity)
+    19. @./memory (Memory and lifetimes)
 
     ## Projects and content
 
@@ -41,6 +42,7 @@ page_head #= theme_head
     - @./packages/core (Core packages)
     - @./beandown (Beandown)
     - @./markdown (Plain Markdown)
+    - @./design-scope (Design scope)
 
     ## Compiler and codebase internals
 

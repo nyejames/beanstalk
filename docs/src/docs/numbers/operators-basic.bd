@@ -25,10 +25,11 @@ Division has two forms:
 `/` produces a real `Float` result. `//` performs integer division and produces
 an `Int`.
 
-Plain string slices can be joined with `+`:
+Use templates to join text:
 
 [codeblock, $code("bst"):
-    greeting = "Hello, " + "Priya"
+    greeting = ["Hello, ", "Priya"]
 ]
 
-Use templates when text needs interpolation or a larger structure.
+Templates handle all string joining and interpolation. `+` is for numbers
+only.

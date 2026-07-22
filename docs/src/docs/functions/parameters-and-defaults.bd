@@ -2,7 +2,7 @@ Every function parameter has a name and an explicit type.
 
 [codeblock, $code("bst"):
     describe |prefix String, subject String| -> String:
-        return prefix + ": " + subject
+        return [prefix, ": ", subject]
     ;
 ]
 
@@ -29,7 +29,7 @@ A default belongs to the declaration.
 
 [codeblock, $code("bst"):
     describe |prefix String = "item", subject String| -> String:
-        return prefix + ": " + subject
+        return [prefix, ": ", subject]
     ;
 ]
 
@@ -54,7 +54,7 @@ Accepted:
     DEFAULT_PREFIX #= "item"
 
     describe |prefix String = DEFAULT_PREFIX, subject String| -> String:
-        return prefix + ": " + subject
+        return [prefix, ": ", subject]
     ;
 ]
 
