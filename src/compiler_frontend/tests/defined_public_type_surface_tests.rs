@@ -9,6 +9,7 @@
 //! `compiler_frontend::defined_public_type_surface`, so they own a focused test beside the
 //! module rather than an end-to-end case.
 
+use crate::compiler_frontend::ast::ResolvedTraitSourceFact;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::statements::functions::{
@@ -18,8 +19,11 @@ use crate::compiler_frontend::ast::{
     ReceiverMethodEntry, ResolvedPublicTypeRoot, ResolvedPublicTypeRootKind,
     ResolvedPublicTypeRootTable,
 };
+use crate::compiler_frontend::builtins::casts::targets::{
+    BuiltinCastFallibility, BuiltinCastTarget,
+};
 use crate::compiler_frontend::canonical_type_identity::{
-    CanonicalBuiltinType, CanonicalTypeIdentity,
+    CanonicalBuiltinType, CanonicalCoreTraitIdentity, CanonicalTraitIdentity, CanonicalTypeIdentity,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
@@ -37,12 +41,14 @@ use crate::compiler_frontend::defined_public_type_surface::{
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::semantic_identity::{
     DefinedPublicExportOrigins, ExportBinding, ModuleRootRole, OriginConstantId,
-    OriginDeclarationId, OriginFunctionId, OriginTypeCategory, OriginTypeId,
+    OriginDeclarationId, OriginFunctionId, OriginTraitId, OriginTypeCategory, OriginTypeId,
     ReceiverSurfaceOrigins, StableModuleOriginIdentity, StablePackageIdentity,
 };
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
+use crate::compiler_frontend::traits::environment::CoreTraitKind;
+use crate::compiler_frontend::traits::ids::TraitId;
 use crate::compiler_frontend::value_mode::ValueMode;
 
 use rustc_hash::FxHashMap;
@@ -341,6 +347,27 @@ fn build_surface(
         root_table,
         export_origins,
         public_nominal_type_origins,
+        &FxHashMap::default(),
+        type_environment,
+        &registry,
+        string_table,
+    )
+}
+
+fn build_surface_with_traits(
+    root_table: &ResolvedPublicTypeRootTable,
+    export_origins: &DefinedPublicExportOrigins,
+    public_nominal_type_origins: &FxHashMap<InternedPath, OriginTypeId>,
+    public_source_trait_origins: &FxHashMap<InternedPath, OriginTraitId>,
+    type_environment: &TypeEnvironment,
+    string_table: &StringTable,
+) -> Result<DefinedPublicTypeSurface, CompilerError> {
+    let registry = ExternalPackageRegistry::new();
+    build_defined_public_type_surface(
+        root_table,
+        export_origins,
+        public_nominal_type_origins,
+        public_source_trait_origins,
         type_environment,
         &registry,
         string_table,
@@ -356,6 +383,33 @@ fn nominal_origins_map(
         map.insert(path(name, string_table), origin);
     }
     map
+}
+
+/// Register a single generic parameter with the given resolved trait bound TraitIds.
+///
+/// The parser-level `GenericParameter.trait_bounds` is left empty; the resolved `TraitId`
+/// bounds are supplied through `resolved_bounds_by_local`, matching how the real AST
+/// environment builder registers generic parameter lists.
+fn register_param_list_with_bounds(
+    env: &mut TypeEnvironment,
+    string_table: &mut StringTable,
+    param_name: &str,
+    bound_trait_ids: Vec<TraitId>,
+) -> GenericParameterListId {
+    use crate::compiler_frontend::datatypes::generic_parameters::{
+        GenericParameter, GenericParameterList, TypeParameterId,
+    };
+    let parameters = vec![GenericParameter {
+        id: TypeParameterId(0),
+        name: string_table.intern(param_name),
+        location: location(),
+        trait_bounds: Vec::new(),
+    }];
+    let list = GenericParameterList { parameters };
+    let mut bounds_by_local: FxHashMap<TypeParameterId, Vec<TraitId>> = FxHashMap::default();
+    bounds_by_local.insert(TypeParameterId(0), bound_trait_ids);
+    env.register_generic_parameter_list(&list, &bounds_by_local)
+        .list_id
 }
 
 // ---------------------------------------------------------------------------
@@ -376,6 +430,7 @@ fn projects_free_function_parameter_and_return_types() {
     let root_table = ResolvedPublicTypeRootTable {
         roots: vec![root],
         receiver_methods: vec![],
+        trait_source_facts: FxHashMap::default(),
     };
 
     let binding = export_binding(
@@ -443,6 +498,7 @@ fn projects_free_function_with_error_return() {
     let root_table = ResolvedPublicTypeRootTable {
         roots: vec![root],
         receiver_methods: vec![],
+        trait_source_facts: FxHashMap::default(),
     };
 
     let binding = export_binding(
@@ -495,6 +551,7 @@ fn projects_struct_fields_to_canonical_field_types() {
     let root_table = ResolvedPublicTypeRootTable {
         roots: vec![root],
         receiver_methods: vec![],
+        trait_source_facts: FxHashMap::default(),
     };
 
     let binding = export_binding("Point", OriginDeclarationId::Type(struct_origin("Point")));
@@ -551,6 +608,7 @@ fn projects_choice_variants_and_payload_fields() {
     let root_table = ResolvedPublicTypeRootTable {
         roots: vec![root],
         receiver_methods: vec![],
+        trait_source_facts: FxHashMap::default(),
     };
 
     let binding = export_binding(
@@ -602,6 +660,7 @@ fn projects_transparent_alias_target_once() {
     let root_table = ResolvedPublicTypeRootTable {
         roots: vec![root],
         receiver_methods: vec![],
+        trait_source_facts: FxHashMap::default(),
     };
 
     let binding = export_binding("Count", OriginDeclarationId::Type(alias_origin("Count")));
@@ -639,6 +698,7 @@ fn projects_constant_type_only() {
     let root_table = ResolvedPublicTypeRootTable {
         roots: vec![root],
         receiver_methods: vec![],
+        trait_source_facts: FxHashMap::default(),
     };
 
     let binding = export_binding(
@@ -685,6 +745,7 @@ fn projects_nested_collection_and_option_types() {
     let root_table = ResolvedPublicTypeRootTable {
         roots: vec![root],
         receiver_methods: vec![],
+        trait_source_facts: FxHashMap::default(),
     };
 
     let binding = export_binding(
@@ -751,6 +812,7 @@ fn projects_open_exported_generic_function_parameter() {
     let root_table = ResolvedPublicTypeRootTable {
         roots: vec![root],
         receiver_methods: vec![],
+        trait_source_facts: FxHashMap::default(),
     };
 
     let binding = export_binding(
@@ -786,12 +848,18 @@ fn projects_open_exported_generic_function_parameter() {
         "open exported generic parameter must project to its stable identity"
     );
     assert_eq!(
-        function.generic_parameters(),
-        &[expected_identity],
+        function
+            .generic_parameters()
+            .iter()
+            .map(|s| s.identity())
+            .collect::<Vec<_>>(),
+        &[&expected_identity],
         "the generic free function must expose its single ordered exported generic parameter identity"
     );
     assert_eq!(
-        function.generic_parameters()[0].declaration_origin(),
+        function.generic_parameters()[0]
+            .identity()
+            .declaration_origin(),
         &expected_origin,
         "the exported generic parameter must name the function's stable origin"
     );
@@ -825,6 +893,7 @@ fn projects_generic_struct_field_with_open_generic_parameter() {
     let root_table = ResolvedPublicTypeRootTable {
         roots: vec![root],
         receiver_methods: vec![],
+        trait_source_facts: FxHashMap::default(),
     };
 
     let binding = export_binding("Box", OriginDeclarationId::Type(struct_origin("Box")));
@@ -853,12 +922,18 @@ fn projects_generic_struct_field_with_open_generic_parameter() {
         "generic struct field must project the open parameter to its nominal-owned identity"
     );
     assert_eq!(
-        nominal.generic_parameters(),
-        &[expected_identity],
+        nominal
+            .generic_parameters()
+            .iter()
+            .map(|s| s.identity())
+            .collect::<Vec<_>>(),
+        &[&expected_identity],
         "the generic struct must expose its single ordered exported generic parameter identity"
     );
     assert_eq!(
-        nominal.generic_parameters()[0].declaration_origin(),
+        nominal.generic_parameters()[0]
+            .identity()
+            .declaration_origin(),
         &expected_origin,
         "the exported generic parameter must name the struct's stable origin"
     );
@@ -881,6 +956,7 @@ fn non_generic_free_function_exposes_empty_generic_parameter_list() {
     let root_table = ResolvedPublicTypeRootTable {
         roots: vec![root],
         receiver_methods: vec![],
+        trait_source_facts: FxHashMap::default(),
     };
 
     let binding = export_binding(
@@ -918,6 +994,7 @@ fn non_generic_struct_exposes_empty_generic_parameter_list() {
     let root_table = ResolvedPublicTypeRootTable {
         roots: vec![root],
         receiver_methods: vec![],
+        trait_source_facts: FxHashMap::default(),
     };
 
     let binding = export_binding(
@@ -964,6 +1041,7 @@ fn generic_free_function_exposes_ordered_generic_parameter_identities() {
     let root_table = ResolvedPublicTypeRootTable {
         roots: vec![root],
         receiver_methods: vec![],
+        trait_source_facts: FxHashMap::default(),
     };
 
     let binding = export_binding(
@@ -1001,8 +1079,12 @@ fn generic_free_function_exposes_ordered_generic_parameter_identities() {
         );
 
     assert_eq!(
-        function.generic_parameters(),
-        &[expected_first, expected_second],
+        function
+            .generic_parameters()
+            .iter()
+            .map(|s| s.identity())
+            .collect::<Vec<_>>(),
+        &[&expected_first, &expected_second],
         "the generic free function must expose its parameters in declaration-local order"
     );
 }
@@ -1041,6 +1123,7 @@ fn generic_choice_exposes_ordered_generic_parameter_identities() {
     let root_table = ResolvedPublicTypeRootTable {
         roots: vec![root],
         receiver_methods: vec![],
+        trait_source_facts: FxHashMap::default(),
     };
 
     let binding = export_binding("Result", OriginDeclarationId::Type(choice_origin("Result")));
@@ -1071,8 +1154,12 @@ fn generic_choice_exposes_ordered_generic_parameter_identities() {
         );
 
     assert_eq!(
-        nominal.generic_parameters(),
-        &[expected_first, expected_second],
+        nominal
+            .generic_parameters()
+            .iter()
+            .map(|s| s.identity())
+            .collect::<Vec<_>>(),
+        &[&expected_first, &expected_second],
         "the generic choice must expose its parameters in declaration-local order"
     );
 }
@@ -1117,6 +1204,7 @@ fn generic_parameter_identities_are_stable_across_donor_local_allocation() {
         let root_table = ResolvedPublicTypeRootTable {
             roots: vec![root],
             receiver_methods: vec![],
+            trait_source_facts: FxHashMap::default(),
         };
 
         let binding = export_binding(
@@ -1144,8 +1232,16 @@ fn generic_parameter_identities_are_stable_across_donor_local_allocation() {
         "the two environments must allocate different donor-local GenericParameterIds for the target parameter so the stability premise is real"
     );
     assert_eq!(
-        surface_a.free_functions()[0].generic_parameters(),
-        surface_b.free_functions()[0].generic_parameters(),
+        surface_a.free_functions()[0]
+            .generic_parameters()
+            .iter()
+            .map(|s| s.identity())
+            .collect::<Vec<_>>(),
+        surface_b.free_functions()[0]
+            .generic_parameters()
+            .iter()
+            .map(|s| s.identity())
+            .collect::<Vec<_>>(),
         "exported generic parameter identities must be stable across donor-local GenericParameterId allocation"
     );
 }
@@ -1203,11 +1299,13 @@ fn wrong_owner_generic_parameter_identity_is_compiler_error() {
         )
         .expect("expected origin must be constructible");
 
-    let result = super::project_exported_generic_parameter_identities(
+    let result = super::project_exported_generic_parameter_surfaces(
         Some(param_list_id),
         &env,
         &resolver,
         &expected_origin,
+        &FxHashMap::default(),
+        &FxHashMap::default(),
     );
 
     assert!(
@@ -1241,11 +1339,13 @@ fn duplicate_resolved_generic_parameter_identity_is_compiler_error() {
         identity: duplicate_identity,
     };
 
-    let result = super::project_exported_generic_parameter_identities(
+    let result = super::project_exported_generic_parameter_surfaces(
         Some(param_list_id),
         &env,
         &resolver,
         &expected_origin,
+        &FxHashMap::default(),
+        &FxHashMap::default(),
     );
 
     assert!(
@@ -1286,6 +1386,7 @@ fn projects_receiver_method_attached_to_public_receiver() {
     let root_table = ResolvedPublicTypeRootTable {
         roots: vec![root],
         receiver_methods: vec![entry],
+        trait_source_facts: FxHashMap::default(),
     };
 
     let binding = export_binding(
@@ -1341,6 +1442,7 @@ fn missing_nominal_origin_is_compiler_error() {
     let root_table = ResolvedPublicTypeRootTable {
         roots: vec![root],
         receiver_methods: vec![],
+        trait_source_facts: FxHashMap::default(),
     };
 
     let binding = export_binding("Point", OriginDeclarationId::Type(struct_origin("Point")));
@@ -1376,6 +1478,7 @@ fn missing_signature_slot_type_id_is_compiler_error() {
     let root_table = ResolvedPublicTypeRootTable {
         roots: vec![root],
         receiver_methods: vec![],
+        trait_source_facts: FxHashMap::default(),
     };
 
     let binding = export_binding(
@@ -1410,6 +1513,7 @@ fn category_mismatch_between_root_and_binding_is_compiler_error() {
     let root_table = ResolvedPublicTypeRootTable {
         roots: vec![root],
         receiver_methods: vec![],
+        trait_source_facts: FxHashMap::default(),
     };
 
     // The root is a struct but the binding origin says it is a constant.
@@ -1447,6 +1551,7 @@ fn unregistered_generic_parameter_in_signature_is_compiler_error() {
     let root_table = ResolvedPublicTypeRootTable {
         roots: vec![root],
         receiver_methods: vec![],
+        trait_source_facts: FxHashMap::default(),
     };
 
     let binding = export_binding(
@@ -1492,6 +1597,7 @@ fn top_level_entries_are_ordered_by_binding_order() {
     let root_table = ResolvedPublicTypeRootTable {
         roots: vec![root2, root1],
         receiver_methods: vec![],
+        trait_source_facts: FxHashMap::default(),
     };
 
     // Bindings in sorted order (alpha first, beta second).
@@ -1551,6 +1657,7 @@ fn output_types_recursively_contain_only_canonical_identities() {
     let root_table = ResolvedPublicTypeRootTable {
         roots: vec![root_fn, root_struct],
         receiver_methods: vec![],
+        trait_source_facts: FxHashMap::default(),
     };
 
     // Bindings sorted by name: "Widget" (type) then "use_widget" (function).
@@ -1650,6 +1757,7 @@ fn projects_imported_public_nominal_reference_to_provider_origin() {
     let root_table = ResolvedPublicTypeRootTable {
         roots: vec![root],
         receiver_methods: vec![],
+        trait_source_facts: FxHashMap::default(),
     };
 
     let binding = export_binding("Widget", OriginDeclarationId::Type(struct_origin("Widget")));
@@ -1701,6 +1809,7 @@ fn imported_nominal_required_but_absent_from_index_is_compiler_error() {
     let root_table = ResolvedPublicTypeRootTable {
         roots: vec![root],
         receiver_methods: vec![],
+        trait_source_facts: FxHashMap::default(),
     };
 
     let binding = export_binding("Widget", OriginDeclarationId::Type(struct_origin("Widget")));
@@ -1737,6 +1846,7 @@ fn non_trait_binding_without_matching_root_is_compiler_error() {
     let root_table = ResolvedPublicTypeRootTable {
         roots: vec![root],
         receiver_methods: vec![],
+        trait_source_facts: FxHashMap::default(),
     };
 
     // A function binding "ghost" with no matching root must be a CompilerError, not a skip.
@@ -1771,6 +1881,7 @@ fn duplicate_root_public_name_is_compiler_error() {
     let root_table = ResolvedPublicTypeRootTable {
         roots: vec![root_a, root_b],
         receiver_methods: vec![],
+        trait_source_facts: FxHashMap::default(),
     };
 
     let binding = export_binding("Foo", OriginDeclarationId::Type(struct_origin("Foo")));
@@ -1809,6 +1920,7 @@ fn unmatched_extra_root_is_compiler_error() {
     let root_table = ResolvedPublicTypeRootTable {
         roots: vec![root_alpha, root_extra],
         receiver_methods: vec![],
+        trait_source_facts: FxHashMap::default(),
     };
 
     let binding = export_binding(
@@ -1889,6 +2001,7 @@ fn receiver_methods_join_by_exact_origin_not_rendered_name() {
     let root_table = ResolvedPublicTypeRootTable {
         roots: vec![],
         receiver_methods: vec![entry_shapes, entry_imports],
+        trait_source_facts: FxHashMap::default(),
     };
     let origins = build_origins(vec![], vec![surface_shapes, surface_imports]);
 
@@ -1953,6 +2066,7 @@ fn duplicate_receiver_method_entry_is_compiler_error() {
     let root_table = ResolvedPublicTypeRootTable {
         roots: vec![],
         receiver_methods: vec![entry_a, entry_b],
+        trait_source_facts: FxHashMap::default(),
     };
     let origins = build_origins(vec![], vec![]);
 
@@ -1988,6 +2102,7 @@ fn missing_receiver_method_entry_is_compiler_error() {
     let root_table = ResolvedPublicTypeRootTable {
         roots: vec![],
         receiver_methods: vec![],
+        trait_source_facts: FxHashMap::default(),
     };
     let origins = build_origins(vec![], vec![receiver_surface]);
 
@@ -2024,6 +2139,7 @@ fn extra_receiver_method_entry_is_compiler_error() {
     let root_table = ResolvedPublicTypeRootTable {
         roots: vec![],
         receiver_methods: vec![entry],
+        trait_source_facts: FxHashMap::default(),
     };
     let origins = build_origins(vec![], vec![]);
 
@@ -2066,6 +2182,7 @@ fn struct_receiver_key_with_choice_origin_is_compiler_error() {
     let root_table = ResolvedPublicTypeRootTable {
         roots: vec![],
         receiver_methods: vec![entry],
+        trait_source_facts: FxHashMap::default(),
     };
     let origins = build_origins(vec![], vec![]);
 
@@ -2110,6 +2227,7 @@ fn choice_receiver_key_with_struct_origin_is_compiler_error() {
     let root_table = ResolvedPublicTypeRootTable {
         roots: vec![],
         receiver_methods: vec![entry],
+        trait_source_facts: FxHashMap::default(),
     };
     let origins = build_origins(vec![], vec![]);
 
@@ -2151,6 +2269,7 @@ fn ambiguous_generic_parameter_owner_is_compiler_error() {
     let root_table = ResolvedPublicTypeRootTable {
         roots: vec![root_alpha, root_beta],
         receiver_methods: vec![],
+        trait_source_facts: FxHashMap::default(),
     };
 
     let bindings = vec![
@@ -2176,5 +2295,558 @@ fn ambiguous_generic_parameter_owner_is_compiler_error() {
         result.is_err(),
         "registering the same GenericParameterId under two distinct declaration origins must \
          be a CompilerError without overwriting the first identity"
+    );
+}
+
+// ---------------------------------------------------------------------------
+//  Generic parameter bound projection
+// ---------------------------------------------------------------------------
+
+fn trait_origin(name: &str) -> OriginTraitId {
+    OriginTraitId::new(module_origin("traits"), name.to_owned())
+}
+
+#[test]
+fn generic_parameter_with_no_bounds_projects_empty_bound_list() {
+    let mut env = TypeEnvironment::new();
+    let mut string_table = StringTable::new();
+    let param_list_id = register_single_param_list(&mut env, &mut string_table, "T");
+    let generic_type_id = env
+        .type_id_for_generic_parameter(
+            env.generic_parameters(param_list_id).unwrap().parameters[0].id,
+        )
+        .unwrap();
+
+    let param = param_declaration("value", generic_type_id, &mut string_table);
+    let signature = free_function_signature(vec![param], vec![generic_type_id]);
+    let root = function_root(
+        "identity",
+        signature,
+        Some(param_list_id),
+        &mut string_table,
+    );
+
+    let root_table = ResolvedPublicTypeRootTable {
+        roots: vec![root],
+        receiver_methods: vec![],
+        trait_source_facts: FxHashMap::default(),
+    };
+
+    let binding = export_binding(
+        "identity",
+        OriginDeclarationId::Function(free_function_origin("identity")),
+    );
+    let origins = build_origins(vec![binding], vec![]);
+
+    let surface = build_surface_with_traits(
+        &root_table,
+        &origins,
+        &FxHashMap::default(),
+        &FxHashMap::default(),
+        &env,
+        &string_table,
+    )
+    .expect("parameter with no bounds should project");
+
+    assert!(
+        surface.free_functions()[0].generic_parameters()[0]
+            .bounds()
+            .is_empty(),
+        "a parameter with no bounds must project an empty bound list"
+    );
+}
+
+#[test]
+fn generic_parameter_with_source_trait_bound_projects_canonical_source_identity() {
+    let mut env = TypeEnvironment::new();
+    let mut string_table = StringTable::new();
+
+    let source_trait_id = TraitId(0);
+    let param_list_id =
+        register_param_list_with_bounds(&mut env, &mut string_table, "T", vec![source_trait_id]);
+
+    let generic_type_id = env
+        .type_id_for_generic_parameter(
+            env.generic_parameters(param_list_id).unwrap().parameters[0].id,
+        )
+        .unwrap();
+
+    let param = param_declaration("value", generic_type_id, &mut string_table);
+    let signature = free_function_signature(vec![param], vec![generic_type_id]);
+    let root = function_root("render", signature, Some(param_list_id), &mut string_table);
+
+    let trait_path = path("RENDERABLE", &mut string_table);
+    let mut trait_source_facts = FxHashMap::default();
+    trait_source_facts.insert(
+        source_trait_id,
+        ResolvedTraitSourceFact::Source(trait_path.clone()),
+    );
+
+    let mut trait_origins = FxHashMap::default();
+    trait_origins.insert(trait_path, trait_origin("RENDERABLE"));
+
+    let root_table = ResolvedPublicTypeRootTable {
+        roots: vec![root],
+        receiver_methods: vec![],
+        trait_source_facts,
+    };
+
+    let binding = export_binding(
+        "render",
+        OriginDeclarationId::Function(free_function_origin("render")),
+    );
+    let origins = build_origins(vec![binding], vec![]);
+
+    let surface = build_surface_with_traits(
+        &root_table,
+        &origins,
+        &FxHashMap::default(),
+        &trait_origins,
+        &env,
+        &string_table,
+    )
+    .expect("source trait bound should project");
+
+    assert_eq!(
+        surface.free_functions()[0].generic_parameters()[0].bounds(),
+        &[CanonicalTraitIdentity::Source(trait_origin("RENDERABLE"))],
+        "a source trait bound must project to its canonical source identity"
+    );
+}
+
+#[test]
+fn generic_parameter_with_displayable_core_bound_projects_canonical_core_identity() {
+    let mut env = TypeEnvironment::new();
+    let mut string_table = StringTable::new();
+
+    let displayable_trait_id = TraitId(0);
+    let param_list_id = register_param_list_with_bounds(
+        &mut env,
+        &mut string_table,
+        "T",
+        vec![displayable_trait_id],
+    );
+
+    let generic_type_id = env
+        .type_id_for_generic_parameter(
+            env.generic_parameters(param_list_id).unwrap().parameters[0].id,
+        )
+        .unwrap();
+
+    let param = param_declaration("value", generic_type_id, &mut string_table);
+    let signature = free_function_signature(vec![param], vec![generic_type_id]);
+    let root = function_root("display", signature, Some(param_list_id), &mut string_table);
+
+    let mut trait_source_facts = FxHashMap::default();
+    trait_source_facts.insert(
+        displayable_trait_id,
+        ResolvedTraitSourceFact::Core(CoreTraitKind::Displayable),
+    );
+
+    let root_table = ResolvedPublicTypeRootTable {
+        roots: vec![root],
+        receiver_methods: vec![],
+        trait_source_facts,
+    };
+
+    let binding = export_binding(
+        "display",
+        OriginDeclarationId::Function(free_function_origin("display")),
+    );
+    let origins = build_origins(vec![binding], vec![]);
+
+    let surface = build_surface_with_traits(
+        &root_table,
+        &origins,
+        &FxHashMap::default(),
+        &FxHashMap::default(),
+        &env,
+        &string_table,
+    )
+    .expect("displayable core bound should project");
+
+    assert_eq!(
+        surface.free_functions()[0].generic_parameters()[0].bounds(),
+        &[CanonicalTraitIdentity::Core(
+            CanonicalCoreTraitIdentity::Displayable
+        )],
+        "a Displayable core bound must project to its canonical core identity"
+    );
+}
+
+#[test]
+fn generic_parameter_with_cast_core_bound_projects_canonical_cast_identity() {
+    let mut env = TypeEnvironment::new();
+    let mut string_table = StringTable::new();
+
+    let cast_trait_id = TraitId(0);
+    let param_list_id =
+        register_param_list_with_bounds(&mut env, &mut string_table, "T", vec![cast_trait_id]);
+
+    let generic_type_id = env
+        .type_id_for_generic_parameter(
+            env.generic_parameters(param_list_id).unwrap().parameters[0].id,
+        )
+        .unwrap();
+
+    let param = param_declaration("value", generic_type_id, &mut string_table);
+    let signature = free_function_signature(vec![param], vec![generic_type_id]);
+    let root = function_root("convert", signature, Some(param_list_id), &mut string_table);
+
+    let mut trait_source_facts = FxHashMap::default();
+    trait_source_facts.insert(
+        cast_trait_id,
+        ResolvedTraitSourceFact::Core(CoreTraitKind::Castable {
+            target: BuiltinCastTarget::Int,
+            fallibility: BuiltinCastFallibility::Fallible,
+        }),
+    );
+
+    let root_table = ResolvedPublicTypeRootTable {
+        roots: vec![root],
+        receiver_methods: vec![],
+        trait_source_facts,
+    };
+
+    let binding = export_binding(
+        "convert",
+        OriginDeclarationId::Function(free_function_origin("convert")),
+    );
+    let origins = build_origins(vec![binding], vec![]);
+
+    let surface = build_surface_with_traits(
+        &root_table,
+        &origins,
+        &FxHashMap::default(),
+        &FxHashMap::default(),
+        &env,
+        &string_table,
+    )
+    .expect("cast core bound should project");
+
+    assert_eq!(
+        surface.free_functions()[0].generic_parameters()[0].bounds(),
+        &[CanonicalTraitIdentity::Core(
+            CanonicalCoreTraitIdentity::Castable {
+                target: BuiltinCastTarget::Int,
+                fallibility: BuiltinCastFallibility::Fallible,
+            }
+        )],
+        "a fallible cast core bound must project to its canonical cast identity with target and fallibility"
+    );
+}
+
+#[test]
+fn multiple_bounds_preserve_declaration_order() {
+    let mut env = TypeEnvironment::new();
+    let mut string_table = StringTable::new();
+
+    let source_trait_id = TraitId(0);
+    let displayable_trait_id = TraitId(1);
+    let cast_trait_id = TraitId(2);
+
+    let param_list_id = register_param_list_with_bounds(
+        &mut env,
+        &mut string_table,
+        "T",
+        vec![source_trait_id, displayable_trait_id, cast_trait_id],
+    );
+
+    let generic_type_id = env
+        .type_id_for_generic_parameter(
+            env.generic_parameters(param_list_id).unwrap().parameters[0].id,
+        )
+        .unwrap();
+
+    let param = param_declaration("value", generic_type_id, &mut string_table);
+    let signature = free_function_signature(vec![param], vec![generic_type_id]);
+    let root = function_root("multi", signature, Some(param_list_id), &mut string_table);
+
+    let source_trait_path = path("RENDERABLE", &mut string_table);
+    let mut trait_source_facts = FxHashMap::default();
+    trait_source_facts.insert(
+        source_trait_id,
+        ResolvedTraitSourceFact::Source(source_trait_path.clone()),
+    );
+    trait_source_facts.insert(
+        displayable_trait_id,
+        ResolvedTraitSourceFact::Core(CoreTraitKind::Displayable),
+    );
+    trait_source_facts.insert(
+        cast_trait_id,
+        ResolvedTraitSourceFact::Core(CoreTraitKind::Castable {
+            target: BuiltinCastTarget::String,
+            fallibility: BuiltinCastFallibility::Infallible,
+        }),
+    );
+
+    let mut trait_origins = FxHashMap::default();
+    trait_origins.insert(source_trait_path, trait_origin("RENDERABLE"));
+
+    let root_table = ResolvedPublicTypeRootTable {
+        roots: vec![root],
+        receiver_methods: vec![],
+        trait_source_facts,
+    };
+
+    let binding = export_binding(
+        "multi",
+        OriginDeclarationId::Function(free_function_origin("multi")),
+    );
+    let origins = build_origins(vec![binding], vec![]);
+
+    let surface = build_surface_with_traits(
+        &root_table,
+        &origins,
+        &FxHashMap::default(),
+        &trait_origins,
+        &env,
+        &string_table,
+    )
+    .expect("multiple bounds should project in order");
+
+    assert_eq!(
+        surface.free_functions()[0].generic_parameters()[0].bounds(),
+        &[
+            CanonicalTraitIdentity::Source(trait_origin("RENDERABLE")),
+            CanonicalTraitIdentity::Core(CanonicalCoreTraitIdentity::Displayable),
+            CanonicalTraitIdentity::Core(CanonicalCoreTraitIdentity::Castable {
+                target: BuiltinCastTarget::String,
+                fallibility: BuiltinCastFallibility::Infallible,
+            }),
+        ],
+        "multiple bounds must be projected in declaration-site order"
+    );
+}
+
+#[test]
+fn missing_trait_source_fact_is_compiler_error() {
+    let mut env = TypeEnvironment::new();
+    let mut string_table = StringTable::new();
+
+    let unknown_trait_id = TraitId(99);
+    let param_list_id =
+        register_param_list_with_bounds(&mut env, &mut string_table, "T", vec![unknown_trait_id]);
+
+    let generic_type_id = env
+        .type_id_for_generic_parameter(
+            env.generic_parameters(param_list_id).unwrap().parameters[0].id,
+        )
+        .unwrap();
+
+    let param = param_declaration("value", generic_type_id, &mut string_table);
+    let signature = free_function_signature(vec![param], vec![generic_type_id]);
+    let root = function_root("missing", signature, Some(param_list_id), &mut string_table);
+
+    let root_table = ResolvedPublicTypeRootTable {
+        roots: vec![root],
+        receiver_methods: vec![],
+        trait_source_facts: FxHashMap::default(),
+    };
+
+    let binding = export_binding(
+        "missing",
+        OriginDeclarationId::Function(free_function_origin("missing")),
+    );
+    let origins = build_origins(vec![binding], vec![]);
+
+    let result = build_surface_with_traits(
+        &root_table,
+        &origins,
+        &FxHashMap::default(),
+        &FxHashMap::default(),
+        &env,
+        &string_table,
+    );
+
+    assert!(
+        result.is_err(),
+        "a bound TraitId with no retained trait source fact must be a CompilerError"
+    );
+}
+
+#[test]
+fn missing_source_trait_origin_is_compiler_error() {
+    let mut env = TypeEnvironment::new();
+    let mut string_table = StringTable::new();
+
+    let source_trait_id = TraitId(0);
+    let param_list_id =
+        register_param_list_with_bounds(&mut env, &mut string_table, "T", vec![source_trait_id]);
+
+    let generic_type_id = env
+        .type_id_for_generic_parameter(
+            env.generic_parameters(param_list_id).unwrap().parameters[0].id,
+        )
+        .unwrap();
+
+    let param = param_declaration("value", generic_type_id, &mut string_table);
+    let signature = free_function_signature(vec![param], vec![generic_type_id]);
+    let root = function_root("private", signature, Some(param_list_id), &mut string_table);
+
+    let trait_path = path("PrivateTrait", &mut string_table);
+    let mut trait_source_facts = FxHashMap::default();
+    trait_source_facts.insert(source_trait_id, ResolvedTraitSourceFact::Source(trait_path));
+
+    // No trait origin index entry for the path -> private/unexported trait
+
+    let root_table = ResolvedPublicTypeRootTable {
+        roots: vec![root],
+        receiver_methods: vec![],
+        trait_source_facts,
+    };
+
+    let binding = export_binding(
+        "private",
+        OriginDeclarationId::Function(free_function_origin("private")),
+    );
+    let origins = build_origins(vec![binding], vec![]);
+
+    let result = build_surface_with_traits(
+        &root_table,
+        &origins,
+        &FxHashMap::default(),
+        &FxHashMap::default(),
+        &env,
+        &string_table,
+    );
+
+    assert!(
+        result.is_err(),
+        "a source trait bound whose path has no retained public source-trait origin must be a CompilerError"
+    );
+}
+
+#[test]
+fn duplicate_canonical_bound_identity_is_compiler_error() {
+    let mut env = TypeEnvironment::new();
+    let mut string_table = StringTable::new();
+
+    let trait_a_id = TraitId(0);
+    let trait_b_id = TraitId(1);
+    let param_list_id = register_param_list_with_bounds(
+        &mut env,
+        &mut string_table,
+        "T",
+        vec![trait_a_id, trait_b_id],
+    );
+
+    let generic_type_id = env
+        .type_id_for_generic_parameter(
+            env.generic_parameters(param_list_id).unwrap().parameters[0].id,
+        )
+        .unwrap();
+
+    let param = param_declaration("value", generic_type_id, &mut string_table);
+    let signature = free_function_signature(vec![param], vec![generic_type_id]);
+    let root = function_root("dup", signature, Some(param_list_id), &mut string_table);
+
+    let trait_path = path("RENDERABLE", &mut string_table);
+    let mut trait_source_facts = FxHashMap::default();
+    trait_source_facts.insert(
+        trait_a_id,
+        ResolvedTraitSourceFact::Source(trait_path.clone()),
+    );
+    trait_source_facts.insert(
+        trait_b_id,
+        ResolvedTraitSourceFact::Source(trait_path.clone()),
+    );
+
+    let mut trait_origins = FxHashMap::default();
+    trait_origins.insert(trait_path, trait_origin("RENDERABLE"));
+
+    let root_table = ResolvedPublicTypeRootTable {
+        roots: vec![root],
+        receiver_methods: vec![],
+        trait_source_facts,
+    };
+
+    let binding = export_binding(
+        "dup",
+        OriginDeclarationId::Function(free_function_origin("dup")),
+    );
+    let origins = build_origins(vec![binding], vec![]);
+
+    let result = build_surface_with_traits(
+        &root_table,
+        &origins,
+        &FxHashMap::default(),
+        &trait_origins,
+        &env,
+        &string_table,
+    );
+
+    assert!(
+        result.is_err(),
+        "two bounds resolving to the same canonical trait identity must be a CompilerError"
+    );
+}
+
+#[test]
+fn source_trait_bound_resolves_to_provider_module_origin_not_active_origin() {
+    let mut env = TypeEnvironment::new();
+    let mut string_table = StringTable::new();
+
+    let source_trait_id = TraitId(0);
+    let param_list_id =
+        register_param_list_with_bounds(&mut env, &mut string_table, "T", vec![source_trait_id]);
+
+    let generic_type_id = env
+        .type_id_for_generic_parameter(
+            env.generic_parameters(param_list_id).unwrap().parameters[0].id,
+        )
+        .unwrap();
+
+    let param = param_declaration("value", generic_type_id, &mut string_table);
+    let signature = free_function_signature(vec![param], vec![generic_type_id]);
+    let root = function_root("render", signature, Some(param_list_id), &mut string_table);
+
+    let trait_path = path("RENDERABLE", &mut string_table);
+    let mut trait_source_facts = FxHashMap::default();
+    trait_source_facts.insert(
+        source_trait_id,
+        ResolvedTraitSourceFact::Source(trait_path.clone()),
+    );
+
+    // The trait is defined by an imported provider module whose origin differs from the
+    // active module that owns the generic function. The projection must resolve the bound
+    // to the trait's provider module origin, never the active function module origin.
+    let provider_origin = module_origin("provider");
+    let active_origin = module_origin("functions");
+    assert_ne!(
+        provider_origin, active_origin,
+        "the provider and active module origins must be distinct for this test to prove provider ownership"
+    );
+    let provider_trait_origin = OriginTraitId::new(provider_origin, "RENDERABLE".to_owned());
+
+    let mut trait_origins = FxHashMap::default();
+    trait_origins.insert(trait_path, provider_trait_origin.clone());
+
+    let root_table = ResolvedPublicTypeRootTable {
+        roots: vec![root],
+        receiver_methods: vec![],
+        trait_source_facts,
+    };
+
+    let binding = export_binding(
+        "render",
+        OriginDeclarationId::Function(free_function_origin("render")),
+    );
+    let origins = build_origins(vec![binding], vec![]);
+
+    let surface = build_surface_with_traits(
+        &root_table,
+        &origins,
+        &FxHashMap::default(),
+        &trait_origins,
+        &env,
+        &string_table,
+    )
+    .expect("a source trait bound from a provider module should project");
+
+    assert_eq!(
+        surface.free_functions()[0].generic_parameters()[0].bounds(),
+        &[CanonicalTraitIdentity::Source(provider_trait_origin)],
+        "a source-bound trait must resolve to its provider module origin, not the active module origin"
     );
 }

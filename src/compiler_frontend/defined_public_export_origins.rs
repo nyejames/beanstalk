@@ -349,6 +349,77 @@ pub(crate) fn build_public_source_nominal_origin_index(
     Ok(origins)
 }
 
+/// Build the transient expanded public source-trait origin index.
+///
+/// WHAT: indexes `OriginTraitId` by canonical declaration path for every trait header whose
+///       canonical declaration path is targeted by any retained module-root or source-package
+///       public export entry. Analogous to [`build_public_source_nominal_origin_index`] but for
+///       trait declarations. Directly-defined public traits, imported project-graph traits and
+///       private normal-file traits exposed through a public alias or re-export are admitted.
+///       Unexported private traits and explicit-`None` unowned source-package traits are absent.
+/// WHY: generic-bound projection resolves each source-bound `TraitId` through its source
+///      canonical path to a stable `OriginTraitId`, so a bound that references an imported or
+///      alias-target project-graph trait resolves to that trait's defining provider module
+///      origin rather than the active module origin. A source-package header whose `FileId`
+///      table entry is `None` (no project-module owner) is deliberately absent from the index:
+///      its trait is not project-graph-owned and must not receive a fabricated origin, and a
+///      projected public bound that requires one fails through the total bound resolver with a
+///      precise `CompilerError`.
+///
+/// Reuses the shared [`PublicExportTarget::is_source_path`] authority via
+/// [`any_retained_public_export_targets_source_path`] so trait origin indexing and nominal
+/// origin indexing cannot drift on what a public export targets. It never uses display/path
+/// identity fallback.
+///
+/// Rejects a missing `FileId`, an out-of-range table lookup, a duplicate canonical trait path
+/// or a conflicting origin explicitly. It never silently overwrites an existing entry.
+/// `DefinedPublicExportOrigins` free binding and receiver behavior is unchanged; this index is
+/// transient only for bound projection.
+pub(crate) fn build_public_source_trait_origin_index(
+    source_module_origins: &SourceModuleOriginTable,
+    sorted_headers: &[Header],
+    module_symbols: &ModuleSymbols,
+    string_table: &StringTable,
+) -> Result<FxHashMap<InternedPath, OriginTraitId>, CompilerError> {
+    let mut origins: FxHashMap<InternedPath, OriginTraitId> = FxHashMap::default();
+
+    for header in sorted_headers {
+        if !is_public_export_targeted_trait_declaration(header, module_symbols) {
+            continue;
+        }
+
+        let Some(name) = header.tokens.src_path.name_str(string_table) else {
+            return Err(CompilerError::compiler_error(format!(
+                "defined public export-origin construction: a public export-targeted trait header has no resolvable defining name (path: {:?})",
+                header.tokens.src_path
+            )));
+        };
+
+        let Some(file_id) = header.tokens.file_id else {
+            return Err(CompilerError::compiler_error(format!(
+                "defined public export-origin construction: a public export-targeted trait header has no retained FileId (path: {:?})",
+                header.tokens.src_path
+            )));
+        };
+
+        let Some(module_origin) = source_module_origins.origin_for(file_id)? else {
+            continue;
+        };
+
+        let origin = OriginTraitId::new(module_origin.clone(), name.to_owned());
+
+        if let Some(existing) = origins.get(&header.tokens.src_path) {
+            return Err(CompilerError::compiler_error(format!(
+                "defined public export-origin construction: a duplicate canonical trait path resolves to conflicting origins (path: {:?}; existing {:?}, new {:?})",
+                header.tokens.src_path, existing, origin
+            )));
+        }
+        origins.insert(header.tokens.src_path.clone(), origin);
+    }
+
+    Ok(origins)
+}
+
 /// Whether a header is a nominal-type declaration whose canonical source path is targeted by a
 /// retained public export entry.
 ///
@@ -369,6 +440,21 @@ fn is_public_export_targeted_nominal_declaration(
         &header.kind,
         HeaderKind::Struct { .. } | HeaderKind::Choice { .. }
     ) && any_retained_public_export_targets_source_path(module_symbols, &header.tokens.src_path)
+}
+
+/// Whether a header is a trait declaration whose canonical source path is targeted by a
+/// retained public export entry.
+///
+/// WHAT: admits a `Trait` declaration when at least one retained module-root or source-package
+///       public export entry targets its canonical source path. This mirrors the nominal
+///       origin index using the shared [`PublicExportTarget::is_source_path`] predicate, so
+///       trait origin indexing and nameability cannot drift on what a public export targets.
+fn is_public_export_targeted_trait_declaration(
+    header: &Header,
+    module_symbols: &ModuleSymbols,
+) -> bool {
+    matches!(&header.kind, HeaderKind::Trait { .. })
+        && any_retained_public_export_targets_source_path(module_symbols, &header.tokens.src_path)
 }
 
 /// Whether any retained module-root or source-package public export entry targets the given

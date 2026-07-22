@@ -2,7 +2,9 @@
 //!
 //! WHAT: builds one deterministic vector of directly-defined active-root public type-root
 //! records plus the receiver methods attached to directly-defined public nominal receivers,
-//! from the same already-resolved facts consumed by public-surface validation.
+//! records plus the receiver methods attached to directly-defined public nominal receivers
+//! and the transient trait source facts for exported generic bounds, from the same
+//! already-resolved facts consumed by public-surface validation.
 //! WHY: canonical type projection needs resolved roots available immediately before HIR
 //! lowering without reconstructing public semantics from HIR or source. This is transient
 //! donor-local AST data consumed before HIR; it never enters `CompiledModuleResult`,
@@ -17,10 +19,14 @@ use crate::compiler_frontend::ast::type_resolution::ResolvedFunctionSignature;
 use crate::compiler_frontend::ast::type_resolution::ResolvedTypeAnnotation;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::ReceiverKey;
+use crate::compiler_frontend::datatypes::definitions::TypeDefinition;
+use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::ids::{GenericParameterListId, TypeId};
 use crate::compiler_frontend::headers::parse_file_headers::{FileRole, Header, HeaderKind};
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::traits::environment::{CoreTraitKind, TraitEnvironment};
+use crate::compiler_frontend::traits::ids::TraitId;
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
@@ -69,20 +75,39 @@ pub(crate) struct ResolvedPublicTypeRoot {
     pub(crate) kind: ResolvedPublicTypeRootKind,
 }
 
+/// Resolved source fact for one local trait, retained transiently for bound projection.
+///
+/// WHAT: carries either the trait's source canonical declaration path or its compiler-owned
+/// core classifier. It never carries the `TraitEnvironment`, requirement bodies, evidence
+/// or a `TraitId` registry handle.
+/// WHY: generic-bound projection needs to resolve each local bound `TraitId` to a stable
+/// canonical trait identity. Retaining only these two facts keeps the transient handoff
+/// minimal and consumed with the rest of `ResolvedPublicTypeRootTable` before HIR.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum ResolvedTraitSourceFact {
+    Source(InternedPath),
+    Core(CoreTraitKind),
+}
+
 /// Transient AST-owned table of resolved public type roots for the module handoff.
 ///
 /// WHAT: `roots` holds the named declaration roots in deterministic sorted-header order;
 /// `receiver_methods` holds the receiver methods attached to directly-defined public
 /// nominal receivers, selected in a separate pass so private method headers outside
 /// `export:` are admitted by receiver ownership rather than their own export binding.
+/// `trait_source_facts` retains only the resolved trait identity source facts needed by
+/// generic bounds on the exported free-function and struct/choice roots, so bound
+/// projection can resolve each local bound `TraitId` without the `TraitEnvironment`.
 /// WHY: the semantic orchestration consumes this immediately before HIR lowering in the
-/// next slice. Donor-local `TypeId`s must not cross the module result boundary.
+/// next slice. Donor-local `TypeId`s and `TraitId`s must not cross the module result
+/// boundary.
 /// Consumed by the defined public type-surface projection immediately before HIR lowering;
 /// retained as transient donor-local AST data that never crosses the module result boundary.
 #[derive(Clone, Default)]
 pub(crate) struct ResolvedPublicTypeRootTable {
     pub(crate) roots: Vec<ResolvedPublicTypeRoot>,
     pub(crate) receiver_methods: Vec<ReceiverMethodEntry>,
+    pub(crate) trait_source_facts: FxHashMap<TraitId, ResolvedTraitSourceFact>,
 }
 
 /// Inputs required to build the resolved public type-root table.
@@ -100,6 +125,8 @@ pub(crate) struct BuildResolvedPublicTypeRootsInput<'a> {
     pub declaration_table: &'a TopLevelDeclarationTable,
     pub generic_function_templates_by_path: &'a FxHashMap<InternedPath, GenericFunctionTemplate>,
     pub receiver_methods: &'a ReceiverMethodCatalog,
+    pub trait_environment: &'a TraitEnvironment,
+    pub type_environment: &'a TypeEnvironment,
     pub string_table: &'a StringTable,
 }
 
@@ -130,6 +157,8 @@ pub(crate) fn build_resolved_public_type_roots(
         declaration_table,
         generic_function_templates_by_path,
         receiver_methods,
+        trait_environment,
+        type_environment,
         string_table,
     } = input;
 
@@ -269,9 +298,179 @@ pub(crate) fn build_resolved_public_type_roots(
         receiver_method_entries.push(entry.clone());
     }
 
+    // Retain only the resolved trait identity source facts needed by generic bounds on the
+    // exported free-function and struct/choice roots. The `TraitEnvironment` is dropped after
+    // this table is built; the projection consumes these facts to resolve each local bound
+    // `TraitId` to a stable canonical trait identity without the `TraitEnvironment`.
+    let trait_source_facts = build_trait_source_facts(&roots, type_environment, trait_environment)?;
+
     Ok(ResolvedPublicTypeRootTable {
         roots,
         receiver_methods: receiver_method_entries,
+        trait_source_facts,
+    })
+}
+
+/// Build the transient resolved trait identity source facts for generic bounds on exported
+/// free-function and struct/choice roots.
+///
+/// WHAT: iterates the roots to collect every local bound `TraitId`, then resolves each
+/// through the `TraitEnvironment`: a core trait maps to `Core(CoreTraitKind)` and a source
+/// trait maps to `Source(canonical_path)`. A `TraitId` that is neither core nor source is
+/// a `CompilerError`, never a silent omission.
+/// WHY: the transient facts let bound projection resolve each local `TraitId` after the
+/// `TraitEnvironment` is dropped. Only the facts needed by exported generic bounds are
+/// retained, keeping the handoff minimal.
+fn build_trait_source_facts(
+    roots: &[ResolvedPublicTypeRoot],
+    type_environment: &TypeEnvironment,
+    trait_environment: &TraitEnvironment,
+) -> Result<FxHashMap<TraitId, ResolvedTraitSourceFact>, CompilerError> {
+    let bound_trait_ids = collect_bound_trait_ids_from_roots(roots, type_environment)?;
+
+    let mut facts = FxHashMap::default();
+    for trait_id in bound_trait_ids {
+        if let Some(kind) = trait_environment.core_trait_kind(trait_id) {
+            if facts
+                .insert(trait_id, ResolvedTraitSourceFact::Core(kind))
+                .is_some()
+            {
+                return Err(CompilerError::compiler_error(format!(
+                    "resolved public type-root construction: TraitId({}) has a duplicate conflicting core trait mapping",
+                    trait_id.0
+                )));
+            }
+            continue;
+        }
+
+        let Some(definition) = trait_environment.get(trait_id) else {
+            return Err(CompilerError::compiler_error(format!(
+                "resolved public type-root construction: bound TraitId({}) has no resolved trait definition and is not a core trait; a missing definition is an internal invariant violation",
+                trait_id.0
+            )));
+        };
+
+        if facts
+            .insert(
+                trait_id,
+                ResolvedTraitSourceFact::Source(definition.canonical_path.clone()),
+            )
+            .is_some()
+        {
+            return Err(CompilerError::compiler_error(format!(
+                "resolved public type-root construction: TraitId({}) has a duplicate conflicting source trait mapping (path: {:?})",
+                trait_id.0, definition.canonical_path
+            )));
+        }
+    }
+
+    Ok(facts)
+}
+
+/// Collect every local bound `TraitId` from the exported generic parameter lists of the
+/// resolved roots.
+///
+/// WHAT: gathers `TraitId`s from the `TypeEnvironment`'s `trait_bounds` for each root's
+/// canonical generic parameter list. Function roots carry their list ID directly;
+/// struct/choice roots resolve their list ID through the `TypeEnvironment` definition.
+/// WHY: only the bounds on exported free-function and struct/choice roots need stable
+/// trait identity projection, so the transient facts are scoped to exactly those bounds.
+fn collect_bound_trait_ids_from_roots(
+    roots: &[ResolvedPublicTypeRoot],
+    type_environment: &TypeEnvironment,
+) -> Result<FxHashSet<TraitId>, CompilerError> {
+    let mut bound_trait_ids = FxHashSet::default();
+
+    for root in roots {
+        match &root.kind {
+            ResolvedPublicTypeRootKind::Function {
+                generic_parameter_list_id: Some(list_id),
+                ..
+            } => {
+                collect_bound_trait_ids_from_list(
+                    type_environment,
+                    *list_id,
+                    &mut bound_trait_ids,
+                )?;
+            }
+            ResolvedPublicTypeRootKind::Struct { type_id } => {
+                if let Some(list_id) =
+                    nominal_generic_parameter_list_id(type_environment, *type_id)?
+                {
+                    collect_bound_trait_ids_from_list(
+                        type_environment,
+                        list_id,
+                        &mut bound_trait_ids,
+                    )?;
+                }
+            }
+            ResolvedPublicTypeRootKind::Choice { type_id } => {
+                if let Some(list_id) =
+                    nominal_generic_parameter_list_id(type_environment, *type_id)?
+                {
+                    collect_bound_trait_ids_from_list(
+                        type_environment,
+                        list_id,
+                        &mut bound_trait_ids,
+                    )?;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    Ok(bound_trait_ids)
+}
+
+/// Collect bound `TraitId`s from one generic parameter list.
+fn collect_bound_trait_ids_from_list(
+    type_environment: &TypeEnvironment,
+    list_id: GenericParameterListId,
+    bound_trait_ids: &mut FxHashSet<TraitId>,
+) -> Result<(), CompilerError> {
+    let Some(list) = type_environment.generic_parameters(list_id) else {
+        return Err(CompilerError::compiler_error(format!(
+            "resolved public type-root construction: GenericParameterListId({}) is missing from the TypeEnvironment while collecting bound trait IDs",
+            list_id.0
+        )));
+    };
+
+    for parameter in &list.parameters {
+        for trait_id in &parameter.trait_bounds {
+            bound_trait_ids.insert(*trait_id);
+        }
+    }
+
+    Ok(())
+}
+
+/// Resolve the generic parameter list ID for a struct or choice root's nominal type.
+///
+/// Returns `Ok(None)` when the struct or choice definition has no generic parameter list
+/// (a non-generic nominal). A `TypeId` that is not registered in the `TypeEnvironment`, or
+/// that resolves to a definition that is neither a struct nor a choice, is a `CompilerError`:
+/// the root was admitted as a nominal declaration, so a missing or wrong-category definition
+/// is an internal invariant violation, not a silent skip.
+fn nominal_generic_parameter_list_id(
+    type_environment: &TypeEnvironment,
+    type_id: TypeId,
+) -> Result<Option<GenericParameterListId>, CompilerError> {
+    let Some(definition) = type_environment.get(type_id) else {
+        return Err(CompilerError::compiler_error(format!(
+            "resolved public type-root construction: a nominal root TypeId({}) is not registered in the TypeEnvironment while collecting bound trait IDs",
+            type_id.0
+        )));
+    };
+
+    Ok(match definition {
+        TypeDefinition::Struct(def) => def.generic_parameters,
+        TypeDefinition::Choice(def) => def.generic_parameters,
+        _ => {
+            return Err(CompilerError::compiler_error(format!(
+                "resolved public type-root construction: a nominal root TypeId({}) resolved to a non-nominal definition while collecting bound trait IDs",
+                type_id.0
+            )));
+        }
     })
 }
 

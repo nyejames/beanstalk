@@ -32,4 +32,5 @@ pub(in crate::compiler_frontend::ast) use resolved_public_type_roots::{
 };
 pub(crate) use resolved_public_type_roots::{
     ResolvedPublicTypeRoot, ResolvedPublicTypeRootKind, ResolvedPublicTypeRootTable,
+    ResolvedTraitSourceFact,
 };

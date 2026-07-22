@@ -14,6 +14,7 @@ use crate::compiler_frontend::ast::{ReceiverMethodCatalog, ReceiverMethodEntry};
 use crate::compiler_frontend::datatypes::ReceiverKey;
 use crate::compiler_frontend::defined_public_export_origins::{
     build_defined_public_export_origin_draft, build_public_source_nominal_origin_index,
+    build_public_source_trait_origin_index,
 };
 use crate::compiler_frontend::headers::module_symbols::{
     ModuleSymbols, PublicExportEntry, PublicExportTarget,
@@ -25,8 +26,8 @@ use crate::compiler_frontend::headers::parse_file_headers::{
 };
 use crate::compiler_frontend::semantic_identity::{
     DefinedPublicExportOrigins, ExportBinding, FunctionOriginKind, ModuleRootRole,
-    OriginDeclarationId, OriginTypeCategory, OriginTypeId, StableModuleOriginIdentity,
-    StablePackageIdentity,
+    OriginDeclarationId, OriginTraitId, OriginTypeCategory, OriginTypeId,
+    StableModuleOriginIdentity, StablePackageIdentity,
 };
 use crate::compiler_frontend::source_module_origin::SourceModuleOriginTable;
 use crate::compiler_frontend::symbols::identity::{FileId, SourceFileTable};
@@ -774,6 +775,18 @@ fn struct_header_path(headers: &[Header], name: &str, string_table: &StringTable
     panic!("no public struct header named `{name}` in test headers")
 }
 
+/// Find the canonical declaration path of a trait header by defining name.
+fn trait_header_path(headers: &[Header], name: &str, string_table: &StringTable) -> InternedPath {
+    for header in headers {
+        if matches!(header.kind, HeaderKind::Trait { .. })
+            && header.tokens.src_path.name_str(string_table) == Some(name)
+        {
+            return header.tokens.src_path.clone();
+        }
+    }
+    panic!("no trait header named `{name}` in test headers")
+}
+
 /// Build a `ModuleSymbols` whose retained module-root public exports target the given source
 /// paths, modelling the header-built public export maps without standing up a full project path
 /// resolver.
@@ -1272,5 +1285,401 @@ fn public_source_nominal_origin_index_excludes_private_normal_file_nominal_witho
     assert!(
         !index.contains_key(&counter_path),
         "a private normal-file nominal with no public export target must be absent from the index"
+    );
+}
+
+// ---------------------------------------------------------------------------
+//  Transient expanded public source-trait origin index (graph-derived origins)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn public_source_trait_origin_index_includes_directly_defined_trait() {
+    let mut string_table = StringTable::new();
+    let file_path = PathBuf::from("src/#page.bst");
+    let output = prepare_single_file(
+        "export:\n    RENDERABLE must:\n        show |This| -> String\n    ;\n;\n",
+        &file_path,
+        &file_path,
+        &mut string_table,
+    );
+    let mut headers: Vec<Header> = output.headers;
+    let source_files = SourceFileTable::build(
+        std::iter::once(file_path.clone()),
+        &file_path,
+        None,
+        &mut string_table,
+    )
+    .expect("source file table should build");
+    let file_id = source_files
+        .get_by_canonical_path(&file_path)
+        .expect("active root file should be present")
+        .file_id;
+    for header in &mut headers {
+        header.tokens.file_id = Some(file_id);
+    }
+
+    let active_origin = StableModuleOriginIdentity::from_portable_path(
+        StablePackageIdentity::project_local("test-project"),
+        String::new(),
+        ModuleRootRole::Normal,
+    );
+    let mut origin_by_canonical_path = rustc_hash::FxHashMap::default();
+    origin_by_canonical_path.insert(file_path.clone(), active_origin.clone());
+    let source_module_origins =
+        SourceModuleOriginTable::from_graph_ownership(&source_files, &origin_by_canonical_path);
+
+    let trait_path = trait_header_path(&headers, "RENDERABLE", &string_table);
+    let module_symbols = module_symbols_with_module_root_export_targets(
+        std::slice::from_ref(&trait_path),
+        &mut string_table,
+    );
+
+    let index = build_public_source_trait_origin_index(
+        &source_module_origins,
+        &headers,
+        &module_symbols,
+        &string_table,
+    )
+    .expect("the trait origin index should build for a directly-defined public trait");
+
+    assert_eq!(
+        index.get(&trait_path),
+        Some(&OriginTraitId::new(active_origin, "RENDERABLE".to_owned())),
+        "a directly-defined public trait must resolve to the active module origin"
+    );
+}
+
+#[test]
+fn public_source_trait_origin_index_includes_imported_provider_trait() {
+    let mut string_table = StringTable::new();
+    let active_path = PathBuf::from("src/#page.bst");
+    let imported_path = PathBuf::from("src/#mod.bst");
+
+    let active_output = prepare_single_file(
+        "export:\n    RENDERABLE must:\n        show |This| -> String\n    ;\n;\n",
+        &active_path,
+        &active_path,
+        &mut string_table,
+    );
+    let imported_output = prepare_single_file(
+        "export:\n    IMPORTED_TRAIT must:\n        show |This| -> String\n    ;\n;\n",
+        &imported_path,
+        &active_path,
+        &mut string_table,
+    );
+
+    let source_files = SourceFileTable::build(
+        [active_path.clone(), imported_path.clone()],
+        &active_path,
+        None,
+        &mut string_table,
+    )
+    .expect("source file table should build");
+    let active_file_id = source_files
+        .get_by_canonical_path(&active_path)
+        .expect("active root file should be present")
+        .file_id;
+    let imported_file_id = source_files
+        .get_by_canonical_path(&imported_path)
+        .expect("imported root file should be present")
+        .file_id;
+
+    let active_origin = StableModuleOriginIdentity::from_portable_path(
+        StablePackageIdentity::project_local("test-project"),
+        String::new(),
+        ModuleRootRole::Normal,
+    );
+    let provider_origin = StableModuleOriginIdentity::from_portable_path(
+        StablePackageIdentity::project_local("test-project"),
+        "imported".to_owned(),
+        ModuleRootRole::Normal,
+    );
+    let mut origin_by_canonical_path = rustc_hash::FxHashMap::default();
+    origin_by_canonical_path.insert(active_path.clone(), active_origin.clone());
+    origin_by_canonical_path.insert(imported_path.clone(), provider_origin.clone());
+    let source_module_origins =
+        SourceModuleOriginTable::from_graph_ownership(&source_files, &origin_by_canonical_path);
+
+    let mut headers: Vec<Header> = Vec::new();
+    for mut header in active_output.headers {
+        header.tokens.file_id = Some(active_file_id);
+        headers.push(header);
+    }
+    for mut header in imported_output.headers {
+        header.tokens.file_id = Some(imported_file_id);
+        headers.push(header);
+    }
+
+    let local_trait_path = trait_header_path(&headers, "RENDERABLE", &string_table);
+    let imported_trait_path = trait_header_path(&headers, "IMPORTED_TRAIT", &string_table);
+    let module_symbols = module_symbols_with_module_root_export_targets(
+        &[local_trait_path.clone(), imported_trait_path.clone()],
+        &mut string_table,
+    );
+
+    let index = build_public_source_trait_origin_index(
+        &source_module_origins,
+        &headers,
+        &module_symbols,
+        &string_table,
+    )
+    .expect("the trait origin index should build for active plus imported roots");
+
+    assert_eq!(
+        index.get(&local_trait_path),
+        Some(&OriginTraitId::new(active_origin, "RENDERABLE".to_owned())),
+        "an active-root public trait must resolve to the active module origin"
+    );
+    assert_eq!(
+        index.get(&imported_trait_path),
+        Some(&OriginTraitId::new(
+            provider_origin,
+            "IMPORTED_TRAIT".to_owned()
+        )),
+        "an imported public trait must resolve to its provider module origin"
+    );
+}
+
+/// A privately-authored trait in a normal file is included when a module-root public export
+/// (an alias or re-export) targets its canonical source path, resolving to the normal file's
+/// graph-derived module origin.
+#[test]
+fn public_source_trait_origin_index_includes_alias_targeted_normal_file_trait() {
+    let mut string_table = StringTable::new();
+    let active_path = PathBuf::from("src/#page.bst");
+    let impl_path = PathBuf::from("src/impl.bst");
+
+    // The active module root carries an unrelated public constant; `RENDERABLE` is authored as
+    // a private trait in the normal file `impl.bst` (no `export:` of its own). A module-root
+    // public re-export entry targets `RENDERABLE`'s canonical source path, so the retained
+    // module-root public export admits the trait into the origin index.
+    let active_output = prepare_single_file(
+        "export:\n    placeholder #= 1\n;\n",
+        &active_path,
+        &active_path,
+        &mut string_table,
+    );
+    let impl_output = prepare_single_file(
+        "RENDERABLE must:\n    show |This| -> String\n;\n",
+        &impl_path,
+        &active_path,
+        &mut string_table,
+    );
+    assert_eq!(active_output.file_role, FileRole::ActiveModuleRoot);
+    assert_eq!(impl_output.file_role, FileRole::Normal);
+
+    let source_files = SourceFileTable::build(
+        [active_path.clone(), impl_path.clone()],
+        &active_path,
+        None,
+        &mut string_table,
+    )
+    .expect("source file table should build for the active root plus normal file");
+    let active_file_id = source_files
+        .get_by_canonical_path(&active_path)
+        .expect("the active root file should be in the source file table")
+        .file_id;
+    let impl_file_id = source_files
+        .get_by_canonical_path(&impl_path)
+        .expect("the normal file should be in the source file table")
+        .file_id;
+
+    let mut headers: Vec<Header> = Vec::new();
+    for mut header in active_output.headers {
+        header.tokens.file_id = Some(active_file_id);
+        headers.push(header);
+    }
+    for mut header in impl_output.headers {
+        header.tokens.file_id = Some(impl_file_id);
+        headers.push(header);
+    }
+
+    // The normal file inherits its nearest owning module origin from the project graph, the same
+    // module origin as the active root, so the alias-targeted trait resolves to that origin.
+    let module_origin = StableModuleOriginIdentity::from_portable_path(
+        StablePackageIdentity::project_local("test-project"),
+        "active".to_owned(),
+        ModuleRootRole::Normal,
+    );
+    let mut origin_by_canonical_path = rustc_hash::FxHashMap::default();
+    origin_by_canonical_path.insert(active_path.clone(), module_origin.clone());
+    origin_by_canonical_path.insert(impl_path.clone(), module_origin.clone());
+    let source_module_origins =
+        SourceModuleOriginTable::from_graph_ownership(&source_files, &origin_by_canonical_path);
+
+    let trait_path = trait_header_path(&headers, "RENDERABLE", &string_table);
+    let module_symbols = module_symbols_with_module_root_export_targets(
+        std::slice::from_ref(&trait_path),
+        &mut string_table,
+    );
+
+    let index = build_public_source_trait_origin_index(
+        &source_module_origins,
+        &headers,
+        &module_symbols,
+        &string_table,
+    )
+    .expect(
+        "the trait origin index should build; the alias-targeted normal-file trait is included",
+    );
+
+    assert_eq!(
+        index.get(&trait_path),
+        Some(&OriginTraitId::new(module_origin, "RENDERABLE".to_owned())),
+        "a privately-authored trait exposed through a module-root public re-export must resolve to its normal file's graph-derived module origin"
+    );
+}
+
+#[test]
+fn public_source_trait_origin_index_excludes_unexported_private_trait() {
+    let mut string_table = StringTable::new();
+    let file_path = PathBuf::from("src/#page.bst");
+    let output = prepare_single_file(
+        "RENDERABLE must:\n    show |This| -> String\n;\n",
+        &file_path,
+        &file_path,
+        &mut string_table,
+    );
+    let mut headers: Vec<Header> = output.headers;
+    let source_files = SourceFileTable::build(
+        std::iter::once(file_path.clone()),
+        &file_path,
+        None,
+        &mut string_table,
+    )
+    .expect("source file table should build");
+    let file_id = source_files
+        .get_by_canonical_path(&file_path)
+        .expect("active root file should be present")
+        .file_id;
+    for header in &mut headers {
+        header.tokens.file_id = Some(file_id);
+    }
+
+    let active_origin = StableModuleOriginIdentity::from_portable_path(
+        StablePackageIdentity::project_local("test-project"),
+        String::new(),
+        ModuleRootRole::Normal,
+    );
+    let mut origin_by_canonical_path = rustc_hash::FxHashMap::default();
+    origin_by_canonical_path.insert(file_path.clone(), active_origin);
+    let source_module_origins =
+        SourceModuleOriginTable::from_graph_ownership(&source_files, &origin_by_canonical_path);
+
+    let trait_path = trait_header_path(&headers, "RENDERABLE", &string_table);
+    // No public export targets the trait path, so it is unexported.
+    let module_symbols = ModuleSymbols::empty();
+
+    let index = build_public_source_trait_origin_index(
+        &source_module_origins,
+        &headers,
+        &module_symbols,
+        &string_table,
+    )
+    .expect("the trait origin index should build for an unexported trait");
+
+    assert!(
+        !index.contains_key(&trait_path),
+        "a private unexported trait must be absent from the trait origin index"
+    );
+}
+
+#[test]
+fn public_source_trait_origin_index_skips_unowned_source_package_trait() {
+    let mut string_table = StringTable::new();
+    let package_path = PathBuf::from("src/#pkg.bst");
+
+    let output = prepare_single_file(
+        "export:\n    PKG_TRAIT must:\n        show |This| -> String\n    ;\n;\n",
+        &package_path,
+        &package_path,
+        &mut string_table,
+    );
+
+    let source_files = SourceFileTable::build(
+        std::iter::once(package_path.clone()),
+        &package_path,
+        None,
+        &mut string_table,
+    )
+    .expect("source file table should build");
+    let file_id = source_files
+        .get_by_canonical_path(&package_path)
+        .expect("package file should be present")
+        .file_id;
+
+    let mut headers: Vec<Header> = Vec::new();
+    for mut header in output.headers {
+        header.tokens.file_id = Some(file_id);
+        headers.push(header);
+    }
+
+    // The package file has an explicit None owning origin (no project-module owner).
+    let source_module_origins = SourceModuleOriginTable::from_graph_ownership(
+        &source_files,
+        &rustc_hash::FxHashMap::default(),
+    );
+
+    let trait_path = trait_header_path(&headers, "PKG_TRAIT", &string_table);
+    let mut module_symbols = ModuleSymbols::empty();
+    add_source_package_export_target(&mut module_symbols, "pkg", &trait_path);
+
+    let index = build_public_source_trait_origin_index(
+        &source_module_origins,
+        &headers,
+        &module_symbols,
+        &string_table,
+    )
+    .expect("the trait origin index should build for an unowned source-package trait");
+
+    assert!(
+        !index.contains_key(&trait_path),
+        "an unowned source-package trait must be absent from the trait origin index"
+    );
+}
+
+#[test]
+fn public_source_trait_origin_index_rejects_missing_file_id() {
+    let mut string_table = StringTable::new();
+    let file_path = PathBuf::from("src/#page.bst");
+    let output = prepare_single_file(
+        "export:\n    RENDERABLE must:\n        show |This| -> String\n    ;\n;\n",
+        &file_path,
+        &file_path,
+        &mut string_table,
+    );
+    let headers: Vec<Header> = output.headers;
+    let source_files = SourceFileTable::build(
+        std::iter::once(file_path.clone()),
+        &file_path,
+        None,
+        &mut string_table,
+    )
+    .expect("source file table should build");
+
+    // Deliberately keep file_id = None on all headers.
+    let active_origin = StableModuleOriginIdentity::from_portable_path(
+        StablePackageIdentity::project_local("test-project"),
+        String::new(),
+        ModuleRootRole::Normal,
+    );
+    let mut origin_by_canonical_path = rustc_hash::FxHashMap::default();
+    origin_by_canonical_path.insert(file_path, active_origin);
+    let source_module_origins =
+        SourceModuleOriginTable::from_graph_ownership(&source_files, &origin_by_canonical_path);
+
+    let trait_path = trait_header_path(&headers, "RENDERABLE", &string_table);
+    let module_symbols =
+        module_symbols_with_module_root_export_targets(&[trait_path], &mut string_table);
+
+    let result = build_public_source_trait_origin_index(
+        &source_module_origins,
+        &headers,
+        &module_symbols,
+        &string_table,
+    );
+    assert!(
+        result.is_err(),
+        "a public export-targeted trait header with no retained FileId must be a CompilerError"
     );
 }

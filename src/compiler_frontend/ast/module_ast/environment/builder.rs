@@ -326,6 +326,8 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 declaration_table: self.declaration_table.as_ref(),
                 generic_function_templates_by_path: &self.generic_function_templates_by_path,
                 receiver_methods: receiver_methods.as_ref(),
+                trait_environment: &trait_environment,
+                type_environment: &self.type_environment,
                 string_table,
             })
             .map_err(|error| self.error_messages(error, string_table))?;

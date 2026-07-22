@@ -9,19 +9,20 @@ Replace entry-closure compilation with canonical project and package graphs, imm
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/canonical-module-compilation-and-scoped-packages-plan.md
 STATUS: active
-CURRENT_SLICE: Phase 7c2c complete; accepted checkpoint ready to commit
-LAST_ACCEPTED_COMMIT: fdbb1fc46 (Phase 7c2b2 canonical public type surfaces)
-WORKTREE: main at fdbb1fc46; clean accepted compiler checkpoint; unrelated docs-only commit a76770e1b preserved in history
+CURRENT_SLICE: Phase 7c2d complete; accepted checkpoint ready to commit
+LAST_ACCEPTED_COMMIT: 815394d0b (Phase 7c2c stable exported generic parameter lists)
+WORKTREE: main at 960c437e1 after concurrent docs commits; accepted Phase 7c2d compiler diff plus unrelated concurrent documentation changes preserved for separate commits
 REQUIRED_RELOADS: startup files, this plan, semantic identity and direct-export origins, TypeEnvironment and AST lookup owners, retained header binding, graph scheduling and current module-result owners
 RELEVANT_CONTEXT_NOW:
-- docs: compiler-design-overview.md requires exported generic templates to use stable declaration and parameter identities; trait bounds need stable trait/evidence identities and remain later
-- code: ResolvedPublicTypeRootTable retains free-function generic list IDs, nominal definitions retain their list IDs and TransientGenericParameterOriginResolver already maps each local parameter to ExportedGenericParameterIdentity
+- docs: compiler-design-overview.md requires exported generic bounds to use stable trait identities; compiler-owned core traits are not source declaration origins and imported source traits must keep provider module origin
+- code: TypeEnvironment stores ordered TraitId bounds per canonical generic parameter; TraitEnvironment resolves each TraitId to a source canonical path or CoreTraitKind but is currently dropped after AST environment construction
 ACCEPTANCE_CRITERIA:
-- met: the existing DefinedPublicTypeSurface owner exposes ordered stable generic parameter lists without a parallel identity path or premature aggregate interface
-- met: free-function and struct/choice surfaces use the retained exact list; non-generic declarations expose an empty list
-- met: every entry resolves through TransientGenericParameterOriginResolver and must match the enclosing stable declaration owner; missing, wrong-owner and duplicate facts are CompilerError
-- met: no donor-local generic/list/type/string/path ID enters the stable result and receiver methods add no independent generic declaration owner
-- met: focused tests cover non-generic, multiple ordered parameters, free-function and nominal ownership, wrong-owner/duplicate rejection and proven donor-local allocation independence
+- met: one owned canonical trait vocabulary distinguishes source OriginTraitId from stable compiler-owned Displayable/cast identities without donor-local IDs
+- met: AST retains only required TraitId-to-source-path/CoreTraitKind facts before TraitEnvironment drops; projection consumes them before HIR and no TraitEnvironment enters Ast or the module result
+- met: the shared public-export-target predicate plus SourceModuleOriginTable covers direct, imported and alias-target source traits while private/unexported and unowned package traits remain absent
+- met: free-function and nominal generic parameter entries now carry stable identity plus ordered canonical bounds with no parallel raw identity-list path
+- met: root/list, parameter-owner and bound joins are total; missing classification/origin, malformed nominal roots and duplicate identities fail through CompilerError
+- met: focused production-path coverage proves direct/imported/alias/core handling and bound order without changing accepted user-visible behavior
 VALIDATION_STATE:
 - Phase 4d just validate: passed; cross-target Clippy, 3419 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases
 - Phase 4e focused validation: passed; 2 import-scanning, 5 reachability, 178 module-discovery, 19 orchestration, 5 token-remap and 116 header tests plus cargo check --tests and git diff --check
@@ -54,12 +55,14 @@ VALIDATION_STATE:
 - Phase 7c2b2 just validate: passed; cross-target Clippy, 3563 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases (+1ms average)
 - Phase 7c2c focused validation: passed; 35 defined-public-type-surface and 42 canonical-identity tests plus cargo check --tests, cargo clippy --tests -D warnings, formatting and git diff --check
 - Phase 7c2c just validate: passed; cross-target Clippy, 3570 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases (no measurable change, +1ms average)
+- Phase 7c2d focused validation: passed after parent-review corrections; 12 resolved-root, 23 defined-export-origin, 44 defined-public-type-surface and 52 canonical-identity tests plus cargo check --tests, cargo clippy --tests -D warnings, formatting and source diff check
+- Phase 7c2d just validate: passed; cross-target Clippy, 3598 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases (-1ms average)
 DOCS_IMPACT: index.md names the canonical cross-module type identity and projection owner; progress matrix unchanged for internal interface groundwork
-BLOCKERS_OR_OPEN_DECISIONS: trait bounds require a stable TraitId-to-OriginTraitId bridge and remain later; generic template bodies, folded values, evidence, access/effect summaries, provenance and provider binding also remain later; no blocker for this checkpoint
+BLOCKERS_OR_OPEN_DECISIONS: completed provider interfaces will later replace transient imported-source trait lookup; trait requirement surfaces, reusable evidence, generic template bodies, folded values, access/effect summaries, provenance and provider binding remain later; no blocker for this checkpoint
 DELEGATION_DECISION: ollama - user requires Ollama for every worker slice
 NEXT_WORKER_ORDER: ollama only; no provider substitution for this run
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit Phase 7c2c, reload startup/plan/source and select the next bounded Phase 7 interface prerequisite through Ollama
+NEXT_RESUME_ACTION: commit Phase 7c2d, reload startup/plan/source and select the next bounded Phase 7 public-interface prerequisite through Ollama
 ```
 
 ## Hard prerequisites
@@ -674,6 +677,25 @@ Accepted Phase 7c2c checkpoint:
 - focused coverage proves declaration-local order, free-function and nominal ownership,
   non-generic emptiness and stable identity across explicitly different donor-local parameter ID
   allocations. Trait bounds and stable trait/evidence identities remain the next prerequisite.
+
+Accepted Phase 7c2d checkpoint:
+
+- `CanonicalTraitIdentity` distinguishes graph-owned source `OriginTraitId` values from stable
+  compiler-owned Displayable and cast trait identities. The output embeds no `TraitId`, path,
+  string-table identity, source location or `CoreTraitKind` registry handle.
+- the transient public-root table retains only each required bound trait's source canonical path
+  or core classifier before `TraitEnvironment` drops. Exact root/list/category joins reject
+  missing trait definitions and malformed nominal roots through `CompilerError`.
+- the shared public-export-target predicate and `SourceModuleOriginTable` build a transient source
+  trait origin index for direct, imported project-graph and private alias-target declarations;
+  private unexported and unowned source-package traits remain absent.
+- free-function and struct/choice generic parameter surfaces carry their stable parameter identity
+  plus ordered canonical bounds. Missing local facts or source origins, wrong owners and duplicate
+  parameter or bound identities fail rather than omitting or fabricating a surface fact.
+- focused tests cover production source/core retention, direct/imported/alias source origins,
+  provider-module ownership, core Displayable/cast variants, bound order and total failures.
+  Trait requirements, reusable evidence, generic template bodies and provider interfaces remain
+  later Phase 7 work.
 
 ### Phase 8: Add generated sidecars and the fixed-point worklist
 

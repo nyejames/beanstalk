@@ -14,6 +14,7 @@ use super::environment::{
     build_resolved_public_type_roots,
 };
 use super::scope_context::{ReceiverMethodCatalog, ReceiverMethodEntry};
+use crate::compiler_frontend::ast::ResolvedTraitSourceFact;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::statements::functions::{
@@ -25,8 +26,14 @@ use crate::compiler_frontend::ast::type_resolution::{
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::ReceiverKey;
+use crate::compiler_frontend::datatypes::definitions::{
+    ChoiceTypeDefinition, StructTypeDefinition,
+};
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
-use crate::compiler_frontend::datatypes::ids::TypeId;
+use crate::compiler_frontend::datatypes::generic_parameters::{
+    GenericParameter, GenericParameterList, TypeParameterId,
+};
+use crate::compiler_frontend::datatypes::ids::{GenericParameterListId, NominalTypeId, TypeId};
 use crate::compiler_frontend::datatypes::parsed::ParsedTypeRef;
 use crate::compiler_frontend::declaration_syntax::binding_mode::BindingMode;
 use crate::compiler_frontend::declaration_syntax::declaration_shell::DeclarationSyntax;
@@ -36,6 +43,9 @@ use crate::compiler_frontend::headers::parse_file_headers::{
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation};
+use crate::compiler_frontend::traits::definitions::{ResolvedTraitDefinition, TraitVisibility};
+use crate::compiler_frontend::traits::environment::{CoreTraitKind, TraitEnvironment};
+use crate::compiler_frontend::traits::ids::TraitId;
 use crate::compiler_frontend::value_mode::ValueMode;
 
 use rustc_hash::FxHashMap;
@@ -182,6 +192,8 @@ fn build_table(
     aliases: FxHashMap<InternedPath, ResolvedTypeAnnotation>,
     declarations: Vec<Declaration>,
     receiver_methods: ReceiverMethodCatalog,
+    type_environment: &TypeEnvironment,
+    trait_environment: &TraitEnvironment,
     string_table: &StringTable,
 ) -> Result<ResolvedPublicTypeRootTable, CompilerError> {
     let declaration_table = TopLevelDeclarationTable::new(declarations);
@@ -193,6 +205,8 @@ fn build_table(
         declaration_table: &declaration_table,
         generic_function_templates_by_path: &FxHashMap::default(),
         receiver_methods: &receiver_methods,
+        trait_environment,
+        type_environment,
         string_table,
     })
 }
@@ -200,7 +214,8 @@ fn build_table(
 #[test]
 fn retains_every_public_root_category_in_sorted_header_order() {
     let mut string_table = StringTable::new();
-    let type_environment = TypeEnvironment::new();
+    let mut type_environment = TypeEnvironment::new();
+    let trait_environment = TraitEnvironment::new();
     let int_type_id = type_environment.builtins().int;
 
     let func_path = path("free_func", &mut string_table);
@@ -208,6 +223,22 @@ fn retains_every_public_root_category_in_sorted_header_order() {
     let choice_path = path("public_choice", &mut string_table);
     let alias_path = path("public_alias", &mut string_table);
     let const_path = path("public_const", &mut string_table);
+
+    // Register real struct and choice definitions so bound-trait collection resolves the
+    // nominal TypeIds. The function, alias and constant still use the builtin int TypeId.
+    let (_, struct_type_id) = type_environment.register_nominal_struct(StructTypeDefinition {
+        id: NominalTypeId(0),
+        path: struct_path.clone(),
+        fields: Box::new([]),
+        generic_parameters: None,
+        const_record: false,
+    });
+    let (_, choice_type_id) = type_environment.register_nominal_choice(ChoiceTypeDefinition {
+        id: NominalTypeId(0),
+        path: choice_path.clone(),
+        variants: Box::new([]),
+        generic_parameters: None,
+    });
 
     // Headers are intentionally in a non-alphabetical order to confirm the table preserves
     // sorted-header input order rather than re-sorting.
@@ -253,8 +284,8 @@ fn retains_every_public_root_category_in_sorted_header_order() {
     signatures.insert(func_path.to_owned(), resolved_free_signature(int_type_id));
 
     let mut nominal_ids = FxHashMap::default();
-    nominal_ids.insert(struct_path.to_owned(), int_type_id);
-    nominal_ids.insert(choice_path.to_owned(), int_type_id);
+    nominal_ids.insert(struct_path.to_owned(), struct_type_id);
+    nominal_ids.insert(choice_path.to_owned(), choice_type_id);
 
     let mut aliases = FxHashMap::default();
     aliases.insert(alias_path.to_owned(), resolved_alias(int_type_id));
@@ -266,6 +297,8 @@ fn retains_every_public_root_category_in_sorted_header_order() {
         aliases,
         vec![constant_declaration(int_type_id, const_path.to_owned())],
         ReceiverMethodCatalog::default(),
+        &type_environment,
+        &trait_environment,
         &string_table,
     )
     .expect("all root categories with resolved facts should be retained");
@@ -280,7 +313,7 @@ fn retains_every_public_root_category_in_sorted_header_order() {
     assert_eq!(table.roots[0].path, struct_path);
     assert!(matches!(
         &table.roots[0].kind,
-        ResolvedPublicTypeRootKind::Struct { type_id } if *type_id == int_type_id
+        ResolvedPublicTypeRootKind::Struct { type_id } if *type_id == struct_type_id
     ));
 
     assert_eq!(table.roots[1].path, func_path);
@@ -295,7 +328,7 @@ fn retains_every_public_root_category_in_sorted_header_order() {
     assert_eq!(table.roots[2].path, choice_path);
     assert!(matches!(
         &table.roots[2].kind,
-        ResolvedPublicTypeRootKind::Choice { type_id } if *type_id == int_type_id
+        ResolvedPublicTypeRootKind::Choice { type_id } if *type_id == choice_type_id
     ));
 
     assert_eq!(table.roots[3].path, alias_path);
@@ -315,6 +348,7 @@ fn retains_every_public_root_category_in_sorted_header_order() {
 fn excludes_imported_root_private_and_non_declaration_headers() {
     let mut string_table = StringTable::new();
     let type_environment = TypeEnvironment::new();
+    let trait_environment = TraitEnvironment::new();
     let int_type_id = type_environment.builtins().int;
 
     let imported_struct = path("imported_struct", &mut string_table);
@@ -367,6 +401,8 @@ fn excludes_imported_root_private_and_non_declaration_headers() {
         FxHashMap::default(),
         Vec::new(),
         ReceiverMethodCatalog::default(),
+        &type_environment,
+        &trait_environment,
         &string_table,
     )
     .expect("imported/private/start exclusion should not fail");
@@ -386,13 +422,32 @@ fn excludes_imported_root_private_and_non_declaration_headers() {
 #[test]
 fn retains_private_receiver_methods_for_public_nominal_receivers_in_order_independent_pass() {
     let mut string_table = StringTable::new();
-    let type_environment = TypeEnvironment::new();
+    let mut type_environment = TypeEnvironment::new();
+    let trait_environment = TraitEnvironment::new();
     let int_type_id = type_environment.builtins().int;
 
     let public_struct = path("public_struct", &mut string_table);
     let private_struct = path("private_struct", &mut string_table);
     let public_method_path = path("public_struct_method", &mut string_table);
     let private_method_path = path("private_struct_method", &mut string_table);
+
+    // Register real struct definitions so bound-trait collection resolves the nominal TypeIds.
+    let (_, public_struct_type_id) =
+        type_environment.register_nominal_struct(StructTypeDefinition {
+            id: NominalTypeId(0),
+            path: public_struct.clone(),
+            fields: Box::new([]),
+            generic_parameters: None,
+            const_record: false,
+        });
+    let (_, private_struct_type_id) =
+        type_environment.register_nominal_struct(StructTypeDefinition {
+            id: NominalTypeId(0),
+            path: private_struct.clone(),
+            fields: Box::new([]),
+            generic_parameters: None,
+            const_record: false,
+        });
 
     // The private method header for the public receiver precedes the public struct in
     // sorted-header order. This proves the two-pass design collects the complete public
@@ -449,8 +504,8 @@ fn retains_private_receiver_methods_for_public_nominal_receivers_in_order_indepe
     );
 
     let mut nominal_ids = FxHashMap::default();
-    nominal_ids.insert(public_struct.to_owned(), int_type_id);
-    nominal_ids.insert(private_struct.to_owned(), int_type_id);
+    nominal_ids.insert(public_struct.to_owned(), public_struct_type_id);
+    nominal_ids.insert(private_struct.to_owned(), private_struct_type_id);
 
     let mut receiver_catalog = ReceiverMethodCatalog::default();
     let public_entry = receiver_entry(
@@ -479,6 +534,8 @@ fn retains_private_receiver_methods_for_public_nominal_receivers_in_order_indepe
         FxHashMap::default(),
         Vec::new(),
         receiver_catalog,
+        &type_environment,
+        &trait_environment,
         &string_table,
     )
     .expect("receiver filtering should not fail");
@@ -506,6 +563,8 @@ fn retains_private_receiver_methods_for_public_nominal_receivers_in_order_indepe
 #[test]
 fn missing_alias_type_id_is_internal_error() {
     let mut string_table = StringTable::new();
+    let type_environment = TypeEnvironment::new();
+    let trait_environment = TraitEnvironment::new();
 
     let alias_path = path("unretained_alias", &mut string_table);
     let headers = vec![header(
@@ -536,6 +595,8 @@ fn missing_alias_type_id_is_internal_error() {
         aliases,
         Vec::new(),
         ReceiverMethodCatalog::default(),
+        &type_environment,
+        &trait_environment,
         &string_table,
     );
 
@@ -548,6 +609,8 @@ fn missing_alias_type_id_is_internal_error() {
 #[test]
 fn missing_resolved_function_signature_is_internal_error() {
     let mut string_table = StringTable::new();
+    let type_environment = TypeEnvironment::new();
+    let trait_environment = TraitEnvironment::new();
 
     let func_path = path("missing_sig_func", &mut string_table);
     let headers = vec![header(
@@ -565,6 +628,8 @@ fn missing_resolved_function_signature_is_internal_error() {
         FxHashMap::default(),
         Vec::new(),
         ReceiverMethodCatalog::default(),
+        &type_environment,
+        &trait_environment,
         &string_table,
     );
 
@@ -577,6 +642,8 @@ fn missing_resolved_function_signature_is_internal_error() {
 #[test]
 fn missing_nominal_type_id_is_internal_error() {
     let mut string_table = StringTable::new();
+    let type_environment = TypeEnvironment::new();
+    let trait_environment = TraitEnvironment::new();
 
     let struct_path = path("missing_nominal_struct", &mut string_table);
     let headers = vec![header(
@@ -594,6 +661,8 @@ fn missing_nominal_type_id_is_internal_error() {
         FxHashMap::default(),
         Vec::new(),
         ReceiverMethodCatalog::default(),
+        &type_environment,
+        &trait_environment,
         &string_table,
     );
 
@@ -606,6 +675,8 @@ fn missing_nominal_type_id_is_internal_error() {
 #[test]
 fn missing_resolved_constant_is_internal_error() {
     let mut string_table = StringTable::new();
+    let type_environment = TypeEnvironment::new();
+    let trait_environment = TraitEnvironment::new();
 
     let const_path = path("missing_const", &mut string_table);
     let headers = vec![header(
@@ -623,6 +694,8 @@ fn missing_resolved_constant_is_internal_error() {
         FxHashMap::default(),
         Vec::new(),
         ReceiverMethodCatalog::default(),
+        &type_environment,
+        &trait_environment,
         &string_table,
     );
 
@@ -636,6 +709,7 @@ fn missing_resolved_constant_is_internal_error() {
 fn missing_receiver_catalog_entry_is_internal_error() {
     let mut string_table = StringTable::new();
     let type_environment = TypeEnvironment::new();
+    let trait_environment = TraitEnvironment::new();
     let int_type_id = type_environment.builtins().int;
 
     let public_struct = path("public_struct", &mut string_table);
@@ -682,6 +756,8 @@ fn missing_receiver_catalog_entry_is_internal_error() {
         FxHashMap::default(),
         Vec::new(),
         ReceiverMethodCatalog::default(),
+        &type_environment,
+        &trait_environment,
         &string_table,
     );
 
@@ -695,6 +771,7 @@ fn missing_receiver_catalog_entry_is_internal_error() {
 fn missing_active_root_function_signature_in_method_pass_is_internal_error() {
     let mut string_table = StringTable::new();
     let type_environment = TypeEnvironment::new();
+    let trait_environment = TraitEnvironment::new();
     let int_type_id = type_environment.builtins().int;
 
     let public_struct = path("public_struct", &mut string_table);
@@ -750,11 +827,234 @@ fn missing_active_root_function_signature_in_method_pass_is_internal_error() {
         FxHashMap::default(),
         Vec::new(),
         ReceiverMethodCatalog::default(),
+        &type_environment,
+        &trait_environment,
         &string_table,
     );
 
     assert!(
         matches!(result, Err(CompilerError { .. })),
         "an active-root function missing its resolved signature in the method pass must be an internal error, not skipped"
+    );
+}
+
+// ---------------------------------------------------------------------------
+//  Transient trait source fact retention
+// ---------------------------------------------------------------------------
+
+/// Register a generic parameter list with one parameter whose declaration-site
+/// `TraitId` bounds are supplied through `resolved_bounds_by_local`, matching how the real
+/// AST environment builder registers generic parameter lists.
+fn register_param_list_with_bounds(
+    env: &mut TypeEnvironment,
+    string_table: &mut StringTable,
+    param_name: &str,
+    bound_trait_ids: Vec<TraitId>,
+) -> GenericParameterListId {
+    let parameters = vec![GenericParameter {
+        id: TypeParameterId(0),
+        name: string_table.intern(param_name),
+        location: SourceLocation::default(),
+        trait_bounds: Vec::new(),
+    }];
+    let list = GenericParameterList { parameters };
+    let mut bounds_by_local: FxHashMap<TypeParameterId, Vec<TraitId>> = FxHashMap::default();
+    bounds_by_local.insert(TypeParameterId(0), bound_trait_ids);
+    env.register_generic_parameter_list(&list, &bounds_by_local)
+        .list_id
+}
+
+/// Register a source trait definition with the given canonical path so bound projection can
+/// resolve its `TraitId` through the `TraitEnvironment`.
+fn register_source_trait(
+    trait_environment: &mut TraitEnvironment,
+    string_table: &mut StringTable,
+    trait_name: &str,
+    this_type: TypeId,
+) -> TraitId {
+    let trait_id = trait_environment.next_trait_id();
+    let definition = ResolvedTraitDefinition {
+        id: trait_id,
+        name: string_table.intern(trait_name),
+        canonical_path: InternedPath::from_single_str(trait_name, string_table),
+        source_file: InternedPath::new(),
+        this_type,
+        requirements: Vec::new(),
+        declaration_location: SourceLocation::default(),
+        visibility: TraitVisibility::Source { exported: true },
+    };
+    trait_environment.insert(definition);
+    trait_id
+}
+
+#[test]
+fn retains_source_trait_fact_for_generic_struct_bound() {
+    let mut string_table = StringTable::new();
+    let mut type_environment = TypeEnvironment::new();
+    let mut trait_environment = TraitEnvironment::new();
+    let int_type_id = type_environment.builtins().int;
+
+    let source_trait_id = register_source_trait(
+        &mut trait_environment,
+        &mut string_table,
+        "RENDERABLE",
+        int_type_id,
+    );
+
+    let list_id = register_param_list_with_bounds(
+        &mut type_environment,
+        &mut string_table,
+        "T",
+        vec![source_trait_id],
+    );
+
+    let struct_path = path("public_struct", &mut string_table);
+    let (_, struct_type_id) = type_environment.register_nominal_struct(StructTypeDefinition {
+        id: NominalTypeId(0),
+        path: struct_path.clone(),
+        fields: Box::new([]),
+        generic_parameters: Some(list_id),
+        const_record: false,
+    });
+
+    let headers = vec![header(
+        struct_kind(),
+        struct_path.to_owned(),
+        FileRole::ActiveModuleRoot,
+        HeaderExportMode::Public,
+        &mut string_table,
+    )];
+
+    let mut nominal_ids = FxHashMap::default();
+    nominal_ids.insert(struct_path.to_owned(), struct_type_id);
+
+    let table = build_table(
+        headers,
+        FxHashMap::default(),
+        nominal_ids,
+        FxHashMap::default(),
+        Vec::new(),
+        ReceiverMethodCatalog::default(),
+        &type_environment,
+        &trait_environment,
+        &string_table,
+    )
+    .expect("a generic struct with a source trait bound should retain its root and facts");
+
+    let source_path = InternedPath::from_single_str("RENDERABLE", &mut string_table);
+    assert_eq!(
+        table.trait_source_facts.get(&source_trait_id),
+        Some(&ResolvedTraitSourceFact::Source(source_path)),
+        "a referenced source trait bound must be retained as a Source fact with its canonical path"
+    );
+}
+
+#[test]
+fn retains_core_trait_fact_for_generic_struct_bound() {
+    let mut string_table = StringTable::new();
+    let mut type_environment = TypeEnvironment::new();
+    let mut trait_environment = TraitEnvironment::new();
+
+    let displayable_trait_id =
+        trait_environment.register_core_displayable(&mut type_environment, &mut string_table);
+
+    let list_id = register_param_list_with_bounds(
+        &mut type_environment,
+        &mut string_table,
+        "T",
+        vec![displayable_trait_id],
+    );
+
+    let struct_path = path("public_struct", &mut string_table);
+    let (_, struct_type_id) = type_environment.register_nominal_struct(StructTypeDefinition {
+        id: NominalTypeId(0),
+        path: struct_path.clone(),
+        fields: Box::new([]),
+        generic_parameters: Some(list_id),
+        const_record: false,
+    });
+
+    let headers = vec![header(
+        struct_kind(),
+        struct_path.to_owned(),
+        FileRole::ActiveModuleRoot,
+        HeaderExportMode::Public,
+        &mut string_table,
+    )];
+
+    let mut nominal_ids = FxHashMap::default();
+    nominal_ids.insert(struct_path.to_owned(), struct_type_id);
+
+    let table = build_table(
+        headers,
+        FxHashMap::default(),
+        nominal_ids,
+        FxHashMap::default(),
+        Vec::new(),
+        ReceiverMethodCatalog::default(),
+        &type_environment,
+        &trait_environment,
+        &string_table,
+    )
+    .expect("a generic struct with a core trait bound should retain its root and facts");
+
+    assert_eq!(
+        table.trait_source_facts.get(&displayable_trait_id),
+        Some(&ResolvedTraitSourceFact::Core(CoreTraitKind::Displayable)),
+        "a referenced core trait bound must be retained as a Core fact with its kind"
+    );
+}
+
+#[test]
+fn missing_trait_definition_for_bound_is_compiler_error() {
+    let mut string_table = StringTable::new();
+    let mut type_environment = TypeEnvironment::new();
+    let trait_environment = TraitEnvironment::new();
+
+    // A TraitId that is neither core nor source: no definition and no classification.
+    let unknown_trait_id = TraitId(99);
+
+    let list_id = register_param_list_with_bounds(
+        &mut type_environment,
+        &mut string_table,
+        "T",
+        vec![unknown_trait_id],
+    );
+
+    let struct_path = path("public_struct", &mut string_table);
+    let (_, struct_type_id) = type_environment.register_nominal_struct(StructTypeDefinition {
+        id: NominalTypeId(0),
+        path: struct_path.clone(),
+        fields: Box::new([]),
+        generic_parameters: Some(list_id),
+        const_record: false,
+    });
+
+    let headers = vec![header(
+        struct_kind(),
+        struct_path.to_owned(),
+        FileRole::ActiveModuleRoot,
+        HeaderExportMode::Public,
+        &mut string_table,
+    )];
+
+    let mut nominal_ids = FxHashMap::default();
+    nominal_ids.insert(struct_path.to_owned(), struct_type_id);
+
+    let result = build_table(
+        headers,
+        FxHashMap::default(),
+        nominal_ids,
+        FxHashMap::default(),
+        Vec::new(),
+        ReceiverMethodCatalog::default(),
+        &type_environment,
+        &trait_environment,
+        &string_table,
+    );
+
+    assert!(
+        matches!(result, Err(CompilerError { .. })),
+        "a bound TraitId with no trait definition and no core classification must be a CompilerError"
     );
 }

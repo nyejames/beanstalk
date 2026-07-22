@@ -8,8 +8,9 @@
 //! and receiver-method signatures, each attached to its stable declaration origin.
 //!
 //! This is **not** `PublicSemanticInterface`. It carries only canonical type shapes and owned
-//! names. Folded constant values, generic template bodies, bounds, access/effect summaries,
-//! provenance, re-export interfaces and cross-module call lowering remain for later phases.
+//! names plus ordered canonical generic trait bounds. Folded constant values, generic
+//! template bodies, trait requirements and evidence, access/effect summaries, provenance,
+//! re-export interfaces and cross-module call lowering remain for later phases.
 //!
 //! WHY: the compiler design overview requires AST to own canonical export projection and to
 //! emit stable semantic identities before HIR. Donor-local `TypeId` values must not cross the
@@ -43,6 +44,7 @@
 //! order is preserved within each declaration. No ordering depends on `FxHashMap` iteration.
 
 use crate::compiler_frontend::ast::ReceiverMethodEntry;
+use crate::compiler_frontend::ast::ResolvedTraitSourceFact;
 use crate::compiler_frontend::ast::statements::functions::{
     FunctionSignature, ReturnChannel, ReturnSlot,
 };
@@ -50,9 +52,9 @@ use crate::compiler_frontend::ast::{
     ResolvedPublicTypeRoot, ResolvedPublicTypeRootKind, ResolvedPublicTypeRootTable,
 };
 use crate::compiler_frontend::canonical_type_identity::{
-    CanonicalTypeIdentity, CanonicalTypeProjectionContext, ExportedGenericParameterIdentity,
-    GenericDeclarationOrigin, GenericParameterOriginResolver, NominalOriginResolver,
-    project_type_id_to_canonical_identity,
+    CanonicalCoreTraitIdentity, CanonicalTraitIdentity, CanonicalTypeIdentity,
+    CanonicalTypeProjectionContext, ExportedGenericParameterIdentity, GenericDeclarationOrigin,
+    GenericParameterOriginResolver, NominalOriginResolver, project_type_id_to_canonical_identity,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::ReceiverKey;
@@ -66,10 +68,12 @@ use crate::compiler_frontend::datatypes::ids::{
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::semantic_identity::{
     DefinedPublicExportOrigins, ExportBinding, OriginConstantId, OriginDeclarationId,
-    OriginFunctionId, OriginTypeCategory, OriginTypeId, ReceiverSurfaceOrigins,
+    OriginFunctionId, OriginTraitId, OriginTypeCategory, OriginTypeId, ReceiverSurfaceOrigins,
 };
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::traits::environment::CoreTraitKind;
+use crate::compiler_frontend::traits::ids::TraitId;
 
 use rustc_hash::FxHashMap;
 
@@ -162,6 +166,38 @@ impl DefinedPublicReturnTypeSlot {
     }
 }
 
+/// One exported generic parameter with its ordered canonical trait bound identities.
+///
+/// WHAT: pairs the stable [`ExportedGenericParameterIdentity`] (declaration owner + position +
+/// authored name, unchanged) with an ordered `Vec<CanonicalTraitIdentity>` resolved from the
+/// `TypeEnvironment`'s declaration-site `TraitId` bounds. The identity never carries bounds;
+/// the bounds are a separate fact on this surface entry.
+/// WHY: the exported generic parameter surface must carry both identity and bounds so a
+/// cross-module consumer can see the full constraint shape without donor-local `TraitId`,
+/// `GenericParameterId`, `InternedPath`, `StringId`, `FileId`, `CoreTraitKind` registry handle
+/// or source location.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct DefinedPublicGenericParameterSurface {
+    identity: ExportedGenericParameterIdentity,
+    bounds: Vec<CanonicalTraitIdentity>,
+}
+
+impl DefinedPublicGenericParameterSurface {
+    /// The stable exported generic parameter identity (owner + position + authored name).
+    #[allow(dead_code)] // Test-only: asserted by focused surface projection tests.
+    pub(crate) fn identity(&self) -> &ExportedGenericParameterIdentity {
+        &self.identity
+    }
+
+    /// The ordered canonical trait bound identities, in declaration-site bound order.
+    ///
+    /// Empty when the parameter has no bounds.
+    #[allow(dead_code)] // Test-only: asserted by focused surface projection tests.
+    pub(crate) fn bounds(&self) -> &[CanonicalTraitIdentity] {
+        &self.bounds
+    }
+}
+
 /// The type-only surface for one exported free function.
 ///
 /// `parameters` and `returns` preserve authored order. `error_return` is `None` when the
@@ -169,7 +205,7 @@ impl DefinedPublicReturnTypeSlot {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct DefinedPublicFunctionTypeSurface {
     origin: OriginFunctionId,
-    generic_parameters: Vec<ExportedGenericParameterIdentity>,
+    generic_parameters: Vec<DefinedPublicGenericParameterSurface>,
     parameters: Vec<DefinedPublicParameterTypeSlot>,
     returns: Vec<DefinedPublicReturnTypeSlot>,
     error_return: Option<CanonicalTypeIdentity>,
@@ -182,12 +218,12 @@ impl DefinedPublicFunctionTypeSurface {
         &self.origin
     }
 
-    /// The exported generic parameter identities in declaration-local order.
+    /// The exported generic parameter surfaces in declaration-local order.
     ///
-    /// Empty for a non-generic free function. Each identity is resolved through the existing
-    /// total `TransientGenericParameterOriginResolver` and names this function's stable origin.
+    /// Empty for a non-generic free function. Each surface entry carries the stable parameter
+    /// identity plus its ordered canonical trait bound identities.
     #[allow(dead_code)] // Test-only: asserted by focused surface projection tests.
-    pub(crate) fn generic_parameters(&self) -> &[ExportedGenericParameterIdentity] {
+    pub(crate) fn generic_parameters(&self) -> &[DefinedPublicGenericParameterSurface] {
         &self.generic_parameters
     }
 
@@ -256,7 +292,7 @@ impl DefinedPublicChoiceVariantTypeSurface {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct DefinedPublicNominalTypeSurface {
     origin: OriginTypeId,
-    generic_parameters: Vec<ExportedGenericParameterIdentity>,
+    generic_parameters: Vec<DefinedPublicGenericParameterSurface>,
     fields: Vec<DefinedPublicFieldTypeSlot>,
     variants: Vec<DefinedPublicChoiceVariantTypeSurface>,
 }
@@ -268,13 +304,13 @@ impl DefinedPublicNominalTypeSurface {
         &self.origin
     }
 
-    /// The exported generic parameter identities in declaration-local order.
+    /// The exported generic parameter surfaces in declaration-local order.
     ///
-    /// Empty for a non-generic struct or choice. Each identity is resolved through the existing
-    /// total `TransientGenericParameterOriginResolver` and names this nominal's stable origin.
-    /// Receiver methods reuse their receiver nominal's parameters and expose no independent list.
+    /// Empty for a non-generic struct or choice. Each surface entry carries the stable parameter
+    /// identity plus its ordered canonical trait bound identities. Receiver methods reuse their
+    /// receiver nominal's parameters and expose no independent list.
     #[allow(dead_code)] // Test-only: asserted by focused surface projection tests.
-    pub(crate) fn generic_parameters(&self) -> &[ExportedGenericParameterIdentity] {
+    pub(crate) fn generic_parameters(&self) -> &[DefinedPublicGenericParameterSurface] {
         &self.generic_parameters
     }
 
@@ -592,22 +628,28 @@ impl<'a> RootIndex<'a> {
 /// Build the defined public type-only surface from the transient root table and stable origins.
 ///
 /// WHAT: takes the `ResolvedPublicTypeRootTable`, `DefinedPublicExportOrigins`,
-/// the transient expanded public source-nominal origin index,
+/// the transient expanded public source-nominal origin index and the transient expanded public
+/// source-trait origin index,
 /// `TypeEnvironment`, `ExternalPackageRegistry` and `StringTable`, then:
 /// 1. builds the transient nominal and generic-parameter origin resolvers,
 /// 2. creates the canonical projection context,
 /// 3. joins each root to its stable export-binding origin in deterministic binding order,
 ///    consuming each root exactly once and rejecting a binding with no root (except traits),
-/// 4. projects every required `TypeId` into canonical identities,
+/// 4. projects every required `TypeId` into canonical identities and each exported generic
+///    parameter's ordered canonical trait bound identities through the transient trait source
+///    facts on the root table and the transient source-trait origin index,
 /// 5. projects receiver methods in deterministic receiver/method order, joining each by exact
 ///    stable receiver origin and method name.
 ///
 /// The output carries only owned stable values. No `TypeId`, `NominalTypeId`,
-/// `GenericParameterId`, `InternedPath` or `StringId` crosses the boundary.
+/// `GenericParameterId`, `GenericParameterListId`, `TraitId`, `CoreTraitKind`, `InternedPath` or
+/// `StringId` crosses the boundary: these donor-local facts are consumed transiently and excluded
+/// from the stable surface.
 pub(crate) fn build_defined_public_type_surface(
     root_table: &ResolvedPublicTypeRootTable,
     export_origins: &DefinedPublicExportOrigins,
     public_source_nominal_type_origins: &FxHashMap<InternedPath, OriginTypeId>,
+    public_source_trait_origins: &FxHashMap<InternedPath, OriginTraitId>,
     type_environment: &TypeEnvironment,
     external_registry: &ExternalPackageRegistry,
     string_table: &StringTable,
@@ -666,6 +708,8 @@ pub(crate) fn build_defined_public_type_surface(
                     signature,
                     type_environment,
                     &projection_context,
+                    &root_table.trait_source_facts,
+                    public_source_trait_origins,
                     string_table,
                 )?);
             }
@@ -681,6 +725,8 @@ pub(crate) fn build_defined_public_type_surface(
                     *type_id,
                     type_environment,
                     &projection_context,
+                    &root_table.trait_source_facts,
+                    public_source_trait_origins,
                     string_table,
                 )?);
             }
@@ -696,6 +742,8 @@ pub(crate) fn build_defined_public_type_surface(
                     *type_id,
                     type_environment,
                     &projection_context,
+                    &root_table.trait_source_facts,
+                    public_source_trait_origins,
                     string_table,
                 )?);
             }
@@ -884,33 +932,40 @@ fn register_nominal_generic_origins(
     Ok(())
 }
 
-/// Project one root's exported generic parameter identities in declaration-local order.
+/// Project one root's exported generic parameter surfaces (identity plus ordered bounds) in
+/// declaration-local order.
 ///
 /// WHAT: iterates the retained `GenericParameterList` in declaration-local order and resolves
 /// each `GenericParameterId` through the already-built total
-/// `TransientGenericParameterOriginResolver`. A non-generic declaration (`list_id` is `None`)
-/// exposes an empty list. Each resolved identity must name the `expected_origin`: a wrong-owner,
-/// missing, duplicate or inconsistent parameter is a `CompilerError` rather than a silent
-/// omission. The output carries only owned stable identities; no `GenericParameterId`,
-/// `GenericParameterListId`, `StringId` or `InternedPath` crosses the boundary.
-fn project_exported_generic_parameter_identities(
+/// `TransientGenericParameterOriginResolver`. Each surface entry pairs the stable
+/// `ExportedGenericParameterIdentity` (declaration owner + position + authored name) with its
+/// ordered `Vec<CanonicalTraitIdentity>` bounds resolved from the declaration-site `TraitId`
+/// bounds. A non-generic declaration (`list_id` is `None`) exposes an empty list. Each resolved
+/// identity must name the `expected_origin`: a wrong-owner, missing, duplicate or inconsistent
+/// parameter is a `CompilerError` rather than a silent omission. The output carries only owned
+/// stable identities and canonical bound identities; no `GenericParameterId`,
+/// `GenericParameterListId`, `TraitId`, `StringId` or `InternedPath` crosses the boundary.
+fn project_exported_generic_parameter_surfaces(
     generic_parameter_list_id: Option<GenericParameterListId>,
     type_environment: &TypeEnvironment,
     generic_resolver: &dyn GenericParameterOriginResolver,
     expected_origin: &GenericDeclarationOrigin,
-) -> Result<Vec<ExportedGenericParameterIdentity>, CompilerError> {
+    trait_source_facts: &FxHashMap<TraitId, ResolvedTraitSourceFact>,
+    public_source_trait_origins: &FxHashMap<InternedPath, OriginTraitId>,
+) -> Result<Vec<DefinedPublicGenericParameterSurface>, CompilerError> {
     let Some(list_id) = generic_parameter_list_id else {
         return Ok(Vec::new());
     };
 
     let list = type_environment.generic_parameters(list_id).ok_or_else(|| {
         CompilerError::compiler_error(format!(
-            "defined public type-surface projection: GenericParameterListId({}) is missing from the TypeEnvironment while projecting exported generic parameter identities",
+            "defined public type-surface projection: GenericParameterListId({}) is missing from the TypeEnvironment while projecting exported generic parameter surfaces",
             list_id.0
         ))
     })?;
 
-    let mut identities = Vec::with_capacity(list.parameters.len());
+    let mut surfaces: Vec<DefinedPublicGenericParameterSurface> =
+        Vec::with_capacity(list.parameters.len());
     for parameter in &list.parameters {
         let identity = generic_resolver.resolve_generic_parameter_origin(parameter.id)?;
 
@@ -928,35 +983,125 @@ fn project_exported_generic_parameter_identities(
         // Reject a duplicate resolved identity. Two distinct `GenericParameterId`s that resolve
         // to the same owner, position and name signal an inconsistent owner table rather than a
         // legitimate second declaration.
-        if identities.contains(&identity) {
+        if surfaces
+            .iter()
+            .any(|surface| surface.identity() == &identity)
+        {
             return Err(CompilerError::compiler_error(format!(
                 "defined public type-surface projection: two exported generic parameters resolved to the same identity {:?}; a duplicate parameter identity must not enter the public type surface",
                 identity,
             )));
         }
 
-        identities.push(identity);
+        // Project ordered canonical trait bound identities from the declaration-site `TraitId`
+        // bounds. Each local `TraitId` is resolved through the transient trait source facts
+        // retained on the root table, then through the public source-trait origin index.
+        let bounds = project_generic_parameter_bounds(
+            parameter.id,
+            type_environment,
+            trait_source_facts,
+            public_source_trait_origins,
+        )?;
+
+        surfaces.push(DefinedPublicGenericParameterSurface { identity, bounds });
     }
 
-    Ok(identities)
+    Ok(surfaces)
+}
+
+/// Project ordered canonical trait bound identities for one generic parameter.
+///
+/// WHAT: reads the declaration-site `TraitId` bounds from the `TypeEnvironment` in their
+/// recorded order, then resolves each through the transient trait source facts and the public
+/// source-trait origin index. A source trait (`ResolvedTraitSourceFact::Source`) resolves to
+/// its exact `OriginTraitId` through the trait origin index; a core trait
+/// (`ResolvedTraitSourceFact::Core`) resolves to its stable `CanonicalCoreTraitIdentity`.
+/// A missing source origin (private/unexported/unowned), a missing local mapping or a
+/// conflicting mapping is a `CompilerError`. A duplicate canonical bound identity is rejected.
+/// WHY: the stable output must carry only canonical trait identities, never donor-local
+/// `TraitId`, `InternedPath`, `StringId`, `FileId`, `CoreTraitKind` registry handle or source
+/// location. The bound order is preserved exactly as the `TypeEnvironment` records it.
+fn project_generic_parameter_bounds(
+    parameter_id: GenericParameterId,
+    type_environment: &TypeEnvironment,
+    trait_source_facts: &FxHashMap<TraitId, ResolvedTraitSourceFact>,
+    public_source_trait_origins: &FxHashMap<InternedPath, OriginTraitId>,
+) -> Result<Vec<CanonicalTraitIdentity>, CompilerError> {
+    let Some(bounds) = type_environment.trait_bounds_for_generic_parameter(parameter_id) else {
+        return Ok(Vec::new());
+    };
+
+    let mut canonical_bounds = Vec::with_capacity(bounds.len());
+    for trait_id in bounds {
+        let Some(source_fact) = trait_source_facts.get(trait_id) else {
+            return Err(CompilerError::compiler_error(format!(
+                "defined public type-surface projection: a generic parameter bound TraitId({}) has no retained trait source fact; a missing local mapping is an internal invariant violation",
+                trait_id.0
+            )));
+        };
+
+        let canonical_identity = match source_fact {
+            ResolvedTraitSourceFact::Source(path) => {
+                let Some(origin) = public_source_trait_origins.get(path) else {
+                    return Err(CompilerError::compiler_error(format!(
+                        "defined public type-surface projection: a generic parameter bound trait source path {:?} has no retained public source-trait origin; a private, unexported or unowned trait must not enter the public type surface",
+                        path
+                    )));
+                };
+                CanonicalTraitIdentity::Source(origin.clone())
+            }
+            ResolvedTraitSourceFact::Core(kind) => {
+                let core_identity = match kind {
+                    CoreTraitKind::Displayable => CanonicalCoreTraitIdentity::Displayable,
+                    CoreTraitKind::Castable {
+                        target,
+                        fallibility,
+                    } => CanonicalCoreTraitIdentity::Castable {
+                        target: *target,
+                        fallibility: *fallibility,
+                    },
+                };
+                CanonicalTraitIdentity::Core(core_identity)
+            }
+        };
+
+        // Reject a duplicate canonical bound identity. Two distinct `TraitId`s that resolve to
+        // the same canonical trait identity signal inconsistent internal metadata rather than a
+        // legitimate second bound.
+        if canonical_bounds.contains(&canonical_identity) {
+            return Err(CompilerError::compiler_error(format!(
+                "defined public type-surface projection: two generic parameter bounds resolved to the same canonical trait identity {:?}; a duplicate bound identity must not enter the public type surface",
+                canonical_identity
+            )));
+        }
+
+        canonical_bounds.push(canonical_identity);
+    }
+
+    Ok(canonical_bounds)
 }
 
 /// Project one free-function signature into the stable type surface.
+#[allow(clippy::too_many_arguments)]
 fn project_free_function(
     function_origin: OriginFunctionId,
     generic_parameter_list_id: Option<GenericParameterListId>,
     signature: &FunctionSignature,
     type_environment: &TypeEnvironment,
     context: &CanonicalTypeProjectionContext,
+    trait_source_facts: &FxHashMap<TraitId, ResolvedTraitSourceFact>,
+    public_source_trait_origins: &FxHashMap<InternedPath, OriginTraitId>,
     string_table: &StringTable,
 ) -> Result<DefinedPublicFunctionTypeSurface, CompilerError> {
     let expected_origin = GenericDeclarationOrigin::free_function(function_origin.clone())?;
 
-    let generic_parameters = project_exported_generic_parameter_identities(
+    let generic_parameters = project_exported_generic_parameter_surfaces(
         generic_parameter_list_id,
         type_environment,
         context.generic_parameter_origins(),
         &expected_origin,
+        trait_source_facts,
+        public_source_trait_origins,
     )?;
 
     let parameters = signature
@@ -1037,11 +1182,14 @@ fn project_return_slots(
 }
 
 /// Project one struct root into the stable nominal type surface.
+#[allow(clippy::too_many_arguments)]
 fn project_struct(
     type_origin: OriginTypeId,
     type_id: TypeId,
     type_environment: &TypeEnvironment,
     context: &CanonicalTypeProjectionContext,
+    trait_source_facts: &FxHashMap<TraitId, ResolvedTraitSourceFact>,
+    public_source_trait_origins: &FxHashMap<InternedPath, OriginTraitId>,
     string_table: &StringTable,
 ) -> Result<DefinedPublicNominalTypeSurface, CompilerError> {
     let definition = type_environment.get(type_id).ok_or_else(|| {
@@ -1079,11 +1227,13 @@ fn project_struct(
 
     let expected_origin = GenericDeclarationOrigin::nominal_type(type_origin.clone())?;
 
-    let generic_parameters = project_exported_generic_parameter_identities(
+    let generic_parameters = project_exported_generic_parameter_surfaces(
         struct_definition.generic_parameters,
         type_environment,
         context.generic_parameter_origins(),
         &expected_origin,
+        trait_source_facts,
+        public_source_trait_origins,
     )?;
 
     let fields = project_fields(struct_definition, type_environment, context, string_table)?;
@@ -1097,11 +1247,14 @@ fn project_struct(
 }
 
 /// Project one choice root into the stable nominal type surface.
+#[allow(clippy::too_many_arguments)]
 fn project_choice(
     type_origin: OriginTypeId,
     type_id: TypeId,
     type_environment: &TypeEnvironment,
     context: &CanonicalTypeProjectionContext,
+    trait_source_facts: &FxHashMap<TraitId, ResolvedTraitSourceFact>,
+    public_source_trait_origins: &FxHashMap<InternedPath, OriginTraitId>,
     string_table: &StringTable,
 ) -> Result<DefinedPublicNominalTypeSurface, CompilerError> {
     let definition = type_environment.get(type_id).ok_or_else(|| {
@@ -1139,11 +1292,13 @@ fn project_choice(
 
     let expected_origin = GenericDeclarationOrigin::nominal_type(type_origin.clone())?;
 
-    let generic_parameters = project_exported_generic_parameter_identities(
+    let generic_parameters = project_exported_generic_parameter_surfaces(
         choice_definition.generic_parameters,
         type_environment,
         context.generic_parameter_origins(),
         &expected_origin,
+        trait_source_facts,
+        public_source_trait_origins,
     )?;
 
     let variants =

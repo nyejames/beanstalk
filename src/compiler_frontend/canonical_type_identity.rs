@@ -27,6 +27,9 @@
 //! and generic-parameter resolvers are owned by the public semantic surface projection work that
 //! follows this slice.
 
+use crate::compiler_frontend::builtins::casts::targets::{
+    BuiltinCastFallibility, BuiltinCastTarget,
+};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::definitions::TypeDefinition;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
@@ -37,7 +40,7 @@ use crate::compiler_frontend::datatypes::ids::{
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::external_packages::ExternalSymbolPath;
 use crate::compiler_frontend::semantic_identity::{
-    FunctionOriginKind, OriginFunctionId, OriginTypeCategory, OriginTypeId,
+    FunctionOriginKind, OriginFunctionId, OriginTraitId, OriginTypeCategory, OriginTypeId,
 };
 
 // ---------------------------------------------------------------------------
@@ -371,6 +374,46 @@ impl ExportedGenericParameterIdentity {
     pub(crate) fn authored_name(&self) -> &str {
         &self.authored_name
     }
+}
+
+// ---------------------------------------------------------------------------
+//  Canonical trait identity vocabulary
+// ---------------------------------------------------------------------------
+
+/// Owned, hashable, cross-build canonical identity for one trait.
+///
+/// WHAT: carries only stable, owned values. It distinguishes source-declared traits
+/// (`Source(OriginTraitId)`) from compiler-owned core traits
+/// (`Core(CanonicalCoreTraitIdentity)`). It never embeds `TraitId`, `StringId`,
+/// `InternedPath`, `FileId`, source location, rendered display name or a
+/// `CoreTraitKind` registry handle.
+/// WHY: cross-module generic bound surfaces must compare trait identities rather than
+/// donor-local `TraitId` values. A source trait and a core trait with the same source
+/// spelling are semantically distinct: the source trait's identity derives from its
+/// owning module origin, while the core trait's identity is a stable compiler-owned
+/// semantic classifier.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) enum CanonicalTraitIdentity {
+    Source(OriginTraitId),
+    Core(CanonicalCoreTraitIdentity),
+}
+
+/// Compiler-owned core trait canonical identity.
+///
+/// WHAT: models `Displayable` and cast traits exactly from the existing `CoreTraitKind`
+/// facts, reusing `BuiltinCastTarget` and `BuiltinCastFallibility` from the builtins
+/// cast-target owner rather than introducing a second core catalogue. It stores no
+/// `TraitId`, `StringId`, path, source location or rendered name.
+/// WHY: core traits are identified by their stable semantic classification, not by a
+/// module-local `TraitId` or a source spelling. Two builds that register the same core
+/// cast trait produce the same canonical identity regardless of `TraitId` allocation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(crate) enum CanonicalCoreTraitIdentity {
+    Displayable,
+    Castable {
+        target: BuiltinCastTarget,
+        fallibility: BuiltinCastFallibility,
+    },
 }
 
 // ---------------------------------------------------------------------------

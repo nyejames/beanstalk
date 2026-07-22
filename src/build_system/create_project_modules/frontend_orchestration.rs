@@ -19,6 +19,7 @@ use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::compiler_messages::ModuleDiagnostics;
 use crate::compiler_frontend::defined_public_export_origins::build_defined_public_export_origin_draft;
 use crate::compiler_frontend::defined_public_export_origins::build_public_source_nominal_origin_index;
+use crate::compiler_frontend::defined_public_export_origins::build_public_source_trait_origin_index;
 use crate::compiler_frontend::defined_public_type_surface::build_defined_public_type_surface;
 use crate::compiler_frontend::external_packages::{
     ExternalFunctionId, ExternalPackageId, ExternalPackageRegistry,
@@ -899,6 +900,21 @@ impl FrontendModuleBuildContext<'_> {
             )
             .map_err(|error| CompilerMessages::from_error_ref(error, &compiler.string_table))?;
 
+            // Build the transient expanded public source-trait origin index before `sorted`
+            // moves into AST construction. Analogous to the nominal origin index, this maps
+            // each trait header whose canonical declaration path is targeted by a retained
+            // public export entry to its stable OriginTraitId. Directly-defined, imported
+            // project-graph and public-alias-target traits are included; private and unowned
+            // source-package traits are excluded. The type-surface projection consumes this
+            // index to resolve source-trait generic bounds to stable trait origin identities.
+            let public_source_trait_origins = build_public_source_trait_origin_index(
+                &source_module_origins,
+                &sorted.headers,
+                &sorted.module_symbols,
+                &compiler.string_table,
+            )
+            .map_err(|error| CompilerMessages::from_error_ref(error, &compiler.string_table))?;
+
             // 3. Build the Abstract Syntax Tree (AST).
             let mut module_ast =
                 timed_frontend_stage("frontend.ast", "AST created in: ", module_label, || {
@@ -947,11 +963,12 @@ impl FrontendModuleBuildContext<'_> {
             // The type-surface projection joins each resolved root to its stable export-binding
             // origin and projects every required TypeId into canonical identities through the
             // existing canonical_type_identity projection owner. The output carries only owned
-            // stable values; no donor-local TypeId, NominalTypeId, GenericParameterId or
-            // InternedPath crosses the module result boundary. It is not the final
-            // PublicSemanticInterface: folded constants, generic template bodies, bounds,
-            // access/effect summaries, provenance, re-export interfaces and cross-module call
-            // lowering remain for later phases.
+            // stable values; no donor-local TypeId, NominalTypeId, GenericParameterId,
+            // TraitId, CoreTraitKind or InternedPath crosses the module result boundary. Ordered
+            // canonical generic bounds are now present. It is not the final
+            // PublicSemanticInterface: folded constants, generic template bodies, trait
+            // requirements and evidence, access/effect summaries, provenance, re-export
+            // interfaces and cross-module call lowering remain for later phases.
             // Finalize the export-origin component (receiver surfaces use the draft's
             // directly-defined active-root nominal index), then build the stable type-only
             // surface. The surface's transient nominal resolver consumes the expanded
@@ -965,6 +982,7 @@ impl FrontendModuleBuildContext<'_> {
                 &resolved_public_type_roots,
                 &defined_public_export_origins,
                 &public_source_nominal_type_origins,
+                &public_source_trait_origins,
                 &module_ast.type_environment,
                 compiler.external_package_registry.as_ref(),
                 &compiler.string_table,

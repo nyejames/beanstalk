@@ -9,12 +9,15 @@
 //! `compiler_frontend::canonical_type_identity`, so they own a focused test beside the module
 //! rather than an end-to-end case.
 
+use crate::compiler_frontend::builtins::casts::targets::{
+    BuiltinCastFallibility, BuiltinCastTarget,
+};
 use crate::compiler_frontend::canonical_type_identity::{
-    CanonicalBuiltinType, CanonicalTypeIdentity, CanonicalTypeProjectionContext,
-    CollectionTypeIdentity, ExportedGenericParameterIdentity, ExternalOpaqueTypeIdentity,
-    FallibleCarrierTypeIdentity, GenericDeclarationOrigin, GenericInstanceTypeIdentity,
-    GenericParameterOriginResolver, NominalOriginResolver, OrderedMapTypeIdentity,
-    project_type_id_to_canonical_identity,
+    CanonicalBuiltinType, CanonicalCoreTraitIdentity, CanonicalTraitIdentity,
+    CanonicalTypeIdentity, CanonicalTypeProjectionContext, CollectionTypeIdentity,
+    ExportedGenericParameterIdentity, ExternalOpaqueTypeIdentity, FallibleCarrierTypeIdentity,
+    GenericDeclarationOrigin, GenericInstanceTypeIdentity, GenericParameterOriginResolver,
+    NominalOriginResolver, OrderedMapTypeIdentity, project_type_id_to_canonical_identity,
 };
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorType};
 use crate::compiler_frontend::datatypes::definitions::{
@@ -31,8 +34,8 @@ use crate::compiler_frontend::external_packages::{
     IO_INPUT_EXTERNAL_TYPE_ID,
 };
 use crate::compiler_frontend::semantic_identity::{
-    ModuleRootRole, OriginFunctionId, OriginTypeCategory, OriginTypeId, StableModuleOriginIdentity,
-    StablePackageIdentity,
+    ModuleRootRole, OriginFunctionId, OriginTraitId, OriginTypeCategory, OriginTypeId,
+    StableModuleOriginIdentity, StablePackageIdentity,
 };
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -1418,4 +1421,147 @@ fn generic_parameter_identity_carries_no_local_ids() {
         !debug.contains("InternedPath"),
         "canonical generic-parameter identity must not embed interned paths: {debug}"
     );
+}
+
+// ---------------------------------------------------------------------------
+//  Canonical trait identity
+// ---------------------------------------------------------------------------
+
+fn trait_origin(name: &str) -> OriginTraitId {
+    OriginTraitId::new(module_origin("traits"), name.to_owned())
+}
+
+#[test]
+fn source_trait_identity_is_equal_for_equal_origin() {
+    let identity_a = CanonicalTraitIdentity::Source(trait_origin("DISPLAYABLE"));
+    let identity_b = CanonicalTraitIdentity::Source(trait_origin("DISPLAYABLE"));
+
+    assert_eq!(identity_a, identity_b);
+    let mut set = HashSet::new();
+    set.insert(identity_a.clone());
+    assert!(set.contains(&identity_b));
+}
+
+#[test]
+fn source_trait_identity_distinguishes_different_module_origins() {
+    let identity_a = CanonicalTraitIdentity::Source(OriginTraitId::new(
+        module_origin("module_a"),
+        "MyTrait".to_owned(),
+    ));
+    let identity_b = CanonicalTraitIdentity::Source(OriginTraitId::new(
+        module_origin("module_b"),
+        "MyTrait".to_owned(),
+    ));
+
+    assert_ne!(identity_a, identity_b);
+}
+
+#[test]
+fn source_trait_identity_distinguishes_different_defining_names() {
+    let identity_a = CanonicalTraitIdentity::Source(trait_origin("TraitA"));
+    let identity_b = CanonicalTraitIdentity::Source(trait_origin("TraitB"));
+
+    assert_ne!(identity_a, identity_b);
+}
+
+#[test]
+fn displayable_core_trait_identity_is_equal_to_itself() {
+    let identity_a = CanonicalTraitIdentity::Core(CanonicalCoreTraitIdentity::Displayable);
+    let identity_b = CanonicalTraitIdentity::Core(CanonicalCoreTraitIdentity::Displayable);
+
+    assert_eq!(identity_a, identity_b);
+    let mut set = HashSet::new();
+    set.insert(identity_a);
+    assert!(set.contains(&identity_b));
+}
+
+#[test]
+fn infallible_cast_core_trait_identity_preserves_target_and_fallibility() {
+    let identity = CanonicalTraitIdentity::Core(CanonicalCoreTraitIdentity::Castable {
+        target: BuiltinCastTarget::Int,
+        fallibility: BuiltinCastFallibility::Infallible,
+    });
+
+    let debug = format!("{identity:?}");
+    assert!(
+        debug.contains("Int") && debug.contains("Infallible"),
+        "infallible cast core trait identity must carry target and fallibility: {debug}"
+    );
+}
+
+#[test]
+fn fallible_cast_core_trait_identity_preserves_target_and_fallibility() {
+    let identity = CanonicalTraitIdentity::Core(CanonicalCoreTraitIdentity::Castable {
+        target: BuiltinCastTarget::Int,
+        fallibility: BuiltinCastFallibility::Fallible,
+    });
+
+    let debug = format!("{identity:?}");
+    assert!(
+        debug.contains("Int") && debug.contains("Fallible"),
+        "fallible cast core trait identity must carry target and fallibility: {debug}"
+    );
+}
+
+#[test]
+fn cast_core_trait_distinguishes_infallible_from_fallible() {
+    let infallible = CanonicalTraitIdentity::Core(CanonicalCoreTraitIdentity::Castable {
+        target: BuiltinCastTarget::Int,
+        fallibility: BuiltinCastFallibility::Infallible,
+    });
+    let fallible = CanonicalTraitIdentity::Core(CanonicalCoreTraitIdentity::Castable {
+        target: BuiltinCastTarget::Int,
+        fallibility: BuiltinCastFallibility::Fallible,
+    });
+
+    assert_ne!(infallible, fallible);
+}
+
+#[test]
+fn cast_core_trait_distinguishes_different_targets() {
+    let to_int = CanonicalTraitIdentity::Core(CanonicalCoreTraitIdentity::Castable {
+        target: BuiltinCastTarget::Int,
+        fallibility: BuiltinCastFallibility::Infallible,
+    });
+    let to_string = CanonicalTraitIdentity::Core(CanonicalCoreTraitIdentity::Castable {
+        target: BuiltinCastTarget::String,
+        fallibility: BuiltinCastFallibility::Infallible,
+    });
+
+    assert_ne!(to_int, to_string);
+}
+
+#[test]
+fn source_trait_identity_is_distinct_from_displayable_core() {
+    let source = CanonicalTraitIdentity::Source(trait_origin("DISPLAYABLE"));
+    let core = CanonicalTraitIdentity::Core(CanonicalCoreTraitIdentity::Displayable);
+
+    assert_ne!(source, core);
+}
+
+#[test]
+fn canonical_trait_identity_carries_no_local_ids_or_paths() {
+    let source = CanonicalTraitIdentity::Source(trait_origin("MyTrait"));
+    let core = CanonicalTraitIdentity::Core(CanonicalCoreTraitIdentity::Castable {
+        target: BuiltinCastTarget::Bool,
+        fallibility: BuiltinCastFallibility::Fallible,
+    });
+
+    for identity in [source, core] {
+        let debug = format!("{identity:?}");
+        assert!(
+            !debug.contains("TraitId(")
+                && !debug.contains("StringId(")
+                && !debug.contains("FileId("),
+            "canonical trait identity must not embed local IDs: {debug}"
+        );
+        assert!(
+            !debug.contains("InternedPath"),
+            "canonical trait identity must not embed interned paths: {debug}"
+        );
+        assert!(
+            !debug.contains("CoreTraitKind"),
+            "canonical trait identity must not embed a CoreTraitKind registry handle: {debug}"
+        );
+    }
 }
