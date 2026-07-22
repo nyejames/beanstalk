@@ -81,51 +81,61 @@ use rustc_hash::FxHashMap;
 //  Stable type-surface value types
 // ---------------------------------------------------------------------------
 
-/// The defined public TYPE surface for one compiled module.
+/// The defined public TYPE surface for one compiled module: an internal projection
+/// intermediate consumed by the [`PublicInterfaceDraftBuilder`] before the draft boundary.
 ///
 /// WHAT: carries only owned, stable values: canonical type identities and owned authored names.
 /// It never embeds `TypeId`, `NominalTypeId`, `GenericParameterId`, `InternedPath`, `StringId`,
 /// source locations, absolute paths or donor-local external numeric IDs.
 ///
-/// It is deliberately not `PublicSemanticInterface`. It carries type shapes only.
+/// It is deliberately not `PublicSemanticInterface`. It carries type shapes only and does not
+/// cross the draft boundary as a stored component.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct DefinedPublicTypeSurface {
-    free_functions: Vec<DefinedPublicFunctionTypeSurface>,
-    nominal_types: Vec<DefinedPublicNominalTypeSurface>,
-    transparent_aliases: Vec<DefinedPublicAliasTypeSurface>,
-    constants: Vec<DefinedPublicConstantTypeSurface>,
-    receiver_methods: Vec<DefinedPublicReceiverMethodTypeSurface>,
+    pub(super) free_functions: Vec<DefinedPublicFunctionTypeSurface>,
+    pub(super) nominal_types: Vec<DefinedPublicNominalTypeSurface>,
+    pub(super) transparent_aliases: Vec<DefinedPublicAliasTypeSurface>,
+    pub(super) constants: Vec<DefinedPublicConstantTypeSurface>,
+    pub(super) receiver_methods: Vec<DefinedPublicReceiverMethodTypeSurface>,
 }
 
-/// One exported parameter slot in a function or receiver-method type surface.
+/// One parameter slot in a public function or receiver-method semantic record.
 ///
-/// `name` is the owned authored parameter name, or `None` when the source signature omits it.
+/// WHAT: a draft/public semantic leaf type that crosses the draft boundary inside
+/// [`PublicFunctionSemantics`] and [`PublicReceiverMethodSemantics`]. `name` is the owned
+/// authored parameter name, or `None` when the source signature omits it.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub(crate) struct DefinedPublicParameterTypeSlot {
-    name: Option<String>,
-    type_identity: CanonicalTypeIdentity,
+pub(crate) struct PublicParameterTypeSlot {
+    pub(crate) name: Option<String>,
+    pub(crate) type_identity: CanonicalTypeIdentity,
 }
 
-/// One exported return slot in a function or receiver-method type surface.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub(crate) struct DefinedPublicReturnTypeSlot {
-    type_identity: CanonicalTypeIdentity,
-}
-
-/// One exported generic parameter with its ordered canonical trait bound identities.
+/// One return slot in a public function or receiver-method semantic record.
 ///
-/// WHAT: pairs the stable [`ExportedGenericParameterIdentity`] (declaration owner + position +
+/// WHAT: a draft/public semantic leaf type that crosses the draft boundary inside
+/// [`PublicFunctionSemantics`] and [`PublicReceiverMethodSemantics`].
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct PublicReturnTypeSlot {
+    pub(crate) type_identity: CanonicalTypeIdentity,
+}
+
+/// One generic parameter with its ordered canonical trait bound identities in a public
+/// declaration record.
+///
+/// WHAT: a draft/public semantic leaf type that crosses the draft boundary inside
+/// [`PublicFunctionSemantics`], [`PublicStructSemantics`] and [`PublicChoiceSemantics`]. It
+/// pairs the stable [`ExportedGenericParameterIdentity`] (declaration owner + position +
 /// authored name, unchanged) with an ordered `Vec<CanonicalTraitIdentity>` resolved from the
 /// `TypeEnvironment`'s declaration-site `TraitId` bounds. The identity never carries bounds;
-/// the bounds are a separate fact on this surface entry.
-/// WHY: the exported generic parameter surface must carry both identity and bounds so a
-/// cross-module consumer can see the full constraint shape without donor-local `TraitId`,
+/// the bounds are a separate fact on this entry.
+/// WHY: the exported generic parameter must carry both identity and bounds so a cross-module
+/// consumer can see the full constraint shape without donor-local `TraitId`,
 /// `GenericParameterId`, `InternedPath`, `StringId`, `FileId`, `CoreTraitKind` registry handle
 /// or source location.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub(crate) struct DefinedPublicGenericParameterSurface {
-    identity: ExportedGenericParameterIdentity,
-    bounds: Vec<CanonicalTraitIdentity>,
+pub(crate) struct PublicGenericParameterSurface {
+    pub(crate) identity: ExportedGenericParameterIdentity,
+    pub(crate) bounds: Vec<CanonicalTraitIdentity>,
 }
 
 /// The type-only surface for one exported free function.
@@ -134,41 +144,47 @@ pub(crate) struct DefinedPublicGenericParameterSurface {
 /// function has no error channel.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct DefinedPublicFunctionTypeSurface {
-    origin: OriginFunctionId,
-    generic_parameters: Vec<DefinedPublicGenericParameterSurface>,
-    parameters: Vec<DefinedPublicParameterTypeSlot>,
-    returns: Vec<DefinedPublicReturnTypeSlot>,
-    error_return: Option<CanonicalTypeIdentity>,
+    pub(crate) origin: OriginFunctionId,
+    pub(crate) generic_parameters: Vec<PublicGenericParameterSurface>,
+    pub(crate) parameters: Vec<PublicParameterTypeSlot>,
+    pub(crate) returns: Vec<PublicReturnTypeSlot>,
+    pub(crate) error_return: Option<CanonicalTypeIdentity>,
 }
 
-/// One exported field in a struct or choice-variant-payload type surface.
+/// One field in a public struct semantic record or a choice-variant payload.
+///
+/// WHAT: a draft/public semantic leaf type that crosses the draft boundary inside
+/// [`PublicStructSemantics`] and [`PublicChoiceVariantSurface`].
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub(crate) struct DefinedPublicFieldTypeSlot {
-    name: String,
-    type_identity: CanonicalTypeIdentity,
+pub(crate) struct PublicFieldTypeSlot {
+    pub(crate) name: String,
+    pub(crate) type_identity: CanonicalTypeIdentity,
 }
 
-/// One exported choice variant in a choice type surface.
+/// One choice variant in a public choice semantic record.
+///
+/// WHAT: a draft/public semantic leaf type that crosses the draft boundary inside
+/// [`PublicChoiceSemantics`].
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct DefinedPublicChoiceVariantTypeSurface {
-    name: String,
-    payload_fields: Vec<DefinedPublicFieldTypeSlot>,
+pub(crate) struct PublicChoiceVariantSurface {
+    pub(crate) name: String,
+    pub(crate) payload_fields: Vec<PublicFieldTypeSlot>,
 }
 
 /// The type-only surface for one exported nominal type (struct or choice).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct DefinedPublicNominalTypeSurface {
-    origin: OriginTypeId,
-    generic_parameters: Vec<DefinedPublicGenericParameterSurface>,
-    fields: Vec<DefinedPublicFieldTypeSlot>,
-    variants: Vec<DefinedPublicChoiceVariantTypeSurface>,
+    pub(crate) origin: OriginTypeId,
+    pub(crate) generic_parameters: Vec<PublicGenericParameterSurface>,
+    pub(crate) fields: Vec<PublicFieldTypeSlot>,
+    pub(crate) variants: Vec<PublicChoiceVariantSurface>,
 }
 
 /// The type-only surface for one exported transparent alias.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct DefinedPublicAliasTypeSurface {
-    origin: OriginTypeId,
-    target_type_identity: CanonicalTypeIdentity,
+    pub(crate) origin: OriginTypeId,
+    pub(crate) target_type_identity: CanonicalTypeIdentity,
 }
 
 /// The type-only surface for one exported constant.
@@ -176,8 +192,8 @@ pub(crate) struct DefinedPublicAliasTypeSurface {
 /// Only the canonical type is exposed in this slice; folded values remain for a later phase.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct DefinedPublicConstantTypeSurface {
-    origin: OriginConstantId,
-    type_identity: CanonicalTypeIdentity,
+    pub(crate) origin: OriginConstantId,
+    pub(crate) type_identity: CanonicalTypeIdentity,
 }
 
 /// The type-only surface for one exported receiver method.
@@ -186,11 +202,11 @@ pub(crate) struct DefinedPublicConstantTypeSurface {
 /// and cannot be imported or re-exported separately.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct DefinedPublicReceiverMethodTypeSurface {
-    receiver_origin: OriginTypeId,
-    method_origin: OriginFunctionId,
-    parameters: Vec<DefinedPublicParameterTypeSlot>,
-    returns: Vec<DefinedPublicReturnTypeSlot>,
-    error_return: Option<CanonicalTypeIdentity>,
+    pub(crate) receiver_origin: OriginTypeId,
+    pub(crate) method_origin: OriginFunctionId,
+    pub(crate) parameters: Vec<PublicParameterTypeSlot>,
+    pub(crate) returns: Vec<PublicReturnTypeSlot>,
+    pub(crate) error_return: Option<CanonicalTypeIdentity>,
 }
 
 // ---------------------------------------------------------------------------
@@ -729,7 +745,7 @@ fn project_exported_generic_parameter_surfaces(
     expected_origin: &GenericDeclarationOrigin,
     trait_source_facts: &FxHashMap<TraitId, ResolvedTraitSourceFact>,
     public_source_trait_origins: &FxHashMap<InternedPath, OriginTraitId>,
-) -> Result<Vec<DefinedPublicGenericParameterSurface>, CompilerError> {
+) -> Result<Vec<PublicGenericParameterSurface>, CompilerError> {
     let Some(list_id) = generic_parameter_list_id else {
         return Ok(Vec::new());
     };
@@ -741,7 +757,7 @@ fn project_exported_generic_parameter_surfaces(
         ))
     })?;
 
-    let mut surfaces: Vec<DefinedPublicGenericParameterSurface> =
+    let mut surfaces: Vec<PublicGenericParameterSurface> =
         Vec::with_capacity(list.parameters.len());
     for parameter in &list.parameters {
         let identity = generic_resolver.resolve_generic_parameter_origin(parameter.id)?;
@@ -777,7 +793,7 @@ fn project_exported_generic_parameter_surfaces(
             public_source_trait_origins,
         )?;
 
-        surfaces.push(DefinedPublicGenericParameterSurface { identity, bounds });
+        surfaces.push(PublicGenericParameterSurface { identity, bounds });
     }
 
     Ok(surfaces)
@@ -891,7 +907,7 @@ fn project_free_function(
                 type_environment,
                 context,
             )?;
-            Ok(DefinedPublicParameterTypeSlot {
+            Ok(PublicParameterTypeSlot {
                 name,
                 type_identity,
             })
@@ -917,13 +933,7 @@ fn project_return_slots(
     return_slots: &[ReturnSlot],
     type_environment: &TypeEnvironment,
     context: &CanonicalTypeProjectionContext,
-) -> Result<
-    (
-        Vec<DefinedPublicReturnTypeSlot>,
-        Option<CanonicalTypeIdentity>,
-    ),
-    CompilerError,
-> {
+) -> Result<(Vec<PublicReturnTypeSlot>, Option<CanonicalTypeIdentity>), CompilerError> {
     let mut returns = Vec::new();
     let mut error_return = None;
 
@@ -939,7 +949,7 @@ fn project_return_slots(
             project_type_id_to_canonical_identity(type_id, type_environment, context)?;
 
         match slot.channel {
-            ReturnChannel::Success => returns.push(DefinedPublicReturnTypeSlot { type_identity }),
+            ReturnChannel::Success => returns.push(PublicReturnTypeSlot { type_identity }),
             ReturnChannel::Error => {
                 if error_return.is_some() {
                     return Err(CompilerError::compiler_error(
@@ -1092,7 +1102,7 @@ fn project_fields(
     type_environment: &TypeEnvironment,
     context: &CanonicalTypeProjectionContext,
     string_table: &StringTable,
-) -> Result<Vec<DefinedPublicFieldTypeSlot>, CompilerError> {
+) -> Result<Vec<PublicFieldTypeSlot>, CompilerError> {
     let mut fields = Vec::with_capacity(struct_definition.fields.len());
     for field in struct_definition.fields.iter() {
         let name = field
@@ -1110,7 +1120,7 @@ fn project_fields(
         let type_identity =
             project_type_id_to_canonical_identity(field.type_id, type_environment, context)?;
 
-        fields.push(DefinedPublicFieldTypeSlot {
+        fields.push(PublicFieldTypeSlot {
             name,
             type_identity,
         });
@@ -1124,7 +1134,7 @@ fn project_choice_variants(
     type_environment: &TypeEnvironment,
     context: &CanonicalTypeProjectionContext,
     string_table: &StringTable,
-) -> Result<Vec<DefinedPublicChoiceVariantTypeSurface>, CompilerError> {
+) -> Result<Vec<PublicChoiceVariantSurface>, CompilerError> {
     let mut variants = Vec::with_capacity(choice_definition.variants.len());
     for variant in choice_definition.variants.iter() {
         let name = string_table.resolve(variant.name).to_owned();
@@ -1152,7 +1162,7 @@ fn project_choice_variants(
                         context,
                     )?;
 
-                    projected_fields.push(DefinedPublicFieldTypeSlot {
+                    projected_fields.push(PublicFieldTypeSlot {
                         name: field_name,
                         type_identity,
                     });
@@ -1161,7 +1171,7 @@ fn project_choice_variants(
             }
         };
 
-        variants.push(DefinedPublicChoiceVariantTypeSurface {
+        variants.push(PublicChoiceVariantSurface {
             name,
             payload_fields,
         });
@@ -1256,7 +1266,7 @@ fn project_receiver_methods(
                         type_environment,
                         context,
                     )?;
-                    Ok(DefinedPublicParameterTypeSlot {
+                    Ok(PublicParameterTypeSlot {
                         name,
                         type_identity,
                     })

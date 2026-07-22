@@ -116,6 +116,7 @@ impl DefinedPublicExportOriginDraft {
         )?;
 
         Ok(DefinedPublicExportOrigins::new(
+            self.module_origin,
             self.export_bindings,
             receiver_surfaces,
         ))

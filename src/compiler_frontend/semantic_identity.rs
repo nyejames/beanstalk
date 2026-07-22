@@ -631,12 +631,14 @@ impl ReceiverSurfaceOrigins {
 /// Immutable compiler-owned stable identity component for public declarations defined directly
 /// in the active module root.
 ///
-/// WHAT: records stable origin IDs and [`ExportBinding`] values for the declarations authored
-///       directly in the active module root's public surface, including direct `ExportBinding`
-///       facts, plus the receiver-method origins attached to each exported nominal type's
-///       surface. It is the immediate consumer of the Phase 7a [`StableModuleOriginIdentity`]:
-///       the module origin becomes the exporting-module and declaration-origin component of
-///       every recorded binding.
+/// WHAT: records the owning [`StableModuleOriginIdentity`], stable origin IDs and
+///       [`ExportBinding`] values for the declarations authored directly in the active module
+///       root's public surface, including direct `ExportBinding` facts, plus the receiver-method
+///       origins attached to each exported nominal type's surface. It is the immediate consumer
+///       of the Phase 7a [`StableModuleOriginIdentity`]: the module origin becomes the
+///       exporting-module and declaration-origin component of every recorded binding, and is
+///       carried so the consuming [`PublicInterfaceDraft`] can own its module origin even when
+///       the module exports nothing.
 ///
 /// It is deliberately not the final `PublicSemanticInterface`. Canonical type shapes, folded
 /// constant payloads, generic templates, trait/conformance evidence, access and effect
@@ -654,21 +656,24 @@ impl ReceiverSurfaceOrigins {
 /// nondeterminism.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct DefinedPublicExportOrigins {
+    module_origin: StableModuleOriginIdentity,
     export_bindings: Vec<ExportBinding>,
     receiver_surfaces: Vec<ReceiverSurfaceOrigins>,
 }
 
 impl DefinedPublicExportOrigins {
-    /// Construct the component from the already-built, deterministically ordered bindings and
-    /// receiver surfaces.
+    /// Construct the component from the owning module origin and the already-built,
+    /// deterministically ordered bindings and receiver surfaces.
     ///
     /// Compiler-internal: the construction owner in `defined_public_export_origins` assembles the
     /// vectors in the documented deterministic order before calling this.
     pub(crate) fn new(
+        module_origin: StableModuleOriginIdentity,
         export_bindings: Vec<ExportBinding>,
         receiver_surfaces: Vec<ReceiverSurfaceOrigins>,
     ) -> Self {
         Self {
+            module_origin,
             export_bindings,
             receiver_surfaces,
         }
@@ -684,5 +689,16 @@ impl DefinedPublicExportOrigins {
     /// order. Not free-namespace bindings.
     pub(crate) fn receiver_surfaces(&self) -> &[ReceiverSurfaceOrigins] {
         &self.receiver_surfaces
+    }
+
+    /// Consume the component, moving the module origin and export bindings into the draft.
+    ///
+    /// The only production consumer is [`PublicInterfaceDraftBuilder::build`], which calls this
+    /// after the borrowing type-surface and trait-surface projections finish. The receiver
+    /// surfaces were already projected into the type surface and are not needed by the draft.
+    pub(crate) fn into_module_origin_and_export_bindings(
+        self,
+    ) -> (StableModuleOriginIdentity, Vec<ExportBinding>) {
+        (self.module_origin, self.export_bindings)
     }
 }

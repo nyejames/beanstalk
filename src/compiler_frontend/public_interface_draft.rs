@@ -2,16 +2,28 @@
 //!
 //! WHAT: owns the [`PublicInterfaceDraftBuilder`] and the [`PublicInterfaceDraft`] it produces.
 //! The draft is the sole pre-HIR public-semantic handoff that crosses the semantic compilation
-//! boundary. It internalizes three projection components as private builder steps:
+//! boundary. It is declaration-centric: one [`PublicDeclarationRecord`] per stable
+//! [`OriginDeclarationId`], carrying a closed [`PublicDeclarationSemantics`] enum that
+//! distinguishes free functions, structs, choices, transparent aliases, constants and traits.
+//! Receiver methods are attached to their owning struct or choice record, not stored as a
+//! top-level parallel vector. Direct [`ExportBinding`] values remain distinct from declaration
+//! records so future re-exports can add bindings without changing donor origins.
+//!
+//! The builder internalizes three projection components as private builder steps:
 //! - the accepted direct export-origin projection ([`DefinedPublicExportOrigins`]),
 //! - the accepted canonical type-surface projection ([`DefinedPublicTypeSurface`]),
 //! - the corrected direct trait-requirement projection ([`DefinedPublicTraitSurface`]).
 //!
+//! These intermediates are consumed before the draft boundary: the draft stores only `Public*`
+//! semantic leaf types. `DefinedPublic*` aggregate projection containers are transient and are
+//! consumed by the join. The join validates every category/origin pairing and rejects missing,
+//! duplicate, extra or mismatched facts through [`CompilerError`].
+//!
 //! WHY: the compiler design overview and the recovery plan require one aggregate producer
-//! boundary instead of parallel `DefinedPublic*` fields on `CompiledModuleResult`. Keeping the
-//! three projections behind one builder preserves their proven, total projection logic while
-//! ensuring only one draft crosses orchestration. R1 may internally retain the proven
-//! projection components; R2 folds them into declaration-centric records and final provenance.
+//! boundary with a declaration-centric shape instead of parallel `DefinedPublic*` fields that
+//! every later phase would have to rejoin. Keeping the three projections behind one builder
+//! preserves their proven, total projection logic while ensuring only one draft crosses
+//! orchestration.
 //!
 //! ## Trait-requirement projection
 //!
@@ -42,17 +54,22 @@ use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::ids::{GenericParameterId, TypeId};
 use crate::compiler_frontend::defined_public_export_origins::DefinedPublicExportOriginDraft;
 use crate::compiler_frontend::defined_public_type_surface::{
-    DefinedPublicTypeSurface, TransientNominalOriginResolver, build_defined_public_type_surface,
+    DefinedPublicAliasTypeSurface, DefinedPublicConstantTypeSurface,
+    DefinedPublicFunctionTypeSurface, DefinedPublicNominalTypeSurface,
+    DefinedPublicReceiverMethodTypeSurface, DefinedPublicTypeSurface, PublicChoiceVariantSurface,
+    PublicFieldTypeSlot, PublicGenericParameterSurface, PublicParameterTypeSlot,
+    PublicReturnTypeSlot, TransientNominalOriginResolver, build_defined_public_type_surface,
 };
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::semantic_identity::{
-    DefinedPublicExportOrigins, ExportBinding, OriginDeclarationId, OriginTraitId, OriginTypeId,
+    ExportBinding, OriginDeclarationId, OriginFunctionId, OriginTraitId, OriginTypeCategory,
+    OriginTypeId, StableModuleOriginIdentity,
 };
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::value_mode::ValueMode;
 
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 // ===========================================================================
 //  Trait surface value types
@@ -72,7 +89,7 @@ pub(crate) enum TraitSurfaceTypeIdentity {
 
 /// Required receiver access for one trait requirement, stored separately from the self type.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub(crate) enum DefinedPublicTraitReceiverAccess {
+pub(crate) enum PublicTraitReceiverAccess {
     Immutable,
     Mutable,
 }
@@ -81,7 +98,7 @@ pub(crate) enum DefinedPublicTraitReceiverAccess {
 ///
 /// `name` is the owned authored parameter name, or `None` when the source signature omits it.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct DefinedPublicTraitRequirementParameter {
+pub(crate) struct PublicTraitRequirementParameter {
     name: Option<String>,
     value_mode: ValueMode,
     type_identity: TraitSurfaceTypeIdentity,
@@ -89,18 +106,18 @@ pub(crate) struct DefinedPublicTraitRequirementParameter {
 
 /// One return slot in a trait requirement surface.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct DefinedPublicTraitRequirementReturn {
+pub(crate) struct PublicTraitRequirementReturn {
     channel: ReturnChannel,
     type_identity: TraitSurfaceTypeIdentity,
 }
 
 /// One method requirement in a trait surface, in authored order.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct DefinedPublicTraitRequirementSurface {
+pub(crate) struct PublicTraitRequirementSurface {
     name: String,
-    receiver_access: DefinedPublicTraitReceiverAccess,
-    parameters: Vec<DefinedPublicTraitRequirementParameter>,
-    returns: Vec<DefinedPublicTraitRequirementReturn>,
+    receiver_access: PublicTraitReceiverAccess,
+    parameters: Vec<PublicTraitRequirementParameter>,
+    returns: Vec<PublicTraitRequirementReturn>,
 }
 
 /// The trait surface for one exported trait authored directly in the active module root.
@@ -110,30 +127,116 @@ pub(crate) struct DefinedPublicTraitRequirementSurface {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct DefinedPublicTraitSurface {
     origin: OriginTraitId,
-    requirements: Vec<DefinedPublicTraitRequirementSurface>,
+    requirements: Vec<PublicTraitRequirementSurface>,
 }
 
 // ===========================================================================
-//  PublicInterfaceDraft
+//  Declaration-centric record value types
 // ===========================================================================
+
+/// The closed semantic category for one public declaration record.
+///
+/// WHAT: a distinct variant per directly-defined public declaration category. Struct and choice
+/// are separate variants so nominal meaning is never implicit in empty field/variant vectors.
+/// Each variant carries only the semantic facts already produced at R1; no folded values,
+/// evidence, provenance, borrow/effect summaries, generic template bodies or re-exports enter
+/// this enum.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum PublicDeclarationSemantics {
+    Function(PublicFunctionSemantics),
+    Struct(PublicStructSemantics),
+    Choice(PublicChoiceSemantics),
+    TransparentAlias(PublicAliasSemantics),
+    Constant(PublicConstantSemantics),
+    Trait(PublicTraitSemantics),
+}
+
+/// The semantic facts for one exported free function: generic parameters/bounds, parameter
+/// types, success returns and error return.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct PublicFunctionSemantics {
+    pub(crate) generic_parameters: Vec<PublicGenericParameterSurface>,
+    pub(crate) parameters: Vec<PublicParameterTypeSlot>,
+    pub(crate) returns: Vec<PublicReturnTypeSlot>,
+    pub(crate) error_return: Option<CanonicalTypeIdentity>,
+}
+
+/// The semantic facts for one exported receiver method, attached to its owning struct or choice
+/// declaration record. The receiver origin is the parent record's origin and is not repeated here.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct PublicReceiverMethodSemantics {
+    pub(crate) method_origin: OriginFunctionId,
+    pub(crate) parameters: Vec<PublicParameterTypeSlot>,
+    pub(crate) returns: Vec<PublicReturnTypeSlot>,
+    pub(crate) error_return: Option<CanonicalTypeIdentity>,
+}
+
+/// The semantic facts for one exported nominal struct: generic parameters/bounds, fields and
+/// receiver methods attached to this struct's surface.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct PublicStructSemantics {
+    pub(crate) generic_parameters: Vec<PublicGenericParameterSurface>,
+    pub(crate) fields: Vec<PublicFieldTypeSlot>,
+    pub(crate) receiver_methods: Vec<PublicReceiverMethodSemantics>,
+}
+
+/// The semantic facts for one exported nominal choice: generic parameters/bounds, variants and
+/// receiver methods attached to this choice's surface.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct PublicChoiceSemantics {
+    pub(crate) generic_parameters: Vec<PublicGenericParameterSurface>,
+    pub(crate) variants: Vec<PublicChoiceVariantSurface>,
+    pub(crate) receiver_methods: Vec<PublicReceiverMethodSemantics>,
+}
+
+/// The semantic facts for one exported transparent alias: the resolved target type identity.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct PublicAliasSemantics {
+    pub(crate) target_type_identity: CanonicalTypeIdentity,
+}
+
+/// The semantic facts for one exported constant: the canonical type identity. Folded values
+/// remain for a later phase.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct PublicConstantSemantics {
+    pub(crate) type_identity: CanonicalTypeIdentity,
+}
+
+/// The semantic facts for one exported trait: its ordered requirements with receiver access,
+/// parameter modes/types and return channels/types.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct PublicTraitSemantics {
+    pub(crate) requirements: Vec<PublicTraitRequirementSurface>,
+}
+
+/// One declaration-centric record in the public interface draft.
+///
+/// WHAT: carries exactly one stable [`OriginDeclarationId`] and its closed
+/// [`PublicDeclarationSemantics`]. The builder produces one record per stable origin in the
+/// deterministic export-binding order, with receiver methods deterministically attached to
+/// their owning struct or choice record.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct PublicDeclarationRecord {
+    pub(crate) origin: OriginDeclarationId,
+    pub(crate) semantics: PublicDeclarationSemantics,
+}
 
 /// The one aggregate pre-HIR public-semantic handoff for one compiled module.
 ///
-/// WHAT: owns the three proven projection components for declarations authored directly in the
-/// active module root: the direct export origins, the canonical type surface and the corrected
-/// direct trait surfaces. R1 retains these components internally; R2 folds them into
-/// declaration-centric records with provenance. It carries only owned stable values: no
-/// donor-local `TypeId`, `NominalTypeId`, `GenericParameterId`, `TraitId`, `InternedPath` or
-/// `StringId` crosses this boundary.
+/// WHAT: owns the owning [`StableModuleOriginIdentity`] (even when the module exports nothing),
+/// the deterministic [`ExportBinding`] values distinct from declaration records, and one
+/// [`PublicDeclarationRecord`] per stable [`OriginDeclarationId`]. It carries only owned stable
+/// values: no donor-local `TypeId`, `NominalTypeId`, `GenericParameterId`, `TraitId`,
+/// `InternedPath` or `StringId` crosses this boundary.
 ///
 /// It is deliberately not the final `PublicSemanticInterface`. Folded constant values, generic
 /// template bodies, evidence, access/effect summaries, provenance, re-export interfaces and
 /// cross-module call lowering remain for later phases.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct PublicInterfaceDraft {
-    export_origins: DefinedPublicExportOrigins,
-    type_surface: DefinedPublicTypeSurface,
-    trait_surfaces: Vec<DefinedPublicTraitSurface>,
+    pub(crate) module_origin: StableModuleOriginIdentity,
+    pub(crate) export_bindings: Vec<ExportBinding>,
+    pub(crate) declarations: Vec<PublicDeclarationRecord>,
 }
 
 // ===========================================================================
@@ -181,13 +284,17 @@ impl<'a> PublicInterfaceDraftBuilder<'a> {
 
     /// Build the aggregate draft.
     ///
-    /// WHAT: runs the three internal projection steps in order:
+    /// WHAT: runs the three internal projection steps in order, then joins their intermediates
+    /// into one declaration-centric record per stable origin:
     /// 1. finalize the export-origin component from the receiver catalog,
     /// 2. build the canonical type surface from the resolved root table,
-    /// 3. build the corrected trait surfaces from the resolved trait roots.
+    /// 3. build the corrected trait surfaces from the resolved trait roots,
+    /// 4. join all three into [`PublicDeclarationRecord`] values, attaching receiver methods to
+    ///    their owning struct or choice record.
     ///
     /// Each step is total: a missing, duplicate, unmatched or malformed fact is a
-    /// `CompilerError` rather than a silent omission.
+    /// `CompilerError` rather than a silent omission. The intermediates are consumed before the
+    /// draft boundary: the draft never stores a `DefinedPublic*` component.
     pub(crate) fn build(self) -> Result<PublicInterfaceDraft, CompilerError> {
         let PublicInterfaceDraftBuilderInput {
             export_origin_draft,
@@ -235,12 +342,358 @@ impl<'a> PublicInterfaceDraftBuilder<'a> {
             string_table,
         )?;
 
+        // Consume the export-origin component after the borrowing projections finish.
+        // The module origin and export bindings move into the draft; the receiver surfaces were
+        // already projected into the type surface and are dropped here.
+        let (module_origin, export_bindings) =
+            export_origins.into_module_origin_and_export_bindings();
+        let declarations =
+            join_declaration_records(&export_bindings, type_surface, trait_surfaces)?;
+
         Ok(PublicInterfaceDraft {
-            export_origins,
-            type_surface,
-            trait_surfaces,
+            module_origin,
+            export_bindings,
+            declarations,
         })
     }
+}
+
+// ===========================================================================
+//  Declaration-centric join
+// ===========================================================================
+
+/// Join the projection intermediates into one declaration-centric record per stable origin.
+///
+/// WHAT: indexes the type-surface and trait-surface intermediates by origin, then iterates the
+/// export bindings in their deterministic order. For each unique origin, the matching
+/// type-surface or trait-surface entry is consumed and its semantic facts are moved into a
+/// [`PublicDeclarationRecord`]. When multiple bindings name the same origin, one record is
+/// produced at the first binding's deterministic position and every binding is preserved
+/// separately in the draft. Receiver methods are grouped by receiver origin and attached to
+/// their owning struct or choice record. A struct fact carrying choice variants or a choice
+/// fact carrying struct fields is rejected rather than silently dropped. After every binding is
+/// processed, any unconsumed type-surface entry, trait surface or receiver method is an extra
+/// fact that must not leak: it is reported as a `CompilerError`.
+///
+/// WHY: the existing projections already validate binding-to-root joins, so the intermediates
+/// are consistent. This join reshapes them into the declaration-centric model the draft owns, and
+/// adds a final totality check so a mismatch between the three intermediates can never silently
+/// omit or duplicate a public fact. Error selection is deterministic: leftover counts and
+/// categories are reported without relying on unordered hash-map iteration.
+fn join_declaration_records(
+    export_bindings: &[ExportBinding],
+    type_surface: DefinedPublicTypeSurface,
+    trait_surfaces: Vec<DefinedPublicTraitSurface>,
+) -> Result<Vec<PublicDeclarationRecord>, CompilerError> {
+    let DefinedPublicTypeSurface {
+        free_functions,
+        nominal_types,
+        transparent_aliases,
+        constants,
+        receiver_methods,
+    } = type_surface;
+
+    let mut functions_by_origin: FxHashMap<OriginDeclarationId, DefinedPublicFunctionTypeSurface> =
+        FxHashMap::default();
+    for function in free_functions {
+        let origin = OriginDeclarationId::Function(function.origin.clone());
+        if functions_by_origin
+            .insert(origin.clone(), function)
+            .is_some()
+        {
+            return Err(CompilerError::compiler_error(format!(
+                "public-interface draft join: two free-function type-surface entries share origin {:?}; a duplicate must not silently overwrite the first",
+                origin
+            )));
+        }
+    }
+
+    let mut nominals_by_origin: FxHashMap<OriginDeclarationId, DefinedPublicNominalTypeSurface> =
+        FxHashMap::default();
+    for nominal in nominal_types {
+        let origin = OriginDeclarationId::Type(nominal.origin.clone());
+        if nominals_by_origin.insert(origin.clone(), nominal).is_some() {
+            return Err(CompilerError::compiler_error(format!(
+                "public-interface draft join: two nominal type-surface entries share origin {:?}; a duplicate must not silently overwrite the first",
+                origin
+            )));
+        }
+    }
+
+    let mut aliases_by_origin: FxHashMap<OriginDeclarationId, DefinedPublicAliasTypeSurface> =
+        FxHashMap::default();
+    for alias in transparent_aliases {
+        let origin = OriginDeclarationId::Type(alias.origin.clone());
+        if aliases_by_origin.insert(origin.clone(), alias).is_some() {
+            return Err(CompilerError::compiler_error(format!(
+                "public-interface draft join: two transparent-alias type-surface entries share origin {:?}; a duplicate must not silently overwrite the first",
+                origin
+            )));
+        }
+    }
+
+    let mut constants_by_origin: FxHashMap<OriginDeclarationId, DefinedPublicConstantTypeSurface> =
+        FxHashMap::default();
+    for constant in constants {
+        let origin = OriginDeclarationId::Constant(constant.origin.clone());
+        if constants_by_origin
+            .insert(origin.clone(), constant)
+            .is_some()
+        {
+            return Err(CompilerError::compiler_error(format!(
+                "public-interface draft join: two constant type-surface entries share origin {:?}; a duplicate must not silently overwrite the first",
+                origin
+            )));
+        }
+    }
+
+    let mut traits_by_origin: FxHashMap<OriginDeclarationId, DefinedPublicTraitSurface> =
+        FxHashMap::default();
+    for surface in trait_surfaces {
+        let origin = OriginDeclarationId::Trait(surface.origin.clone());
+        if traits_by_origin.insert(origin.clone(), surface).is_some() {
+            return Err(CompilerError::compiler_error(format!(
+                "public-interface draft join: two trait surfaces share origin {:?}; a duplicate must not silently overwrite the first",
+                origin
+            )));
+        }
+    }
+
+    let mut receiver_methods_by_receiver: FxHashMap<
+        OriginTypeId,
+        Vec<DefinedPublicReceiverMethodTypeSurface>,
+    > = FxHashMap::default();
+    let mut seen_method_origins: FxHashSet<OriginFunctionId> = FxHashSet::default();
+    for method in receiver_methods {
+        if !seen_method_origins.insert(method.method_origin.clone()) {
+            return Err(CompilerError::compiler_error(format!(
+                "public-interface draft join: two receiver-method type-surface entries share method origin {:?}; a duplicate must not silently overwrite the first",
+                method.method_origin
+            )));
+        }
+        receiver_methods_by_receiver
+            .entry(method.receiver_origin.clone())
+            .or_default()
+            .push(method);
+    }
+
+    let mut declarations = Vec::new();
+    let mut seen_origins: FxHashSet<OriginDeclarationId> = FxHashSet::default();
+
+    for binding in export_bindings {
+        // One declaration record per unique origin. A second binding for the same origin is
+        // preserved in the export-bindings list but does not produce a second record.
+        if !seen_origins.insert(binding.origin().clone()) {
+            continue;
+        }
+
+        match binding.origin() {
+            OriginDeclarationId::Function(function_origin) => {
+                let function = functions_by_origin
+                    .remove(&OriginDeclarationId::Function(function_origin.clone()))
+                    .ok_or_else(|| {
+                        CompilerError::compiler_error(format!(
+                            "public-interface draft join: the function export binding '{}' has no matching free-function type-surface entry",
+                            binding.public_name()
+                        ))
+                    })?;
+                declarations.push(PublicDeclarationRecord {
+                    origin: binding.origin().clone(),
+                    semantics: PublicDeclarationSemantics::Function(PublicFunctionSemantics {
+                        generic_parameters: function.generic_parameters,
+                        parameters: function.parameters,
+                        returns: function.returns,
+                        error_return: function.error_return,
+                    }),
+                });
+            }
+            OriginDeclarationId::Type(type_origin) => match type_origin.category() {
+                OriginTypeCategory::Struct => {
+                    let nominal = nominals_by_origin
+                        .remove(&OriginDeclarationId::Type(type_origin.clone()))
+                        .ok_or_else(|| {
+                            CompilerError::compiler_error(format!(
+                                "public-interface draft join: the struct export binding '{}' has no matching nominal type-surface entry",
+                                binding.public_name()
+                            ))
+                        })?;
+
+                    // A struct fact must not carry choice variants; rejecting the wrong vector
+                    // prevents silently discarding an input fact.
+                    if !nominal.variants.is_empty() {
+                        return Err(CompilerError::compiler_error(format!(
+                            "public-interface draft join: the struct export binding '{}' carries {} choice variant(s); a struct must not contain choice variants",
+                            binding.public_name(),
+                            nominal.variants.len()
+                        )));
+                    }
+
+                    let receiver_methods = receiver_methods_by_receiver
+                        .remove(type_origin)
+                        .unwrap_or_default();
+                    declarations.push(PublicDeclarationRecord {
+                        origin: binding.origin().clone(),
+                        semantics: PublicDeclarationSemantics::Struct(PublicStructSemantics {
+                            generic_parameters: nominal.generic_parameters,
+                            fields: nominal.fields,
+                            receiver_methods: receiver_methods
+                                .into_iter()
+                                .map(|method| PublicReceiverMethodSemantics {
+                                    method_origin: method.method_origin,
+                                    parameters: method.parameters,
+                                    returns: method.returns,
+                                    error_return: method.error_return,
+                                })
+                                .collect(),
+                        }),
+                    });
+                }
+                OriginTypeCategory::Choice => {
+                    let nominal = nominals_by_origin
+                        .remove(&OriginDeclarationId::Type(type_origin.clone()))
+                        .ok_or_else(|| {
+                            CompilerError::compiler_error(format!(
+                                "public-interface draft join: the choice export binding '{}' has no matching nominal type-surface entry",
+                                binding.public_name()
+                            ))
+                        })?;
+
+                    // A choice fact must not carry struct fields; rejecting the wrong vector
+                    // prevents silently discarding an input fact.
+                    if !nominal.fields.is_empty() {
+                        return Err(CompilerError::compiler_error(format!(
+                            "public-interface draft join: the choice export binding '{}' carries {} struct field(s); a choice must not contain struct fields",
+                            binding.public_name(),
+                            nominal.fields.len()
+                        )));
+                    }
+
+                    let receiver_methods = receiver_methods_by_receiver
+                        .remove(type_origin)
+                        .unwrap_or_default();
+                    declarations.push(PublicDeclarationRecord {
+                        origin: binding.origin().clone(),
+                        semantics: PublicDeclarationSemantics::Choice(PublicChoiceSemantics {
+                            generic_parameters: nominal.generic_parameters,
+                            variants: nominal.variants,
+                            receiver_methods: receiver_methods
+                                .into_iter()
+                                .map(|method| PublicReceiverMethodSemantics {
+                                    method_origin: method.method_origin,
+                                    parameters: method.parameters,
+                                    returns: method.returns,
+                                    error_return: method.error_return,
+                                })
+                                .collect(),
+                        }),
+                    });
+                }
+                OriginTypeCategory::TransparentAlias => {
+                    let alias = aliases_by_origin
+                        .remove(&OriginDeclarationId::Type(type_origin.clone()))
+                        .ok_or_else(|| {
+                            CompilerError::compiler_error(format!(
+                                "public-interface draft join: the transparent-alias export binding '{}' has no matching alias type-surface entry",
+                                binding.public_name()
+                            ))
+                        })?;
+                    declarations.push(PublicDeclarationRecord {
+                        origin: binding.origin().clone(),
+                        semantics: PublicDeclarationSemantics::TransparentAlias(
+                            PublicAliasSemantics {
+                                target_type_identity: alias.target_type_identity,
+                            },
+                        ),
+                    });
+                }
+            },
+            OriginDeclarationId::Constant(constant_origin) => {
+                let constant = constants_by_origin
+                    .remove(&OriginDeclarationId::Constant(constant_origin.clone()))
+                    .ok_or_else(|| {
+                        CompilerError::compiler_error(format!(
+                            "public-interface draft join: the constant export binding '{}' has no matching constant type-surface entry",
+                            binding.public_name()
+                        ))
+                    })?;
+                declarations.push(PublicDeclarationRecord {
+                    origin: binding.origin().clone(),
+                    semantics: PublicDeclarationSemantics::Constant(PublicConstantSemantics {
+                        type_identity: constant.type_identity,
+                    }),
+                });
+            }
+            OriginDeclarationId::Trait(trait_origin) => {
+                let surface = traits_by_origin
+                    .remove(&OriginDeclarationId::Trait(trait_origin.clone()))
+                    .ok_or_else(|| {
+                        CompilerError::compiler_error(format!(
+                            "public-interface draft join: the trait export binding '{}' has no matching trait surface",
+                            binding.public_name()
+                        ))
+                    })?;
+                declarations.push(PublicDeclarationRecord {
+                    origin: binding.origin().clone(),
+                    semantics: PublicDeclarationSemantics::Trait(PublicTraitSemantics {
+                        requirements: surface.requirements,
+                    }),
+                });
+            }
+        }
+    }
+
+    // Every type-surface and trait-surface entry must have joined a binding. Deterministic
+    // count/category reporting avoids unordered hash-map iteration when selecting an error.
+    let leftover_functions = functions_by_origin.len();
+    if leftover_functions > 0 {
+        return Err(CompilerError::compiler_error(format!(
+            "public-interface draft join: {} free-function type-surface entries have no matching export binding",
+            leftover_functions
+        )));
+    }
+
+    let leftover_nominals = nominals_by_origin.len();
+    if leftover_nominals > 0 {
+        return Err(CompilerError::compiler_error(format!(
+            "public-interface draft join: {} nominal type-surface entries have no matching export binding",
+            leftover_nominals
+        )));
+    }
+
+    let leftover_aliases = aliases_by_origin.len();
+    if leftover_aliases > 0 {
+        return Err(CompilerError::compiler_error(format!(
+            "public-interface draft join: {} transparent-alias type-surface entries have no matching export binding",
+            leftover_aliases
+        )));
+    }
+
+    let leftover_constants = constants_by_origin.len();
+    if leftover_constants > 0 {
+        return Err(CompilerError::compiler_error(format!(
+            "public-interface draft join: {} constant type-surface entries have no matching export binding",
+            leftover_constants
+        )));
+    }
+
+    let leftover_traits = traits_by_origin.len();
+    if leftover_traits > 0 {
+        return Err(CompilerError::compiler_error(format!(
+            "public-interface draft join: {} trait surfaces have no matching export binding",
+            leftover_traits
+        )));
+    }
+
+    let leftover_receiver_methods: usize =
+        receiver_methods_by_receiver.values().map(Vec::len).sum();
+    if leftover_receiver_methods > 0 {
+        return Err(CompilerError::compiler_error(format!(
+            "public-interface draft join: {} receiver method(s) have no matching struct or choice export binding",
+            leftover_receiver_methods
+        )));
+    }
+
+    Ok(declarations)
 }
 
 // ===========================================================================
@@ -470,7 +923,7 @@ fn project_trait_requirement(
     type_environment: &TypeEnvironment,
     context: &CanonicalTypeProjectionContext,
     string_table: &StringTable,
-) -> Result<DefinedPublicTraitRequirementSurface, CompilerError> {
+) -> Result<PublicTraitRequirementSurface, CompilerError> {
     // Validate the receiver this_type against the owning trait this_type before mapping access.
     // A mismatch is malformed transient AST data and must not be silently discarded.
     if requirement.receiver.this_type != owning_this_type {
@@ -483,8 +936,8 @@ fn project_trait_requirement(
     }
 
     let receiver_access = match requirement.receiver.access {
-        TraitReceiverAccessKind::Immutable => DefinedPublicTraitReceiverAccess::Immutable,
-        TraitReceiverAccessKind::Mutable => DefinedPublicTraitReceiverAccess::Mutable,
+        TraitReceiverAccessKind::Immutable => PublicTraitReceiverAccess::Immutable,
+        TraitReceiverAccessKind::Mutable => PublicTraitReceiverAccess::Mutable,
     };
 
     let name = string_table.resolve(requirement.name).to_owned();
@@ -503,7 +956,7 @@ fn project_trait_requirement(
                 type_environment,
                 context,
             )?;
-            Ok(DefinedPublicTraitRequirementParameter {
+            Ok(PublicTraitRequirementParameter {
                 name,
                 value_mode: parameter.value_mode.clone(),
                 type_identity,
@@ -521,14 +974,14 @@ fn project_trait_requirement(
                 type_environment,
                 context,
             )?;
-            Ok(DefinedPublicTraitRequirementReturn {
+            Ok(PublicTraitRequirementReturn {
                 channel: return_slot.channel,
                 type_identity,
             })
         })
         .collect::<Result<Vec<_>, CompilerError>>()?;
 
-    Ok(DefinedPublicTraitRequirementSurface {
+    Ok(PublicTraitRequirementSurface {
         name,
         receiver_access,
         parameters,

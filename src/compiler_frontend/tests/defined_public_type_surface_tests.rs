@@ -332,7 +332,11 @@ fn build_origins(
     export_bindings: Vec<ExportBinding>,
     receiver_surfaces: Vec<ReceiverSurfaceOrigins>,
 ) -> DefinedPublicExportOrigins {
-    DefinedPublicExportOrigins::new(export_bindings, receiver_surfaces)
+    DefinedPublicExportOrigins::new(
+        module_origin("functions"),
+        export_bindings,
+        receiver_surfaces,
+    )
 }
 
 fn build_surface(

@@ -14,9 +14,10 @@
 
 use crate::compiler_frontend::ast::AstPublicInterfaceProjectionInput;
 use crate::compiler_frontend::ast::ReceiverMethodCatalog;
-use crate::compiler_frontend::ast::statements::functions::ReturnChannel;
+use crate::compiler_frontend::ast::statements::functions::{FunctionSignature, ReturnChannel};
 use crate::compiler_frontend::ast::{
-    ResolvedPublicTraitRoot, ResolvedPublicTypeRootTable, ResolvedTraitParameterFact,
+    ReceiverMethodEntry, ResolvedPublicTraitRoot, ResolvedPublicTypeRoot,
+    ResolvedPublicTypeRootKind, ResolvedPublicTypeRootTable, ResolvedTraitParameterFact,
     ResolvedTraitReceiverFact, ResolvedTraitRequirementFact, ResolvedTraitReturnFact,
     TraitReceiverAccessKind,
 };
@@ -24,18 +25,29 @@ use crate::compiler_frontend::canonical_type_identity::{
     CanonicalBuiltinType, CanonicalTypeIdentity,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::datatypes::definitions::{FieldDefinition, StructTypeDefinition};
+use crate::compiler_frontend::datatypes::ReceiverKey;
+use crate::compiler_frontend::datatypes::definitions::{
+    ChoiceTypeDefinition, ChoiceVariantDefinition, FieldDefinition, StructTypeDefinition,
+};
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
-use crate::compiler_frontend::datatypes::ids::{NominalTypeId, TypeId};
+use crate::compiler_frontend::datatypes::ids::{GenericParameterListId, NominalTypeId, TypeId};
 use crate::compiler_frontend::defined_public_export_origins::DefinedPublicExportOriginDraft;
+use crate::compiler_frontend::defined_public_type_surface::{
+    DefinedPublicAliasTypeSurface, DefinedPublicConstantTypeSurface,
+    DefinedPublicFunctionTypeSurface, DefinedPublicNominalTypeSurface,
+    DefinedPublicReceiverMethodTypeSurface, DefinedPublicTypeSurface, PublicChoiceVariantSurface,
+    PublicFieldTypeSlot,
+};
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::public_interface_draft::{
-    DefinedPublicTraitReceiverAccess, DefinedPublicTraitSurface, PublicInterfaceDraftBuilder,
-    PublicInterfaceDraftBuilderInput, TraitSurfaceTypeIdentity, build_trait_surfaces,
+    DefinedPublicTraitSurface, PublicDeclarationSemantics, PublicInterfaceDraftBuilder,
+    PublicInterfaceDraftBuilderInput, PublicTraitReceiverAccess, TraitSurfaceTypeIdentity,
+    build_trait_surfaces, join_declaration_records,
 };
 use crate::compiler_frontend::semantic_identity::{
-    ExportBinding, ModuleRootRole, OriginDeclarationId, OriginTraitId, OriginTypeCategory,
-    OriginTypeId, StableModuleOriginIdentity, StablePackageIdentity,
+    ExportBinding, ModuleRootRole, OriginConstantId, OriginDeclarationId, OriginFunctionId,
+    OriginTraitId, OriginTypeCategory, OriginTypeId, StableModuleOriginIdentity,
+    StablePackageIdentity,
 };
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -146,13 +158,15 @@ fn register_struct(
     env: &mut TypeEnvironment,
     string_table: &mut StringTable,
     name: &str,
+    fields: Box<[FieldDefinition]>,
+    generic_parameters: Option<GenericParameterListId>,
 ) -> (NominalTypeId, TypeId) {
     let path = InternedPath::from_single_str(name, string_table);
     env.register_nominal_struct(StructTypeDefinition {
         id: NominalTypeId(0),
         path,
-        fields: empty_fields(),
-        generic_parameters: None,
+        fields,
+        generic_parameters,
         const_record: false,
     })
 }
@@ -197,6 +211,139 @@ fn trait_origins_map(
         map.insert(path(name, string_table), origin);
     }
     map
+}
+
+fn constant_origin(name: &str) -> OriginConstantId {
+    OriginConstantId::new(module_origin(), name.to_owned())
+}
+
+fn free_function_origin(name: &str) -> OriginFunctionId {
+    OriginFunctionId::new_free(module_origin(), name.to_owned())
+}
+
+fn choice_origin(name: &str) -> OriginTypeId {
+    OriginTypeId::new(module_origin(), name.to_owned(), OriginTypeCategory::Choice)
+}
+
+fn alias_origin(name: &str) -> OriginTypeId {
+    OriginTypeId::new(
+        module_origin(),
+        name.to_owned(),
+        OriginTypeCategory::TransparentAlias,
+    )
+}
+
+fn empty_variant_box() -> Box<[ChoiceVariantDefinition]> {
+    Box::new([])
+}
+
+fn register_choice(
+    env: &mut TypeEnvironment,
+    string_table: &mut StringTable,
+    name: &str,
+) -> (NominalTypeId, TypeId) {
+    let path = InternedPath::from_single_str(name, string_table);
+    env.register_nominal_choice(ChoiceTypeDefinition {
+        id: NominalTypeId(0),
+        path,
+        variants: empty_variant_box(),
+        generic_parameters: None,
+    })
+}
+
+fn function_root(
+    name: &str,
+    signature: FunctionSignature,
+    string_table: &mut StringTable,
+) -> ResolvedPublicTypeRoot {
+    ResolvedPublicTypeRoot {
+        path: path(name, string_table),
+        kind: ResolvedPublicTypeRootKind::Function {
+            signature,
+            generic_parameter_list_id: None,
+        },
+    }
+}
+
+fn struct_root(
+    name: &str,
+    type_id: TypeId,
+    string_table: &mut StringTable,
+) -> ResolvedPublicTypeRoot {
+    ResolvedPublicTypeRoot {
+        path: path(name, string_table),
+        kind: ResolvedPublicTypeRootKind::Struct { type_id },
+    }
+}
+
+fn choice_root(
+    name: &str,
+    type_id: TypeId,
+    string_table: &mut StringTable,
+) -> ResolvedPublicTypeRoot {
+    ResolvedPublicTypeRoot {
+        path: path(name, string_table),
+        kind: ResolvedPublicTypeRootKind::Choice { type_id },
+    }
+}
+
+fn alias_root(
+    name: &str,
+    target_type_id: TypeId,
+    string_table: &mut StringTable,
+) -> ResolvedPublicTypeRoot {
+    ResolvedPublicTypeRoot {
+        path: path(name, string_table),
+        kind: ResolvedPublicTypeRootKind::TransparentAlias { target_type_id },
+    }
+}
+
+fn constant_root(
+    name: &str,
+    type_id: TypeId,
+    string_table: &mut StringTable,
+) -> ResolvedPublicTypeRoot {
+    ResolvedPublicTypeRoot {
+        path: path(name, string_table),
+        kind: ResolvedPublicTypeRootKind::Constant { type_id },
+    }
+}
+
+fn empty_signature() -> FunctionSignature {
+    FunctionSignature {
+        parameters: vec![],
+        returns: vec![],
+    }
+}
+
+fn receiver_entry(
+    function_path: InternedPath,
+    receiver: ReceiverKey,
+    signature: FunctionSignature,
+) -> ReceiverMethodEntry {
+    ReceiverMethodEntry {
+        function_path,
+        receiver,
+        source_file: InternedPath::new(),
+        receiver_mutable: false,
+        signature,
+    }
+}
+
+fn type_surface(
+    free_functions: Vec<DefinedPublicFunctionTypeSurface>,
+    nominal_types: Vec<DefinedPublicNominalTypeSurface>,
+    transparent_aliases: Vec<DefinedPublicAliasTypeSurface>,
+    constants: Vec<DefinedPublicConstantTypeSurface>,
+    receiver_methods: Vec<DefinedPublicReceiverMethodTypeSurface>,
+) -> DefinedPublicTypeSurface {
+    DefinedPublicTypeSurface {
+        free_functions,
+        nominal_types,
+        transparent_aliases,
+        constants,
+        receiver_methods,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -255,12 +402,12 @@ fn projects_trait_with_ordered_requirements_immutable_and_mutable_receivers() {
     assert_eq!(&surface.requirements[0].name, "read");
     assert_eq!(
         surface.requirements[0].receiver_access,
-        DefinedPublicTraitReceiverAccess::Immutable
+        PublicTraitReceiverAccess::Immutable
     );
     assert_eq!(&surface.requirements[1].name, "write");
     assert_eq!(
         surface.requirements[1].receiver_access,
-        DefinedPublicTraitReceiverAccess::Mutable
+        PublicTraitReceiverAccess::Mutable
     );
 }
 
@@ -315,7 +462,8 @@ fn projects_ordinary_builtin_and_source_nominal_types_as_concrete() {
     let mut env = TypeEnvironment::new();
     let this_id = this_type(&mut env, &mut string_table);
     let int_id = env.builtins().int;
-    let (_, widget_id) = register_struct(&mut env, &mut string_table, "Widget");
+    let (_, widget_id) =
+        register_struct(&mut env, &mut string_table, "Widget", empty_fields(), None);
 
     let requirements = vec![requirement(
         "build",
@@ -595,7 +743,7 @@ fn rejects_trait_root_without_matching_binding() {
 
     assert!(result.is_err());
     let message = result.unwrap_err().msg.clone();
-    assert!(message.contains("no matching export binding"));
+    assert!(message.contains("has no matching export binding"));
 }
 
 #[test]
@@ -653,30 +801,273 @@ fn rejects_trait_root_without_retained_source_trait_origin() {
 }
 
 // ---------------------------------------------------------------------------
-//  Orchestration: the builder carries exactly one aggregate draft
+//  Orchestration: declaration-centric draft shape
 // ---------------------------------------------------------------------------
 
 #[test]
-fn builder_produces_one_aggregate_draft_with_three_components() {
+fn builder_produces_declaration_centric_draft_covering_every_category() {
     let mut string_table = StringTable::new();
     let mut env = TypeEnvironment::new();
-    let this_id = this_type(&mut env, &mut string_table);
+    let int_id = env.builtins().int;
 
-    let root = trait_root("Shape", this_id, vec![], &mut string_table);
-    let binding = trait_binding("Shape");
+    // Register a struct and a choice so the type-surface projection can resolve them.
+    let (_, struct_type_id) =
+        register_struct(&mut env, &mut string_table, "Counter", empty_fields(), None);
+    let (_, choice_type_id) = register_choice(&mut env, &mut string_table, "Status");
+
+    // Build roots for every non-trait category.
+    let function_root = function_root("render", empty_signature(), &mut string_table);
+    let struct_root = struct_root("Counter", struct_type_id, &mut string_table);
+    let choice_root = choice_root("Status", choice_type_id, &mut string_table);
+    let alias_root = alias_root("IntAlias", int_id, &mut string_table);
+    let constant_root = constant_root("MaxSize", int_id, &mut string_table);
+
+    let root_table = ResolvedPublicTypeRootTable {
+        roots: vec![
+            function_root,
+            struct_root,
+            choice_root,
+            alias_root,
+            constant_root,
+        ],
+        receiver_methods: vec![],
+        trait_source_facts: FxHashMap::default(),
+    };
+
+    // Build the trait root.
+    let this_id = this_type(&mut env, &mut string_table);
+    let trait_root = trait_root("Shape", this_id, vec![], &mut string_table);
+
+    // Build export bindings for all six categories, in deterministic sorted order by name.
+    let bindings = vec![
+        ExportBinding::new(
+            module_origin(),
+            "Counter".to_owned(),
+            OriginDeclarationId::Type(struct_origin("Counter")),
+        ),
+        ExportBinding::new(
+            module_origin(),
+            "IntAlias".to_owned(),
+            OriginDeclarationId::Type(alias_origin("IntAlias")),
+        ),
+        ExportBinding::new(
+            module_origin(),
+            "MaxSize".to_owned(),
+            OriginDeclarationId::Constant(constant_origin("MaxSize")),
+        ),
+        ExportBinding::new(
+            module_origin(),
+            "Status".to_owned(),
+            OriginDeclarationId::Type(choice_origin("Status")),
+        ),
+        ExportBinding::new(
+            module_origin(),
+            "render".to_owned(),
+            OriginDeclarationId::Function(free_function_origin("render")),
+        ),
+        trait_binding("Shape"),
+    ];
+
+    let nominal_origins = nominal_origins_map(
+        vec![
+            ("Counter", struct_origin("Counter")),
+            ("Status", choice_origin("Status")),
+        ],
+        &mut string_table,
+    );
     let trait_origins =
         trait_origins_map(vec![("Shape", trait_origin("Shape"))], &mut string_table);
 
     let export_origin_draft =
-        DefinedPublicExportOriginDraft::new(module_origin(), vec![binding], FxHashMap::default());
+        DefinedPublicExportOriginDraft::new(module_origin(), bindings, nominal_origins.clone());
 
     let projection_input = AstPublicInterfaceProjectionInput {
-        root_table: ResolvedPublicTypeRootTable {
-            roots: vec![],
-            receiver_methods: vec![],
-            trait_source_facts: FxHashMap::default(),
-        },
-        trait_roots: vec![root],
+        root_table,
+        trait_roots: vec![trait_root],
+        receiver_catalog: Some(std::rc::Rc::new(ReceiverMethodCatalog::default())),
+    };
+
+    let registry = ExternalPackageRegistry::new();
+    let draft = PublicInterfaceDraftBuilder::new(PublicInterfaceDraftBuilderInput {
+        export_origin_draft,
+        public_interface_projection_input: projection_input,
+        public_source_nominal_type_origins: &nominal_origins,
+        public_source_trait_origins: &trait_origins,
+        type_environment: &env,
+        external_registry: &registry,
+        string_table: &string_table,
+    })
+    .build()
+    .expect("declaration-centric draft builds for all categories");
+
+    // The draft owns its module origin.
+    assert_eq!(draft.module_origin, module_origin());
+
+    // The draft carries exactly six export bindings and six declaration records.
+    assert_eq!(draft.export_bindings.len(), 6);
+    assert_eq!(draft.declarations.len(), 6);
+
+    // Every semantics category is present as a distinct variant. Collect them by origin name.
+    let categories: Vec<&str> = draft
+        .declarations
+        .iter()
+        .map(|record| match &record.semantics {
+            PublicDeclarationSemantics::Function(_) => "function",
+            PublicDeclarationSemantics::Struct(_) => "struct",
+            PublicDeclarationSemantics::Choice(_) => "choice",
+            PublicDeclarationSemantics::TransparentAlias(_) => "alias",
+            PublicDeclarationSemantics::Constant(_) => "constant",
+            PublicDeclarationSemantics::Trait(_) => "trait",
+        })
+        .collect();
+    assert!(categories.contains(&"function"));
+    assert!(categories.contains(&"struct"));
+    assert!(categories.contains(&"choice"));
+    assert!(categories.contains(&"alias"));
+    assert!(categories.contains(&"constant"));
+    assert!(categories.contains(&"trait"));
+
+    // The constant record carries the canonical builtin int type.
+    let constant_record = draft
+        .declarations
+        .iter()
+        .find(|record| matches!(record.semantics, PublicDeclarationSemantics::Constant(_)))
+        .expect("constant record exists");
+    if let PublicDeclarationSemantics::Constant(semantics) = &constant_record.semantics {
+        assert_eq!(
+            semantics.type_identity,
+            CanonicalTypeIdentity::Builtin(CanonicalBuiltinType::Int)
+        );
+    }
+
+    // The alias record carries the canonical builtin int target.
+    let alias_record = draft
+        .declarations
+        .iter()
+        .find(|record| {
+            matches!(
+                record.semantics,
+                PublicDeclarationSemantics::TransparentAlias(_)
+            )
+        })
+        .expect("alias record exists");
+    if let PublicDeclarationSemantics::TransparentAlias(semantics) = &alias_record.semantics {
+        assert_eq!(
+            semantics.target_type_identity,
+            CanonicalTypeIdentity::Builtin(CanonicalBuiltinType::Int)
+        );
+    }
+
+    // The trait record carries zero requirements and the correct origin.
+    let trait_record = draft
+        .declarations
+        .iter()
+        .find(|record| matches!(record.semantics, PublicDeclarationSemantics::Trait(_)))
+        .expect("trait record exists");
+    if let PublicDeclarationSemantics::Trait(semantics) = &trait_record.semantics {
+        assert!(semantics.requirements.is_empty());
+    }
+    assert_eq!(
+        trait_record.origin,
+        OriginDeclarationId::Trait(trait_origin("Shape"))
+    );
+}
+
+#[test]
+fn builder_attaches_receiver_methods_to_struct_record() {
+    let mut string_table = StringTable::new();
+    let mut env = TypeEnvironment::new();
+
+    let (_, struct_type_id) =
+        register_struct(&mut env, &mut string_table, "Counter", empty_fields(), None);
+
+    let receiver_path = path("Counter", &mut string_table);
+    let method_fn_path = path("render", &mut string_table);
+    let signature = FunctionSignature {
+        parameters: vec![],
+        returns: vec![],
+    };
+    let entry = receiver_entry(
+        method_fn_path.clone(),
+        ReceiverKey::Struct(receiver_path),
+        signature,
+    );
+
+    let root = struct_root("Counter", struct_type_id, &mut string_table);
+    let root_table = ResolvedPublicTypeRootTable {
+        roots: vec![root],
+        receiver_methods: vec![entry.clone()],
+        trait_source_facts: FxHashMap::default(),
+    };
+
+    let binding = ExportBinding::new(
+        module_origin(),
+        "Counter".to_owned(),
+        OriginDeclarationId::Type(struct_origin("Counter")),
+    );
+
+    let method_origin = OriginFunctionId::new_receiver(
+        module_origin(),
+        "render".to_owned(),
+        struct_origin("Counter"),
+    );
+
+    let nominal_origins = nominal_origins_map(
+        vec![("Counter", struct_origin("Counter"))],
+        &mut string_table,
+    );
+
+    let export_origin_draft = DefinedPublicExportOriginDraft::new(
+        module_origin(),
+        vec![binding],
+        nominal_origins.clone(),
+    );
+
+    let mut catalog = ReceiverMethodCatalog::default();
+    catalog.by_function_path.insert(method_fn_path, entry);
+
+    let projection_input = AstPublicInterfaceProjectionInput {
+        root_table,
+        trait_roots: vec![],
+        receiver_catalog: Some(std::rc::Rc::new(catalog)),
+    };
+
+    let registry = ExternalPackageRegistry::new();
+    let draft = PublicInterfaceDraftBuilder::new(PublicInterfaceDraftBuilderInput {
+        export_origin_draft,
+        public_interface_projection_input: projection_input,
+        public_source_nominal_type_origins: &nominal_origins,
+        public_source_trait_origins: &FxHashMap::default(),
+        type_environment: &env,
+        external_registry: &registry,
+        string_table: &string_table,
+    })
+    .build()
+    .expect("draft with receiver method builds");
+
+    assert_eq!(draft.declarations.len(), 1);
+    let record = &draft.declarations[0];
+    assert!(matches!(
+        record.semantics,
+        PublicDeclarationSemantics::Struct(_)
+    ));
+    if let PublicDeclarationSemantics::Struct(semantics) = &record.semantics {
+        assert_eq!(semantics.receiver_methods.len(), 1);
+        assert_eq!(semantics.receiver_methods[0].method_origin, method_origin);
+    }
+}
+
+#[test]
+fn module_origin_survives_empty_public_surface() {
+    let string_table = StringTable::new();
+    let env = TypeEnvironment::new();
+
+    let export_origin_draft =
+        DefinedPublicExportOriginDraft::new(module_origin(), vec![], FxHashMap::default());
+
+    let projection_input = AstPublicInterfaceProjectionInput {
+        root_table: ResolvedPublicTypeRootTable::default(),
+        trait_roots: vec![],
         receiver_catalog: Some(std::rc::Rc::new(ReceiverMethodCatalog::default())),
     };
 
@@ -685,18 +1076,82 @@ fn builder_produces_one_aggregate_draft_with_three_components() {
         export_origin_draft,
         public_interface_projection_input: projection_input,
         public_source_nominal_type_origins: &FxHashMap::default(),
-        public_source_trait_origins: &trait_origins,
+        public_source_trait_origins: &FxHashMap::default(),
         type_environment: &env,
         external_registry: &registry,
         string_table: &string_table,
     })
     .build()
-    .expect("aggregate draft builds");
+    .expect("empty-surface draft builds");
 
-    // The draft carries exactly one of each projection component.
-    assert_eq!(draft.export_origins.export_bindings().len(), 1);
-    assert_eq!(draft.trait_surfaces.len(), 1);
-    assert_eq!(draft.trait_surfaces[0].origin, trait_origin("Shape"));
+    assert_eq!(draft.module_origin, module_origin());
+    assert!(draft.export_bindings.is_empty());
+    assert!(draft.declarations.is_empty());
+}
+
+// ---------------------------------------------------------------------------
+//  Declaration-centric join totality
+// ---------------------------------------------------------------------------
+
+#[test]
+fn join_rejects_binding_without_matching_type_surface_entry() {
+    let binding = ExportBinding::new(
+        module_origin(),
+        "missing".to_owned(),
+        OriginDeclarationId::Function(free_function_origin("missing")),
+    );
+    let type_surface = type_surface(vec![], vec![], vec![], vec![], vec![]);
+
+    let result = join_declaration_records(std::slice::from_ref(&binding), type_surface, vec![]);
+
+    assert!(result.is_err());
+    let message = result.unwrap_err().msg.clone();
+    assert!(message.contains("no matching free-function type-surface entry"));
+}
+
+#[test]
+fn join_rejects_extra_type_surface_entry_without_binding() {
+    let function = DefinedPublicFunctionTypeSurface {
+        origin: free_function_origin("orphan"),
+        generic_parameters: vec![],
+        parameters: vec![],
+        returns: vec![],
+        error_return: None,
+    };
+    let type_surface = type_surface(vec![function], vec![], vec![], vec![], vec![]);
+
+    let result = join_declaration_records(&[], type_surface, vec![]);
+
+    assert!(result.is_err());
+    let message = result.unwrap_err().msg.clone();
+    assert!(message.contains("no matching export binding"));
+}
+
+#[test]
+fn join_produces_one_record_per_origin() {
+    let function_origin = free_function_origin("render");
+    let binding = ExportBinding::new(
+        module_origin(),
+        "render".to_owned(),
+        OriginDeclarationId::Function(function_origin.clone()),
+    );
+    let function = DefinedPublicFunctionTypeSurface {
+        origin: function_origin,
+        generic_parameters: vec![],
+        parameters: vec![],
+        returns: vec![],
+        error_return: None,
+    };
+    let type_surface = type_surface(vec![function], vec![], vec![], vec![], vec![]);
+
+    let records = join_declaration_records(std::slice::from_ref(&binding), type_surface, vec![])
+        .expect("join succeeds for one function");
+
+    assert_eq!(records.len(), 1);
+    assert!(matches!(
+        records[0].semantics,
+        PublicDeclarationSemantics::Function(_)
+    ));
 }
 
 // ---------------------------------------------------------------------------
@@ -759,5 +1214,169 @@ fn rejects_trait_root_with_wrong_name_generic_parameter() {
     assert!(
         message.contains("not \"This\""),
         "expected a wrong-name this_type diagnostic, got: {message}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+//  Declaration-centric join: unique-origin and total-join invariants
+// ---------------------------------------------------------------------------
+
+#[test]
+fn join_emits_one_record_when_two_bindings_share_one_origin() {
+    let function_origin = free_function_origin("render");
+
+    // Two export bindings name the same function origin under different public names. The
+    // data-model invariant is one declaration record per unique origin; both bindings are
+    // preserved separately by the draft (not by the join).
+    let binding_a = ExportBinding::new(
+        module_origin(),
+        "render".to_owned(),
+        OriginDeclarationId::Function(function_origin.clone()),
+    );
+    let binding_b = ExportBinding::new(
+        module_origin(),
+        "export_render".to_owned(),
+        OriginDeclarationId::Function(function_origin.clone()),
+    );
+
+    let function = DefinedPublicFunctionTypeSurface {
+        origin: function_origin,
+        generic_parameters: vec![],
+        parameters: vec![],
+        returns: vec![],
+        error_return: None,
+    };
+    let type_surface = type_surface(vec![function], vec![], vec![], vec![], vec![]);
+
+    let records = join_declaration_records(&[binding_a, binding_b], type_surface, vec![])
+        .expect("join succeeds with one record for a shared origin");
+
+    assert_eq!(records.len(), 1, "one record per unique origin");
+    assert!(matches!(
+        records[0].semantics,
+        PublicDeclarationSemantics::Function(_)
+    ));
+}
+
+#[test]
+fn join_rejects_duplicate_type_surface_origin() {
+    let function_origin = free_function_origin("render");
+    let function = DefinedPublicFunctionTypeSurface {
+        origin: function_origin.clone(),
+        generic_parameters: vec![],
+        parameters: vec![],
+        returns: vec![],
+        error_return: None,
+    };
+    let duplicate = DefinedPublicFunctionTypeSurface {
+        origin: function_origin,
+        generic_parameters: vec![],
+        parameters: vec![],
+        returns: vec![],
+        error_return: None,
+    };
+    let type_surface = type_surface(vec![function, duplicate], vec![], vec![], vec![], vec![]);
+
+    let result = join_declaration_records(&[], type_surface, vec![]);
+
+    assert!(result.is_err());
+    let message = result.unwrap_err().msg.clone();
+    assert!(
+        message.contains("two free-function type-surface entries share origin"),
+        "expected a duplicate-origin diagnostic, got: {message}"
+    );
+}
+
+#[test]
+fn join_rejects_struct_fact_containing_choice_variants() {
+    let origin = struct_origin("Counter");
+    let binding = ExportBinding::new(
+        module_origin(),
+        "Counter".to_owned(),
+        OriginDeclarationId::Type(origin.clone()),
+    );
+
+    let nominal = DefinedPublicNominalTypeSurface {
+        origin,
+        generic_parameters: vec![],
+        fields: vec![],
+        variants: vec![PublicChoiceVariantSurface {
+            name: "unexpected".to_owned(),
+            payload_fields: vec![],
+        }],
+    };
+    let type_surface = type_surface(vec![], vec![nominal], vec![], vec![], vec![]);
+
+    let result = join_declaration_records(std::slice::from_ref(&binding), type_surface, vec![]);
+
+    assert!(result.is_err());
+    let message = result.unwrap_err().msg.clone();
+    assert!(
+        message.contains("a struct must not contain choice variants"),
+        "expected a struct-with-variants diagnostic, got: {message}"
+    );
+}
+
+#[test]
+fn join_rejects_choice_fact_containing_struct_fields() {
+    let origin = choice_origin("Status");
+    let binding = ExportBinding::new(
+        module_origin(),
+        "Status".to_owned(),
+        OriginDeclarationId::Type(origin.clone()),
+    );
+
+    let nominal = DefinedPublicNominalTypeSurface {
+        origin,
+        generic_parameters: vec![],
+        fields: vec![PublicFieldTypeSlot {
+            name: "unexpected".to_owned(),
+            type_identity: CanonicalTypeIdentity::Builtin(CanonicalBuiltinType::Int),
+        }],
+        variants: vec![],
+    };
+    let type_surface = type_surface(vec![], vec![nominal], vec![], vec![], vec![]);
+
+    let result = join_declaration_records(std::slice::from_ref(&binding), type_surface, vec![]);
+
+    assert!(result.is_err());
+    let message = result.unwrap_err().msg.clone();
+    assert!(
+        message.contains("a choice must not contain struct fields"),
+        "expected a choice-with-fields diagnostic, got: {message}"
+    );
+}
+
+#[test]
+fn join_rejects_duplicate_receiver_method_origin() {
+    let origin = struct_origin("Counter");
+    let method_origin =
+        OriginFunctionId::new_receiver(module_origin(), "render".to_owned(), origin.clone());
+
+    let method_a = DefinedPublicReceiverMethodTypeSurface {
+        receiver_origin: origin.clone(),
+        method_origin: method_origin.clone(),
+        parameters: vec![],
+        returns: vec![],
+        error_return: None,
+    };
+    let method_b = DefinedPublicReceiverMethodTypeSurface {
+        receiver_origin: origin.clone(),
+        method_origin,
+        parameters: vec![],
+        returns: vec![],
+        error_return: None,
+    };
+    let type_surface = type_surface(vec![], vec![], vec![], vec![], vec![method_a, method_b]);
+
+    // A binding is not needed: the duplicate is caught while indexing receiver methods, before
+    // the binding loop runs.
+    let result = join_declaration_records(&[], type_surface, vec![]);
+
+    assert!(result.is_err());
+    let message = result.unwrap_err().msg.clone();
+    assert!(
+        message.contains("two receiver-method type-surface entries share method origin"),
+        "expected a duplicate method-origin diagnostic, got: {message}"
     );
 }

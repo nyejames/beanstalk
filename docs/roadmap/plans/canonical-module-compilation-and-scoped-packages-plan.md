@@ -20,27 +20,30 @@ This document replaces the previous incremental phase sequence at the same path.
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/canonical-module-compilation-and-scoped-packages-plan.md
 STATUS: active
-CURRENT_SLICE: R1 accepted — checkpoint the aggregate public-interface draft, then continue with R2a declaration-centric direct records
-LAST_ACCEPTED_COMMIT: 4a0cd4e012b868b88263a91501061dc6d5e5a0cd
-WORKTREE: main at b184744ee; unrelated documentation/CSS work was committed separately and no unrelated changes remain
+CURRENT_SLICE: R2a complete — declaration-centric direct-record checkpoint reviewed, validated and ready to commit
+LAST_ACCEPTED_COMMIT: 3e8b0f20b
+WORKTREE: main at 3e8b0f20b; no known unrelated changes
 REQUIRED_RELOADS: startup files, this plan, current public-interface source and current diff
 RELEVANT_CONTEXT_NOW:
 - docs: compiler-design-overview.md and build-system-design.md own the draft/final interface and orchestration boundaries
-- code: public_interface_draft.rs, semantic_identity.rs, defined_public_type_surface.rs, AST resolved public roots, build.rs and frontend_orchestration.rs own the aggregate producer path
+- code: public_interface_draft.rs owns aggregation; semantic_identity.rs, defined_public_type_surface.rs and AST resolved public roots supply the existing direct facts
 ACCEPTANCE_CRITERIA:
-- R1 source, tests and this plan are staged without unrelated documentation or CSS changes
-- checkpoint commit records the accepted aggregate draft and corrected trait-self projection
-- continuation refreshes LAST_ACCEPTED_COMMIT and scopes the first coherent R2 declaration-centric record slice
+- PublicInterfaceDraft owns module origin, all export bindings and exactly one direct declaration record per unique stable origin for every current public category
+- the draft stores only declaration-centric Public* semantics; DefinedPublic* containers and leaf vocabulary remain private projection intermediates consumed before the boundary
+- receiver methods attach deterministically to struct/choice records; duplicate origins/methods, wrong nominal shapes and every missing/extra/mismatched fact fail deterministically
+- multiple export bindings for one origin retain all bindings but produce one declaration record in first-binding order
+- folded values/defaults, evidence, provenance, borrow summaries, provider re-exports, generated functions and fingerprints remain outside R2a
 VALIDATION_STATE:
-- cargo fmt --all -- --check: passed
-- focused public-interface, defined-public and trait-root tests: passed
-- just validate: passed; cross-target Clippy, 3,619 Rust tests, 1,793 integration runs, docs check and 28 benchmark cases
-DOCS_IMPACT: active plan only; progress matrix unchanged because R1 changes no user-visible support
+- cargo fmt --all: passed
+- focused public-interface and defined-public projection tests: passed; 25 and 67 tests
+- cargo check --tests and cargo clippy --tests -- -D warnings: passed
+- just validate: passed; cross-target Clippy, 3,629 Rust tests, 1,793 integration runs, docs check and 28 benchmark cases
+DOCS_IMPACT: active plan only; progress matrix unchanged because R2a changes no user-visible support
 BLOCKERS_OR_OPEN_DECISIONS: none
 DELEGATION_DECISION: ollama - user requires Ollama for every worker slice
 NEXT_WORKER_ORDER: ollama only
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit the accepted R1 checkpoint, refresh its hash, then define and launch R2a through Ollama
+NEXT_RESUME_ACTION: stage only the accepted R2a code, tests and this plan, commit the checkpoint, then refresh current state for R2b
 ```
 
 Do not append worktree-specific notes, complete validation histories or worker transcripts to this plan. Keep this status block current and concise. Git history is the validation history.
@@ -530,6 +533,11 @@ Validation:
 - `just validate`
 
 ## Milestone R2: Complete direct semantic facts and artefact finalization inputs
+
+R2a checkpoint: completed by the declaration-centric direct-record implementation. The draft now
+owns module identity, separate export bindings and exactly one closed semantic record per unique
+direct declaration origin. Transient `DefinedPublic*` aggregates are consumed before the boundary,
+and receiver methods attach to their nominal records through total deterministic joins.
 
 Goal: make one declaring module able to produce every direct semantic fact required by a future provider interface.
 
