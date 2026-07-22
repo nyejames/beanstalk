@@ -1,7 +1,7 @@
 import @styles/docs {navbar, section, theme_head, codeblock}
 
 page_title #= "Memory management"
-page_description #= "GC semantics, shared access, borrow validation, ownership and backend memory lowering."
+page_description #= "Reference semantics, borrow validation, lifetime regions, ownership and backend memory lowering."
 page_head #= theme_head
 
 #[navbar]
@@ -11,11 +11,11 @@ page_head #= theme_head
 
     # Memory management
 
+    **Beanstalk is reference-semantic by default, copy-explicit and move-inferred. It omits explicit reference types and lifetime syntax, not references themselves.**
+
     Beanstalk keeps the source model small. Reads are shared, copies are explicit and mutation has to announce itself.
 
-    Borrow validation enforces exclusive mutation and move safety. 
-    
-    A GC semantic baseline keeps execution practical while ownership analysis leaves room for future allocation and deterministic-drop optimisations.
+    Borrow validation enforces exclusive mutation and optional transfer safety. Lifetime-region validation enforces one lifetime owner and legal retained edges. A GC representation keeps execution practical while ownership analysis leaves room for future allocation and deterministic-drop optimisations.
 ]
 
 #[section, $md:
@@ -23,12 +23,22 @@ page_head #= theme_head
 
     Existing values use shared, read-only access by default. Binding a new name to an existing value doesn't copy it. Use `copy` when you need an independent value.
 
+    Shared aliases use last-potential-use activity, not pure lexical lifetime. After the final potential use of a shared alias, later mutation may proceed.
+
     [codeblock, $code("bst"):
         items ~= {"a", "b"}
         shared_items = items
 
         change(~items)       -- invalid: shared_items is used again
         inspect(shared_items)
+    ]
+
+    [codeblock, $code("bst"):
+        items ~= {"a", "b"}
+        shared_items = items
+        inspect(shared_items)
+
+        change(~items)       -- valid: shared_items has no later potential use
     ]
 
     [codeblock, $code("bst"):
@@ -43,7 +53,7 @@ page_head #= theme_head
 #[section, $md:
     ## Exclusive access
 
-    `~place` requests temporary mutation-capable access to an existing mutable place. It isn't a move marker or a type identity. Fresh rvalues satisfy mutable parameters without source `~`.
+    `~place` requests temporary mutation-capable access to an existing mutable place. It isn't a move marker or a type identity. Fresh rvalues satisfy ordinary mutable parameters without source `~`. Mutable receivers still require an existing mutable place.
 
     [codeblock, $code("bst"):
         change({"fresh"})
@@ -51,14 +61,28 @@ page_head #= theme_head
 ]
 
 #[section, $md:
+    ## Lifetime owners
+
+    Every runtime allocation has exactly one semantic lifetime owner. Multiple bindings or fields may alias that allocation without becoming additional owners.
+
+    An object may retain a reference only when the referenced allocation belongs to the same lifetime region or to a region statically known to outlive the retaining object.
+
+    The compiler rejects illegal sibling sharing and cross-region cycles even under GC. GC is a permitted representation for a statically legal topology, not a way to accept invalid retained edges.
+
+    Declared `group` / `into` syntax is accepted end-state design with implementation deferred. See the lifetime-regions page for the full topology model.
+]
+
+#[section, $md:
     ## How the compiler layers it
 
     [codeblock, $code("text"):
-        source access rules
-            -> AST access-mode and copy validation
-            -> HIR places, hidden locals and explicit control flow
-            -> borrow validation and ownership facts
-            -> GC or ownership-aware backend lowering
+        source access and copy rules
+            -> AST access-mode, placement and freshness validation
+            -> validated HIR with explicit places and control flow
+            -> borrow validation and optional transfer facts
+            -> lifetime-region and escape validation
+            -> build-owned reachability, lifecycle roots and target planning
+            -> GC, region, ownership-aware or other validated backend lowering
     ]
 ]
 
@@ -66,7 +90,8 @@ page_head #= theme_head
     ## Detailed pages
 
     - @./access-and-aliasing (Access and aliasing): shared reads, explicit copies and `~` access
-    - @./borrow-validation (Borrow validation): roots, joins, move safety and facts
+    - @./borrow-validation (Borrow validation): roots, joins, optional transfer safety and facts
+    - @./lifetime-regions-and-escape-validation (Lifetime regions and escape validation): one owner, retained edges, escapes and region topology
     - @./ownership-and-drops (Ownership and drops): inferred transfer, unified ABI and conditional destruction
     - @./runtime-and-backend-lowering (Runtime and backend lowering): GC baseline and ownership-aware backend paths
 ]

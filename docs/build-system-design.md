@@ -392,10 +392,10 @@ select command, artefact builder, build profile and tooling overlays
 -> compile dependency-ordered waves
    -> bind retained import shells to completed provider interfaces
    -> order local declarations
-   -> run AST, HIR and borrow validation
+    -> run AST, HIR, borrow validation and local lifetime constraints and summaries
 -> complete the generated-function worklist
 -> assemble a success-only ProjectCompilation
--> plan target validation and backend artefacts
+-> plan entry/package roots, lifetime topology, target validation and backend artefacts
 ```
 
 Inactive config sections are folded during config compilation even though their schemas are not active.
@@ -829,8 +829,11 @@ receive retained syntax and completed provider interfaces
 -> run AST semantics
 -> lower and validate HIR
 -> borrow-validate
+-> produce local lifetime constraints and summaries
 -> return Success or Diagnosed
 ```
+
+Local module compilation cannot validate every cross-module or builder-lifecycle relationship by itself. Project and link planning instantiate lifetime summaries over the reachable call graph and builder-supplied lifecycle roots.
 
 A source provider diagnosis blocks its semantic consumers. Independent branches continue.
 
@@ -949,7 +952,7 @@ Requests are keyed by stable generic declaration identity, canonical concrete ty
 
 The worklist continues until no generated function requests another instance.
 
-Each successful generated sidecar entry carries its own generated-local type context, HIR, borrow facts, link facts and fingerprints. It does not mutate a base module artefact.
+Each successful generated sidecar entry carries its own generated-local type context, HIR, borrow facts, lifetime facts and summaries, link facts and fingerprints. It does not mutate a base module artefact.
 
 Cross-package instances belong to the consuming compilation. Dependency base artefacts remain immutable.
 
@@ -989,7 +992,7 @@ Imported normal modules expose public interfaces without executing root work.
 
 Support modules and the project package facade never execute root work.
 
-Entry assembly never triggers parsing, type checking, HIR generation, generic inference or borrow validation.
+Entry assembly never triggers parsing, type checking, HIR generation, generic inference, borrow validation or lifetime-region validation.
 
 The implicit `start` is non-exported, non-importable and infallible. The builder does not define a fallible start channel or an error-fragment policy.
 
@@ -1104,15 +1107,39 @@ One source function may be JavaScript in one entry variant and Wasm in another.
 
 Each selected module variant has a generated JavaScript companion facade. Wasm is emitted per selected module variant.
 
+### Link planning and lifetime topology
+
+Project and package link planning follows this conceptual sequence:
+
+```text
+entry/package roots
+-> reachable function and effect union
+-> instantiate lifetime constraints with builder lifecycle roots
+-> validate complete lifetime topology
+-> target affinity and deterministic partition
+-> target validation
+-> lowering
+```
+
+`ProjectCompilation` or the link plan conceptually carries project-level validated lifetime topology. Exact Rust shape remains open.
+
+Builder-supplied page, mount, request, frame and arena roots are lifecycle inputs, not builder-specific source-law exceptions. Builder lifecycles cannot change language validity.
+
+Exported lifetime summaries participate in the public-interface fingerprint. Topology-relevant implementation and link facts invalidate affected assemblies. Exact persistent encoding remains deferred.
+
+External boundary profile and capability metadata belong on the builder surface conceptually so backends receive closed WIT-value or host-binding classifications rather than inventing retention graphs.
+
 ### Runtime and memory
 
-Each page owns one runtime instance and one memory shared by its linked Wasm modules.
+Each page owns one runtime instance and one memory shared by its linked Beanstalk Wasm variants.
 
-Linked Wasm variants import the page runtime rather than owning separate memories.
+Linked Beanstalk Wasm variants import the page runtime rather than owning separate memories.
+
+This one-page runtime/memory contract applies to linked Beanstalk Wasm variants. It does not require imported WIT components to share page memory. Imported components own private runtime memory and cross the boundary only through closed value conversion profiles.
 
 Project-level runtime bytes may be emitted once and instantiated separately for each page.
 
-Wasm lowering consumes explicit selected-function, import, export, capability and layout plans.
+Wasm lowering consumes explicit selected-function, import, export, capability, layout and validated lifetime plans.
 
 Wasm LIR is structured and backend-owned. It is not a second frontend semantic authority.
 

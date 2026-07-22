@@ -36,9 +36,10 @@ This page explains whether the surface belongs in the language at all.
 | Runtime heterogeneity | Choices |
 | Expected failure | `Error!`, postfix propagation and `catch` |
 | Platform integration | Builder packages, external packages and source-backed packages |
-| Memory safety | GC baseline plus mandatory borrow validation |
+| Memory safety | GC baseline plus mandatory borrow and lifetime-region validation |
 | Mutation | Explicit exclusive access rather than implicit mutation |
-| Ownership | Compiler-inferred transfer rather than source-visible move or lifetime syntax |
+| Ownership | Compiler-inferred optional transfer rather than source-visible move or lifetime syntax |
+| Declared bulk lifetimes | Accepted deferred `group` / `into` hard lifetime regions |
 | Performance | Hidden compiler and backend optimisation |
 
 ## Major outside-scope families
@@ -56,7 +57,10 @@ The exact list lives in `docs/language-overview.md`. Major families include:
 - user-extensible builtin hashmap key semantics
 - public exceptions and competing broad result systems
 - source-visible lifetime, reference-category and ownership annotation systems
+- source-visible RC, retain/release, weak ownership and unrestricted dynamic shared ownership
 - backend-specific semantics leaking into the language
+
+Diagnostics plus common-owner groups, `copy` and builder lifecycle roots are the intended replacement for source-level RC. Internal backend RC remains allowed for already-legal topology. See `docs/src/docs/codebase/memory-management/lifetime-regions-and-escape-validation/overview.bd`.
 
 ## Review questions
 

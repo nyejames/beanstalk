@@ -12,6 +12,8 @@ page_head #= theme_head
 
     # Access and aliasing
 
+    **Beanstalk is reference-semantic by default, copy-explicit and move-inferred. It omits explicit reference types and lifetime syntax, not references themselves.**
+
     Existing values are shared by default. Copies are explicit. `~` requests exclusive access to a mutable place.
 ]
 

@@ -1,10 +1,21 @@
 # Declared Lifetime Regions and Grouped Memory Design
 
+**Status:** accepted end-state design; implementation deferred  
+**Scope:** canonical grouped-memory and declared lifetime-region design, not an implementation plan
+
 ## Purpose
 
 Grouped memory gives the programmer a direct way to state that a set of fresh runtime values shares one lifetime owner and one destruction boundary.
 
-A memory group is a **declared lifetime region**. It is not an allocator object or source-visible ownership type.
+A memory group is a **declared semantic lifetime region**. It is not an allocator object, value, type, field, parameter, generic argument, trait or lifetime annotation.
+
+Canonical general topology rules live in:
+
+```text
+docs/src/docs/codebase/memory-management/lifetime-regions-and-escape-validation/
+```
+
+This file owns the accepted `group` / `into` surface and its interaction with that topology model.
 
 ```beanstalk
 group request:
@@ -27,6 +38,7 @@ A backend may realise the contract with:
 - a grouped drop list
 - ordinary per-value ownership
 - host or runtime GC
+- internal reference counting for already-legal topology
 
 The representation is not observable in Beanstalk source.
 
@@ -58,23 +70,28 @@ This design does not add:
 - finalizers, weak references or resurrection
 - reserved-byte or capacity syntax
 - general object-graph relocation as a required runtime mechanism
-- reference counting
+- source-visible RC or dynamic shared-ownership surface
+
+Internal RC remains a valid backend representation of already-legal topology.
 
 Reserved capacity remains a separate deferred design.
 
 ## Relationship to the existing memory model
+
+**Beanstalk is reference-semantic by default, copy-explicit and move-inferred. It omits explicit reference types and lifetime syntax, not references themselves.**
 
 Grouped memory extends, rather than replaces, Beanstalk's existing memory model:
 
 - Existing values use shared read-only access by default.
 - Independent duplication uses explicit `copy`.
 - Mutation requires explicit exclusive access.
-- Ownership transfer is compiler-inferred.
+- Ownership transfer is compiler-inferred and optional.
 - Borrow validation is mandatory and backend-independent.
+- Lifetime-region and escape validation is mandatory and backend-independent.
 - HIR remains the backend-facing semantic IR.
-- Borrow validation writes side-table facts and does not rewrite HIR.
+- Borrow validation and lifetime analysis write side-table facts and do not rewrite HIR.
 - Allocation and release strategy remain backend decisions.
-- GC remains a legal physical representation.
+- GC remains a legal physical representation for already-legal topology.
 
 GC must not weaken group escape rules. A GC-only backend may ignore physical group release, but it must accept and reject the same grouped source as every other backend.
 
@@ -95,7 +112,7 @@ A source and HIR scope that controls name visibility and control-flow exits.
 
 ### Implicit lifetime region
 
-A compiler-inferred lifetime owner for ordinary ungrouped allocations. The compiler may merge, widen, split or physically ignore implicit regions when behaviour remains unchanged.
+A compiler-inferred lifetime owner for ordinary ungrouped allocations. The compiler may merge, widen, split or physically ignore implicit regions when behaviour remains unchanged, subject to the nearest-existing-ancestor rule.
 
 ### Declared lifetime region
 
@@ -163,7 +180,7 @@ Destruction is legal only when the compiler has also proved that no live borrowe
 
 `String into scratch` remains `String`.
 
-Group identity belongs to HIR and borrow or region facts. It must not affect:
+Group identity belongs to HIR and lifetime-region facts. It must not affect:
 
 - semantic type equality
 - generic identity
@@ -174,6 +191,17 @@ Group identity belongs to HIR and borrow or region facts. It must not affect:
 ### Copies separate lifetimes
 
 `copy place` creates an independent value graph. The copy may be allocated into a different region and reclaimed independently from the source.
+
+See `docs/src/docs/codebase/memory-management/access-and-aliasing/access-and-aliasing.bd` for the complete graph-level contract:
+
+- deep copy of the complete copyable runtime value graph
+- internal alias topology preserved
+- same-region cycles preserved
+- no mutable sharing with the source graph
+- reactive sources copied as current values, not reactive identities
+- external opaque handles non-copyable by default
+- non-copyable graph members produce source diagnostics
+- destination-region allocation permitted
 
 ## Two region layers
 
@@ -189,16 +217,16 @@ make_label |name String| -> Label:
 
 The compiler may allocate the result directly into a hidden caller-selected result region.
 
-Implicit regions may be:
+Implicit region inference may widen an allocation only to the nearest existing ancestor on the same ordered owner chain that outlives every retained observer. It may not silently promote an allocation laterally across independently ending sibling lifetime domains.
 
-- local to one call
-- attached to a returned value
-- owned by an aggregate
-- widened to an enclosing lifetime
-- merged with another inferred region
-- implemented through GC
+The compiler must not invent a page-, application- or process-lifetime owner merely to avoid a diagnostic. Declared groups are never implicitly widened.
 
-The compiler may refine implicit region analysis without changing source semantics.
+Sharing across sibling domains requires one of:
+
+1. an already-existing common semantic owner
+2. an enclosing declared memory group
+3. a builder-declared common lifecycle
+4. independent storage created by `copy`
 
 ### Declared groups
 
@@ -249,13 +277,23 @@ rows ~{Row} into scratch = {}
 maybe_name String? into scratch = find_name(id)?
 ```
 
-Grammar shape:
+V1 placement syntax:
 
 ```text
-name [access/type] [into group_name] = expression
+name [access/type] into group_name = expression
 ```
 
 `into group_name` appears after access or type syntax and before `=`.
+
+Placement may target the current group or a lexically enclosing ancestor group, never a sibling or unrelated group.
+
+### Binding visibility and destination scope
+
+- A binding's lexical owner follows its destination group.
+- A binding declared inside a nested block but placed into an ancestor group remains visible from its declaration point through the remainder of that destination group.
+- Visibility begins at the declaration point, not at the group opening.
+- Name collisions are checked in the destination group scope.
+- Ordinary declarations without `into` retain normal lexical visibility.
 
 ### No expression-site placement in V1
 
@@ -291,6 +329,8 @@ V1 reassignment accepts only:
 
 It does not let a group-owned binding switch into a borrowed alias of ancestor, sibling or external storage. Use a separate ordinary alias binding for that purpose.
 
+V1 has no extraction or unrestricted group-to-group adoption.
+
 ## Freshness and direct destination allocation
 
 A value may be placed `into group` only when it is fresh or proven to carry independent fresh storage.
@@ -325,6 +365,7 @@ The hidden destination:
 
 - is not part of the source signature
 - is not a region parameter visible to generics or callers
+- is not a source lifetime parameter
 - may be ignored by a GC backend
 - lets an optimising backend allocate the fresh result graph directly into the caller's region
 
@@ -379,6 +420,8 @@ A group-owned aggregate may retain:
 
 It must not retain values owned by a child, sibling or otherwise shorter-lived region.
 
+Parent, sibling or otherwise longer-lived regions must not retain child-group values.
+
 ### No group-to-group transfer in V1
 
 A value cannot be extracted from one declared group and adopted by another.
@@ -393,7 +436,7 @@ This avoids graph splitting, alias rewriting and drop-list reparenting.
 
 ## Escapes
 
-Borrow validation must reject every path where a group-owned value or alias can outlive the group.
+Lifetime-region and escape validation must reject every path where a group-owned value or alias can outlive the group.
 
 Invalid escapes include:
 
@@ -406,7 +449,7 @@ Invalid escapes include:
 - keeping a map lookup, collection element or field alias live after group exit
 - creating a longer-lived retained edge into the group
 
-Backend GC fallback does not legalise these cases.
+Backend GC representation does not legalise these cases.
 
 ### Crossing a group boundary
 
@@ -499,28 +542,11 @@ Header mount ─┐
 Footer mount ─┘
 ```
 
-Precise reclamation when the second observer ends requires one of:
+Implicit region inference may widen an allocation only to the nearest existing ancestor on the same ordered owner chain that outlives every retained observer. It may not silently promote an allocation laterally across independently ending sibling lifetime domains.
 
-- a common semantic owner that outlives both
-- independent copies
-- dynamic reachability tracking such as GC or RC
+The compiler cannot invent an overly broad owner merely to accept the program.
 
-A one-bit ownership flag cannot discover which observer is last.
-
-The intended direction is:
-
-> Persistent sharing across sibling lifetime domains requires a known common semantic owner. The compiler must not manufacture two destruction owners for one allocation.
-
-The common owner may be:
-
-- an enclosing aggregate region
-- a declared memory group
-- a builder-owned page, mount, request or frame lifetime
-- another finite compiler-proven parent lifetime
-
-If no acceptable common owner exists, the programmer must create independent storage with `copy` or restructure the graph under one common group.
-
-The exact boundary between implicit common-owner inference and required explicit grouping is the remaining design question described at the end of this document.
+If no acceptable common owner exists, the programmer must create independent storage with `copy` or restructure the graph under one common group or builder lifecycle.
 
 ## Cycles
 
@@ -574,7 +600,7 @@ Functions export backend-neutral facts sufficient for callers to perform lifetim
 - results or receiver storage that retain parameter aliases
 - required outlives constraints such as `region(parameter) >= region(result)`
 - possible parameter consumption
-- external retention and capture effects
+- external retention and capture effects under closed boundary profiles
 
 Examples:
 
@@ -655,7 +681,7 @@ Reactive storage can outlive the lexical function that creates it. V1 must rejec
 - assigning group-owned values into reactive storage that outlives the group
 - subscriptions or mounted state retaining group-owned aliases past group exit
 
-A GC backend may use ordinary reachability.
+A GC backend may use ordinary reachability for already-legal topology.
 
 A future collector-free HTML-Wasm path should use builder-owned lifecycle regions such as:
 
@@ -670,26 +696,34 @@ Page region
     └── render-generation region
 ```
 
-Builder-owned regions obey the same retained-edge rule as source groups, but they are created and ended by the project runtime rather than ordinary source blocks.
+Builder-owned regions obey the same retained-edge rule as source groups, but they are created and ended by the project runtime rather than ordinary source blocks. Builders cannot change source legality.
 
-## External packages and resources
+## External lifetime boundaries
 
-External function metadata must declare:
+External bindings use closed semantic boundary profiles. They do not expose arbitrary user-defined lifetime graphs.
 
-- borrowed for call duration
-- may consume destruction responsibility
-- may retain past the call
-- returns fresh storage
-- returns an alias
-- copies the argument
-- transfers into a returned external owner
-- explicit close or teardown requirement
+### WIT value-only V1 profile
 
-A group-owned value may be passed only when metadata proves it will not be retained past the call.
+Beanstalk imports general external Wasm libraries through a value-only WIT component profile.
 
-Unknown retention is a source diagnostic for grouped values. It is not a backend fallback.
+- Supported arguments are lowered from shared reads into independent component values.
+- Results are lifted into fresh Beanstalk values.
+- No Beanstalk alias, lifetime owner, ownership state or destruction responsibility crosses the component boundary.
+- The source call is not consuming.
+- Group-owned values cannot cross a value-only boundary as aliases; value conversion creates independent foreign values.
+- WIT resources, handles, callbacks, async, futures, streams, shared memory, pointers, returned aliases and retained Beanstalk references are rejected by the V1 profile.
 
-External resources must use explicit lifecycle operations such as `close` when cleanup timing is observable. Object finalization must not depend on whether the backend uses GC, ownership or a region.
+### Restricted host-binding profile
+
+Existing Core, Builder, JavaScript-provider and curated platform bindings use a restricted host-binding profile.
+
+- Ordinary Beanstalk values cross by value.
+- Host code may not retain references into ordinary Beanstalk storage.
+- Opaque handles represent foreign identities rather than Beanstalk reference types.
+- Observable external resources require explicit close or teardown operations.
+- Host or component finalization timing must not define observable language behaviour.
+
+Richer resource-capable profiles are deferred and require a separate complete design.
 
 ## Backend and build-profile behaviour
 
@@ -697,7 +731,7 @@ External resources must use explicit lifecycle operations such as `close` when c
 
 Every backend must accept and reject the same grouped-memory source.
 
-Development and release builds must also agree on source validity and observable behaviour.
+Development and release builds must also agree on source validity and observable behaviour. Profiles differ only in optimisation effort.
 
 ### JavaScript
 
@@ -707,7 +741,7 @@ JavaScript may lower:
 - group release to a no-op
 - ownership drops to no-ops where host reachability owns storage
 
-It must still enforce all frontend and borrow-validation group rules.
+It must still enforce all frontend, borrow-validation and lifetime-topology group rules.
 
 ### Wasm and future native targets
 
@@ -719,9 +753,10 @@ An ownership-aware backend may choose:
 - slabs or pools
 - grouped drop lists
 - ordinary per-value ownership
-- GC fallback
+- internal RC for legal topology
+- GC representation
 
-The backend chooses from validated HIR, borrow facts, group facts, type layout, selected functions, target capabilities and optimisation profile.
+The backend chooses from validated HIR, borrow facts, lifetime facts, group facts, type layout, selected functions, target capabilities and optimisation profile.
 
 ### Collector-free artefacts
 
@@ -731,25 +766,24 @@ This is an artefact property, not a source mode or project-wide language contrac
 
 A profile may spend more analysis effort to eliminate GC. Failure to optimise one value must not change source validity or observable behaviour.
 
-A builder must not claim useful collector-free planning merely by retaining arbitrary runtime allocations until process termination. Truly static or page-lifetime data may use a root region, but repeated temporary allocations need bounded teardown regions.
-
 ## Compiler ownership
 
 ### AST
 
-AST owns:
+AST owns, when implemented:
 
 - parsing `group` and `into`
 - group-name scope and collisions
 - receiving-boundary placement syntax
+- destination-group visibility and collision checks
 - obvious position and freshness diagnostics
 - stable group identity creation
 
-Group identity must not enter `TypeId`.
+Group identity must not enter `TypeId`. Implementation is deferred.
 
 ### HIR
 
-HIR records explicit group metadata and group exits.
+HIR records explicit group metadata and group exits when implemented.
 
 Conceptual structures:
 
@@ -776,83 +810,77 @@ HIR records:
 - group-owned allocation candidates
 - all control-flow exits that close a group
 
-HIR validation checks structural invariants only.
+HIR validation checks structural invariants only. HIR still does not decide exact lifetime topology.
 
 ### Borrow validation
 
-Borrow validation owns group safety and mandatory lifetime topology checks.
+Borrow validation owns access conflicts and optional transfer safety.
 
-It must reject:
+It does not own group escape, retained-edge, outlives, cycle or common-owner legality.
 
-1. grouped placement of non-fresh or alias results
-2. group-owned return escapes
-3. projection or collection aliases live across group exit
-4. parent or sibling retention of child-group values
-5. external retention beyond the group
-6. reactive retention beyond the group
-7. cross-group cycles
-8. invalid stored edges into shorter-lived regions
-9. ordinary shared or exclusive access conflicts
+### Lifetime-region and escape validation
 
-Borrow validation remains conservative. Failure to prove an explicit group safe is a source diagnostic.
+Lifetime-region and escape validation owns group escape, retained-edge, outlives, cycle and common-owner legality.
+
+Local per-function/module analysis produces constraints and exported summaries. Project/link analysis instantiates those summaries over the reachable call graph and builder-supplied lifecycle roots.
+
+Facts are immutable side tables. HIR is unchanged. There is no numbered compiler Stage 7.
 
 ### Optional region and ownership planning
 
-A later optimisation stage may consume validated HIR and borrow facts to choose:
+A later optimisation stage may consume validated HIR, borrow facts and lifetime facts to choose:
 
 - implicit region placement
-- region widening or coalescing
+- region widening or coalescing within legal bounds
 - direct result allocation
 - field-sensitive splitting
 - last-use transfer
 - group physical representation
 - collector elimination
 
-This stage must not invent source legality or mutate the meaning of borrow facts.
+This stage must not invent source legality or mutate the meaning of borrow or lifetime facts.
 
 ### Backend lowering
 
-Backends consume explicit group, borrow, ownership and link-plan facts. They must not rediscover source group syntax or infer group identity from names.
+Backends consume explicit group, borrow, lifetime, ownership and link-plan facts. They must not rediscover source group syntax or infer group identity from names.
 
-There is no numbered compiler `Stage 7`. Backend lowering follows the compiler handoff and target planning described by the compiler and build-system authorities.
+Backend lowering follows the compiler handoff and target planning described by the compiler and build-system authorities.
 
 ## Diagnostics
 
-Grouped-memory diagnostics need stable codes and structured payloads.
+Lifetime and group diagnostics are part of the memory model, not an afterthought. Diagnostic quality is part of the rationale for rejecting source-visible RC.
 
-Suggested families:
+Diagnostics must distinguish:
 
-- `memory_group_unknown`
-- `memory_group_name_collision`
-- `memory_group_invalid_position`
-- `memory_group_non_fresh_value`
-- `memory_group_alias_result`
-- `memory_group_return_escape`
-- `memory_group_projection_escape`
-- `memory_group_store_escape`
-- `memory_group_nested_escape`
-- `memory_group_cross_region_cycle`
-- `memory_group_live_alias_at_exit`
-- `memory_group_reactive_escape`
-- `memory_group_external_retention`
-- `memory_region_missing_common_owner`
+- topology proven invalid
+- topology not proven legal by conservative analysis
+- invalid group syntax or placement
+- non-copyable graph contents
+- unsupported external boundary profile
+- missing or inconsistent compiler-owned metadata
 
-Diagnostics should identify:
+User-facing diagnostics use stable codes and structured reason payloads. Internal impossible or inconsistent metadata uses `CompilerError`.
+
+Conceptual diagnostic families include invalid group name or position, non-fresh placement, alias result placement, return or projection escape, store escape, nested escape, cross-region cycle, live alias at exit, reactive escape, external retention and missing common owner.
+
+Every diagnostic should identify, where applicable:
 
 - the group declaration
 - the grouped binding or allocation
 - the retained edge or escaping use
 - the shorter and longer lifetime owners
 - the external metadata boundary where relevant
+- the failed rule
 
-Help should prefer:
+Remedies must be ranked in this order:
 
-- allocate directly into the correct longer-lived group
-- move both observers under one common group
-- use `copy` for independent lifetime
-- shorten the retained alias
+1. allocate directly into the required destination region
+2. place observers under one common group
+3. create independent storage with `copy`
+4. shorten the alias or retained edge
+5. repair package-owned external lifetime metadata
 
-There is no `memory_group_backend_unsupported` diagnostic. A backend may ignore physical grouping through GC while preserving the source contract.
+There is no backend-specific escape from semantic lifetime diagnostics. A backend may ignore physical grouping through GC while preserving the source contract.
 
 ## Deferred extensions
 
@@ -868,59 +896,51 @@ Deferred work includes:
 - field-sensitive region splitting
 - physical region layout and runtime ABI encoding
 
-## Roadmap order
+## Future implementation roadmap
 
 A later implementation plan should separate:
 
 1. source syntax and AST group identity
 2. HIR group and exit metadata
-3. borrow-validation escape and stored-edge rules
-4. JS no-op lowering with full semantic enforcement
-5. hidden fresh-result destination support
-6. Wasm group release markers
-7. implicit region and ownership planning
-8. builder-owned page and mount regions
-9. collector-elision verification for physical artefacts
+3. lifetime-region and escape validation for group and ungrouped topology
+4. borrow-validation access interaction with group-owned places
+5. JS no-op lowering with full semantic enforcement
+6. hidden fresh-result destination support
+7. Wasm group release markers
+8. implicit region and ownership planning
+9. builder-owned page and mount regions
+10. collector-elision verification for physical artefacts
+
+Grouped-memory implementation should be evaluated as a likely prerequisite for the full ownership-aware Wasm completion plan. This document does not mark that work active or queued.
 
 ## Final design decisions
 
 - The source feature is named grouped memory or memory groups.
 - A memory group is semantically a declared lifetime region.
 - `group name:` creates a hard local lifetime and destruction boundary.
-- `into group` appears on declaration receiving boundaries.
+- `into group` appears on declaration receiving boundaries only in V1.
+- Destination-group lexical ownership and visibility follow the declaration point through the remainder of the destination group.
+- Placement may target current or ancestor group only.
 - Group membership is metadata, not type identity.
 - Every allocation has one lifetime owner.
 - Retained references may point only to storage in the same or a longer-lived region.
+- Implicit widening uses the nearest existing ancestor on one ordered owner chain.
+- No lateral promotion across independently ending sibling domains.
 - Group-owned values may retain same-group and ancestor-group aliases.
 - Parent and sibling regions must not retain child-group values.
 - Group values and aliases must not escape.
-- Explicit `copy` creates independent lifetime.
+- Explicit `copy` creates independent lifetime under the full graph-level copy contract.
 - Fresh calls may allocate directly into a hidden caller-selected destination region.
 - Interior aliases remain rooted in their containing allocation family.
 - Cross-region cycles are invalid.
 - Same-region cycles are lifetime-safe, while direct source construction remains deferred.
 - The ownership bit records destruction responsibility, not uniqueness or observer count.
 - Group-owned values are normally borrowed at call boundaries because the group owns release.
+- Borrow validation owns access conflicts and optional transfer safety.
+- Lifetime-region and escape validation owns topology legality.
+- External bindings use closed WIT-value and host-binding profiles.
 - JavaScript may implement groups as GC no-ops while enforcing identical source rules.
+- Internal RC is a permitted backend representation of already-legal topology.
+- Source-visible RC remains outside the language.
 - Profiles may change optimisation effort but never language semantics.
 - Project builders may report collector-free physical artefacts without introducing a collector-free language mode.
-
-## Remaining design question: sibling persistent sharing
-
-The final unresolved rule is how much common-owner inference ordinary ungrouped code should receive before explicit grouping or copying becomes mandatory.
-
-The strongest proposed rule is:
-
-> Implicit region inference may follow one nested ownership chain, but it must not silently hoist a runtime allocation across independently ending sibling lifetime domains. Such sharing requires an explicit common group, a builder-owned common lifecycle or independent copies.
-
-This rule would:
-
-- prevent hidden promotion into an overly broad page or process region
-- give every shared allocation a statically visible destruction owner
-- make collector-free lowering predictable
-- reject some programs that a tracing GC could safely execute
-- require programmers to group or copy persistent sibling state
-
-A weaker rule would let the compiler choose any finite common ancestor region automatically. That accepts more source but may retain values much longer than expected and makes collector-free memory bounds harder to predict.
-
-The ownership bit cannot remove this choice. It can represent the one common owner once selected, or transfer responsibility at a proven handoff. It cannot identify the last of several independently ending observers.

@@ -35,6 +35,8 @@ User-facing pages under `docs/src/docs/**` teach the language. They do not repla
 - User-facing failures use `CompilerDiagnostic`. Internal invariants and infrastructure failures use `CompilerError`.
 - Backend validation consumes explicit roots, target assignments and validated HIR. Lowerers never rediscover source meaning.
 - GC is the semantic baseline. Ownership-aware lowering preserves the same accepted programs and observable behaviour.
+- Lifetime-region and escape validation is mandatory and backend-independent. GC cannot bypass topology legality.
+- Ownership optimisation preserves accepted programs; missing optimisation proof must not reject source.
 - Parallelism, reuse and caching preserve deterministic identities, diagnostics and output order.
 
 ## Compiler input and result boundary
@@ -128,6 +130,19 @@ pub struct CompiledModuleArtifact {
 - the local `TypeEnvironment`
 - validated module-local HIR
 - borrow-analysis facts
+- lifetime-region and escape-validation facts
+
+`PublicSemanticInterface` also exports lifetime and effect summaries conceptually, including:
+
+- fresh result
+- parameter and result aliasing
+- projection aliases
+- result-to-result aliases
+- retained-parameter relationships
+- outlives constraints
+- external boundary profile
+
+Process-local region IDs are not cross-module semantic identity. Exported summaries use stable semantic relationships rather than donor-local region indexes.
 
 `ModuleLinkFacts` contains backend-neutral facts used by graph linking and target validation:
 
@@ -635,6 +650,8 @@ AST owns:
 - root-local entry metadata folding through ordinary module visibility
 - common frontend value-to-string behaviour for Float, Number, templates and runtime lowering
 
+When accepted deferred `group` / `into` syntax is implemented, AST also owns parser, scope, placement and freshness validation for declared memory groups. Group identity must not enter `TypeId`. Implementation is deferred.
+
 AST is defined by ownership and data flow rather than a fixed number of internal passes.
 
 #### Imports and visibility
@@ -908,20 +925,21 @@ Borrow validation runs once for each canonical module and once for each generate
 It enforces:
 
 - shared and exclusive access rules
-- use-after-consumption safety
+- optional transfer eligibility and no-later-use proof
 - conservative aliasing for collections and maps
 - legal mutable call access
 - control-flow joins
-- inferred move safety
 - reactive invalidation facts
 
-Borrow validation reads validated HIR and writes read-only side tables. It does not rewrite HIR, compute exact lifetimes or decide final runtime ownership.
+Borrow validation reads validated HIR and writes read-only side tables. It does not rewrite HIR, decide lifetime topology or decide final runtime ownership.
+
+Optional inferred transfer is an optimisation path. When proof is unavailable on every relevant path, the operation remains a borrow. Failure to prove transfer must not reject an otherwise valid program. Immutable and mutable parameters may both receive inferred destruction responsibility at a proven final-use call site.
 
 Public function interfaces export:
 
 - parameter access modes
 - mutation effects
-- possible ownership consumption
+- transfer eligibility and effect categories
 - return aliasing
 - relevant reactive effects
 
@@ -931,11 +949,37 @@ Borrow validation resolves binding-backed function IDs through semantic package 
 
 Missing or inconsistent summaries are `CompilerError` invariant failures.
 
-GC remains the semantic baseline. GC-only backends may ignore ownership optimisation facts but cannot skip borrow validation. GC and ownership-aware lowering accept and reject the same programs.
+GC remains the semantic baseline. GC-only backends may ignore ownership optimisation facts but cannot skip borrow validation or lifetime-region validation. GC and ownership-aware lowering accept and reject the same programs.
 
 Reactive subscriptions are read-only source dependencies rather than active borrow lifetimes.
 
-Fresh rvalues passed to mutable call slots are materialised into compiler-introduced hidden locals before borrow validation. The checker then sees ordinary local access.
+Fresh rvalues passed to mutable call slots are materialised into compiler-introduced hidden locals before borrow validation. The checker then sees ordinary local access. Fresh-rvalue materialisation does not make temporaries valid mutable receivers.
+
+## Lifetime-region and escape validation
+
+Lifetime-region and escape validation is a distinct backend-neutral analysis after Stage 6 borrow validation and before target planning. It is not a numbered Stage 7.
+
+Local per-function and module work:
+
+- reads validated HIR and read-only borrow/effect facts
+- produces allocation, alias, retention, escape, result and outlives constraints
+- writes immutable side-table facts and exported lifetime summaries
+- does not rewrite HIR
+- does not choose target partition or physical allocation representation
+
+Project and link work instantiates those summaries over the reachable call graph and builder-supplied lifecycle roots. Local module compilation cannot validate every cross-module or builder-lifecycle relationship by itself.
+
+The analysis decides semantic lifetime ownership and topology legality. Diagnostics distinguish topology proven invalid from topology not proven legal by conservative analysis. Backends receive a validated topology and may not reconsider source legality.
+
+Canonical design lives under `docs/src/docs/codebase/memory-management/lifetime-regions-and-escape-validation/`. Declared `group` / `into` is accepted end-state syntax with implementation deferred; see `docs/roadmap/plans/grouped-memory-design.md`.
+
+When group syntax is implemented:
+
+- AST owns parser, scope, placement and freshness validation
+- group identity must not enter `TypeId`
+- HIR records explicit group metadata and exits
+- recoverable checked failure paths remain explicit HIR control flow before memory analyses
+- HIR still does not decide exact lifetime topology
 
 ## Per-function link facts
 
@@ -963,7 +1007,7 @@ The build system supplies explicit validation roots and target assignments from 
 
 Target validation:
 
-- runs after HIR and borrow validation
+- runs after HIR, borrow validation and final lifetime-topology validation
 - traverses functions reachable from supplied roots
 - includes reachable generated functions
 - checks target-gated HIR features
@@ -986,9 +1030,16 @@ Backend lowerers receive only explicit validated inputs:
 - paired local or generated-local type environments
 - stable local, cross-module and binding-backed call targets
 - borrow facts
+- validated lifetime-region facts and exported lifetime summaries
+- external boundary classifications
 - per-function link facts
 - selected-function, import and capability plans
 - semantic layout identities required by the target
+- builder lifecycle and runtime plans where relevant
+
+Generated function sidecars carry the same conceptual lifetime summaries and facts as ordinary functions.
+
+Binding-backed symbols carry a closed boundary classification such as WIT value-only or restricted host-binding. Exact Rust enum names are implementation detail. Missing compiler-owned boundary classification is `CompilerError`. Unsupported source-selected interface features are structured diagnostics.
 
 Backend lowerers do not:
 
@@ -1000,6 +1051,7 @@ Backend lowerers do not:
 - interpret TIR
 - rediscover project topology
 - choose command, entry or route policy
+- reconsider source legality, borrow facts or lifetime topology
 - write final project outputs directly
 
 A lowerer may implement a language-owned HIR operation with a target-native instruction or runtime helper only when the result preserves the full Beanstalk contract.

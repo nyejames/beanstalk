@@ -1,12 +1,11 @@
 
 ## Design contract
 
-Backends may choose different allocation, GC, handle and ownership
-representations. They may not choose different language semantics.
+Backends may choose different allocation, GC, handle and ownership representations. They may not choose different language semantics.
 
-Every backend must preserve shared read-only access, exclusive mutation,
-explicit copy behaviour, move safety, reactive liveness and GC-equivalent
-observable results.
+Every backend must preserve shared read-only access, exclusive mutation, explicit copy behaviour, optional transfer safety, lifetime-topology legality, reactive liveness and GC-equivalent observable results.
+
+GC is a permitted runtime representation for a statically legal lifetime topology. It is not a mechanism for accepting invalid retained edges, lateral lifetime promotion, unowned escapes or cross-region cycles.
 
 ## Main backend paths
 
@@ -18,138 +17,184 @@ observable results.
 
 ## Backend-neutral semantics
 
-- Borrow validation precedes target lowering.
-- Invalid source access is rejected before backend codegen.
-- Backend doesn't infer access from source syntax.
-- Backend consumes HIR plus borrow facts.
+- Borrow validation and lifetime-region validation precede target lowering.
+- Invalid source access or topology is rejected before backend codegen.
+- Backend doesn't infer access or topology from source syntax.
+- Backend consumes HIR plus borrow facts plus validated lifetime facts.
 - Ownership optimisation is optional.
 - Backend representation can't affect `copy`, alias or `~` semantics.
-- Fallback always preserves valid program behaviour.
+- Missing optimisation proof may retain GC for already-legal topology.
+- Missing topology proof is not a backend fallback.
 
 ## GC baseline
 
-Heap-managed values may remain under GC. No deterministic drop is required for
-correctness. `drop_if_owned` may be a no-op. Borrowed/owned distinctions may
-be omitted at runtime when irrelevant. Borrow validation still applies.
+- Deterministic destruction is not required for correctness.
+- Valid topology may be represented by host or runtime GC.
+- Mandatory access and lifetime validation still run.
+- Optional ownership operations may be erased.
+- `drop_if_owned` may be a no-op.
+- Borrowed/owned distinctions may be omitted at runtime when irrelevant.
 
-GC can be host GC, Wasm GC, a runtime collector or another backend strategy.
-Exact current target support belongs in the progress matrix.
+GC can be host GC, Wasm GC, a runtime collector or another backend strategy. Exact current target support belongs in the progress matrix.
+
+Internal RC, arenas, handles, regions, stack storage, pools and hybrid representations are permitted for valid topology. Source-visible RC and hidden unrestricted dynamic sharing are not permitted.
 
 ## Debug and development configurations
 
-Debug and development configurations may deliberately retain the GC baseline
-even where ownership-aware lowering is available.
+Debug and development configurations may deliberately retain the GC baseline even where ownership-aware lowering is available.
 
-Unless a configuration is specifically intended to exercise ownership
-behaviour, debuggability, instrumentation and predictable runtime behaviour
-take priority over deterministic-destruction optimisation.
+Unless a configuration is specifically intended to exercise ownership behaviour, debuggability, instrumentation and predictable runtime behaviour take priority over deterministic-destruction optimisation.
 
-Release configurations may still fall back to GC per value whenever ownership
-proof is unavailable.
+Release configurations may still fall back to GC per value whenever ownership proof is unavailable. Profiles differ only in optimisation effort and physical representation, never in source legality.
+
+## Build-owned target and lifecycle planning
+
+The build system owns reachability, target partition, page/request/mount/frame roots and page runtime topology. Backends consume explicit plans rather than selecting them.
+
+See `docs/build-system-design.md` for project and link orchestration.
+
+## Beanstalk-linked page memory
+
+Each page owns one runtime instance and one memory shared by its linked Beanstalk Wasm variants. Linked variants import the page runtime rather than owning separate memories.
+
+This is build architecture, not source memory semantics. It applies to Beanstalk-linked Wasm variants, not arbitrary imported components.
+
+## Imported Wasm components
+
+Imported components own private runtime memory. They are not members of Beanstalk page memory or the Beanstalk lifetime graph. They do not need to declare a GC strategy to Beanstalk.
+
+The one-page/one-memory rule applies to Beanstalk-linked Wasm variants, not arbitrary imported components.
+
+## WIT value-only V1 profile
+
+Beanstalk imports general external Wasm libraries through a value-only WIT component profile. Supported arguments are lowered from shared reads into independent component values, and results are lifted into fresh Beanstalk values. No Beanstalk alias, lifetime owner, ownership state or destruction responsibility crosses the component boundary.
+
+- The source call is not consuming.
+- The component may use any private allocation strategy without declaring it to Beanstalk.
+- Supported direction is value-shape lower/lift only. This docs plan does not claim current implementation.
+- Rejected V1 surfaces include WIT resources, owned or borrowed resource handles, callbacks, async operations, futures, streams, shared-memory views, raw pointer escapes, returned aliases and retained Beanstalk references.
+- Unsupported WIT features receive structured import diagnostics and may suggest a wrapper component that presents a value-only interface.
+
+## Restricted host-binding profile
+
+Existing Core, Builder, JavaScript-provider and curated platform bindings use a restricted host-binding profile.
+
+- Ordinary Beanstalk values cross by value.
+- Host code may not retain references into ordinary Beanstalk storage.
+- Opaque handles represent foreign identity, not Beanstalk reference types.
+- Shared or mutable access to a handle controls legal access to the foreign identity, not direct access to host object storage.
+- Observable external resources require explicit close or teardown operations.
+- Host or component finalization timing must not define observable language behaviour.
+
+## Deferred resource-capable profiles
+
+A future resource-capable profile requires a separate complete design for identity, transfer, teardown, callbacks, async suspension, reentrancy, cycles and failures. It is not part of V1.
 
 ## JavaScript lowering
 
-JavaScript normally realises the GC baseline through host reachability. Borrow
-validation still determines valid source behaviour. Ownership-specific
-advisory facts may be ignored. Explicit copy and alias semantics must still be
-preserved. JS host behaviour must not silently mutate shared aliases or
-duplicate values contrary to Beanstalk semantics. Reactive cells and mounted
-fragments stay alive through runtime reachability.
+- Host references realise validated aliases.
+- JS does not weaken topology.
+- Explicit copy remains graph-independent semantically even if current implementation lags.
+- Ownership-specific advisory facts may be ignored.
+- JS host behaviour must not silently mutate shared aliases or duplicate values contrary to Beanstalk semantics.
+- Reactive mounts follow builder lifecycle roots and stay alive through runtime reachability.
 
 ## Wasm lowering
 
-Wasm can use GC-backed, linear-memory, handle or hybrid lowering.
-Ownership-aware heap values use handles or pointers carrying ownership state.
-Borrow facts identify legal transfer and destruction points. Conditional drops
-release owned handles. Missing ownership proof falls back to GC-managed
-behaviour. Runtime helpers own allocation, release, string, collection and handle contracts. The unified ownership ABI applies across ownership-aware
-calls. Source semantics remain backend independent.
+- Borrow and lifetime facts precede LIR.
+- Ownership bit is responsibility only.
+- Group/region representation is separate from the ownership bit.
+- Missing optimisation proof may retain GC.
+- Missing topology proof is not a backend fallback.
+- Ownership-aware heap values use handles or pointers carrying ownership state.
+- Conditional drops release owned handles where individual release is legal.
+- Runtime helpers own allocation, release, string, collection and handle contracts.
+- The unified ownership ABI applies across ownership-aware calls.
+- Source semantics remain backend independent.
 
-`src/backends/wasm/hir_to_lir/ownership.rs` is the ownership projection seam,
-and Wasm LIR includes conditional `DropIfOwned` plus reserved retain support.
+`src/backends/wasm/hir_to_lir/ownership.rs` is the ownership projection seam, and Wasm LIR includes conditional `DropIfOwned` plus reserved retain support.
 
 ## Runtime ownership metadata
 
-- ownership bit or tag on heap handles.
-- borrowed versus owned state.
-- mask and extract value representation.
-- callee responsibility.
-- propagation of ownership metadata through calls.
-- no source-visible owned/borrowed overload.
-- scalar values need not use tagged handles.
-- representation details can evolve while preserving the accepted contract.
+- ownership bit or tag on heap handles
+- borrowed versus owned state
+- mask and extract value representation
+- callee responsibility
+- propagation of ownership metadata through calls
+- no source-visible owned/borrowed overload
+- scalar values need not use tagged handles
+- representation details can evolve while preserving the accepted contract
 
 ## Drop and retain behaviour
 
-- Release only owned values.
+- Release only owned values that are individually releasable or whose region is ending.
 - Never release borrowed values.
-- Retain when a runtime representation requires extending shared storage
-  lifetime.
+- Retain when a runtime representation requires extending shared storage lifetime.
 - Remove retain and release checks when static proof permits.
 - Avoid double release.
 - Ensure all potential ownership paths reach release or safe transfer.
 - GC lowering can erase ownership-specific operations.
+- Internal RC may be used only for already-legal topology.
 
-## Borrow-fact consumption
+## Fact consumption
 
 Backends may consume:
 
-- value access classifications.
-- call effects.
-- return-alias summaries.
-- move decisions.
-- advisory drop sites.
-- region/exit information.
-- reactive invalidation and liveness metadata.
+- value access classifications
+- call effects
+- return-alias summaries
+- validated transfer decisions
+- advisory drop sites
+- validated lifetime topology and allocation-family facts
+- builder lifecycle roots
+- region/exit information
+- reactive invalidation and liveness metadata
+- external boundary classifications
 
 Backends must not:
 
-- mutate those facts.
-- reinterpret source syntax.
-- invent new move points that invalidate borrow validation.
-- treat missing facts as proof of ownership.
+- mutate those facts
+- reinterpret source syntax
+- invent new move points that invalidate borrow or lifetime validation
+- treat missing facts as proof of ownership or topology legality
+- reconsider source legality
 
 ## Reactive and mounted-fragment liveness
 
-Live reactive subscriptions and mounted fragments can keep state observable.
-Ownership-aware lowering must not free a source or template instance while it
-remains observable. GC reachability is the semantic reference behaviour.
-Finer invalidation granularity may improve performance but not lifetime
-semantics. Runtime fragment and reactive mount behaviour remain separate
-concerns.
+Live reactive subscriptions and mounted fragments can keep state observable. Ownership-aware lowering must not free a source or template instance while it remains observable. GC reachability is the semantic reference behaviour for already-legal topology. Finer invalidation granularity may improve performance but not lifetime semantics. Runtime fragment and reactive mount behaviour remain separate concerns.
 
 ## Backend specialisation
 
 Allowed optimisations include:
 
-- ownership-effect specialisation.
-- drop-check elimination.
-- retain elimination.
-- region allocation.
-- stack or arena allocation.
-- GC elision.
-- devirtualized runtime helpers.
-- target-specific handle representation.
+- ownership-effect specialisation
+- drop-check elimination
+- retain elimination
+- region allocation
+- stack or arena allocation
+- GC elision
+- internal RC for legal topology
+- devirtualized runtime helpers
+- target-specific handle representation
 
 Requirements:
 
-- same source behaviour.
-- same validation result.
-- no unchecked aliasing.
-- no source-visible lifetime or ownership surface.
-- graceful GC fallback.
+- same source behaviour
+- same validation result
+- no unchecked aliasing
+- no source-visible lifetime or ownership surface
+- graceful GC representation when optimisation is unavailable
 
 ## Fallback requirements
 
-When a backend can't prove or implement an ownership optimisation safely, it
-must retain GC-managed behaviour for that value or feature.
+When a backend can't prove or implement an ownership optimisation safely, it must retain GC-managed behaviour for that value or feature on already-legal topology.
 
-A missing optimisation is valid. A semantic divergence isn't.
+A missing optimisation is valid. A semantic divergence isn't. Unknown external retention is not a GC fallback.
 
 ## What backends must not do
 
-- Skip borrow validation.
-- Accept aliasing rejected by other backends.
+- Skip borrow validation or lifetime-region validation.
+- Accept aliasing or topology rejected by other backends.
 - Reinterpret `~` as an unconditional move.
 - Silently copy shared values.
 - Destroy borrowed data.
@@ -157,23 +202,27 @@ A missing optimisation is valid. A semantic divergence isn't.
 - Rediscover source imports or access syntax.
 - Require deterministic destruction for correctness.
 - Make reactive observability depend on target-specific early release.
+- Assume page memory includes arbitrary imported components.
+- Invent a numbered Stage 7 for backend lowering.
 
 ## Common mistakes
 
 - Treating the JS path as semantically weaker because it uses GC.
-- Presenting current Wasm scaffolding as the whole accepted memory
-  architecture.
+- Treating GC as permission for invalid topology.
+- Presenting current Wasm scaffolding as the whole accepted memory architecture.
 - Treating every runtime value as a tagged heap pointer.
 - Lowering advisory drops without checking ownership.
 - Freeing reactive state too early.
 - Treating missing ownership proof as an error.
+- Treating missing topology proof as backend GC fallback.
 - Creating separate borrowed/owned language APIs.
+- Assuming imported components share Beanstalk page memory.
 
 ## Related reading
 
 - @../ (Memory management): core contract
 - @../ownership-and-drops (Ownership and drops): unified ABI and destruction
 - @../borrow-validation (Borrow validation): analysis facts
-- @https://github.com/nyejames/beanstalk/blob/main/docs/compiler-design-overview.md (Compiler JavaScript lowering)
-- @https://github.com/nyejames/beanstalk/blob/main/docs/compiler-design-overview.md (Compiler Wasm lowering)
-- @https://github.com/nyejames/beanstalk/blob/main/docs/compiler-design-overview.md (Compiler backend lowering)
+- @../lifetime-regions-and-escape-validation (Lifetime regions and escape validation): topology legality
+- @https://github.com/nyejames/beanstalk/blob/main/docs/compiler-design-overview.md (Compiler design overview)
+- @https://github.com/nyejames/beanstalk/blob/main/docs/build-system-design.md (Build-system design)

@@ -8,7 +8,7 @@ Design principles:
 - Powerful string templates for rendering content and describing UI
 - Minimal, consistent syntax that is easy to parse and reason about
 - Fast compile times for hot-reload development builds
-- Memory safety through GC fallback plus future static ownership optimisation
+- Memory safety through mandatory borrow and lifetime-region validation, with GC as a legal representation and optional ownership optimisation
 - Strict static typing with a small number of concise, opinionated patterns
 
 ## Language Design Scope
@@ -57,7 +57,7 @@ The following surfaces are intentionally outside Beanstalk's language design sco
 
 - `docs/src/docs/**` — user-facing docs-site pages and real `.bst` examples
 - `docs/compiler-design-overview.md`: compiler stage ownership and cross-stage architecture
-- `docs/src/docs/codebase/memory-management/overview.bd` — GC fallback, ownership optimisation and borrow-analysis strategy
+- `docs/src/docs/codebase/memory-management/overview.bd` — reference semantics, borrow validation, lifetime regions, ownership and backend lowering
 - `docs/src/docs/codebase/design-scope/overview.bd` — accepted mechanisms, constraints and outside-scope families
 - `docs/src/docs/progress/#page.bst` — current implementation status
 - `docs/roadmap/roadmap.md` — planned work
@@ -71,10 +71,10 @@ The following surfaces are intentionally outside Beanstalk's language design sco
 | Comments | In ordinary code, `--` starts a single-line comment. Template and Beandown bodies treat it as content. |
 | Operators | Logical/equality forms use words such as `is` and `not`; symbolic equality and logical-not forms are not operators. |
 | Mutability | `~` marks mutable bindings/access. In declarations it appears before the type: `name ~Type = value`. |
-| References | Shared immutable access is the default for stack and heap values. |
+| References | Shared immutable reference semantics are the default. Beanstalk omits explicit reference types and lifetime syntax, not references themselves. |
 | Constants | `#` marks compile-time constants: `name #= value`. |
 | Module exports | `export:` is a strict block valid only in a module root file. It contains public declarations and grouped re-exports. |
-| Copies | Copies must be explicit unless an expression constructs a new value from references. |
+| Copies | Copies must be explicit. Constructing a fresh value from shared inputs does not implicitly copy those inputs. |
 | Parameters/fields | Function parameters and struct/choice fields use `|...|`. Defaults use `=`. |
 | Results/options | Error returns use `Error!`; options use `T?`. |
 | Generics | Declaration-site generics use `type`: `Box type A = | value A |`. Concrete instances use `of`: `Box of String`. |
@@ -151,6 +151,57 @@ newline. Raw backtick tokenization does not decode escapes and preserves backsla
 newlines, but that tokenizer behaviour does not make raw backticks valid source expressions.
 
 `copy` accepts a visible binding, field projection or parenthesised place. Literals, templates, calls and computed expressions aren't copy places and are rejected.
+
+## Memory semantics
+
+**Beanstalk is reference-semantic by default, copy-explicit and move-inferred. It omits explicit reference types and lifetime syntax, not references themselves.**
+
+Canonical detail lives under `docs/src/docs/codebase/memory-management/`. This section records the compiler-facing source rules.
+
+### Shared aliases and non-lexical activity
+
+- Reading, binding, passing, returning or storing an existing value uses shared reference semantics by default.
+- Shared aliases are read-only and do not imply ownership or implicit copy.
+- Alias activity is non-lexical and control-flow-sensitive. A shared alias blocks overlapping mutation only until its last potential use on the relevant path.
+- An unused shared alias does not block later mutation.
+
+### Mutable aliases versus fresh mutable slots
+
+- `alias ~= source`, or an equivalent typed mutable declaration from an existing place, creates an exclusive write-through mutable alias.
+- Assignment through a mutable alias writes through to the referent and must not silently detach or rebind the alias.
+- A mutable declaration initialized from a fresh value creates an independent mutable slot.
+- `~place` requests exclusive access to an existing mutable place. It is not a move marker or type constructor.
+- Mutable receivers require an existing mutable place. Fresh-rvalue materialisation applies only to ordinary mutable parameters.
+
+### Aggregate storage
+
+Existing values stored in structs, choices, collections, maps, tuples, templates or other aggregates retain shared reference semantics by default. `copy` creates independent storage. At a proven final use, the compiler may realise the same source operation as an ownership transfer without changing source meaning.
+
+Maps own their entry structure while keys and values follow the same shared/copy/inferred-transfer rules. Map lookup keys are borrowed. `get` returns a shared alias. `remove` returns the removed value under normal lifetime and ownership rules.
+
+### Explicit `copy`
+
+`copy place` performs a semantic deep copy of the complete copyable runtime value graph reachable from the place. Internal alias topology is preserved, same-region cycles are preserved, the copied graph shares no mutable allocation with the source, reactive sources are copied as current values, and non-copyable external resources produce diagnostics. Full contract: `docs/src/docs/codebase/memory-management/access-and-aliasing/access-and-aliasing.bd`.
+
+### Optional inferred transfer
+
+There is no move syntax and no ordinary mandatory-consuming value operation. Inferred transfer is optional. When safe transfer is not proven on every relevant path, the operation remains a borrow. Immutable and mutable parameters may both receive inferred destruction responsibility at a proven final-use call site. Parameter access mode remains separate from optional ownership effect.
+
+### Accepted but deferred: declared memory groups
+
+The following is accepted end-state syntax. Implementation is deferred and must not be treated as current source support:
+
+- `group name:` creates a declared hard lifetime region
+- `name [access/type] into group_name = expression` places a declaration into the current or ancestor group only
+- destination-group lexical ownership and visibility follow the declaration point through the remainder of the destination group
+- V1 has no expression-site placement, reassignment placement, extraction or unrestricted group-to-group adoption
+- group identity is not part of types or signatures
+
+Design authority: `docs/roadmap/plans/grouped-memory-design.md` and `docs/src/docs/codebase/memory-management/lifetime-regions-and-escape-validation/`.
+
+### Outside memory-surface scope
+
+Source-visible RC, retain/release, weak ownership, finalizers and unrestricted dynamic shared ownership are outside language design scope. Internal backend RC remains allowed for already-legal topology.
 
 ### Function Calls, Named Arguments, and Mutable Access
 
@@ -1508,6 +1559,10 @@ Rules:
 - External aliases follow normal file-local collision and case-convention rules.
 - External opaque types can be passed, returned, and used by external functions, but cannot be constructed with struct syntax or field-accessed.
 - External packages do not expose receiver methods. Use free functions for raw external APIs, or a source-owned wrapper type when method-style ergonomics are wanted.
+- Existing Core, Builder and JavaScript-backed bindings use a restricted host-binding profile: ordinary Beanstalk values cross by value, host code may not retain references into ordinary Beanstalk storage, and opaque handles represent foreign identities rather than Beanstalk reference types.
+- Observable external resources require explicit close or teardown. Host finalization timing must not define language behaviour.
+- Future general Wasm library imports use a value-only WIT component profile. Supported arguments lower from shared reads into independent component values and results lift into fresh Beanstalk values. No Beanstalk alias, lifetime owner, ownership state or destruction responsibility crosses the component boundary.
+- WIT resources, callbacks, async operations, futures, streams, shared-memory views, raw pointers, returned aliases and retained Beanstalk references are deferred beyond the V1 value-only profile.
 
 Initial optional core packages:
 - `@core/math`: `PI`, `TAU`, `E`, and `Float` math helpers.

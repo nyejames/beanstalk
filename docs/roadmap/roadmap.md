@@ -33,13 +33,13 @@ Do not mark a plan active unless its current-state capsule says it is active.
 
 These items are genuinely deferred. They are not current implementation work. Each item links to its owning plan or stays here only when no plan exists yet.
 
-## Region based memory management syntax and the final memory management design implementation
+## Region based memory management syntax and ownership-aware Wasm completion
 
-This will involve finalising the design of regions as well as the final model for GC-eliding static analysis and the split of debug builds being fast and falling back to GC while optimised builds try to completely elide the GC if possible. 
+Canonical memory design lives under [the memory management design docs](docs/src/docs/codebase/memory-management).
 
-The final model for the direction of the memory management system (the final design brief, not current implementation) is in [the memory management design docs](docs/src/docs/codebase/memory-management)
+Accepted end-state grouped-memory design (`group` / `into`) lives in [grouped memory design](docs/roadmap/plans/grouped-memory-design.md). Implementation remains deferred until a separate implementation plan is approved. It is a likely prerequisite to final ownership-aware Wasm completion, but it is not active or queued merely because the design is accepted.
 
-[Design draft for regions syntax](docs/roadmap/plans/grouped-memory-design.md)
+Development and release profiles may differ only in optimisation effort and physical representation. They must not differ in source legality.
 
 ## Post-TIR template performance follow-ups
 

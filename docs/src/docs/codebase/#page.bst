@@ -21,7 +21,7 @@ page_head #= theme_head
     ## Explore the codebase
 
     - @./compiler-design (Compiler design): staged pipeline, task-reading matrix and cross-cutting contracts
-    - @./memory-management (Memory management): GC semantics, shared access, borrow validation, ownership and backend lowering
+    - @./memory-management (Memory management): reference semantics, borrow validation, lifetime regions, ownership and backend lowering
     - @./style-guide (Codebase development standards): implementation style, test strategy and validation gates
     - @./design-scope (Design scope): accepted mechanisms, constraints and intentionally excluded complexity
     - @./language (Compiler-facing language reference): bridge to the canonical language overview
@@ -42,7 +42,8 @@ page_head #= theme_head
             -> Stage 4: AST construction
             -> Stage 5: HIR generation
             -> Stage 6: borrow validation
-            -> Stage 7: backend lowering
+            -> lifetime-region and escape validation
+            -> build-owned link planning and backend lowering
             -> output files
     ]
 ]

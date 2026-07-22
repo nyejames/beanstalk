@@ -2,7 +2,7 @@ import @./borrow-validation {content as reference_content}
 import @styles/docs {navbar, section, theme_head}
 
 page_title #= "Borrow validation"
-page_description #= "How Beanstalk checks exclusivity, aliasing and move safety."
+page_description #= "How Beanstalk checks exclusivity, aliasing and optional transfer safety."
 page_head #= theme_head
 
 #[navbar]
@@ -12,7 +12,7 @@ page_head #= theme_head
 
     # Borrow validation
 
-    Borrow validation runs after HIR generation. It writes analysis facts beside HIR without changing it.
+    Borrow validation runs after HIR generation. It writes analysis facts beside HIR without changing it. Lifetime topology is a separate later analysis.
 ]
 
 #[section, reference_content]

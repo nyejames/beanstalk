@@ -173,7 +173,7 @@ Flow: [projects](src/projects/) → [build_system](src/build_system/) → [compi
 - [compiler design overview](docs/compiler-design-overview.md)
 - [build system design overview](docs/build-system-design.md)
 - [language semantics overview](docs/language-overview.md)
-- [memory management design](docs/memory-management-design.md)
+- [memory management design](docs/src/docs/codebase/memory-management/overview.bd)
 - [codebase style guide](docs/codebase-style-guide.md)
 - [docs website source](docs/src/docs/); [generated output](docs/release/)
 - [language support progress matrix](docs/src/docs/progress/#page.bst)

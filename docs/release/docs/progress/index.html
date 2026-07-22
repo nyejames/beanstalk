@@ -187,9 +187,9 @@ body {
                 ),
                 linear-gradient(
                     145deg,
-                    #0c1d17 0%,
-                    #101a18 48%,
-                    #081606 100%
+                    #0c1711 0%,
+                    #1b2019 48%,
+                    #081b06 100%
                 );
 
             background-repeat: no-repeat;
@@ -211,10 +211,10 @@ body {
                 ),
                 linear-gradient(
                     145deg,
-                    #baf6d4 0%,
-                    #eeffe3 17%,
-                    #e2ffe2 77%,
-                    #b1fcec 100%
+                    #dcf9d3 0%,
+                    #f5f5f5 27%,
+                    #e6f2e6 86%,
+                    #ade8cd 100%
                 );
 
             background-repeat: no-repeat;
@@ -680,7 +680,31 @@ body {
      <td style="padding: 0.1em 0.5em; "> Supported</td>
      <td style="padding: 0.1em 0.5em; "> Broad borrow, aliasing, mutable/exclusive access, use-after-move, branch merge, loop, short-circuit, future-use, final-use, advisory drop-site, hashmap, reactivity and adversarial coverage.</td>
      <td style="padding: 0.1em 0.5em; "> HIR analysis / JS GC baseline</td>
-     <td style="padding: 0.1em 0.5em; "> Borrow validation enforces exclusivity and move-safety while ownership/drop facts remain advisory for GC-only JS. GC fallback remains the language baseline.</td>
+     <td style="padding: 0.1em 0.5em; "> Borrow validation enforces exclusivity and current move-sensitive checks while ownership/drop facts remain advisory for GC-only JS. GC remains the language baseline representation. Current move-sensitive and aggregate behaviour may not yet match the accepted final memory design and is tracked as compiler drift for a later implementation plan.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.1em 0.5em; "> Lifetime-region and escape validation</td>
+     <td style="padding: 0.1em 0.5em; "> Deferred</td>
+     <td style="padding: 0.1em 0.5em; "> None</td>
+     <td style="padding: 0.1em 0.5em; "> Backend-neutral design</td>
+     <td style="padding: 0.1em 0.5em; "> Accepted architecture exists; no implementation owner has landed. GC does not bypass the future semantic validation.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.1em 0.5em; "> Declared memory groups (`group` / `into`)</td>
+     <td style="padding: 0.1em 0.5em; "> Deferred</td>
+     <td style="padding: 0.1em 0.5em; "> None</td>
+     <td style="padding: 0.1em 0.5em; "> Frontend / HIR / lifetime analysis / all backends</td>
+     <td style="padding: 0.1em 0.5em; "> Accepted end-state syntax; not current source support.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.1em 0.5em; "> WIT value-only component integration</td>
+     <td style="padding: 0.1em 0.5em; "> Deferred</td>
+     <td style="padding: 0.1em 0.5em; "> None</td>
+     <td style="padding: 0.1em 0.5em; "> Frontend / build / backends</td>
+     <td style="padding: 0.1em 0.5em; "> Accepted closed external-boundary profile; no current import validator or runtime integration.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">

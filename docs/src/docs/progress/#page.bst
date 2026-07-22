@@ -318,7 +318,31 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
             [: Supported]
             [: Broad borrow, aliasing, mutable/exclusive access, use-after-move, branch merge, loop, short-circuit, future-use, final-use, advisory drop-site, hashmap, reactivity and adversarial coverage.]
             [: HIR analysis / JS GC baseline]
-            [: Borrow validation enforces exclusivity and move-safety while ownership/drop facts remain advisory for GC-only JS. GC fallback remains the language baseline.]
+            [: Borrow validation enforces exclusivity and current move-sensitive checks while ownership/drop facts remain advisory for GC-only JS. GC remains the language baseline representation. Current move-sensitive and aggregate behaviour may not yet match the accepted final memory design and is tracked as compiler drift for a later implementation plan.]
+        ]
+
+        [data:
+            [: Lifetime-region and escape validation]
+            [: Deferred]
+            [: None]
+            [: Backend-neutral design]
+            [: Accepted architecture exists; no implementation owner has landed. GC does not bypass the future semantic validation.]
+        ]
+
+        [data:
+            [: Declared memory groups (`group` / `into`)]
+            [: Deferred]
+            [: None]
+            [: Frontend / HIR / lifetime analysis / all backends]
+            [: Accepted end-state syntax; not current source support.]
+        ]
+
+        [data:
+            [: WIT value-only component integration]
+            [: Deferred]
+            [: None]
+            [: Frontend / build / backends]
+            [: Accepted closed external-boundary profile; no current import validator or runtime integration.]
         ]
 
         [data:

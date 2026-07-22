@@ -1,12 +1,35 @@
 # Memory Management Documentation Migration Completion Plan
 
-**Status:** Approved implementation plan  
+**Status:** complete  
 **Repository:** `nyejames/beanstalk`  
 **Baseline reviewed:** `main` at `7f9ab487aecc64ef31f68d5d615d6f07794ecaf9`  
 **Primary scope:** Documentation architecture, accepted design clarification, migration completion, and retirement of the legacy memory monolith  
 **Change class:** Documentation-only  
 **Required final gate:** `bean build docs --release` or `cargo run --quiet -- build docs --release`  
 **Follow-up work:** A separate compiler-drift implementation plan must be produced after this documentation plan lands
+
+## Current state
+
+ACTIVE_PLAN: `docs/roadmap/plans/memory-management-docs-migration-completion-plan.md`
+STATUS: complete
+CURRENT_SLICE: none
+LAST_ACCEPTED_COMMIT: pending parent commit
+WORKTREE: main; unrelated compiler/src changes preserved and not staged
+REQUIRED_RELOADS: startup files, this plan, current source/diff
+RELEVANT_CONTEXT_NOW:
+- docs: split memory authority complete; legacy monolith deleted
+- code: none (documentation-only)
+ACCEPTANCE_CRITERIA:
+- all phase acceptance criteria satisfied
+VALIDATION_STATE:
+- `bean check docs`: passed
+- `bean build docs --release`: passed; 64 files
+DOCS_IMPACT: memory leaf, compiler/build/language/progress/roadmap/index updated; `docs/release/**` regenerated
+BLOCKERS_OR_OPEN_DECISIONS: none
+DELEGATION_DECISION: parent-direct - documentation-only parent-owned work
+NEXT_WORKER_ORDER: none
+STOP_REASON: active work source and final review complete
+NEXT_RESUME_ACTION: none; produce separate compiler-drift implementation plan later
 
 ---
 

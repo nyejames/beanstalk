@@ -76,15 +76,16 @@ Think of shared access as several vines reading the same stem. Exclusive access 
 
 Hold these rules together:
 
-1. **GC is the semantic baseline** for all backends.
+1. **GC is a permitted runtime representation** for a statically legal lifetime topology. It is not a legality escape for invalid retained edges or unproven topology.
 2. **Borrow validation is mandatory**, even under GC.
-3. **Shared access** is the default for existing values. Binding, passing, returning or storing an existing value creates a shared alias unless exclusive access or explicit copy applies.
-4. **`copy`** creates an independent value on purpose. Ordinary assignment does not clone.
-5. **`~place`** requests temporary exclusive access to an existing mutable place. It is not a move marker and not a type constructor.
-6. **Moves are inferred** at safe consumption points. Optional inferred transfer always backs off to borrowing when proof is unavailable.
-7. **Ownership-aware lowering** is optional optimisation layered over the same accepted programs.
+3. **Lifetime-region validation is mandatory** after borrow validation. Two proof layers stay distinct: mandatory topology/access legality versus optional ownership optimisation.
+4. **Shared access** is the default for existing values. Binding, passing, returning or storing an existing value creates a shared alias unless exclusive access or explicit copy applies.
+5. **`copy`** creates an independent value on purpose. Ordinary assignment does not clone.
+6. **`~place`** requests temporary exclusive access to an existing mutable place. It is not a move marker and not a type constructor.
+7. **Moves are inferred** at safe consumption points. Optional inferred transfer always backs off to borrowing when proof is unavailable.
+8. **Ownership-aware lowering** is optional optimisation layered over the same accepted programs.
 
-GC-only and ownership-aware backends must accept and reject the same source programs. Optimisation may not widen or shrink the language.
+GC-only and ownership-aware backends must accept and reject the same source programs. Optimisation may not widen or shrink the language. GC does not accept any lifetime graph merely because deterministic lowering cannot prove ownership.
 
 Shared access is a source-semantic relationship. It does not require every scalar to be heap-allocated or represented by a pointer. A small integer can still follow shared-access rules at the language level while living in a register at runtime.
 
@@ -130,7 +131,7 @@ In the greeting project, strings and template values cross runtime operations. U
 
 **Alternative:** expose Rust-style lifetimes, references and owned-or-borrowed signatures in every API.
 
-**Choice:** keep GC as the semantic fallback and validate access separately.
+**Choice:** keep GC as a legal representation for already-valid topology, validate access and lifetime topology separately, and optimise ownership when proof exists.
 
 **Benefit:** safer source rules with a backend escape route when proof is thin. Source APIs stay readable.
 

@@ -4,11 +4,13 @@ Inferred transfer, unified ABI and conditional destruction.
 
 ## Contract
 
-- Input: borrow facts and validated HIR
+- Input: validated HIR, borrow facts and validated lifetime facts
 - Output: ownership-aware lowering decisions and conditional drop placement
-- Decides: inferred move points, unified ABI shape, conditional destruction
-- Must not decide: source legality, HIR shape, borrow facts
+- Decides: runtime realisation of validated transfer facts, ownership metadata encoding, unified ABI behaviour, and conditional destruction
+- Must not decide: source legality, lifetime topology, HIR shape, or borrow facts
 - Invariant: ownership-aware and GC paths preserve identical observable behavior
+
+Source legality and lifetime topology are already fixed before ownership lowering.
 
 ## Main paths
 
@@ -19,5 +21,6 @@ Inferred transfer, unified ABI and conditional destruction.
 ## Read next
 
 - `docs/src/docs/codebase/memory-management/ownership-and-drops/ownership-and-drops.bd`
+- `docs/src/docs/codebase/memory-management/lifetime-regions-and-escape-validation/overview.bd`
 - `docs/src/docs/codebase/memory-management/borrow-validation/overview.bd`
 - `docs/src/docs/codebase/memory-management/runtime-and-backend-lowering/overview.bd`

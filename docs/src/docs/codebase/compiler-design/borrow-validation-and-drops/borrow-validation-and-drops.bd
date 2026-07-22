@@ -119,13 +119,23 @@ Label that example carefully. It teaches why exclusivity exists. It does not cla
 *Caption: general teaching example, not current runtime support.*
 *Question: why prevent the pattern before threads arrive?*
 
+## Ownership bit and drops
+
+The ownership bit records destruction responsibility only. It does not prove uniqueness, identify the final observer or establish lifetime legality. Advisory drop sites and operations in the spirit of `drop_if_owned` are weaker than validated release permission or lifetime topology.
+
+There is no ordinary mandatory-consuming source operation today. Optional inferred transfer always backs off to borrowing when proof is unavailable. Path-dependent optional transfer does not reject the program merely because transfer is ambiguous.
+
+## Handoff to lifetime validation
+
+Borrow validation supplies access, alias, optional-transfer and reactive invalidation facts. Lifetime-region and escape validation is a separate later analysis that decides one lifetime owner, retained-edge legality, escapes and cycles before module artefacts feed target planning. See `docs/src/docs/codebase/memory-management/lifetime-regions-and-escape-validation/`.
+
 ## What can fail here
 
 - conflicting shared and exclusive access
 - invalid mutation
-- use after inferred move
 - unsafe return alias
 - conservative joins that reject or retain more than an ideal analysis
+- topology failures belong to lifetime-region validation, not ordinary optional-transfer proof
 
 Do not claim current threaded or async execution as present tense support. Do not claim full lifetime-region topology analysis as already shipped if the progress matrix still separates it from current borrow checking.
 
@@ -133,19 +143,19 @@ Do not claim current threaded or async execution as present tense support. Do no
 
 **Alternative:** expose source lifetimes and move syntax.
 
-**Choice:** mandatory HIR analysis, inferred transfers and GC fallback.
+**Choice:** mandatory HIR analysis, optional inferred transfers that back off to borrowing, and GC as a legal representation for already-valid topology.
 
 **Benefit:** source APIs stay small while access safety remains explicit to the compiler.
 
-**Cost:** analysis precision limits ownership optimisation and can reject ambiguous programs.
+**Cost:** analysis precision limits ownership optimisation. Topology that cannot be proved legal is rejected by the separate lifetime analysis.
 
 ## Roadmap and current status
 
-- **Accepted design:** borrow validation reads HIR and writes side tables. Reference-semantic defaults, explicit copy, exclusive `~`, inferred moves.
+- **Accepted design:** borrow validation reads HIR and writes side tables. Reference-semantic defaults, explicit copy, exclusive `~`, optional inferred moves.
 - **Current implementation:** memory and progress pages for supported checks.
 - **Queued work:** ownership-aware drops, backend ABI work, lifetime-region and escape-validation implementation.
-- **Deferred or outside scope:** current concurrency syntax, trait objects, source-visible references and `group` / `into` bulk lifetimes until implementation lands.
+- **Deferred or outside scope:** current concurrency syntax, trait objects, source-visible reference types and `group` / `into` bulk lifetimes until implementation lands.
 
 ## Exit state
 
-You leave with validated access facts, inferred ownership facts and advisory drop sites. Next: how these facts become one immutable module artefact the rest of the build can reuse.
+You leave with validated access facts, optional transfer facts and advisory drop sites. Next: lifetime-region validation, then how these facts become one immutable module artefact the rest of the build can reuse.
