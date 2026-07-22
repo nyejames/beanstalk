@@ -20,7 +20,7 @@ compiler_walkthrough/
 
 And keep these source shapes stable:
 
-[codeblock, $code("text"):
+[codeblock, $code("beanstalk"):
 -- greeting.bst
 
 greeting_prefix #= "Hello"
@@ -30,7 +30,7 @@ greet |name String| -> String:
 ;
 ]
 
-[codeblock, $code("text"):
+[codeblock, $code("beanstalk"):
 -- #page.bst
 
 import @greeting { greet }
