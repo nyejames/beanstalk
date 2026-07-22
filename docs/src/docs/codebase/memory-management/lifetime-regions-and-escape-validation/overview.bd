@@ -10,14 +10,14 @@ One lifetime owner, retained-edge legality, escape validation and region topolog
 - Must not decide: source access syntax, HIR shape, target partition, physical allocation strategy, ownership-bit encoding, or backend lowering
 - Invariant: GC may realise only a topology already proven legal
 
-Implementation of this analysis is deferred. The canonical design lives in this leaf plus `docs/roadmap/plans/grouped-memory-design.md`.
+Implementation of this analysis is deferred. Canonical grouped-memory semantics live under `docs/src/docs/codebase/memory-management/declared-memory-groups/`. The roadmap file owns implementation sequencing and deferred follow-up only.
 
 ## Read next
 
 - `docs/src/docs/codebase/memory-management/lifetime-regions-and-escape-validation/lifetime-regions-and-escape-validation.bd`
+- `docs/src/docs/codebase/memory-management/declared-memory-groups/overview.bd`
 - `docs/src/docs/codebase/memory-management/borrow-validation/overview.bd`
 - `docs/src/docs/codebase/memory-management/ownership-and-drops/overview.bd`
 - `docs/src/docs/codebase/memory-management/runtime-and-backend-lowering/overview.bd`
 - `docs/compiler-design-overview.md`
 - `docs/build-system-design.md`
-- `docs/roadmap/plans/grouped-memory-design.md`

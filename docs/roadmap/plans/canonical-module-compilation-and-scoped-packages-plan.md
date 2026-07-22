@@ -15,15 +15,32 @@ The target remains unchanged:
 
 This document replaces the previous incremental phase sequence at the same path. The accepted implementation through `4a0cd4e01` is retained. The replacement changes what happens next and when incomplete migration owners are deleted.
 
-## Durable status
+## Current state
 
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/canonical-module-compilation-and-scoped-packages-plan.md
-STATUS: active recovery plan
-ACCEPTED_IMPLEMENTATION_BASELINE: 4a0cd4e012b868b88263a91501061dc6d5e5a0cd
-REVIEW_BASELINE: main at 628038be811751c18ad2c9cce7afbb1ef9c6a33a
-CURRENT_MILESTONE: R1 — consolidate the public-interface producer boundary
-UNACCEPTED_INPUT: Phase 7c2e trait-requirement patch; salvage only after parent review and invariant correction
+STATUS: active
+CURRENT_SLICE: R1 — replace the parallel direct export/type outputs with one aggregate public-interface draft, including corrected direct trait requirement projection
+LAST_ACCEPTED_COMMIT: 4a0cd4e012b868b88263a91501061dc6d5e5a0cd
+WORKTREE: main at c60f0fbd1; unrelated staged memory-documentation additions must remain untouched
+REQUIRED_RELOADS: startup files, this plan, current public-interface source, current diff and prior Phase 7c2e task/handoff
+RELEVANT_CONTEXT_NOW:
+- docs: compiler-design-overview.md and build-system-design.md own the draft/final interface and orchestration boundaries
+- code: semantic_identity.rs, defined_public_type_surface.rs, AST resolved public roots, build.rs and frontend_orchestration.rs own the current parallel producer path
+ACCEPTANCE_CRITERIA:
+- one PublicInterfaceDraftBuilder produces one owned PublicInterfaceDraft covering direct export origins, canonical declaration types, receiver surfaces, generic bounds and corrected trait requirements
+- CompiledModuleResult carries exactly one aggregate draft and no separate defined_public_* fields
+- trait receiver SelfType projection validates the owning trait this_type invariant and no open-ended AST handoff bag or compatibility path remains
+VALIDATION_STATE:
+- cargo fmt: not run for this slice
+- focused tests: not run for this slice
+- just validate: not run for this slice
+DOCS_IMPACT: active plan only; progress matrix unchanged because R1 changes no user-visible support
+BLOCKERS_OR_OPEN_DECISIONS: none
+DELEGATION_DECISION: ollama - user requires Ollama for every worker slice
+NEXT_WORKER_ORDER: ollama only
+STOP_REASON: none
+NEXT_RESUME_ACTION: launch the bounded R1 aggregate-draft implementation through Ollama
 ```
 
 Do not append worktree-specific notes, complete validation histories or worker transcripts to this plan. Keep this status block current and concise. Git history is the validation history.

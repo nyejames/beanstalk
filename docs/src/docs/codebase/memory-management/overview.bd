@@ -36,7 +36,7 @@ If ownership optimisation cannot be proven or is not useful for a backend, the v
 - cycle legality
 - external-boundary legality
 
-Failure to prove mandatory semantic legality may produce a source diagnostic.
+User-authored topology that is invalid or cannot be proven legal produces a structured `CompilerDiagnostic`. Missing or inconsistent compiler-owned summaries, boundary classifications, lifecycle roots, or metadata produce `CompilerError`.
 
 **Optional optimisation proof**
 
@@ -65,7 +65,7 @@ Do not treat "ownership unavailable" and "topology unproven" as the same fallbac
 
 **6. One lifetime owner and stored-edge legality.** Every allocation has exactly one semantic lifetime owner. An object may retain a reference only when the referenced allocation belongs to the same lifetime region or to a region statically known to outlive the retaining object (`R_value >= R_container`).
 
-**7. Lifetime-region validation is mandatory.** Lifetime topology is a backend-neutral source-legality check after borrow validation. GC cannot bypass it. Build profiles differ only in optimisation effort and physical representation.
+**7. Lifetime-region validation is mandatory.** Lifetime topology is a backend-neutral source-legality check after borrow validation. GC cannot bypass it. Build profiles may vary optional optimisation-analysis effort and physical allocation strategy. They must run semantically equivalent mandatory borrow and lifetime-topology validation and must not change source legality.
 
 **8. Backend representation is optional.** GC, internal RC, arenas, handles, stack storage and hybrid representations may realise a topology already proven legal. Source-visible RC and unrestricted dynamic shared ownership remain outside the language.
 
@@ -120,15 +120,24 @@ Local module compilation produces local lifetime constraints and exported summar
     ]
 
     [td:
-        [: Returns, escaping aliases, regions, groups, reactive lifetime roots, cross-region cycles or external retention]
+        [: Returns, escaping aliases, regions, reactive lifetime roots, cross-region cycles or external retention]
         [:
             - `docs/src/docs/codebase/memory-management/lifetime-regions-and-escape-validation/overview.bd`
             - `docs/src/docs/codebase/memory-management/borrow-validation/overview.bd`
         ]
         [:
             - `docs/src/docs/codebase/memory-management/lifetime-regions-and-escape-validation/lifetime-regions-and-escape-validation.bd`
-            - `docs/roadmap/plans/grouped-memory-design.md`
+            - `docs/src/docs/codebase/memory-management/declared-memory-groups/declared-memory-groups.bd`
         ]
+    ]
+
+    [td:
+        [: `group` / `into`, destination scope, hard group exits, nested groups]
+        [:
+            - `docs/src/docs/codebase/memory-management/declared-memory-groups/overview.bd`
+            - `docs/src/docs/codebase/memory-management/lifetime-regions-and-escape-validation/overview.bd`
+        ]
+        [: `docs/src/docs/codebase/memory-management/declared-memory-groups/declared-memory-groups.bd`]
     ]
 
     [td:

@@ -13,13 +13,13 @@ Lifetime-region and escape validation is the mandatory semantic proof that every
 - cycle legality
 - external-boundary legality
 
-Failure to prove mandatory semantic legality may produce a source diagnostic.
+User-authored topology that is invalid or cannot be proven legal produces a structured `CompilerDiagnostic`. Missing or inconsistent compiler-owned summaries, boundary classifications, lifecycle roots, or metadata produce `CompilerError`.
 
 **Optional optimisation proof** covers final-use transfer, deterministic drop placement, retain/drop elimination, stack/arena/region allocation, collector elision and ownership specialisation. Failure to prove an optimisation preserves semantics through a conservative representation such as GC. It must not reject the program.
 
 GC is a permitted runtime representation for a statically legal lifetime topology. It is not a mechanism for accepting invalid retained edges, lateral lifetime promotion, unowned escapes or cross-region cycles.
 
-Implementation of this analysis is deferred. This leaf is the canonical design authority for lifetime topology. Declared `group` / `into` syntax is accepted end-state design owned by `docs/roadmap/plans/grouped-memory-design.md` and summarised here.
+Implementation of this analysis is deferred. This leaf is the canonical design authority for lifetime topology. Canonical grouped-memory semantics live under @../declared-memory-groups (Declared memory groups). The roadmap file owns implementation sequencing and deferred follow-up only.
 
 ## Terminology
 
@@ -88,6 +88,21 @@ Implementation of this analysis is deferred. This leaf is the canonical design a
         [: Physical representation]
         [: GC, RC, arena, stack, handle or hybrid storage chosen after topology is validated.]
     ]
+
+    [td:
+        [: Fresh result root]
+        [: Newly allocated result root that may retain legal references to older allocations.]
+    ]
+
+    [td:
+        [: Alias result]
+        [: Result root that is an existing argument, projection, external allocation, or another result.]
+    ]
+
+    [td:
+        [: Independent result graph]
+        [: New graph with no mutable sharing or retained Beanstalk reference to pre-existing storage.]
+    ]
 ]
 
 An allocation family is the containing allocation plus field, element and other projections that remain rooted in it. A projection does not silently become an independent allocation.
@@ -141,9 +156,20 @@ Lexical scope does not define allocation lifetime. Escaping or retained aliases 
 
 ## Implicit lifetime inference
 
-Implicit region inference may widen an allocation only to the nearest existing ancestor on the same ordered owner chain that outlives every retained observer. It may not silently promote an allocation laterally across independently ending sibling lifetime domains.
+An ordinary allocation begins in the narrowest inferred region capable of owning its initial uses. The compiler may widen that allocation only to the nearest existing ancestor on the same ordered owner chain that outlives every retained observer.
 
-Widening may follow one ordered owner chain only. The selected owner is the nearest existing ancestor that outlives every retained observer. The compiler must not widen farther than necessary. The compiler must not invent a page-, application- or process-lifetime owner merely to avoid a diagnostic.
+The inference sequence:
+
+[codeblock, $code("text"):
+    choose the narrowest initial owner
+    -> collect retained observers
+    -> widen only when required
+    -> choose the nearest existing ancestor on the same owner chain
+]
+
+Implicit region inference may not silently promote an allocation laterally across independently ending sibling lifetime domains.
+
+Widening may follow one ordered owner chain only. The compiler must not widen farther than necessary or invent a page-, application- or process-lifetime owner merely to avoid a diagnostic.
 
 Independently ending sibling lifetime domains do not form one ordered chain.
 
@@ -168,15 +194,17 @@ Inferred transfer is optional. When safe transfer is not proven on every relevan
 
 ## Interior projections and allocation families
 
-Interior projections remain rooted in their containing allocation family and may keep that family alive.
+Interior projections remain rooted in their containing allocation family. Returning, storing, or escaping a projection retains that family. At a proven final use, analysis may transfer the containing allocation family. A child is independently releasable only when it was already established as a separately owned allocation before the escape.
 
 A projection does not silently become an independent allocation or independent copy. Returning, storing or escaping a field or element alias retains the base family under the stored-edge rule.
+
+Field-sensitive allocation splitting may remain as a future compatible optimisation only when the compiler establishes separate child ownership before the alias escapes. It is not retroactive child extraction.
 
 ## Returns and multi-return aliasing
 
 Function lifetime summaries cover:
 
-- fresh results
+- fresh result roots
 - parameter aliases
 - projection aliases
 - result-to-result aliases
@@ -185,7 +213,7 @@ Function lifetime summaries cover:
 
 Multiple return values may alias one allocation when they remain under one caller lifetime owner.
 
-A caller may place only fresh results directly into a destination region. Alias results remain tied to their source lifetime owner. A fresh result that retains a parameter is valid only when the parameter's region outlives the selected result region.
+A caller may place a fresh result root directly into a destination region only when every retained edge in the result is legal for that destination. An alias result remains tied to its existing lifetime owner. An independent result graph may enter an unrelated destination lifetime without retained edges to its source graph.
 
 ## Cycles and strongly connected graphs
 
@@ -305,8 +333,9 @@ Conservative analysis may reject topology it cannot prove legal. That is a sourc
 - @../ (Memory management): top-level memory authority
 - @../access-and-aliasing (Access and aliasing): shared aliases, copies and aggregate storage
 - @../borrow-validation (Borrow validation): exclusivity and optional transfer safety
+- @../declared-memory-groups (Declared memory groups): accepted deferred `group` / `into` surface and hard destination lifetimes
 - @../ownership-and-drops (Ownership and drops): destruction responsibility
 - @../runtime-and-backend-lowering (Runtime and backend lowering): GC/RC/arena representations and external profiles
 - @https://github.com/nyejames/beanstalk/blob/main/docs/compiler-design-overview.md (Compiler design overview): analysis boundary and artefact lanes
 - @https://github.com/nyejames/beanstalk/blob/main/docs/build-system-design.md (Build-system design): lifecycle roots and link planning
-- @https://github.com/nyejames/beanstalk/blob/main/docs/roadmap/plans/grouped-memory-design.md (Grouped memory design): accepted deferred `group` / `into` surface
+- @https://github.com/nyejames/beanstalk/blob/main/docs/roadmap/plans/grouped-memory-design.md (Grouped memory implementation roadmap): implementation sequencing and deferred investigations

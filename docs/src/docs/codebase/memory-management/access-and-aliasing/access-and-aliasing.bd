@@ -289,6 +289,7 @@ One visible name maps to one binding. This keeps alias roots, future-use reasoni
 - @../ (Memory management): concise memory-model contract
 - @../borrow-validation (Borrow validation): how shared and exclusive access are checked
 - @../lifetime-regions-and-escape-validation (Lifetime regions and escape validation): retained edges, escapes and region topology
+- @../declared-memory-groups (Declared memory groups): accepted `group` / `into` placement and destination lifetimes
 - @../ownership-and-drops (Ownership and drops): inferred transfer after access validation
 - @https://github.com/nyejames/beanstalk/blob/main/docs/language-overview.md (Language overview): full source syntax
 - @https://github.com/nyejames/beanstalk/blob/main/docs/compiler-design-overview.md (Compiler AST construction): source access and coercion ownership

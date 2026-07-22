@@ -334,7 +334,7 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
             [: Deferred]
             [: None]
             [: Frontend / HIR / lifetime analysis / all backends]
-            [: Accepted end-state syntax; not current source support.]
+            [: Accepted end-state syntax; not current source support. Canonical semantics live under `docs/src/docs/codebase/memory-management/declared-memory-groups/`; implementation sequencing in `docs/roadmap/plans/grouped-memory-design.md`.]
         ]
 
         [data:

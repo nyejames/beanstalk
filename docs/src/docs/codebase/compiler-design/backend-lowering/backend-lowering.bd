@@ -12,9 +12,11 @@ A lowerer receives explicit records:
 - paired local or generated-local type environments
 - stable call targets
 - borrow facts
+- validated lifetime facts and summaries
+- external boundary classifications
+- builder lifecycle/runtime plan
 - per-function link facts
-- selected-function, import and capability plans
-- semantic layout identities the target needs
+- selected-function, import, capability and layout identities
 
 A lowerer does **not**:
 
@@ -23,6 +25,7 @@ A lowerer does **not**:
 - infer generics or reconstruct traits
 - fold constants or interpret TIR
 - rediscover project topology
+- reconsider lifetime topology or source legality
 - choose command or route policy
 - write final project files directly
 
@@ -65,7 +68,7 @@ Old dispatcher-loop LIR stories, `bst_start` bootstrap myths, `i64` Int bridges 
 
 ## Shared runtime and wrappers
 
-Accepted HTML mixed-target design wants **page-local shared Wasm runtime and memory** rather than a scatter of isolated memories per module as the end state.
+Accepted HTML mixed-target design wants **page-local shared Wasm runtime and memory** rather than a scatter of isolated memories per module as the end state. Page-local shared Wasm runtime/memory applies to Beanstalk-linked variants only. Imported WIT components use component-private memory and value conversion.
 
 JavaScript companion facades and wrappers call Wasm exports through explicit handles and layout rules. The bridge is data, not guesswork.
 

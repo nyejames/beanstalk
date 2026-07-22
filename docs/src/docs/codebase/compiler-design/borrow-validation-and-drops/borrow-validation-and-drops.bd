@@ -58,7 +58,7 @@ Public function interfaces export summaries:
 
 - parameter access modes
 - mutation effects
-- possible ownership consumption
+- optional transfer eligibility and effect category
 - return aliasing
 - relevant reactive effects
 
@@ -131,11 +131,12 @@ Borrow validation supplies access, alias, optional-transfer and reactive invalid
 
 ## What can fail here
 
-- conflicting shared and exclusive access
+- access conflict
 - invalid mutation
-- unsafe return alias
+- invalid alias use
+- internal inconsistent borrow metadata
 - conservative joins that reject or retain more than an ideal analysis
-- topology failures belong to lifetime-region validation, not ordinary optional-transfer proof
+- return-escape legality belongs to lifetime-region validation, not ordinary optional-transfer proof
 
 Do not claim current threaded or async execution as present tense support. Do not claim full lifetime-region topology analysis as already shipped if the progress matrix still separates it from current borrow checking.
 
@@ -153,8 +154,8 @@ Do not claim current threaded or async execution as present tense support. Do no
 
 - **Accepted design:** borrow validation reads HIR and writes side tables. Reference-semantic defaults, explicit copy, exclusive `~`, optional inferred moves.
 - **Current implementation:** memory and progress pages for supported checks.
-- **Queued work:** ownership-aware drops, backend ABI work, lifetime-region and escape-validation implementation.
-- **Deferred or outside scope:** current concurrency syntax, trait objects, source-visible reference types and `group` / `into` bulk lifetimes until implementation lands.
+- **Deferred implementation:** ownership-aware drops, backend ABI work, lifetime-region and escape validation. Lifetime-region and escape validation is deferred implementation, not queued. Grouped memory is accepted design with deferred implementation. Ownership-aware backend realisation follows separate plans.
+- **Outside scope:** current concurrency syntax, trait objects and source-visible reference types.
 
 ## Exit state
 

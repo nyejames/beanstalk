@@ -107,7 +107,7 @@ This compiles the project using the command-selected builder and writes output t
 
 - A small static type system plus borrow validation for memory-safe code that's free of data races and iterator invalidation by default.
 
-- A GC fallback with ownership analysis that can remove runtime collection in ideal cases.
+- **Safe automatic memory management, with compiler checks that prevent invalid memory use and optimisations that can avoid garbage collection when proven safe.**
 
 - A backend-neutral frontend. Wasm as the main, platform-agnostic workhorse output target (Wasm backend in development).
 

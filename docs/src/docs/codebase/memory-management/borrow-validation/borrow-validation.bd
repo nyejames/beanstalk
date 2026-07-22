@@ -107,7 +107,7 @@ Borrow validation consumes and produces:
 - mutation effects
 - transfer eligibility / effect category
 - return-alias summaries
-- fresh result
+- fresh result roots
 - alias of one or more parameters
 - unknown or imprecise alias result
 - reactive effects
@@ -117,6 +117,8 @@ Borrow validation consumes and produces:
 Lifetime constraints are produced and validated by the separate lifetime-region analysis.
 
 All runtime value parameters, immutable or mutable, may be eligible for inferred responsibility transfer. Parameter access mode remains separate from optional ownership effect. An immutable parameter receiving ownership remains read-only. A mutable parameter receiving ownership may mutate according to the source contract.
+
+Closed external boundary profiles override this general rule. WIT value-only calls are non-consuming. Restricted host-value crossings are non-consuming, and mutable opaque-handle access does not transfer Beanstalk storage through the ordinary Beanstalk ownership ABI.
 
 `MayConsume`, `NeverConsumes` and `AlwaysConsumes` are analysis/lowering categories, not source-visible signature categories.
 

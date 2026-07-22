@@ -53,38 +53,96 @@ The build system owns reachability, target partition, page/request/mount/frame r
 
 See `docs/build-system-design.md` for project and link orchestration.
 
-## Beanstalk-linked page memory
+## Beanstalk-linked page memory and imported components
 
-Each page owns one runtime instance and one memory shared by its linked Beanstalk Wasm variants. Linked variants import the page runtime rather than owning separate memories.
-
-This is build architecture, not source memory semantics. It applies to Beanstalk-linked Wasm variants, not arbitrary imported components.
-
-## Imported Wasm components
-
-Imported components own private runtime memory. They are not members of Beanstalk page memory or the Beanstalk lifetime graph. They do not need to declare a GC strategy to Beanstalk.
-
-The one-page/one-memory rule applies to Beanstalk-linked Wasm variants, not arbitrary imported components.
+Each page may own one runtime and memory shared by its linked Beanstalk Wasm variants. Imported WIT components are separate runtimes with component-private memory and communicate only through the closed value boundary. This is build architecture, not source memory semantics. The one-page/one-memory rule applies to Beanstalk-linked Wasm variants, not arbitrary imported components. Imported components are not members of Beanstalk page memory or the Beanstalk lifetime graph and do not need to declare a GC strategy to Beanstalk.
 
 ## WIT value-only V1 profile
 
-Beanstalk imports general external Wasm libraries through a value-only WIT component profile. Supported arguments are lowered from shared reads into independent component values, and results are lifted into fresh Beanstalk values. No Beanstalk alias, lifetime owner, ownership state or destruction responsibility crosses the component boundary.
+**Beanstalk imports general external Wasm libraries as WIT-described Wasm Components. The V1 component boundary is value-only. Every supported argument is lowered from a shared read of a Beanstalk value into an independent component value, and every result is lifted into an independent Beanstalk result graph. No Beanstalk alias, lifetime owner, ownership state, or destruction responsibility crosses the component boundary.**
 
-- The source call is not consuming.
-- The component may use any private allocation strategy without declaring it to Beanstalk.
-- Supported direction is value-shape lower/lift only. This docs plan does not claim current implementation.
-- Rejected V1 surfaces include WIT resources, owned or borrowed resource handles, callbacks, async operations, futures, streams, shared-memory views, raw pointer escapes, returned aliases and retained Beanstalk references.
-- Unsupported WIT features receive structured import diagnostics and may suggest a wrapper component that presents a value-only interface.
+The component may use any private allocation or garbage-collection strategy. That strategy is not part of the Beanstalk binding contract and does not require a GC declaration.
+
+### Fixed facts
+
+| Fact | WIT value-only V1 |
+|---|---|
+| Parameter source access | Shared read |
+| Boundary crossing | Independent semantic value |
+| Retained Beanstalk reference | Never |
+| Result provenance | Independent result graph |
+| Result aliases an argument | Never |
+| Source call consumes argument | Never |
+| Destruction responsibility crosses | Never |
+| External lifetime owner | Component-private |
+| Cross-runtime allocation cycle | Impossible by contract |
+
+### Supported V1 WIT value families
+
+- primitives
+- strings
+- records whose members are supported values
+- variants whose payloads are supported values
+- options of supported values
+- recursively supported lists
+
+### Rejected V1 WIT surfaces
+
+- WIT resources
+- borrowed or owned resource handles
+- resource constructors or methods
+- callbacks into Beanstalk
+- retained closures or executable state
+- async functions
+- futures
+- streams
+- shared-memory views
+- raw pointers or pointer/length escape hatches
+- returned aliases
+- retained Beanstalk references
+- project-authored Beanstalk functions imported by the component
+
+Unsupported interfaces must receive structured import diagnostics identifying:
+
+- unsupported WIT feature
+- function
+- parameter or result
+- why it cannot cross the value-only boundary
+- whether a wrapper component could expose a supported value-only interface
+
+### Required importer metadata
+
+The importer requires stable:
+
+- stable package identity
+- stable world identity
+- stable interface identity
+- stable function identity
+- Beanstalk-facing parameter and result types
+- corresponding WIT value types
+- component export identity
+- trap or failure behavior
+- required component imports
+- target and runtime capability requirements
+
+The boundary classification generates the fixed memory facts. The importer must not infer them from a generic `Fresh` result marker, and binding authors must not restate them per function. No `uses_gc` field is required.
 
 ## Restricted host-binding profile
 
 Existing Core, Builder, JavaScript-provider and curated platform bindings use a restricted host-binding profile.
 
-- Ordinary Beanstalk values cross by value.
-- Host code may not retain references into ordinary Beanstalk storage.
-- Opaque handles represent foreign identity, not Beanstalk reference types.
-- Shared or mutable access to a handle controls legal access to the foreign identity, not direct access to host object storage.
+- Ordinary Beanstalk values cross by value as non-retained inputs.
+- Host code cannot retain references into ordinary Beanstalk storage.
+- Mutable host access is supported only for opaque foreign handles.
+- A mutable opaque-handle argument controls legal access to the foreign identity; it is not direct mutation of Beanstalk storage.
+- Ordinary Beanstalk values are not passed by mutable reference to host code.
+- Host operations that conceptually modify ordinary Beanstalk data return a fresh or independent result instead of mutating Beanstalk storage through copy-in/copy-out.
+- V1 does not define copy-in/copy-out writeback semantics.
+- Opaque handles represent foreign identities, not Beanstalk reference types.
 - Observable external resources require explicit close or teardown operations.
-- Host or component finalization timing must not define observable language behaviour.
+- Host finalization timing cannot define observable Beanstalk behavior.
+
+Restricted host-binding V1 permits mutable access only to opaque foreign handles. Ordinary Beanstalk values cross by value as non-retained inputs. A host operation that conceptually changes ordinary Beanstalk data returns a fresh or independent result instead of mutating Beanstalk storage through the boundary.
 
 ## Deferred resource-capable profiles
 
@@ -224,5 +282,6 @@ A missing optimisation is valid. A semantic divergence isn't. Unknown external r
 - @../ownership-and-drops (Ownership and drops): unified ABI and destruction
 - @../borrow-validation (Borrow validation): analysis facts
 - @../lifetime-regions-and-escape-validation (Lifetime regions and escape validation): topology legality
+- @../declared-memory-groups (Declared memory groups): group physical representation and group-to-group transfer
 - @https://github.com/nyejames/beanstalk/blob/main/docs/compiler-design-overview.md (Compiler design overview)
 - @https://github.com/nyejames/beanstalk/blob/main/docs/build-system-design.md (Build-system design)

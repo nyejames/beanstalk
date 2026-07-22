@@ -11,7 +11,7 @@ Companion authorities:
 - `docs/compiler-design-overview.md` for core compiler architecture
 - `docs/language-overview.md` and `docs/src/docs/codebase/language/**` for source syntax and language semantics
 - `docs/src/docs/codebase/design-scope/overview.bd` for design bias and scope boundaries
-- `docs/src/docs/codebase/memory-management/overview.bd` for access, borrow, GC, ownership and destruction semantics
+- `docs/src/docs/codebase/memory-management/overview.bd` for reference semantics, borrow validation, lifetime topology, declared groups, ownership, GC and backend memory lowering
 - `docs/src/docs/codebase/style-guide/style-guide.bd` for implementation standards
 - `docs/src/docs/progress/#page.bst` for current support and backend coverage
 - `docs/roadmap/roadmap.md` and `docs/roadmap/plans/` for implementation order and genuinely deferred design
@@ -20,7 +20,7 @@ Companion authorities:
 
 - One command selects one artefact builder and any active tooling overlays before config schema validation begins.
 - `config.bst` is one self-contained compile-time source file with no source imports or package resolution.
-- Stage 0 owns one canonical graph, file ownership, legal topology and deterministic scheduling for each project or package boundary.
+- Stage 0 owns one canonical graph, file ownership, legal project/module graph topology and deterministic scheduling for each project or package boundary.
 - A physical module is semantically compiled once inside that boundary.
 - Tokenization and declaration-shell parsing happen once. Stage 0 reuses prepared syntax for graph construction, later interface binding and module compilation.
 - Structural provider references, imported symbol bindings and module-local declaration-ordering edges are different data classes.
@@ -379,28 +379,26 @@ The command and bootstrap flow is:
 ```text
 select command, artefact builder, build profile and tooling overlays
 -> construct compiler and builder bootstrap capability surface
--> tokenize and parse one self-contained config.bst
--> order config declarations
--> resolve direct project #Import sources while AST folds config
--> validate the completed project record and active project sections
+-> compile and validate config
 -> derive entry_root and @project
--> build one canonical source index
--> prepare source syntax once for command candidates
--> finalise project, package and provider graphs
--> collect and validate narrow source #Import contracts
--> resolve remaining inputs and diagnose unknown inputs
+-> build the canonical source index and provider graphs
+-> resolve build-input contracts
 -> compile dependency-ordered waves
-   -> bind retained import shells to completed provider interfaces
+   -> bind provider interfaces
    -> order local declarations
-    -> run AST, HIR, borrow validation and local lifetime constraints and summaries
+   -> run AST semantics
+   -> lower and validate HIR
+   -> borrow-validate
+   -> produce local lifetime constraints and exported summaries
 -> complete the generated-function worklist
 -> assemble a success-only ProjectCompilation
--> plan entry/package roots, lifetime topology, target validation and backend artefacts
+-> plan entry/package roots and exact reachable unions
+-> instantiate and validate complete lifetime topology
+-> plan target assignments and validate them
+-> lower backend artefacts
 ```
 
-Inactive config sections are folded during config compilation even though their schemas are not active.
-
-Project config creates no source import graph.
+Config compilation tokenizes and parses one self-contained `config.bst`, orders config declarations, resolves direct project `#Import` sources while AST folds config, and validates the completed project record and active project sections. Inactive config sections are folded during config compilation even though their schemas are not active. Project config creates no source import graph.
 
 ## Source indexing and source sets
 
@@ -828,9 +826,9 @@ receive retained syntax and completed provider interfaces
 -> order local declarations
 -> run AST semantics
 -> lower and validate HIR
--> borrow-validate
--> produce local lifetime constraints and summaries
--> return Success or Diagnosed
+    -> borrow-validate
+    -> produce local lifetime constraints, lifetime facts and exported summaries
+    -> return Success or Diagnosed
 ```
 
 Local module compilation cannot validate every cross-module or builder-lifecycle relationship by itself. Project and link planning instantiate lifetime summaries over the reachable call graph and builder-supplied lifecycle roots.
@@ -1061,12 +1059,13 @@ Modules without HTML artefact activity remain available to the graph but produce
 The fixed sequence is:
 
 ```text
-entry roots and linked callable surface
--> exact reachable function and runtime-fact union
+entry or package roots
+-> exact reachable function and effect union
+-> instantiate local lifetime summaries with builder lifecycle roots
+-> validate complete lifetime topology
 -> target-affinity and capability analysis
--> deterministic JavaScript and Wasm partition
--> validate every function against its assigned target
--> validate permitted cross-target edges
+-> deterministic target partition
+-> validate assigned functions and permitted cross-target edges
 -> lower selected functions
 ```
 
@@ -1109,17 +1108,9 @@ Each selected module variant has a generated JavaScript companion facade. Wasm i
 
 ### Link planning and lifetime topology
 
-Project and package link planning follows this conceptual sequence:
+Project and package link planning instantiates local lifetime summaries with builder lifecycle roots and validates the complete lifetime topology before target assignment. Linking does not reopen source or mutate HIR.
 
-```text
-entry/package roots
--> reachable function and effect union
--> instantiate lifetime constraints with builder lifecycle roots
--> validate complete lifetime topology
--> target affinity and deterministic partition
--> target validation
--> lowering
-```
+`ProjectCompilation` or the link plan conceptually carries project-level validated lifetime topology. Exact Rust shape remains open.
 
 `ProjectCompilation` or the link plan conceptually carries project-level validated lifetime topology. Exact Rust shape remains open.
 

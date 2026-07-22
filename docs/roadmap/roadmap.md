@@ -37,9 +37,9 @@ These items are genuinely deferred. They are not current implementation work. Ea
 
 Canonical memory design lives under [the memory management design docs](docs/src/docs/codebase/memory-management).
 
-Accepted end-state grouped-memory design (`group` / `into`) lives in [grouped memory design](docs/roadmap/plans/grouped-memory-design.md). Implementation remains deferred until a separate implementation plan is approved. It is a likely prerequisite to final ownership-aware Wasm completion, but it is not active or queued merely because the design is accepted.
+Accepted end-state grouped-memory semantics live under [declared memory groups](docs/src/docs/codebase/memory-management/declared-memory-groups). Implementation sequencing and deferred follow-up live in [grouped memory implementation roadmap](docs/roadmap/plans/grouped-memory-design.md). The work remains deferred and is not automatically active or queued merely because the design is accepted. It is a likely prerequisite to final ownership-aware Wasm completion.
 
-Development and release profiles may differ only in optimisation effort and physical representation. They must not differ in source legality.
+Build profiles may vary optional optimisation-analysis effort and physical allocation strategy. They must run semantically equivalent mandatory borrow and lifetime-topology validation and must not change source legality.
 
 ## Post-TIR template performance follow-ups
 

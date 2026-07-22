@@ -55,6 +55,8 @@ When transfer is realised:
 
 Immutable and mutable parameters may both receive inferred destruction responsibility at a proven final-use call site. Parameter mutability controls access; ownership metadata controls destruction responsibility. An immutable parameter receiving ownership remains read-only. A mutable parameter receiving ownership may mutate according to the source contract.
 
+Closed external boundary profiles override this general rule. WIT value-only calls are non-consuming. Restricted host-value crossings are non-consuming, and mutable opaque-handle access does not transfer Beanstalk storage through the ordinary Beanstalk ownership ABI.
+
 ## Single ownership transfer
 
 - Ownership transfers at most once along a control-flow path.
@@ -195,6 +197,7 @@ These must preserve source-language semantics, the unified ownership contract an
 - @../access-and-aliasing (Access and aliasing): source semantics
 - @../borrow-validation (Borrow validation): optional transfer facts
 - @../lifetime-regions-and-escape-validation (Lifetime regions and escape validation): lifetime owners and topology
+- @../declared-memory-groups (Declared memory groups): group ownership of release families and reassignment
 - @../runtime-and-backend-lowering (Runtime and backend memory lowering): ABI realisation and representations
 - @https://github.com/nyejames/beanstalk/blob/main/docs/compiler-design-overview.md (Compiler borrow validation): transfer and drop facts
 - @https://github.com/nyejames/beanstalk/blob/main/docs/compiler-design-overview.md (Compiler Wasm lowering): ownership-aware backend seam

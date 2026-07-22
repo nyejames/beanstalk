@@ -139,10 +139,10 @@ In the greeting project, strings and template values cross runtime operations. U
 
 ## Roadmap and current status
 
-- **Accepted design:** GC is the semantic baseline for all backends. Reference-semantic defaults, explicit `copy`, exclusive `~place` and inferred moves.
+- **Accepted design:** GC can represent any lifetime topology the compiler has already accepted. Borrow and lifetime checks still define legality. Reference-semantic defaults, explicit `copy`, exclusive `~place` and inferred moves.
 - **Current implementation:** memory and progress authorities for runtime coverage and current borrow-checker support.
-- **Queued work:** ownership-aware backend work follows mixed backend plans. Lifetime-region and escape-validation docs and implementation remain sequenced work.
-- **Deferred or outside scope:** current concurrency syntax, deterministic destruction as a source-level guarantee, and `group` / `into` bulk lifetimes until their implementation lands.
+- **Deferred implementation:** ownership-aware backend work follows separate plans. Lifetime-region and escape validation is deferred implementation, not queued. Grouped memory is accepted design with deferred implementation.
+- **Outside scope:** current concurrency syntax, deterministic destruction as a source-level guarantee, and source-visible RC.
 
 Deep detail lives under `docs/src/docs/codebase/memory-management/`. This article places the model on the chronological route.
 

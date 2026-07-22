@@ -23,17 +23,17 @@ User-facing pages under `docs/src/docs/**` teach the language. They do not repla
 ## Architectural invariants
 
 - One directory-scoped `#*.bst` or `+*.bst` module is the canonical semantic compilation unit.
-- A physical module is compiled once per project or package compilation boundary and owns local type, HIR and borrow identity.
-- Every normal module included in a command's semantic graph has its dormant root work parsed, type-checked, lowered and borrow-validated before any entry can activate it.
+- A physical module is compiled once per project or package compilation boundary and owns local type, HIR, borrow and lifetime-analysis identity/facts.
+- Every normal module included in a command's semantic graph has its dormant root work parsed, type-checked, lowered, borrow-validated and lifetime-analysed before any entry can activate it.
 - Tokenization and declaration-shell parsing happen once. Later phases bind and consume retained syntax rather than reparsing source.
 - Each semantic fact has one source owner. A later stage does not reconstruct the same fact from source or an earlier IR.
 - Module interfaces use stable semantic identities rather than donor-local indexes.
-- AST resolves constants, generic call inference, traits, casts and template semantics, then emits concrete generic requests. Generated functions are materialised, HIR-validated and borrow-validated before backend handoff.
+- AST resolves constants, generic call inference, traits, casts and template semantics, then emits concrete generic requests. Generated functions are materialised, HIR-validated, borrow-validated and lifetime-analysed before backend handoff.
 - TIR is AST-local. HIR receives folded strings or neutral owned runtime handoff data only.
 - HIR is the first backend-facing semantic IR. Borrow validation reads validated HIR and writes side tables without rewriting it.
 - Public semantic facts, executable state, backend-neutral link facts and compiler metadata are separate artefact lanes.
 - User-facing failures use `CompilerDiagnostic`. Internal invariants and infrastructure failures use `CompilerError`.
-- Backend validation consumes explicit roots, target assignments and validated HIR. Lowerers never rediscover source meaning.
+- Backend validation consumes explicit roots, target assignments, validated HIR and validated lifetime topology. Lowerers never rediscover source meaning or reconsider lifetime legality.
 - GC is the semantic baseline. Ownership-aware lowering preserves the same accepted programs and observable behaviour.
 - Lifetime-region and escape validation is mandatory and backend-independent. GC cannot bypass topology legality.
 - Ownership optimisation preserves accepted programs; missing optimisation proof must not reject source.
@@ -134,15 +134,14 @@ pub struct CompiledModuleArtifact {
 
 `PublicSemanticInterface` also exports lifetime and effect summaries conceptually, including:
 
-- fresh result
-- parameter and result aliasing
-- projection aliases
-- result-to-result aliases
+- fresh result roots
+- alias and projection results
+- result-to-result alias relationships
 - retained-parameter relationships
 - outlives constraints
-- external boundary profile
+- external boundary classification
 
-Process-local region IDs are not cross-module semantic identity. Exported summaries use stable semantic relationships rather than donor-local region indexes.
+Donor-local region IDs do not cross module interfaces. Exported lifetime summaries use stable semantic relationships.
 
 `ModuleLinkFacts` contains backend-neutral facts used by graph linking and target validation:
 
@@ -971,7 +970,7 @@ Project and link work instantiates those summaries over the reachable call graph
 
 The analysis decides semantic lifetime ownership and topology legality. Diagnostics distinguish topology proven invalid from topology not proven legal by conservative analysis. Backends receive a validated topology and may not reconsider source legality.
 
-Canonical design lives under `docs/src/docs/codebase/memory-management/lifetime-regions-and-escape-validation/`. Declared `group` / `into` is accepted end-state syntax with implementation deferred; see `docs/roadmap/plans/grouped-memory-design.md`.
+Canonical design lives under `docs/src/docs/codebase/memory-management/lifetime-regions-and-escape-validation/`. Declared `group` / `into` is accepted end-state syntax with implementation deferred; see `docs/src/docs/codebase/memory-management/declared-memory-groups/` for the canonical semantic contract and `docs/roadmap/plans/grouped-memory-design.md` for implementation sequencing.
 
 When group syntax is implemented:
 
@@ -1007,7 +1006,7 @@ The build system supplies explicit validation roots and target assignments from 
 
 Target validation:
 
-- runs after HIR, borrow validation and final lifetime-topology validation
+- runs after HIR validation, borrow validation and complete project/link lifetime-topology validation
 - traverses functions reachable from supplied roots
 - includes reachable generated functions
 - checks target-gated HIR features

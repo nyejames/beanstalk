@@ -76,6 +76,12 @@ Link facts also carry capabilities and assets the entry will need.
 *Caption: teaching graph.*
 *Question: what reaches the backend?*
 
+## Complete lifetime topology
+
+The exact reachable union is also the point where local lifetime summaries can be instantiated against actual callers, entry/package roots, and builder-supplied lifecycle roots.
+
+Project/link validation completes the lifetime topology before target assignment. Linking does not reopen source or mutate HIR.
+
 ## No deferred compilation
 
 Linking consumes compiled facts. It **never** triggers source compilation of a module that should have been in the graph already.
@@ -111,4 +117,4 @@ Target capability failures wait for the next article even when they appear adjac
 
 ## Exit state
 
-You leave with explicit roots, fragment metadata and a reachable function union. Next: which target can host each reachable function.
+You leave with explicit roots, a reachable function union, and a validated project/link lifetime topology. Next: target assignment.

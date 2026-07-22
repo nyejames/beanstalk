@@ -92,6 +92,7 @@ page_head #= theme_head
     - @./access-and-aliasing (Access and aliasing): shared reads, explicit copies and `~` access
     - @./borrow-validation (Borrow validation): roots, joins, optional transfer safety and facts
     - @./lifetime-regions-and-escape-validation (Lifetime regions and escape validation): one owner, retained edges, escapes and region topology
+    - @./declared-memory-groups (Declared memory groups): accepted deferred `group` / `into` semantics and hard destination lifetimes
     - @./ownership-and-drops (Ownership and drops): inferred transfer, unified ABI and conditional destruction
     - @./runtime-and-backend-lowering (Runtime and backend lowering): GC baseline and ownership-aware backend paths
 ]

@@ -187,6 +187,14 @@ Maps own their entry structure while keys and values follow the same shared/copy
 
 There is no move syntax and no ordinary mandatory-consuming value operation. Inferred transfer is optional. When safe transfer is not proven on every relevant path, the operation remains a borrow. Immutable and mutable parameters may both receive inferred destruction responsibility at a proven final-use call site. Parameter access mode remains separate from optional ownership effect.
 
+### Result freshness and independence
+
+- A fresh result root has a new root allocation but may retain legal references.
+- An alias result reuses an existing root or projection.
+- An independent result graph has no retained Beanstalk reference to pre-existing storage.
+
+Canonical detail: `docs/src/docs/codebase/memory-management/lifetime-regions-and-escape-validation/lifetime-regions-and-escape-validation.bd`.
+
 ### Accepted but deferred: declared memory groups
 
 The following is accepted end-state syntax. Implementation is deferred and must not be treated as current source support:
@@ -194,10 +202,15 @@ The following is accepted end-state syntax. Implementation is deferred and must 
 - `group name:` creates a declared hard lifetime region
 - `name [access/type] into group_name = expression` places a declaration into the current or ancestor group only
 - destination-group lexical ownership and visibility follow the declaration point through the remainder of the destination group
-- V1 has no expression-site placement, reassignment placement, extraction or unrestricted group-to-group adoption
+- a declaration targeting an ancestor group is legal only from a straight-line nested `block:` or nested `group:` that executes at most once; it is invalid directly inside `if` branches, match arms, `catch` branches, loops or any construct that may execute zero or multiple times
+- V1 has no expression-site placement, no `into group` syntax on reassignment, no extraction, and no unrestricted group-to-group adoption. A mutable binding already owned by a group may be reassigned only with a fresh result root valid for that group, an independent copy allocated into that group, or a same-group value transferred at a proven final use.
 - group identity is not part of types or signatures
 
-Design authority: `docs/roadmap/plans/grouped-memory-design.md` and `docs/src/docs/codebase/memory-management/lifetime-regions-and-escape-validation/`.
+Design authority: `docs/src/docs/codebase/memory-management/declared-memory-groups/`. Implementation sequencing: `docs/roadmap/plans/grouped-memory-design.md`.
+
+### External platform imports
+
+Ordinary values in restricted host bindings cross by value and cannot be retained as references into Beanstalk storage. Mutable host access applies only to opaque foreign handles. General Wasm Components use the separate WIT value-only profile described by the memory authority.
 
 ### Outside memory-surface scope
 

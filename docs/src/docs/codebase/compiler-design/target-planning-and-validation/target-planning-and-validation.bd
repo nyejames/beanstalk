@@ -1,5 +1,7 @@
 # Deciding where code can run
 
+Target planning receives an already-validated lifetime topology. It assigns targets and checks capabilities; it does not change region ownership or source legality.
+
 Semantically valid Beanstalk can still be unhostable on a chosen target. A function that touches the DOM does not belong in a pure Wasm partition that has no DOM. A backend should learn that **before** it emits half a module and shrugs.
 
 **Target planning** assigns functions. **Target validation** checks the assignment against capabilities.
@@ -37,11 +39,11 @@ Requirements **propagate backwards** along call edges. If a callee needs the DOM
 
 A clean mental loop:
 
-1. take the reachable union
-2. run affinity analysis
-3. assign each function to JavaScript or Wasm (or the relevant targets)
-4. record an **explicit reason** for every assignment
-5. run compiler target validation
+1. take the reachable union and validated lifetime topology
+2. run affinity/capability analysis
+3. assign targets
+4. record reasons
+5. validate assigned functions
 6. validate cross-target edges
 
 Determinism matters. The same program should not flip partitions because a hash map iterated differently at breakfast.

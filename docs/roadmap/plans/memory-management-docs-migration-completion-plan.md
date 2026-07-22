@@ -2,19 +2,20 @@
 
 **Status:** complete  
 **Repository:** `nyejames/beanstalk`  
+**Migration commit:** `ee6562e9cf1d42dbe15bbae9675288455bbbf371`  
 **Baseline reviewed:** `main` at `7f9ab487aecc64ef31f68d5d615d6f07794ecaf9`  
 **Primary scope:** Documentation architecture, accepted design clarification, migration completion, and retirement of the legacy memory monolith  
 **Change class:** Documentation-only  
 **Required final gate:** `bean build docs --release` or `cargo run --quiet -- build docs --release`  
-**Follow-up work:** A separate compiler-drift implementation plan must be produced after this documentation plan lands
+**Follow-up work:** Remaining contradictions and ambiguities are corrected by `docs/roadmap/plans/memory-management-documentation-follow-up-corrections-plan.md`. A separate compiler-drift implementation plan must be produced after that documentation plan lands.
 
 ## Current state
 
-ACTIVE_PLAN: `docs/roadmap/plans/memory-management-docs-migration-completion-plan.md`
+ACTIVE_PLAN: none (this plan is complete)
 STATUS: complete
 CURRENT_SLICE: none
-LAST_ACCEPTED_COMMIT: pending parent commit
-WORKTREE: main; unrelated compiler/src changes preserved and not staged
+LAST_ACCEPTED_COMMIT: `ee6562e9cf1d42dbe15bbae9675288455bbbf371`
+WORKTREE: main
 REQUIRED_RELOADS: startup files, this plan, current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: split memory authority complete; legacy monolith deleted
@@ -29,7 +30,7 @@ BLOCKERS_OR_OPEN_DECISIONS: none
 DELEGATION_DECISION: parent-direct - documentation-only parent-owned work
 NEXT_WORKER_ORDER: none
 STOP_REASON: active work source and final review complete
-NEXT_RESUME_ACTION: none; produce separate compiler-drift implementation plan later
+NEXT_RESUME_ACTION: none; follow-up handled by `memory-management-documentation-follow-up-corrections-plan.md`
 
 ---
 
@@ -68,32 +69,34 @@ The end state must leave one unambiguous memory-design authority. A coding agent
 
 ## 2. Definition of completion
 
-This plan is complete only when all of the following are true:
+This plan is complete. All definition-of-completion checks were satisfied and validated in migration commit `ee6562e9cf1d42dbe15bbae9675288455bbbf371`. Remaining contradictions and ambiguities found after review are corrected by the follow-up plan `docs/roadmap/plans/memory-management-documentation-follow-up-corrections-plan.md`; this migration plan is not reopened as active work.
 
-- [ ] The split memory-management pages explicitly declare themselves the canonical authority for program memory semantics.
-- [ ] The exact sentence below appears prominently in all required locations:
+Original completion criteria (all satisfied):
+
+- [x] The split memory-management pages explicitly declare themselves the canonical authority for program memory semantics.
+- [x] The exact sentence below appears prominently in all required locations:
 
   > **Beanstalk is reference-semantic by default, copy-explicit and move-inferred. It omits explicit reference types and lifetime syntax, not references themselves.**
 
-- [ ] Access semantics, lifetime topology, ownership responsibility, and backend representation are described as distinct concepts.
-- [ ] A new `lifetime-regions-and-escape-validation` documentation leaf exists and is linked from the memory landing page and task-reading guide.
-- [ ] Optional inferred transfer is documented as an optimisation that always backs off to borrowing when proof is unavailable.
-- [ ] Mandatory lifetime-topology validation is documented as a source-legality check that GC cannot bypass.
-- [ ] Aggregate storage is documented as shared-aliasing by default, with explicit `copy` for independent storage and optional final-use transfer.
-- [ ] `copy` has a complete graph-level semantic definition.
-- [ ] Mutable aliases, non-lexical alias activity, interior projections, returns, cycles, reactive lifetimes, and builder-owned lifecycle roots are specified.
-- [ ] `group` / `into` is documented as accepted end-state syntax with implementation explicitly deferred.
-- [ ] The grouped-memory draft contains no unresolved design question.
-- [ ] External bindings use closed semantic boundary profiles, including the value-only WIT component profile and restricted host-binding profile.
-- [ ] Diagnostics distinguish proven-invalid topology from topology that conservative analysis cannot prove legal.
-- [ ] Compiler and build-system documents place lifetime-topology analysis at the correct boundaries.
-- [ ] Educational compiler pages no longer teach stale memory-stage ownership.
-- [ ] The progress matrix clearly distinguishes current borrow-checker support from deferred lifetime-region/group implementation.
-- [ ] `index.md` and every other live reference point to the split memory authority.
-- [ ] `docs/memory-management-design.md` is deleted.
-- [ ] Repository-wide searches find no stale legacy references or contradictory wording.
-- [ ] The documentation release build succeeds.
-- [ ] Every changed memory route and relevant generated diff is manually inspected.
+- [x] Access semantics, lifetime topology, ownership responsibility, and backend representation are described as distinct concepts.
+- [x] A new `lifetime-regions-and-escape-validation` documentation leaf exists and is linked from the memory landing page and task-reading guide.
+- [x] Optional inferred transfer is documented as an optimisation that always backs off to borrowing when proof is unavailable.
+- [x] Mandatory lifetime-topology validation is documented as a source-legality check that GC cannot bypass.
+- [x] Aggregate storage is documented as shared-aliasing by default, with explicit `copy` for independent storage and optional final-use transfer.
+- [x] `copy` has a complete graph-level semantic definition.
+- [x] Mutable aliases, non-lexical alias activity, interior projections, returns, cycles, reactive lifetimes, and builder-owned lifecycle roots are specified.
+- [x] `group` / `into` is documented as accepted end-state syntax with implementation explicitly deferred.
+- [x] The grouped-memory draft contains no unresolved design question.
+- [x] External bindings use closed semantic boundary profiles, including the value-only WIT component profile and restricted host-binding profile.
+- [x] Diagnostics distinguish proven-invalid topology from topology that conservative analysis cannot prove legal.
+- [x] Compiler and build-system documents place lifetime-topology analysis at the correct boundaries.
+- [x] Educational compiler pages no longer teach stale memory-stage ownership.
+- [x] The progress matrix clearly distinguishes current borrow-checker support from deferred lifetime-region/group implementation.
+- [x] `index.md` and every other live reference point to the split memory authority.
+- [x] `docs/memory-management-design.md` is deleted.
+- [x] Repository-wide searches find no stale legacy references or contradictory wording.
+- [x] The documentation release build succeeds.
+- [x] Every changed memory route and relevant generated diff is manually inspected.
 
 ---
 

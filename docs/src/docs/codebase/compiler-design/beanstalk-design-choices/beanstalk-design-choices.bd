@@ -62,7 +62,7 @@ Existing values use **shared** read-only access by default. Mutation needs expli
 
 Errors prefer **`Error!`**, postfix propagation and **`catch`** over a second exception dialect fighting the first.
 
-GC backs correctness on every backend. Borrow validation still runs. Ownership-aware lowering may drop values earlier when proof exists. It never changes which programs the language accepts.
+GC can represent any lifetime topology the compiler has already accepted. Borrow and lifetime checks still define legality. Ownership-aware lowering may drop values earlier when proof exists. It never changes which programs the language accepts.
 
 The memory articles later unpack the model. Here only the design bet matters: safety rules stay compiler-owned, while source APIs stay small.
 
