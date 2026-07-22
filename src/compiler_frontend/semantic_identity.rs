@@ -251,7 +251,6 @@ impl StableOwnedSourceIdentity {
     }
 
     /// The owning module origin identity.
-    #[allow(dead_code)]
     pub(crate) fn module_origin(&self) -> &StableModuleOriginIdentity {
         &self.module_origin
     }

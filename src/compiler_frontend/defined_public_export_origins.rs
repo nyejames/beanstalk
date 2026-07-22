@@ -3,7 +3,7 @@
 //! WHAT: owns the one construction path that turns already-bound, sorted declaration shells and
 //!       the header-built public export metadata into the immutable
 //!       [`DefinedPublicExportOrigins`] component at the semantic compilation boundary. It is the
-//!       immediate consumer of the Phase 7a [`StableModuleOriginIdentity`]: the module origin
+//!       immediate consumer of `StableModuleOriginIdentity`: the module origin
 //!       becomes the exporting-module and declaration-origin component of every recorded binding.
 //! WHY: the compiler design overview requires public-interface facts to be built once from
 //!      retained header facts at the semantic boundary, never by reparsing source or scanning
@@ -47,6 +47,8 @@ use crate::compiler_frontend::semantic_identity::{
     OriginFunctionId, OriginTraitId, OriginTypeCategory, OriginTypeId, ReceiverSurfaceOrigins,
     StableModuleOriginIdentity,
 };
+use crate::compiler_frontend::source_module_origin::SourceModuleOriginTable;
+use crate::compiler_frontend::symbols::identity::FileId;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 
@@ -56,7 +58,8 @@ use rustc_hash::FxHashMap;
 ///
 /// WHAT: carries the free-namespace export bindings and the public nominal-type origin index
 ///       projected from bound, sorted header shells, plus the module origin needed to finalize
-///       receiver surface origins after AST receiver validation succeeds.
+///       receiver surface origins after AST receiver validation succeeds. The module origin is
+///       the table-resolved active root origin, not a loose argument.
 /// WHY: free bindings and nominal-type origins depend only on header shells and are safe to
 ///      project before AST construction. Receiver surface origins need the resolved
 ///      [`ReceiverMethodCatalog`] so they are finalized separately after the AST succeeds; the
@@ -104,30 +107,101 @@ impl DefinedPublicExportOriginDraft {
 /// Build the pre-AST draft of the directly-defined public export identity component.
 ///
 /// WHAT: projects the sorted declaration shells and header-built public export metadata into free
-///       export bindings and the public nominal-type origin index using the supplied stable module
-///       origin as the exporting-module and declaration-origin component. It reads no source text,
-///       tokens, HIR, AST or backend output. The caller retains the completed component only on
-///       overall semantic success; a diagnosed module exposes no component.
+///       export bindings and the public nominal-type origin index. The active root's owning
+///       stable module origin is resolved from the per-file `SourceModuleOriginTable` using the
+///       retained active root `FileId`, not from a loose module-origin argument. It reads no
+///       source text, tokens, HIR, AST or backend output. The caller retains the completed
+///       component only on overall semantic success; a diagnosed module exposes no component.
 /// WHY: the semantic compilation boundary already holds the bound, sorted declaration shells and
 ///      the public export metadata, so stable export origins are projected here once rather than
-///      reconstructed by a later stage.
+///      reconstructed by a later stage. Resolving the origin from the table validates that every
+///      directly-defined public declaration belongs to one unique active module origin, instead
+///      of trusting a single loose argument.
 pub(crate) fn build_defined_public_export_origin_draft(
-    module_origin: &StableModuleOriginIdentity,
+    source_module_origins: &SourceModuleOriginTable,
+    active_root_file_id: FileId,
     sorted_headers: &[Header],
     module_symbols: &ModuleSymbols,
     string_table: &StringTable,
 ) -> Result<DefinedPublicExportOriginDraft, CompilerError> {
+    let active_origin =
+        resolve_active_module_origin(source_module_origins, active_root_file_id, sorted_headers)?;
+
     let public_nominal_type_origins =
-        index_public_nominal_type_origins(module_origin, sorted_headers, string_table)?;
+        index_public_nominal_type_origins(&active_origin, sorted_headers, string_table)?;
 
     let export_bindings =
-        collect_free_export_bindings(module_origin, sorted_headers, module_symbols, string_table)?;
+        collect_free_export_bindings(&active_origin, sorted_headers, module_symbols, string_table)?;
 
     Ok(DefinedPublicExportOriginDraft {
-        module_origin: module_origin.clone(),
+        module_origin: active_origin,
         export_bindings,
         public_nominal_type_origins,
     })
+}
+
+/// Resolve the one active module origin from the per-file source-origin table.
+///
+/// WHAT: resolves the active root's owning origin by looking up `active_root_file_id` in the
+///       `SourceModuleOriginTable`. The active root must have an owning project-module origin;
+///       an unowned active root is an internal failure, not a fallback to a loose argument. This
+///       validation runs even when the module has zero directly-defined public exports, so the
+///       empty component still carries a validated active origin. Every directly-defined public
+///       header must carry a retained `file_id` and its table origin must equal the active root
+///       origin, catching any header that does not belong to the active module root.
+/// WHY: the projection must not trust a loose module-origin argument. The table makes the owning
+///      origin a per-file fact derived from the graph, so the projection validates the active
+///      root's origin instead of assuming it. Removing the canonical-path fallback ensures every
+///      declaration identity enters through the same retained file identity, not a path-derived
+///      guess.
+fn resolve_active_module_origin(
+    source_module_origins: &SourceModuleOriginTable,
+    active_root_file_id: FileId,
+    sorted_headers: &[Header],
+) -> Result<StableModuleOriginIdentity, CompilerError> {
+    let active_origin = source_module_origins
+        .origin_for(active_root_file_id)?
+        .ok_or_else(|| {
+            CompilerError::compiler_error(format!(
+                "defined public export-origin construction: the active root (file id {}) has no owning module origin in the source module origin table",
+                active_root_file_id.0
+            ))
+        })?
+        .clone();
+
+    for header in sorted_headers {
+        if !is_directly_defined_public_export(header) {
+            continue;
+        }
+
+        // Preparation sets `file_id` on every prepared Beanstalk file's tokens, so a
+        // directly-defined public header without one is an internal invariant violation, not a
+        // path-resolution fallback case.
+        let file_id = header.tokens.file_id.ok_or_else(|| {
+            CompilerError::compiler_error(format!(
+                "defined public export-origin construction: a directly-defined public header has no retained file identity (logical path: {:?})",
+                header.source_file
+            ))
+        })?;
+
+        let header_origin = source_module_origins
+            .origin_for(file_id)?
+            .ok_or_else(|| {
+            CompilerError::compiler_error(format!(
+                "defined public export-origin construction: a directly-defined public header's source file (file id {}) has no owning module origin",
+                file_id.0
+            ))
+        })?;
+
+        if header_origin != &active_origin {
+            return Err(CompilerError::compiler_error(format!(
+                "defined public export-origin construction: a directly-defined public header's owning module origin ({:?}) does not match the active root origin ({:?})",
+                header_origin, active_origin
+            )));
+        }
+    }
+
+    Ok(active_origin)
 }
 
 /// Index the stable type origins of directly-defined public nominal types (structs and choices)

@@ -19,8 +19,12 @@ use crate::compiler_frontend::semantic_identity::{
     DefinedPublicExportOrigins, ExportBinding, FunctionOriginKind, ModuleRootRole,
     OriginDeclarationId, OriginTypeCategory, StableModuleOriginIdentity, StablePackageIdentity,
 };
+use crate::compiler_frontend::source_module_origin::SourceModuleOriginTable;
+use crate::compiler_frontend::symbols::identity::{FileId, SourceFileTable};
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+
+use std::path::PathBuf;
 
 /// Build the component for one active-root source using a deterministic synthetic module origin.
 ///
@@ -45,14 +49,38 @@ fn build_origins_for_project_with_catalog(
     project_name: &str,
     catalog: ReceiverMethodCatalog,
 ) -> DefinedPublicExportOrigins {
-    let (headers, string_table) = parse_single_file_headers_with_table(source);
+    let (mut headers, mut string_table) = parse_single_file_headers_with_table(source);
     let module_origin = StableModuleOriginIdentity::from_portable_path(
         StablePackageIdentity::project_local(project_name),
         String::new(),
         ModuleRootRole::Normal,
     );
+
+    // Build a source file table for the single synthetic test file and set the retained
+    // file identity on every header so the origin projection can resolve the active root
+    // from the per-file source-origin table.
+    let file_path = PathBuf::from("src/#page.bst");
+    let source_files = SourceFileTable::build(
+        std::iter::once(file_path.clone()),
+        &file_path,
+        None,
+        &mut string_table,
+    )
+    .expect("source file table should build for the synthetic test file");
+    let file_id = source_files
+        .get_by_canonical_path(&file_path)
+        .expect("the synthetic test file should be in the source file table")
+        .file_id;
+    for header in &mut headers.headers {
+        header.tokens.file_id = Some(file_id);
+    }
+
+    let source_module_origins =
+        SourceModuleOriginTable::from_synthetic_origin(&source_files, &module_origin);
+
     let draft = build_defined_public_export_origin_draft(
-        &module_origin,
+        &source_module_origins,
+        file_id,
         &headers.headers,
         &headers.module_symbols,
         &string_table,
@@ -440,6 +468,220 @@ export:\n\
     assert_eq!(
         first, second,
         "the component must be identical regardless of declaration scheduling"
+    );
+}
+
+#[test]
+fn active_origin_missing_from_table_fails_internally() {
+    // Hidden invariant: when the active root's FileId maps to no owning module origin, the
+    // projection must fail through CompilerError rather than silently using a fallback origin.
+    let (mut headers, mut string_table) =
+        parse_single_file_headers_with_table("export:\n    alpha #= 1\n;\n");
+
+    let file_path = PathBuf::from("src/#page.bst");
+    let source_files = SourceFileTable::build(
+        std::iter::once(file_path.clone()),
+        &file_path,
+        None,
+        &mut string_table,
+    )
+    .expect("source file table should build");
+    let file_id = source_files
+        .get_by_canonical_path(&file_path)
+        .expect("file should be in source file table")
+        .file_id;
+    for header in &mut headers.headers {
+        header.tokens.file_id = Some(file_id);
+    }
+
+    // Build a table where every file maps to None (simulating a source-package file outside the
+    // project module graph that somehow became an active root).
+    let empty_lookup = rustc_hash::FxHashMap::default();
+    let source_module_origins =
+        SourceModuleOriginTable::from_graph_ownership(&source_files, &empty_lookup);
+
+    let result = build_defined_public_export_origin_draft(
+        &source_module_origins,
+        file_id,
+        &headers.headers,
+        &headers.module_symbols,
+        &string_table,
+    );
+
+    let error = match result {
+        Err(error) => error,
+        Ok(_) => panic!("an active root with no owning module origin must fail"),
+    };
+    assert!(
+        error.msg.contains("no owning module origin"),
+        "the error must state the missing-origin violation, got: {}",
+        error.msg
+    );
+}
+
+#[test]
+fn out_of_range_active_root_file_id_fails_internally() {
+    // Hidden invariant: an out-of-range FileId is an internal CompilerError, not a silent None.
+    let (mut headers, mut string_table) =
+        parse_single_file_headers_with_table("export:\n    alpha #= 1\n;\n");
+
+    let file_path = PathBuf::from("src/#page.bst");
+    let source_files = SourceFileTable::build(
+        std::iter::once(file_path.clone()),
+        &file_path,
+        None,
+        &mut string_table,
+    )
+    .expect("source file table should build");
+    let file_id = source_files
+        .get_by_canonical_path(&file_path)
+        .expect("file should be in source file table")
+        .file_id;
+    for header in &mut headers.headers {
+        header.tokens.file_id = Some(file_id);
+    }
+
+    let module_origin = StableModuleOriginIdentity::from_portable_path(
+        StablePackageIdentity::project_local("test-project"),
+        String::new(),
+        ModuleRootRole::Normal,
+    );
+    let source_module_origins =
+        SourceModuleOriginTable::from_synthetic_origin(&source_files, &module_origin);
+
+    let result = build_defined_public_export_origin_draft(
+        &source_module_origins,
+        FileId(999),
+        &headers.headers,
+        &headers.module_symbols,
+        &string_table,
+    );
+
+    let error = match result {
+        Err(error) => error,
+        Ok(_) => panic!("an out-of-range active root FileId must fail"),
+    };
+    assert!(
+        error.msg.contains("out-of-range"),
+        "the error must state the out-of-range violation, got: {}",
+        error.msg
+    );
+}
+
+#[test]
+fn conflicting_public_header_ownership_fails_internally() {
+    // Hidden invariant: when two directly-defined public headers resolve to different owning
+    // module origins, the projection must fail rather than picking one silently.
+    let (mut headers, mut string_table) =
+        parse_single_file_headers_with_table("export:\n    alpha #= 1\n    beta #= 2\n;\n");
+
+    let file_path = PathBuf::from("src/#page.bst");
+    let second_path = PathBuf::from("src/other.bst");
+    let source_files = SourceFileTable::build(
+        [file_path.clone(), second_path.clone()],
+        &file_path,
+        None,
+        &mut string_table,
+    )
+    .expect("source file table should build with two files");
+    let active_file_id = source_files
+        .get_by_canonical_path(&file_path)
+        .expect("active root should be in the source file table")
+        .file_id;
+    let other_file_id = source_files
+        .get_by_canonical_path(&second_path)
+        .expect("second file should be in the source file table")
+        .file_id;
+
+    let active_origin = StableModuleOriginIdentity::from_portable_path(
+        StablePackageIdentity::project_local("test-project"),
+        String::new(),
+        ModuleRootRole::Normal,
+    );
+    let other_origin = StableModuleOriginIdentity::from_portable_path(
+        StablePackageIdentity::project_local("test-project"),
+        "other".to_string(),
+        ModuleRootRole::Normal,
+    );
+
+    let mut lookup = rustc_hash::FxHashMap::default();
+    lookup.insert(file_path.clone(), active_origin.clone());
+    lookup.insert(second_path.clone(), other_origin.clone());
+    let source_module_origins =
+        SourceModuleOriginTable::from_graph_ownership(&source_files, &lookup);
+
+    // Set one header to the active file and the other to the other file so their origins differ.
+    for (index, header) in headers.headers.iter_mut().enumerate() {
+        header.tokens.file_id = Some(if index == 0 {
+            active_file_id
+        } else {
+            other_file_id
+        });
+    }
+
+    let result = build_defined_public_export_origin_draft(
+        &source_module_origins,
+        active_file_id,
+        &headers.headers,
+        &headers.module_symbols,
+        &string_table,
+    );
+
+    let error = match result {
+        Err(error) => error,
+        Ok(_) => panic!("conflicting public header ownership must fail"),
+    };
+    assert!(
+        error.msg.contains("does not match the active root origin"),
+        "the error must state the ownership conflict, got: {}",
+        error.msg
+    );
+}
+
+#[test]
+fn zero_public_exports_still_validates_active_origin() {
+    // Hidden invariant: the active root origin is validated from the table even when the module
+    // has zero directly-defined public exports. An in-range active root whose table entry is
+    // None must still fail, proving lookup and validation run before any header is inspected.
+    let (headers, mut string_table) = parse_single_file_headers_with_table("#page\n");
+
+    let file_path = PathBuf::from("src/#page.bst");
+    let source_files = SourceFileTable::build(
+        std::iter::once(file_path.clone()),
+        &file_path,
+        None,
+        &mut string_table,
+    )
+    .expect("source file table should build");
+    let file_id = source_files
+        .get_by_canonical_path(&file_path)
+        .expect("file should be in source file table")
+        .file_id;
+
+    // Build a table where the in-range active file maps to None, simulating an unowned active
+    // root. With zero public exports the header loop never runs, so only the active-root lookup
+    // and validation can fail — proving they execute before any header is inspected.
+    let empty_lookup = rustc_hash::FxHashMap::default();
+    let source_module_origins =
+        SourceModuleOriginTable::from_graph_ownership(&source_files, &empty_lookup);
+    let result = build_defined_public_export_origin_draft(
+        &source_module_origins,
+        file_id,
+        &headers.headers,
+        &headers.module_symbols,
+        &string_table,
+    );
+
+    let error = match result {
+        Err(error) => error,
+        Ok(_) => panic!(
+            "an active root with no owning module origin must fail even with zero public exports"
+        ),
+    };
+    assert!(
+        error.msg.contains("no owning module origin"),
+        "the error must state the missing-origin violation, got: {}",
+        error.msg
     );
 }
 

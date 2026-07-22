@@ -77,7 +77,6 @@ impl ProjectModuleGraphNode {
     // by compile-wave scheduling and entry selection; the remaining identity, ancestry and
     // source-set accessors expose data the graph carries for later provider-edge and source-set
     // consumers and are exercised by focused graph-invariant tests.
-    #[allow(dead_code)]
     /// The owned cross-build origin identity for this module.
     pub(crate) fn stable_origin(&self) -> &StableModuleOriginIdentity {
         &self.stable_origin
@@ -112,7 +111,6 @@ impl ProjectModuleGraphNode {
         &self.direct_children
     }
 
-    #[allow(dead_code)]
     /// The deterministic owned supported-source set for this module.
     pub(crate) fn owned_source_set(&self) -> &OwnedSourceSet {
         &self.owned_source_set
@@ -301,6 +299,51 @@ impl ProjectModuleGraph {
         self.root_directory_to_module_id
             .get(root_directory)
             .copied()
+    }
+
+    /// Build a lookup from canonical source path to owning stable module origin from every
+    /// module's owned source set.
+    ///
+    /// WHAT: the one production path that materializes the graph's OwnedSourceSet ownership
+    ///       authority into a canonical-path-to-StableModuleOriginIdentity map consumed by
+    ///       directory-module preparation to build the per-module SourceModuleOriginTable.
+    /// WHY: the SourceModuleOriginTable must resolve each prepared source file to its
+    ///      graph-owned origin without a second filesystem traversal or a parallel topology
+    ///      table. The graph already carries every owned source entry with its stable identity,
+    ///      so this lookup is a direct projection, not a scan or guess.
+    ///
+    /// A canonical path owned by two modules is a proven graph-construction invariant violation
+    /// surfaced through CompilerError rather than silently overwriting one origin.
+    pub(crate) fn build_source_origin_lookup(
+        &self,
+    ) -> Result<FxHashMap<std::path::PathBuf, StableModuleOriginIdentity>, CompilerError> {
+        let mut origins: FxHashMap<std::path::PathBuf, StableModuleOriginIdentity> =
+            FxHashMap::default();
+
+        for node in &self.nodes {
+            let node_origin = node.stable_origin();
+            for entry in node.owned_source_set().entries() {
+                let entry_origin = entry.stable_identity().module_origin();
+                if entry_origin != node_origin {
+                    return Err(CompilerError::compiler_error(format!(
+                        "Project module graph owned source entry {} has a stable identity module origin ({:?}) that does not match its containing graph node origin ({:?})",
+                        entry.canonical_path().display(),
+                        entry_origin,
+                        node_origin,
+                    )));
+                }
+                let canonical_path = entry.canonical_path().to_path_buf();
+                if origins.contains_key(&canonical_path) {
+                    return Err(CompilerError::compiler_error(format!(
+                        "Project module graph owned source sets assign canonical path {} to multiple modules; each source file must have exactly one owning module",
+                        canonical_path.display()
+                    )));
+                }
+                origins.insert(canonical_path, entry_origin.clone());
+            }
+        }
+
+        Ok(origins)
     }
 
     /// Insert one deterministic provider-before-consumer dependency edge.

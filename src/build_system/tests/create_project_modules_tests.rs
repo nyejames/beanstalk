@@ -4986,3 +4986,52 @@ fn discovered_module_origin_is_not_rederived_from_a_path_component() {
 
     fs::remove_dir_all(&root).expect("should remove temp root");
 }
+
+#[test]
+fn build_source_origin_lookup_maps_each_owned_file_to_its_node_origin() {
+    // Hidden invariant: the source-origin lookup is a direct projection of the graph's
+    // OwnedSourceSet ownership. Every owned source entry's stable identity module origin must
+    // equal its containing graph node's stable origin, and no canonical path may appear twice.
+    let root = temp_dir("source_origin_lookup_node_origin_alignment");
+    let (config, resolver, style_directives, _module_a_root, _module_b_root) =
+        write_cross_module_project(&root);
+
+    let (_modules, graph, _string_table) =
+        discover_modules_and_graph_for_test(&config, &resolver, &style_directives);
+
+    let lookup = graph
+        .build_source_origin_lookup()
+        .expect("the source-origin lookup should build for a valid cross-module project");
+
+    // Every lookup entry's origin must equal the stable origin of the graph node that owns it.
+    for node in graph.nodes() {
+        for entry in node.owned_source_set().entries() {
+            let lookup_origin = lookup
+                .get(entry.canonical_path())
+                .expect("every owned source entry must be present in the lookup");
+            assert_eq!(
+                lookup_origin,
+                node.stable_origin(),
+                "an owned source entry's lookup origin must equal its containing node origin (path: {:?})",
+                entry.canonical_path().display(),
+            );
+        }
+    }
+
+    // No canonical path may appear under two different origins: the lookup is a function, not a
+    // relation. Duplicates would have failed inside `build_source_origin_lookup`, so reaching
+    // here with every entry validated confirms single-ownership.
+    let unique_paths: HashSet<&std::path::Path> = lookup.keys().map(|p| p.as_path()).collect();
+    let total_entries: usize = graph
+        .nodes()
+        .iter()
+        .map(|node| node.owned_source_set().entries().len())
+        .sum();
+    assert_eq!(
+        unique_paths.len(),
+        total_entries,
+        "every owned source path must be unique across all graph nodes"
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}

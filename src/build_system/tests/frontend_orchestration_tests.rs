@@ -26,6 +26,7 @@ use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::semantic_identity::{
     ModuleRootRole, StableModuleOriginIdentity, StablePackageIdentity,
 };
+use crate::compiler_frontend::source_module_origin::SourceModuleOriginTable;
 use crate::compiler_frontend::source_packages::root_file::PreparedSourcePackageRoots;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::identity::SourceFileTable;
@@ -505,7 +506,7 @@ fn prepare_module_retains_header_syntax_for_semantic_compilation() {
 
     let prepared = preparation_context
         .prepare_module(
-            stable_origin,
+            super::ModuleOriginInput::Synthetic(stable_origin),
             &input_files,
             &canonical_entry,
             local_table,
@@ -1258,6 +1259,80 @@ fn merge_rejects_reversed_chunk_range() {
     let reversed = dummy_preparation_chunk(1, std::ops::Range { start: 4, end: 3 }, Vec::new());
 
     assert_malformed_chunks_rejected(vec![chunk, reversed], 4, "has reversed range");
+}
+
+#[test]
+fn resolve_and_validate_active_root_rejects_mismatched_expected_origin() {
+    // The active root maps to stable origin A in the source-origin table, but the expected
+    // active origin passed by the caller is distinct origin B. Preparation must reject this
+    // mismatch rather than trusting the loose expected-origin argument.
+    let temp_dir = tempfile::tempdir().expect("should create temp dir");
+    let entry_path = temp_dir.path().join("#page.bst");
+    fs::write(&entry_path, "#page\n").expect("test source file should be written");
+    let canonical_entry = fs::canonicalize(&entry_path).expect("file should canonicalize");
+
+    let mut string_table = StringTable::new();
+    let source_files = SourceFileTable::build(
+        std::iter::once(canonical_entry.clone()),
+        &canonical_entry,
+        None,
+        &mut string_table,
+    )
+    .expect("source file table should build");
+
+    let table_origin = StableModuleOriginIdentity::from_relative_logical_path(
+        StablePackageIdentity::project_local("project-a"),
+        std::path::Path::new(""),
+        ModuleRootRole::Normal,
+    )
+    .expect("table origin should construct");
+    let expected_origin = StableModuleOriginIdentity::from_relative_logical_path(
+        StablePackageIdentity::project_local("project-b"),
+        std::path::Path::new(""),
+        ModuleRootRole::Normal,
+    )
+    .expect("expected origin should construct");
+
+    let mut lookup = rustc_hash::FxHashMap::default();
+    lookup.insert(canonical_entry.clone(), table_origin.clone());
+    let source_module_origins =
+        SourceModuleOriginTable::from_graph_ownership(&source_files, &lookup);
+
+    let result = super::ModulePreparationContext::resolve_and_validate_active_root(
+        &source_files,
+        &source_module_origins,
+        &expected_origin,
+        &canonical_entry,
+        &string_table,
+    );
+
+    let error_messages = match result {
+        Err(messages) => messages,
+        Ok(_) => panic!("a mismatched expected active origin must be rejected"),
+    };
+    assert!(
+        error_messages.has_errors(),
+        "an origin mismatch must produce at least one error diagnostic"
+    );
+    let mismatch_error = error_messages
+        .diagnostics
+        .iter()
+        .find(|diagnostic| {
+            matches!(
+                diagnostic.payload,
+                DiagnosticPayload::InfrastructureError { .. }
+            )
+        })
+        .expect("an origin mismatch must produce an infrastructure error");
+    match &mismatch_error.payload {
+        DiagnosticPayload::InfrastructureError { msg, .. } => {
+            assert!(
+                msg.contains("does not match the expected active origin"),
+                "error message `{msg}` should state the origin mismatch"
+            );
+        }
+        _ => unreachable!("already matched InfrastructureError"),
+    }
 }
 
 #[cfg(all(feature = "timers", feature = "benchmark_counters"))]

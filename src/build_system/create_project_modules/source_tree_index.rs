@@ -153,7 +153,6 @@ pub(crate) struct OwnedSourceEntry {
 }
 
 impl OwnedSourceEntry {
-    #[allow(dead_code)]
     pub(crate) fn canonical_path(&self) -> &Path {
         &self.canonical_path
     }
@@ -163,7 +162,6 @@ impl OwnedSourceEntry {
         self.kind
     }
 
-    #[allow(dead_code)]
     pub(crate) fn stable_identity(&self) -> &StableOwnedSourceIdentity {
         &self.stable_identity
     }
@@ -189,7 +187,6 @@ impl OwnedSourceSet {
         self.module_id
     }
 
-    #[allow(dead_code)]
     pub(crate) fn entries(&self) -> &[OwnedSourceEntry] {
         &self.entries
     }

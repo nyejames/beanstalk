@@ -9,19 +9,19 @@ Replace entry-closure compilation with canonical project and package graphs, imm
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/canonical-module-compilation-and-scoped-packages-plan.md
 STATUS: active
-CURRENT_SLICE: Phase 5c dependency-wave semantic scheduling accepted; next Phase 5d canonical per-node semantic jobs and immutable provider interfaces
-LAST_ACCEPTED_COMMIT: d3e00618a (Phase 7c2a stable exported generic-parameter identities); Phase 5c checkpoint pending commit
-WORKTREE: main at d3e00618a with the accepted Phase 5c code, tests and this plan update; unrelated user documentation work may appear and must be preserved
+CURRENT_SLICE: Phase 5d1 stable prepared-source module origins accepted; checkpoint pending commit
+LAST_ACCEPTED_COMMIT: c85ae4c3a (Phase 5c dependency-wave semantic scheduling)
+WORKTREE: main at 7f9ab487a with accepted Phase 5d1 code, tests and this plan update; unrelated merged CSS work at HEAD is preserved and unrelated user documentation work may appear
 REQUIRED_RELOADS: startup files, this plan, semantic identity and direct-export origins, TypeEnvironment and AST lookup owners, retained header binding, graph scheduling and current module-result owners
 RELEVANT_CONTEXT_NOW:
 - docs: build-system-design.md Project and package topology plus Deterministic scheduling define canonical graph nodes, strict support scope, facade placement and deterministic waves
-- code: ModuleEntryCompileWaves preserves populated ProjectModuleGraph wave boundaries and directory compilation now exhausts each temporary entry-job wave before starting the next; canonical per-node jobs, immutable provider interfaces and blocked consumers remain absent
+- code: current entry jobs still compile transitive source closures with one loose active module origin; headers and TypeEnvironment retain donor-local source paths, but no module-local table maps each prepared source file to its graph-owned stable module origin
 ACCEPTANCE_CRITERIA:
-- replace entry-only closure jobs with one semantic job per canonical graph node, including support roots and the optional project package facade
-- bind each job against immutable interfaces from successful providers instead of reopening or copying provider source state
-- prevent a diagnosed provider from semantically compiling its consumers while independent ready branches continue
-- preserve deterministic wave, result, string-table and diagnostic order and keep single-file behavior unchanged
-- focused tests protect compile-once node identity, provider interface consumption, support/facade scheduling and blocked-consumer behavior
+- SourceModuleOriginTable is the one remap-free FileId-keyed prepared-source origin owner, projected from ProjectModuleGraph ownership or one synthetic single-file origin
+- PreparedModule retains the table and active root FileId without provider interfaces, retokenization, source re-reading or a loose trusted origin
+- direct public export-origin projection resolves and validates the active root and every directly-defined public header from the table
+- current entry-closure semantics and source-package migration state remain explicit; OwnedSourceSet is not treated as the semantic source set
+- focused tests cover project, imported, package-unowned, missing, mismatched, out-of-range, zero-export, remap-free and single-file invariants
 VALIDATION_STATE:
 - Phase 4d just validate: passed; cross-target Clippy, 3419 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases
 - Phase 4e focused validation: passed; 2 import-scanning, 5 reachability, 178 module-discovery, 19 orchestration, 5 token-remap and 116 header tests plus cargo check --tests and git diff --check
@@ -46,12 +46,14 @@ VALIDATION_STATE:
 - Phase 7c2a just validate: passed; cross-target Clippy, 3507 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases (-1ms average)
 - Phase 5c focused validation: passed after removing flat test-only compatibility APIs; 101 create-project-modules/frontend-orchestration tests plus cargo check --tests, cargo clippy --tests -D warnings, formatting and git diff --check
 - Phase 5c just validate: passed; cross-target Clippy, 3508 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases (+1ms average)
+- Phase 5d1 focused validation: passed after active-origin correction; 121 defined-export-origin, source-module-origin, frontend-orchestration and create-project-modules tests plus cargo check --tests, cargo clippy --tests -D warnings, formatting and git diff --check
+- Phase 5d1 just validate: passed; cross-target Clippy, 3521 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases (0ms average)
 DOCS_IMPACT: index.md names the canonical cross-module type identity and projection owner; progress matrix unchanged for internal interface groundwork
-BLOCKERS_OR_OPEN_DECISIONS: Phase 5d must define the smallest non-transitional owner split that replaces entry-only closure jobs with canonical per-node compilation; production public type-surface projection remains blocked until provider interfaces carry correct donor origins
+BLOCKERS_OR_OPEN_DECISIONS: source-package files outside the project graph retain explicit None origins until separate package graphs exist; the next slice must not silently omit a package identity or treat OwnedSourceSet as semantic membership
 DELEGATION_DECISION: ollama - user requires Ollama for every worker slice
 NEXT_WORKER_ORDER: ollama only; no provider substitution for this run
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit the accepted Phase 5c checkpoint, then inspect current inventory, preparation, binding and module-result owners to bound Phase 5d without a transitional duplicate path
+NEXT_RESUME_ACTION: commit the accepted Phase 5d1 checkpoint, then inspect the AST and TypeEnvironment public-surface owners to bound Phase 7c2b without silently omitting source-package identities
 ```
 
 ## Hard prerequisites
@@ -498,6 +500,22 @@ Accepted Phase 5c checkpoint:
   interface is claimed or consumed before canonical per-node jobs land.
 - focused inventory tests protect provider-before-consumer waves, same-wave independent jobs,
   deterministic graph `ModuleId` order and fan-in consumers sharing a ready wave.
+
+Accepted Phase 5d1 checkpoint:
+
+- `SourceModuleOriginTable` is the compiler-owned, immutable and remap-free side table from each
+  prepared `FileId` to its graph-owned stable module origin. Directory construction projects the
+  existing `ProjectModuleGraph` owned-source authority once; single-file construction assigns the
+  one synthetic normal-module origin.
+- `PreparedModule` retains the active root `FileId` and source-origin table instead of a loose
+  trusted module origin. Preparation validates the graph-declared active origin before discarding
+  it, and semantic direct-export construction resolves the active origin from the retained table.
+- directly-defined public headers must carry a retained file identity whose table origin matches
+  the active root. Missing, unowned, out-of-range and mismatched identities fail through internal
+  `CompilerError` boundaries, including for a module with zero public exports.
+- current entry-closure semantic source selection remains unchanged. Registered source-package
+  files outside the project graph retain an explicit `None` until separate package graphs supply
+  their stable origins; owned orphan files are not injected into semantic compilation.
 
 ### Phase 6: Add graph outcomes and immutable module artefact lanes
 

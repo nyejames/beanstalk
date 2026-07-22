@@ -1,10 +1,10 @@
 //! Retained module preparation payload.
 //!
 //! WHAT: the build-system-owned handoff between Stage 0 source-file preparation and semantic
-//!       module compilation. Carries the canonical `StableModuleOriginIdentity`, the
-//!       provider-independent `PreparedHeaderSyntax`, the deterministic module string-table
-//!       context, source identities, preparation warnings, and the input-size facts semantic
-//!       compilation needs for arena capacity estimation.
+//!       module compilation. Carries the active root's retained `FileId`, the per-file
+//!       source-origin table, the provider-independent `PreparedHeaderSyntax`, the
+//!       deterministic module string-table context, source identities, preparation warnings,
+//!       and the input-size facts semantic compilation needs for arena capacity estimation.
 //! WHY: the compiler design overview requires `PreparedHeaderSyntax` to be produced before the
 //!      provider graph is compiled and retained so semantic compilation begins with
 //!      provider-dependent `bind_module_headers` without retokenizing or reparsing source.
@@ -14,8 +14,8 @@
 
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::headers::parse_file_headers::PreparedHeaderSyntax;
-use crate::compiler_frontend::semantic_identity::StableModuleOriginIdentity;
-use crate::compiler_frontend::symbols::identity::SourceFileTable;
+use crate::compiler_frontend::source_module_origin::SourceModuleOriginTable;
+use crate::compiler_frontend::symbols::identity::{FileId, SourceFileTable};
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 /// Retained result of preparing one module's source files and aggregating header syntax.
@@ -26,19 +26,32 @@ use crate::compiler_frontend::symbols::string_interning::StringTable;
 /// mutating the same string table through binding, AST, HIR and borrow validation.
 ///
 /// This payload carries no source text or token streams, so semantic compilation cannot rerun
-/// file preparation or retokenize source. It carries the module's canonical stable origin so the
-/// semantic module-compilation boundary receives a graph-assigned identity instead of
-/// reconstructing one from an entry path. The shape is ready for Phase 5 dependency-ordered
-/// provider scheduling: preparation and binding are independently schedulable around the retained
-/// syntax, string-table context and stable identity.
+/// file preparation or retokenize source. It carries the active root's retained `FileId` so the
+/// semantic module-compilation boundary resolves the active module origin from the per-file
+/// source-origin table instead of reconstructing one from an entry path or trusting a loose
+/// origin argument. The shape is ready for dependency-ordered provider scheduling: preparation
+/// and binding are independently schedulable around the retained syntax, string-table context
+/// and source-origin table.
 pub(crate) struct PreparedModule {
-    /// The graph-assigned (or synthetic single-file) cross-build origin identity for this module.
+    /// The retained `FileId` of the active module root (the entry file), resolved once through
+    /// `SourceFileTable` during preparation and validated against the per-file source-origin
+    /// table.
     ///
-    /// Travels from discovery through preparation to semantic compilation so the compiler receives
-    /// a canonical module identity by name rather than re-deriving it from `entry_file_path`,
-    /// `SourceFileTable` or absolute paths. Semantic compilation consumes it as the exporting-module
-    /// and declaration-origin component of the `DefinedPublicExportOrigins` identity component.
-    pub(crate) stable_origin: StableModuleOriginIdentity,
+    /// Semantic compilation resolves the active module origin from `source_module_origins` using
+    /// this `FileId`, so the owning origin is a per-file fact derived from the graph rather than a
+    /// loose argument travelling through the handoff. The loose declared origin is validated
+    /// during preparation and then discarded, so `PreparedModule` carries only the file identity
+    /// the projection needs.
+    pub(crate) active_root_file_id: FileId,
+    /// Immutable per-file source-origin side table mapping each prepared source file to its
+    /// owning `StableModuleOriginIdentity`.
+    ///
+    /// Populated from the graph owned-source-set authority for directory modules or from the
+    /// single synthetic normal-module origin for single-file compilation. The table is remap-free
+    /// by construction and is consumed by direct export-origin projection to resolve and validate
+    /// the active root's origin from the retained `active_root_file_id` and each
+    /// directly-defined public header's defining source file.
+    pub(crate) source_module_origins: SourceModuleOriginTable,
     /// Provider-independent retained header syntax, produced before provider interfaces exist.
     pub(crate) prepared_header_syntax: PreparedHeaderSyntax,
     /// Local module string table forked for this module during file preparation.

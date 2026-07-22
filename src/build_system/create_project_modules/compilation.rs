@@ -18,6 +18,7 @@ use crate::compiler_frontend::semantic_identity::{
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringTable, StringTableForkSource};
+use rustc_hash::FxHashMap;
 
 use crate::builder_surface::{BuilderSurface, SourceFileKind};
 use crate::compiler_frontend::source_packages::root_file::file_name_is_hash_root_file;
@@ -311,7 +312,7 @@ pub(crate) fn compile_single_file_frontend(
     };
 
     let prepared = match preparation_context.prepare_module(
-        stable_origin,
+        super::frontend_orchestration::ModuleOriginInput::Synthetic(stable_origin),
         &input_files,
         &entry_path,
         local_table,
@@ -433,6 +434,7 @@ struct DirectoryModuleCompileContext<'a> {
     style_directives: &'a StyleDirectiveRegistry,
     external_packages: &'a Arc<ExternalPackageRegistry>,
     builder_surface: &'a BuilderSurface,
+    source_origin_lookup: &'a FxHashMap<std::path::PathBuf, StableModuleOriginIdentity>,
 }
 
 impl DirectoryModuleCompileContext<'_> {
@@ -465,7 +467,10 @@ impl DirectoryModuleCompileContext<'_> {
         };
 
         let prepared = match preparation_context.prepare_module(
-            stable_origin,
+            super::frontend_orchestration::ModuleOriginInput::Graph {
+                stable_origin,
+                origin_by_canonical_path: self.source_origin_lookup,
+            },
             input_files,
             &entry_point,
             local_table,
@@ -596,6 +601,21 @@ pub(crate) fn compile_directory_frontend(
     };
     log_stage_timing("stage0.directory.module_inventory", module_inventory_start);
 
+    // Build the immutable source-origin lookup from the graph's owned source sets so each
+    // directory module's preparation can resolve every prepared source file to its owning
+    // stable module origin. The lookup is shared across all module compilations and is a direct
+    // projection of the graph ownership authority, not a filesystem scan or longest-prefix guess.
+    let source_origin_lookup = match project_setup
+        .project_module_graph
+        .build_source_origin_lookup()
+    {
+        Ok(lookup) => lookup,
+        Err(error) => {
+            log_stage_timing("stage0.directory.total", total_start);
+            return Err(CompilerMessages::from_error_ref(error, string_table));
+        }
+    };
+
     // Share the effective external package registry immutably across all module compilations;
     // directory modules may compile in parallel and can safely read the same Arc.
     let external_packages = Arc::new(builder_surface.binding_packages.clone());
@@ -618,6 +638,7 @@ pub(crate) fn compile_directory_frontend(
         style_directives,
         external_packages: &external_packages,
         builder_surface,
+        source_origin_lookup: &source_origin_lookup,
     };
 
     // Record frontend counters per wave: multi-job waves contribute to the parallel-task count and
