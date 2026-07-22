@@ -28,6 +28,11 @@ pub use crate::compiler_frontend::headers::types::{
     Header, HeaderKind, HeaderParseOptions, LocalDeclarationOrderingHint, PreparedHeaderSyntax,
     TopLevelConstFragment,
 };
+// HeaderExportMode is re-exported for focused AST tests that construct Header values with
+// explicit export modes. Production code calls HeaderExportMode::is_public() through the
+// header field, so this re-export is only reached from test modules.
+#[cfg(test)]
+pub use crate::compiler_frontend::headers::types::HeaderExportMode;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::source_packages::root_file::{
     file_name_is_config_file, file_name_is_hash_root_file,

@@ -10,8 +10,9 @@ use crate::compiler_frontend::ast::expressions::expression::{Expression, Express
 use crate::compiler_frontend::ast::generic_functions::GenericFunctionTemplate;
 use crate::compiler_frontend::ast::module_ast::build_context::AstPhaseContext;
 use crate::compiler_frontend::ast::module_ast::environment::{
-    AstEnvironmentInput, AstModuleEnvironment, AstModuleLookups, DeclarationSemanticTable,
-    TopLevelDeclarationTable,
+    AstEnvironmentInput, AstModuleEnvironment, AstModuleLookups, BuildResolvedPublicTypeRootsInput,
+    DeclarationSemanticTable, ResolvedPublicTypeRootTable, TopLevelDeclarationTable,
+    build_resolved_public_type_roots,
 };
 use crate::compiler_frontend::ast::module_ast::scope_context::ReceiverMethodCatalog;
 use crate::compiler_frontend::ast::templates::error::TemplateError;
@@ -308,6 +309,31 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         );
         let _ = public_surface_start;
 
+        // ---------------------------------------------
+        //  Build resolved public type-root handoff
+        // ---------------------------------------------
+        // WHAT: retains one transient AST-owned table of directly-defined active-root public
+        // type roots and their attached receiver methods from the same already-resolved facts
+        // used by public-surface validation. Donor-local TypeIds stay inside the Ast handoff
+        // and never enter a cross-module artefact.
+        let public_type_roots_start = Instant::now();
+        let resolved_public_type_roots =
+            build_resolved_public_type_roots(BuildResolvedPublicTypeRootsInput {
+                sorted_headers,
+                resolved_function_signatures_by_path: &self.resolved_function_signatures_by_path,
+                nominal_type_ids_by_path: &self.nominal_type_ids_by_path,
+                resolved_type_aliases_by_path: &self.resolved_type_aliases_by_path,
+                declaration_table: self.declaration_table.as_ref(),
+                receiver_methods: receiver_methods.as_ref(),
+                string_table,
+            })
+            .map_err(|error| self.error_messages(error, string_table))?;
+        timer_log!(
+            public_type_roots_start,
+            "AST/environment/resolved public type roots built in: "
+        );
+        let _ = public_type_roots_start;
+
         benchmark_timer_log!(
             environment_start,
             "ast_build_environment_ms",
@@ -324,6 +350,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
             trait_environment,
             trait_evidence_environment,
             generic_declarations_by_path,
+            resolved_public_type_roots,
             string_table,
         )
     }
@@ -340,6 +367,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         trait_environment: TraitEnvironment,
         trait_evidence_environment: TraitEvidenceEnvironment,
         generic_declarations_by_path: FxHashMap<InternedPath, GenericDeclarationMetadata>,
+        resolved_public_type_roots: ResolvedPublicTypeRootTable,
         string_table: &StringTable,
     ) -> Result<AstModuleEnvironment, CompilerMessages> {
         let declaration_semantics = DeclarationSemanticTable::from_environment(
@@ -386,6 +414,8 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 project_path_resolver: self.context.project_path_resolver.clone(),
                 path_format_config: self.context.path_format_config.clone(),
             }),
+            resolved_public_type_roots,
+
             type_environment: self.type_environment,
         })
     }

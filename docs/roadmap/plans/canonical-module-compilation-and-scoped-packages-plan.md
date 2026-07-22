@@ -9,19 +9,19 @@ Replace entry-closure compilation with canonical project and package graphs, imm
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/canonical-module-compilation-and-scoped-packages-plan.md
 STATUS: active
-CURRENT_SLICE: Phase 5d1 stable prepared-source module origins accepted; checkpoint pending commit
-LAST_ACCEPTED_COMMIT: c85ae4c3a (Phase 5c dependency-wave semantic scheduling)
-WORKTREE: main at 7f9ab487a with accepted Phase 5d1 code, tests and this plan update; unrelated merged CSS work at HEAD is preserved and unrelated user documentation work may appear
+CURRENT_SLICE: Phase 7c2b1 transient AST-owned resolved public type roots accepted; checkpoint pending commit
+LAST_ACCEPTED_COMMIT: 3e63b264f (Phase 5d1 stable prepared-source module origins)
+WORKTREE: main at 3e63b264f; clean after accepted checkpoint; unrelated merged CSS work is already in history and unrelated user documentation work may appear
 REQUIRED_RELOADS: startup files, this plan, semantic identity and direct-export origins, TypeEnvironment and AST lookup owners, retained header binding, graph scheduling and current module-result owners
 RELEVANT_CONTEXT_NOW:
-- docs: build-system-design.md Project and package topology plus Deterministic scheduling define canonical graph nodes, strict support scope, facade placement and deterministic waves
-- code: current entry jobs still compile transitive source closures with one loose active module origin; headers and TypeEnvironment retain donor-local source paths, but no module-local table maps each prepared source file to its graph-owned stable module origin
+- docs: compiler-design-overview.md makes AST the owner of public-interface validation and canonical export projection; donor-local TypeIds must not cross the module result boundary
+- code: AstModuleEnvironment owns resolved signatures, aliases, nominal ids, constants, generic metadata and receiver methods, but most lookup facts are discarded when Ast is consumed by HIR; transparent alias targets have no later owner
 ACCEPTANCE_CRITERIA:
-- SourceModuleOriginTable is the one remap-free FileId-keyed prepared-source origin owner, projected from ProjectModuleGraph ownership or one synthetic single-file origin
-- PreparedModule retains the table and active root FileId without provider interfaces, retokenization, source re-reading or a loose trusted origin
-- direct public export-origin projection resolves and validates the active root and every directly-defined public header from the table
-- current entry-closure semantics and source-package migration state remain explicit; OwnedSourceSet is not treated as the semantic source set
-- focused tests cover project, imported, package-unowned, missing, mismatched, out-of-range, zero-export, remap-free and single-file invariants
+- AST builds one deterministic transient resolved type-root table from the same already-resolved facts used by public-surface validation; no source reparse, HIR scan or parallel resolver path
+- table covers directly-defined active-root public free functions, nominal structs/choices, transparent alias targets, constants and methods attached to directly-defined public receiver types
+- every required local TypeId/root fact is explicit; missing resolved data is an internal CompilerError rather than silent omission
+- table travels only inside the Ast handoff and remains available immediately before HIR lowering; no donor-local TypeId enters CompiledModuleResult or a cross-module artefact
+- focused AST tests cover all root categories, deterministic ordering, public receiver filtering, imported/private exclusion and missing-fact failures
 VALIDATION_STATE:
 - Phase 4d just validate: passed; cross-target Clippy, 3419 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases
 - Phase 4e focused validation: passed; 2 import-scanning, 5 reachability, 178 module-discovery, 19 orchestration, 5 token-remap and 116 header tests plus cargo check --tests and git diff --check
@@ -48,12 +48,14 @@ VALIDATION_STATE:
 - Phase 5c just validate: passed; cross-target Clippy, 3508 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases (+1ms average)
 - Phase 5d1 focused validation: passed after active-origin correction; 121 defined-export-origin, source-module-origin, frontend-orchestration and create-project-modules tests plus cargo check --tests, cargo clippy --tests -D warnings, formatting and git diff --check
 - Phase 5d1 just validate: passed; cross-target Clippy, 3521 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases (0ms average)
+- Phase 7c2b1 focused validation: passed after receiver-selection, alias-owner and required-handoff corrections; 69 public-type-root/public-surface/canonical-identity tests plus cargo check --tests, cargo clippy --tests -D warnings, formatting and git diff --check
+- Phase 7c2b1 just validate: passed; cross-target Clippy, 3530 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases (+1ms average)
 DOCS_IMPACT: index.md names the canonical cross-module type identity and projection owner; progress matrix unchanged for internal interface groundwork
-BLOCKERS_OR_OPEN_DECISIONS: source-package files outside the project graph retain explicit None origins until separate package graphs exist; the next slice must not silently omit a package identity or treat OwnedSourceSet as semantic membership
+BLOCKERS_OR_OPEN_DECISIONS: the next slice must join transient public type roots to stable export origins and generic-parameter owners before HIR, without retaining donor-local TypeIds or silently omitting trait/evidence work that remains later
 DELEGATION_DECISION: ollama - user requires Ollama for every worker slice
 NEXT_WORKER_ORDER: ollama only; no provider substitution for this run
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit the accepted Phase 5d1 checkpoint, then inspect the AST and TypeEnvironment public-surface owners to bound Phase 7c2b without silently omitting source-package identities
+NEXT_RESUME_ACTION: commit Phase 7c2b1, then launch Phase 7c2b2 through Ollama to consume and canonicalize the retained roots before HIR lowering
 ```
 
 ## Hard prerequisites
@@ -622,6 +624,21 @@ Accepted Phase 7c2a checkpoint:
   types. Missing and synthetic parameters fail instead of falling back to name identity.
 - the module-local `TypeIdentityKey` bridge remains separate and every closed projection retains
   its prior behavior. Production direct public type-surface projection remains Phase 7c2b.
+
+Accepted Phase 7c2b1 checkpoint:
+
+- AST public-surface validation now retains one required, transient `ResolvedPublicTypeRootTable`
+  in `Ast`. It contains active-root public free-function signatures, struct/choice nominal
+  TypeIds, transparent-alias targets, constant TypeIds and private receiver-method signatures
+  attached to directly-defined public nominal receivers.
+- roots preserve dependency-sorted header order. Receiver methods use a separate deterministic
+  header pass after the complete public nominal set is known, so their ordinary private header
+  mode and declaration order cannot hide them or turn them into free export bindings.
+- the existing AST public-surface owner materializes and writes back a public alias target TypeId
+  once; table construction consumes the retained fact and treats every missing resolved root as
+  an internal CompilerError rather than reparsing, guessing or silently omitting it.
+- donor-local TypeIds remain inside the required Ast handoff and do not enter HIR, Module or
+  CompiledModuleResult. Canonical projection consumes this table before HIR in Phase 7c2b2.
 
 ### Phase 8: Add generated sidecars and the fixed-point worklist
 

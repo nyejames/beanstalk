@@ -7,6 +7,7 @@
 //!      handle the diagnostic-only placeholder.
 
 use crate::compiler_frontend::ast::Ast;
+use crate::compiler_frontend::ast::ResolvedPublicTypeRootTable;
 use crate::compiler_frontend::ast::ast_nodes::{
     AstNode, Declaration, MultiBindTarget, MultiBindTargetKind, NodeKind, SourceLocation,
 };
@@ -702,6 +703,7 @@ pub(crate) fn build_ast_with_choices(
         type_environment,
         const_facts: AstConstFacts::default(),
         resolved_receiver_catalog: None,
+        resolved_public_type_roots: ResolvedPublicTypeRootTable::default(),
     }
 }
 

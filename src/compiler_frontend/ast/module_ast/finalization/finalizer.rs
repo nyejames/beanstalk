@@ -205,6 +205,7 @@ impl<'context, 'services> AstFinalizer<'context, 'services> {
         let AstModuleEnvironment {
             lookups,
             type_environment,
+            resolved_public_type_roots,
         } = self.environment;
 
         #[cfg(debug_assertions)]
@@ -234,6 +235,7 @@ impl<'context, 'services> AstFinalizer<'context, 'services> {
             type_environment,
             const_facts,
             resolved_receiver_catalog,
+            resolved_public_type_roots,
         })
     }
 

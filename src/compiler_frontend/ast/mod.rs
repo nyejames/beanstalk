@@ -117,6 +117,7 @@ pub(crate) mod templates;
 // WHY: the AST module should expose one obvious entry surface. Internal helpers,
 // pass implementations, and parser submodules stay private to `ast/`.
 pub use module_ast::build_context::AstBuildContext;
+pub(crate) use module_ast::environment::ResolvedPublicTypeRootTable;
 pub(crate) use module_ast::environment::TopLevelDeclarationTable;
 pub use module_ast::scope_context::{ContextKind, ScopeContext};
 pub(crate) use receiver_methods::{ReceiverMethodCatalog, ReceiverMethodEntry};
@@ -214,6 +215,18 @@ pub struct Ast {
     ///      names. The catalog is taken from `Ast` before HIR lowering so HIR does not become
     ///      its consumer.
     pub resolved_receiver_catalog: Option<Rc<ReceiverMethodCatalog>>,
+
+    /// Transient AST-owned resolved public type-root handoff.
+    ///
+    /// WHAT: one deterministic table of directly-defined active-root public type roots and the
+    ///       receiver methods attached to directly-defined public nominal receivers, built from
+    ///       already-resolved AST facts. Production AST construction always populates this;
+    ///       synthetic AST fixtures use `ResolvedPublicTypeRootTable::default()`.
+    /// WHY: carried in `Ast` so the semantic orchestration can take it immediately before HIR
+    ///      lowering without reconstructing public semantics from HIR or source. Donor-local
+    ///      `TypeId`s stay inside this handoff and never enter a cross-module artefact.
+    #[allow(dead_code)]
+    pub resolved_public_type_roots: ResolvedPublicTypeRootTable,
 }
 
 /// Complete header-stage output consumed by AST construction.
