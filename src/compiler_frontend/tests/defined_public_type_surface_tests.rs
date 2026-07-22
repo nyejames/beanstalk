@@ -171,11 +171,26 @@ fn function_root(
 fn struct_root(
     name: &str,
     type_id: TypeId,
+    fields: Vec<Declaration>,
     string_table: &mut StringTable,
 ) -> ResolvedPublicTypeRoot {
     ResolvedPublicTypeRoot {
         path: path(name, string_table),
-        kind: ResolvedPublicTypeRootKind::Struct { type_id },
+        kind: ResolvedPublicTypeRootKind::Struct { type_id, fields },
+    }
+}
+
+/// Create a field `Declaration` with no default, matching a `FieldDefinition` of the same name
+/// and type.
+fn field_declaration(name: &str, type_id: TypeId, string_table: &mut StringTable) -> Declaration {
+    Declaration {
+        id: path(name, string_table),
+        value: Expression::no_value_with_type_id(
+            location(),
+            DataType::Inferred,
+            type_id,
+            ValueMode::ImmutableOwned,
+        ),
     }
 }
 
@@ -551,7 +566,15 @@ fn projects_struct_fields_to_canonical_field_types() {
     let (_nominal_id, type_id) =
         register_struct(&mut env, &mut string_table, "Point", fields, None);
 
-    let root = struct_root("Point", type_id, &mut string_table);
+    let root = struct_root(
+        "Point",
+        type_id,
+        vec![
+            field_declaration("x", int_id, &mut string_table),
+            field_declaration("flag", bool_id, &mut string_table),
+        ],
+        &mut string_table,
+    );
     let root_table = ResolvedPublicTypeRootTable {
         roots: vec![root],
         receiver_methods: vec![],
@@ -891,7 +914,16 @@ fn projects_generic_struct_field_with_open_generic_parameter() {
         Some(param_list_id),
     );
 
-    let root = struct_root("Box", type_id, &mut string_table);
+    let root = struct_root(
+        "Box",
+        type_id,
+        vec![field_declaration(
+            "value",
+            generic_type_id,
+            &mut string_table,
+        )],
+        &mut string_table,
+    );
     let root_table = ResolvedPublicTypeRootTable {
         roots: vec![root],
         receiver_methods: vec![],
@@ -990,7 +1022,12 @@ fn non_generic_struct_exposes_empty_generic_parameter_list() {
     let (_nominal_id, type_id) =
         register_struct(&mut env, &mut string_table, "Counter", fields, None);
 
-    let root = struct_root("Counter", type_id, &mut string_table);
+    let root = struct_root(
+        "Counter",
+        type_id,
+        vec![field_declaration("count", int_id, &mut string_table)],
+        &mut string_table,
+    );
     let root_table = ResolvedPublicTypeRootTable {
         roots: vec![root],
         receiver_methods: vec![],
@@ -1382,7 +1419,7 @@ fn projects_receiver_method_attached_to_public_receiver() {
         signature,
     );
 
-    let root = struct_root("Counter", struct_type_id, &mut string_table);
+    let root = struct_root("Counter", struct_type_id, vec![], &mut string_table);
     let root_table = ResolvedPublicTypeRootTable {
         roots: vec![root],
         receiver_methods: vec![entry],
@@ -1438,7 +1475,7 @@ fn missing_nominal_origin_is_compiler_error() {
     let (_nominal_id, type_id) =
         register_struct(&mut env, &mut string_table, "Point", fields, None);
 
-    let root = struct_root("Point", type_id, &mut string_table);
+    let root = struct_root("Point", type_id, vec![], &mut string_table);
     let root_table = ResolvedPublicTypeRootTable {
         roots: vec![root],
         receiver_methods: vec![],
@@ -1509,7 +1546,7 @@ fn category_mismatch_between_root_and_binding_is_compiler_error() {
     let (_nominal_id, type_id) =
         register_struct(&mut env, &mut string_table, "Widget", empty_fields(), None);
 
-    let root = struct_root("Widget", type_id, &mut string_table);
+    let root = struct_root("Widget", type_id, vec![], &mut string_table);
     let root_table = ResolvedPublicTypeRootTable {
         roots: vec![root],
         receiver_methods: vec![],
@@ -1652,7 +1689,12 @@ fn output_types_recursively_contain_only_canonical_identities() {
     let param = param_declaration("widget", struct_type_id, &mut string_table);
     let signature = free_function_signature(vec![param], vec![int_id]);
     let root_fn = function_root("use_widget", signature, None, &mut string_table);
-    let root_struct = struct_root("Widget", struct_type_id, &mut string_table);
+    let root_struct = struct_root(
+        "Widget",
+        struct_type_id,
+        vec![field_declaration("count", int_id, &mut string_table)],
+        &mut string_table,
+    );
 
     let root_table = ResolvedPublicTypeRootTable {
         roots: vec![root_fn, root_struct],
@@ -1753,7 +1795,16 @@ fn projects_imported_public_nominal_reference_to_provider_origin() {
     let (_widget_nominal_id, widget_type_id) =
         register_struct(&mut env, &mut string_table, "Widget", fields, None);
 
-    let root = struct_root("Widget", widget_type_id, &mut string_table);
+    let root = struct_root(
+        "Widget",
+        widget_type_id,
+        vec![field_declaration(
+            "value",
+            imported_type_id,
+            &mut string_table,
+        )],
+        &mut string_table,
+    );
     let root_table = ResolvedPublicTypeRootTable {
         roots: vec![root],
         receiver_methods: vec![],
@@ -1805,7 +1856,16 @@ fn imported_nominal_required_but_absent_from_index_is_compiler_error() {
     let (_widget_nominal_id, widget_type_id) =
         register_struct(&mut env, &mut string_table, "Widget", fields, None);
 
-    let root = struct_root("Widget", widget_type_id, &mut string_table);
+    let root = struct_root(
+        "Widget",
+        widget_type_id,
+        vec![field_declaration(
+            "value",
+            imported_type_id,
+            &mut string_table,
+        )],
+        &mut string_table,
+    );
     let root_table = ResolvedPublicTypeRootTable {
         roots: vec![root],
         receiver_methods: vec![],
@@ -1876,8 +1936,8 @@ fn duplicate_root_public_name_is_compiler_error() {
     let (_nominal_id, type_id) =
         register_struct(&mut env, &mut string_table, "Foo", empty_fields(), None);
 
-    let root_a = struct_root("Foo", type_id, &mut string_table);
-    let root_b = struct_root("Foo", type_id, &mut string_table);
+    let root_a = struct_root("Foo", type_id, vec![], &mut string_table);
+    let root_b = struct_root("Foo", type_id, vec![], &mut string_table);
     let root_table = ResolvedPublicTypeRootTable {
         roots: vec![root_a, root_b],
         receiver_methods: vec![],
@@ -2848,5 +2908,154 @@ fn source_trait_bound_resolves_to_provider_module_origin_not_active_origin() {
         &surface.free_functions[0].generic_parameters[0].bounds,
         &[CanonicalTraitIdentity::Source(provider_trait_origin)],
         "a source-bound trait must resolve to its provider module origin, not the active module origin"
+    );
+}
+
+// ---------------------------------------------------------------------------
+//  Struct field-default join invariant tests (R2c)
+// ---------------------------------------------------------------------------
+
+/// Create a field `Declaration` carrying a compile-time default value with the
+/// declared `TypeId` set explicitly so the join reads the correct type.
+fn field_declaration_with_default(
+    name: &str,
+    type_id: TypeId,
+    default: Expression,
+    string_table: &mut StringTable,
+) -> Declaration {
+    let mut value = default;
+    value.type_id = type_id;
+    Declaration {
+        id: path(name, string_table),
+        value,
+    }
+}
+
+/// Build a struct root table, export origins and nominal origins for one struct,
+/// then project the surface. Returns the result so callers can assert success
+/// or failure.
+fn project_struct_with_fields(
+    env: &mut TypeEnvironment,
+    string_table: &mut StringTable,
+    field_defs: Box<[FieldDefinition]>,
+    retained_fields: Vec<Declaration>,
+) -> Result<DefinedPublicTypeSurface, CompilerError> {
+    let (_, type_id) = register_struct(env, string_table, "Widget", field_defs, None);
+
+    let root = struct_root("Widget", type_id, retained_fields, string_table);
+    let root_table = ResolvedPublicTypeRootTable {
+        roots: vec![root],
+        receiver_methods: vec![],
+        trait_source_facts: FxHashMap::default(),
+    };
+
+    let binding = export_binding("Widget", OriginDeclarationId::Type(struct_origin("Widget")));
+    let origins = build_origins(vec![binding], vec![]);
+    let nominal_map = nominal_origins_map(vec![("Widget", struct_origin("Widget"))], string_table);
+
+    build_surface(&root_table, &origins, &nominal_map, env, string_table)
+}
+
+#[test]
+fn struct_join_rejects_count_mismatch() {
+    let mut env = TypeEnvironment::new();
+    let mut string_table = StringTable::new();
+    let int_id = env.builtins().int;
+    let bool_id = env.builtins().bool;
+
+    // Canonical definition has two fields, but only one retained declaration.
+    let field_defs = Box::new([
+        field_def("x", int_id, &mut string_table),
+        field_def("flag", bool_id, &mut string_table),
+    ]);
+    let retained = vec![field_declaration("x", int_id, &mut string_table)];
+
+    let result = project_struct_with_fields(&mut env, &mut string_table, field_defs, retained);
+    assert!(result.is_err());
+    let message = result.unwrap_err().msg.clone();
+    assert!(
+        message.contains("retained declaration count must match"),
+        "expected a count-mismatch diagnostic, got: {message}"
+    );
+}
+
+#[test]
+fn struct_join_rejects_name_or_order_mismatch() {
+    let mut env = TypeEnvironment::new();
+    let mut string_table = StringTable::new();
+    let int_id = env.builtins().int;
+    let bool_id = env.builtins().bool;
+
+    // Canonical order is x, flag; retained order is flag, x.
+    let field_defs = Box::new([
+        field_def("x", int_id, &mut string_table),
+        field_def("flag", bool_id, &mut string_table),
+    ]);
+    let retained = vec![
+        field_declaration("flag", bool_id, &mut string_table),
+        field_declaration("x", int_id, &mut string_table),
+    ];
+
+    let result = project_struct_with_fields(&mut env, &mut string_table, field_defs, retained);
+    assert!(result.is_err());
+    let message = result.unwrap_err().msg.clone();
+    assert!(
+        message.contains("field name or order mismatch"),
+        "expected a name/order-mismatch diagnostic, got: {message}"
+    );
+}
+
+#[test]
+fn struct_join_rejects_type_id_mismatch() {
+    let mut env = TypeEnvironment::new();
+    let mut string_table = StringTable::new();
+    let int_id = env.builtins().int;
+    let string_id = env.builtins().string;
+
+    // Canonical field x is Int, but the retained declaration carries String.
+    let field_defs = Box::new([field_def("x", int_id, &mut string_table)]);
+    let retained = vec![field_declaration_with_default(
+        "x",
+        string_id,
+        Expression::string_slice(
+            string_table.intern("wrong"),
+            location(),
+            ValueMode::ImmutableOwned,
+        ),
+        &mut string_table,
+    )];
+
+    let result = project_struct_with_fields(&mut env, &mut string_table, field_defs, retained);
+    assert!(result.is_err());
+    let message = result.unwrap_err().msg.clone();
+    assert!(
+        message.contains("TypeId mismatch"),
+        "expected a TypeId-mismatch diagnostic, got: {message}"
+    );
+}
+
+#[test]
+fn struct_join_rejects_duplicate_canonical_field_name() {
+    let mut env = TypeEnvironment::new();
+    let mut string_table = StringTable::new();
+    let int_id = env.builtins().int;
+    let bool_id = env.builtins().bool;
+
+    // Two canonical fields share the same name "x".
+    let field_defs = Box::new([
+        field_def("x", int_id, &mut string_table),
+        field_def("x", bool_id, &mut string_table),
+    ]);
+    let retained = vec![
+        field_declaration("x", int_id, &mut string_table),
+        field_declaration("x", bool_id, &mut string_table),
+    ];
+
+    let result = project_struct_with_fields(&mut env, &mut string_table, field_defs, retained);
+    assert!(result.is_err());
+    let message = result.unwrap_err().msg.clone();
+    assert!(
+        message.contains("duplicate field name"),
+        "expected a duplicate-name diagnostic, got: {message}"
     );
 }

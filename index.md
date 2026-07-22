@@ -53,8 +53,11 @@ Flow: [projects](src/projects/) → [build_system](src/build_system/) → [compi
 - [paths](src/compiler_frontend/paths/): import/path normalization/format/resolution. kw: @imports, source roots.
 - [source_packages](src/compiler_frontend/source_packages/): package-root registration and public import boundaries.
 - [semantic_identity.rs](src/compiler_frontend/semantic_identity.rs): stable package, module and exported declaration origin identities plus `ExportBinding` and the immutable directly-defined export-origin component shared across compiler/build stages.
-- [canonical_type_identity.rs](src/compiler_frontend/canonical_type_identity.rs): owned cross-module identities and fallible `TypeId` projection for closed builtin, source nominal, binding-backed opaque and constructed type shapes; exported generic-parameter ownership and public-interface wiring remain Phase 7 follow-ups.
+- [canonical_type_identity.rs](src/compiler_frontend/canonical_type_identity.rs): owned cross-module identities and fallible `TypeId` projection for builtin, source nominal, binding-backed opaque, constructed and exported generic-parameter type shapes.
 - [defined_public_export_origins.rs](src/compiler_frontend/defined_public_export_origins.rs): deterministic, fallible projection from bound/sorted active-root declaration shells into stable direct export bindings and receiver-surface origins; source re-exports remain owned by the future completed provider interface.
+- [defined_public_type_surface.rs](src/compiler_frontend/defined_public_type_surface.rs): total direct-declaration projection from AST-owned roots into canonical function, nominal, alias, constant and receiver type surfaces, including owned callable and struct defaults.
+- [folded_value.rs](src/compiler_frontend/folded_value.rs): one owned backend-neutral folded-value vocabulary and converter shared by exported constants and retained defaults.
+- [public_interface_draft.rs](src/compiler_frontend/public_interface_draft.rs): declaration-centric aggregate pre-HIR public-semantic draft builder that consumes direct origin, type, folded-value and trait projections.
 - [module_metadata.rs](src/compiler_frontend/module_metadata.rs): named HIR-lowering result, resolved documentation metadata, rendered-path handoff and non-HIR metadata validation.
 - [external_packages](src/compiler_frontend/external_packages/): virtual package registry, external IDs. kw: @core, @web, opaque.
 - [builtins](src/compiler_frontend/builtins/): compiler-owned types/ops/casts/runtime error metadata.

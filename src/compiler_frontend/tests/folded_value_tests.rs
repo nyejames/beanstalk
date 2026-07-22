@@ -1,18 +1,17 @@
 //! Focused unit tests for folded-value projection of directly exported constants.
 //!
 //! WHAT: exercises the constant folded-value join and conversion owned by
-//! `public_interface_draft`: exact defining-path join, owned backend-neutral value
-//! vocabulary, option-present/absent projection, finite-float semantics, and totality
-//! failures for missing, duplicate, extra and unsupported folded facts. These are
-//! projection/join invariants integration output cannot inspect, so they own a focused
-//! test beside the projection owner.
+//! `folded_value`: exact defining-path join, owned backend-neutral value vocabulary,
+//! option-present/absent projection, finite-float semantics, and totality failures for
+//! missing, duplicate, extra and unsupported folded facts. These are projection/join
+//! invariants integration output cannot inspect, so they own a focused test beside the
+//! projection owner.
 //!
 //! This module is a child of `public_interface_draft_tests` and reuses its shared fixtures.
 
 use super::super::{
-    DefinedPublicTraitSurface, FiniteFloat, FoldedValueGenericParameterResolver,
-    FoldedValueJoinContext, PublicDeclarationRecord, PublicDeclarationSemantics, PublicFoldedValue,
-    join_declaration_records,
+    DefinedPublicTraitSurface, FoldedValueJoinContext, PublicDeclarationRecord,
+    PublicDeclarationSemantics, join_declaration_records,
 };
 use super::{
     choice_origin, constant_origin, immutable, module_origin, nominal_origins_map, register_struct,
@@ -37,6 +36,9 @@ use crate::compiler_frontend::defined_public_type_surface::{
     DefinedPublicConstantTypeSurface, DefinedPublicTypeSurface, TransientNominalOriginResolver,
 };
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
+use crate::compiler_frontend::folded_value::{
+    FiniteFloat, FoldedValueGenericParameterResolver, PublicFoldedValue,
+};
 use crate::compiler_frontend::semantic_identity::{
     ExportBinding, OriginDeclarationId, OriginTypeId,
 };

@@ -329,6 +329,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         let resolved_public_type_roots =
             build_resolved_public_type_roots(BuildResolvedPublicTypeRootsInput {
                 sorted_headers,
+                resolved_struct_fields_by_path: &self.resolved_struct_fields_by_path,
                 resolved_function_signatures_by_path: &self.resolved_function_signatures_by_path,
                 nominal_type_ids_by_path: &self.nominal_type_ids_by_path,
                 resolved_type_aliases_by_path: &self.resolved_type_aliases_by_path,

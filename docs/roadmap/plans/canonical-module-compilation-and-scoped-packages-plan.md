@@ -20,30 +20,31 @@ This document replaces the previous incremental phase sequence at the same path.
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/canonical-module-compilation-and-scoped-packages-plan.md
 STATUS: active
-CURRENT_SLICE: R2b complete — directly exported constant records own canonical folded values; checkpoint ready to commit before R2c
-LAST_ACCEPTED_COMMIT: 350ec2b3a (R2a; R2b is the pending checkpoint in this worktree)
-WORKTREE: main at 56c95e0ac with the reviewed R2b source, test and plan diff; intervening documentation commits are unrelated and already in history
-REQUIRED_RELOADS: startup files, this plan, public-interface draft construction, function/field default owners and current source/diff
+CURRENT_SLICE: R2c complete — accepted checkpoint ready to commit
+LAST_ACCEPTED_COMMIT: 8399a0a2e (R2b)
+WORKTREE: main at d707782fc after unrelated docs commits; accepted R2c source/tests plus plan and index updates
+REQUIRED_RELOADS: startup files, this plan, public-interface draft/default projection owners and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: compiler-design-overview.md owns one-time AST folding and owned provider values; build-system-design.md owns immutable provider binding; R2 item 3 is next
-- code: public_interface_draft.rs owns the declaration records and public folded-value vocabulary; finalized Ast::module_constants remains the one fold owner; function and struct-field default projection owners must be inspected for R2c
+- docs: compiler-design-overview.md owns AST default coercion/folding and owned provider values; function and struct authorities require compile-time defaults; choice payload defaults remain deferred
+- code: finalized function signatures and struct definition fields are the default-value owners; folded_value.rs owns the one recursive folded-value vocabulary and defined_public_type_surface.rs owns callable/constructor slot projection
 ACCEPTANCE_CRITERIA:
-- directly exported constants retain canonical type identity and an owned recursive value covering scalars, folded template strings, collections, ordered const records, choices, ranges and options
-- exact transient defining paths join finalized AST constants once; private same-leaf constants remain unrelated and alias bindings sharing one origin consume one declaration value
-- non-finite Float and unsupported/missing/duplicate/unconsumed public facts fail with CompilerError; finite Float equality is canonical and negative zero normalizes to positive zero
-- no donor-local path, type/string ID, source location, AST/TIR identity or local choice tag crosses the draft boundary
-- defaults, evidence, provenance, borrow summaries, provider re-exports, generated functions and fingerprints remain outside R2b
+- directly exported free functions, receiver methods and struct fields retain `None` or one owned folded default in authored slot order
+- emitted declaration defaults normalize once through the existing AST path and feed retained public facts; only generic declarations without emitted nodes use the retained normalization path
+- total exact joins reject missing, duplicate, mismatched or unsupported default facts with `CompilerError`, including every receiver-catalog index; completed AST and draft facts contain no live TIR identity
+- remove the compatibility re-export and second recursive default/reference resolver; keep one folded-value vocabulary and converter
+- trait requirements and choice payload fields remain default-free; evidence, provenance, borrow summaries, provider re-exports, generated functions and fingerprints remain outside R2c
 VALIDATION_STATE:
+- worker validation: final Ollama correction passed focused tests, cargo check, cargo clippy and 3665 library tests
+- parent focused validation: passed 13 root-table, 36 normalization, 48 type-surface, 48 draft and 20 folded-value tests plus cargo check
 - cargo fmt --all: passed
-- focused public-interface draft tests: passed, 44 tests
-- focused folded-value tests: passed, 20 tests
-- just validate: passed; cross-target Clippy, 3648 Rust tests, 1793 integration contracts, docs check and 28 benchmark cases
-DOCS_IMPACT: active plan only; progress matrix unchanged because R2b changes no user-visible support
+- just validate: passed cross-target Clippy, 3666 Rust tests, 1793 integration contracts, docs check and 28 benchmark cases
+- cargo run --quiet -- check docs: passed after the index locator update
+DOCS_IMPACT: active plan and index locator updated; progress matrix unchanged because defaults were already supported and R2c changes the internal interface draft
 BLOCKERS_OR_OPEN_DECISIONS: none
 DELEGATION_DECISION: ollama - user requires Ollama for every worker slice
 NEXT_WORKER_ORDER: ollama only
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit the accepted R2b checkpoint, reload the plan and current source, then define and dispatch bounded R2c function/field default projection through Ollama
+NEXT_RESUME_ACTION: commit the accepted R2c checkpoint, reload the plan and select the next bounded R2 slice
 ```
 
 Do not append worktree-specific notes, complete validation histories or worker transcripts to this plan. Keep this status block current and concise. Git history is the validation history.

@@ -58,7 +58,7 @@ impl<'context, 'services> AstFinalizer<'context, 'services> {
     /// WHY: each step mutates or consumes intermediate state that later steps depend on,
     /// so they must run sequentially in a single orchestration function.
     pub(in crate::compiler_frontend::ast) fn finalize(
-        self,
+        mut self,
         mut emitted: AstEmission,
         top_level_const_fragments: &[TopLevelConstFragment],
         string_table: &mut StringTable,
@@ -134,6 +134,32 @@ impl<'context, 'services> AstFinalizer<'context, 'services> {
             "AST/finalize/AST templates normalized in: "
         );
         let _ = ast_template_normalization_start;
+
+        // ----------------------------
+        //  Synchronize normalized public defaults
+        // ----------------------------
+        //
+        // The emitted AST was just normalized once (function signature parameter defaults,
+        // struct field defaults and function bodies folded together). Synchronize those exact
+        // normalized signatures and fields into the retained public root table and receiver
+        // catalog so the public-interface draft reads one normalized copy. Generic free
+        // functions, generic structs and generic receiver methods have no emitted declaration
+        // node, so their retained defaults are normalized in place through the same helper.
+        let public_default_synchronization_start = Instant::now();
+        let normalized_receiver_catalog = self
+            .synchronize_normalized_public_defaults(
+                &emitted.ast,
+                project_path_resolver,
+                string_table,
+            )
+            .map_err(|error| {
+                self.template_normalization_error_messages(error, &emitted.warnings, string_table)
+            })?;
+        timer_log!(
+            public_default_synchronization_start,
+            "AST/finalize/public defaults synchronized in: "
+        );
+        let _ = public_default_synchronization_start;
 
         // ----------------------------
         //  Normalize module constants
@@ -222,7 +248,7 @@ impl<'context, 'services> AstFinalizer<'context, 'services> {
             );
         }
 
-        let resolved_receiver_catalog = Some(Rc::clone(&lookups.receiver_methods));
+        let resolved_receiver_catalog = Some(Rc::new(normalized_receiver_catalog));
 
         Ok(Ast {
             nodes: emitted.ast,

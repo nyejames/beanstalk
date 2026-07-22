@@ -28,8 +28,10 @@ use crate::compiler_frontend::canonical_type_identity::{
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::ReceiverKey;
+use crate::compiler_frontend::datatypes::datatype::DataType;
 use crate::compiler_frontend::datatypes::definitions::{
-    ChoiceTypeDefinition, ChoiceVariantDefinition, FieldDefinition, StructTypeDefinition,
+    ChoiceTypeDefinition, ChoiceVariantDefinition, ChoiceVariantPayloadDefinition, FieldDefinition,
+    StructTypeDefinition,
 };
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::ids::{GenericParameterListId, NominalTypeId, TypeId};
@@ -41,11 +43,14 @@ use crate::compiler_frontend::defined_public_type_surface::{
     PublicFieldTypeSlot, TransientNominalOriginResolver,
 };
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
+use crate::compiler_frontend::folded_value::{
+    FoldedValueGenericParameterResolver, PublicFoldedValue,
+};
 use crate::compiler_frontend::public_interface_draft::{
-    DefinedPublicTraitSurface, FoldedValueGenericParameterResolver, FoldedValueJoinContext,
-    PublicDeclarationRecord, PublicDeclarationSemantics, PublicInterfaceDraftBuilder,
-    PublicInterfaceDraftBuilderInput, PublicTraitReceiverAccess, TraitSurfaceTypeIdentity,
-    build_trait_surfaces, join_declaration_records,
+    DefinedPublicTraitSurface, FoldedValueJoinContext, PublicDeclarationRecord,
+    PublicDeclarationSemantics, PublicInterfaceDraftBuilder, PublicInterfaceDraftBuilderInput,
+    PublicTraitReceiverAccess, TraitSurfaceTypeIdentity, build_trait_surfaces,
+    join_declaration_records,
 };
 use crate::compiler_frontend::semantic_identity::{
     ExportBinding, ModuleRootRole, OriginConstantId, OriginDeclarationId, OriginFunctionId,
@@ -272,11 +277,12 @@ fn function_root(
 fn struct_root(
     name: &str,
     type_id: TypeId,
+    fields: Vec<Declaration>,
     string_table: &mut StringTable,
 ) -> ResolvedPublicTypeRoot {
     ResolvedPublicTypeRoot {
         path: path(name, string_table),
-        kind: ResolvedPublicTypeRootKind::Struct { type_id },
+        kind: ResolvedPublicTypeRootKind::Struct { type_id, fields },
     }
 }
 
@@ -858,7 +864,7 @@ fn builder_produces_declaration_centric_draft_covering_every_category() {
 
     // Build roots for every non-trait category.
     let function_root = function_root("render", empty_signature(), &mut string_table);
-    let struct_root = struct_root("Counter", struct_type_id, &mut string_table);
+    let struct_root = struct_root("Counter", struct_type_id, vec![], &mut string_table);
     let choice_root = choice_root("Status", choice_type_id, &mut string_table);
     let alias_root = alias_root("IntAlias", int_id, &mut string_table);
     let constant_root = constant_root("MaxSize", int_id, &mut string_table);
@@ -1041,7 +1047,7 @@ fn builder_attaches_receiver_methods_to_struct_record() {
         signature,
     );
 
-    let root = struct_root("Counter", struct_type_id, &mut string_table);
+    let root = struct_root("Counter", struct_type_id, vec![], &mut string_table);
     let root_table = ResolvedPublicTypeRootTable {
         roots: vec![root],
         receiver_methods: vec![entry.clone()],
@@ -1382,6 +1388,7 @@ fn join_rejects_choice_fact_containing_struct_fields() {
         fields: vec![PublicFieldTypeSlot {
             name: "unexpected".to_owned(),
             type_identity: CanonicalTypeIdentity::Builtin(CanonicalBuiltinType::Int),
+            folded_default: None,
         }],
         variants: vec![],
     };
@@ -1428,6 +1435,437 @@ fn join_rejects_duplicate_receiver_method_origin() {
     assert!(
         message.contains("two receiver-method type-surface entries share method origin"),
         "expected a duplicate method-origin diagnostic, got: {message}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+//  Default retention tests (R2c)
+// ---------------------------------------------------------------------------
+
+/// Helper: create a field `Declaration` carrying a compile-time default value.
+fn field_declaration_with_default(
+    name: &str,
+    type_id: TypeId,
+    default: Expression,
+    string_table: &mut StringTable,
+) -> Declaration {
+    let mut value = default;
+    value.type_id = type_id;
+    Declaration {
+        id: path(name, string_table),
+        value,
+    }
+}
+
+/// Helper: create a field `Declaration` with no default.
+fn field_declaration_no_default(
+    name: &str,
+    type_id: TypeId,
+    string_table: &mut StringTable,
+) -> Declaration {
+    Declaration {
+        id: path(name, string_table),
+        value: Expression::no_value_with_type_id(
+            default_location(),
+            DataType::Inferred,
+            type_id,
+            immutable(),
+        ),
+    }
+}
+
+/// Helper: create a `FieldDefinition` matching a field name and type.
+fn field_def(name: &str, type_id: TypeId, string_table: &mut StringTable) -> FieldDefinition {
+    FieldDefinition {
+        name: path(name, string_table),
+        type_id,
+        location: default_location(),
+    }
+}
+
+#[test]
+fn free_function_retains_folded_parameter_defaults_in_authored_order() {
+    let mut string_table = StringTable::new();
+    let env = TypeEnvironment::new();
+    let int_id = env.builtins().int;
+    let string_id = env.builtins().string;
+
+    // Every default expression carries its declared TypeId so the projection reads the
+    // correct canonical type identity from the expression, not from a global builtin
+    // constant that may differ from the environment.
+    let parameters = vec![
+        field_declaration_with_default(
+            "prefix",
+            string_id,
+            Expression::string_slice(
+                string_table.intern("default-prefix"),
+                default_location(),
+                immutable(),
+            ),
+            &mut string_table,
+        ),
+        field_declaration_with_default(
+            "count",
+            int_id,
+            Expression::int(42, default_location(), immutable()),
+            &mut string_table,
+        ),
+        field_declaration_no_default("subject", string_id, &mut string_table),
+    ];
+
+    let signature = FunctionSignature {
+        parameters,
+        returns: vec![],
+    };
+
+    let root = function_root("render", signature, &mut string_table);
+    let root_table = ResolvedPublicTypeRootTable {
+        roots: vec![root],
+        receiver_methods: vec![],
+        trait_source_facts: FxHashMap::default(),
+    };
+
+    let binding = ExportBinding::new(
+        module_origin(),
+        "render".to_owned(),
+        OriginDeclarationId::Function(free_function_origin("render")),
+    );
+
+    let export_origin_draft =
+        DefinedPublicExportOriginDraft::new(module_origin(), vec![binding], FxHashMap::default());
+
+    let projection_input = AstPublicInterfaceProjectionInput {
+        root_table,
+        trait_roots: vec![],
+        receiver_catalog: Some(std::rc::Rc::new(ReceiverMethodCatalog::default())),
+    };
+
+    let registry = ExternalPackageRegistry::new();
+    let draft = PublicInterfaceDraftBuilder::new(PublicInterfaceDraftBuilderInput {
+        export_origin_draft,
+        public_interface_projection_input: projection_input,
+        public_source_nominal_type_origins: &FxHashMap::default(),
+        public_source_trait_origins: &FxHashMap::default(),
+        type_environment: &env,
+        external_registry: &registry,
+        string_table: &string_table,
+        module_constants: &[],
+    })
+    .build()
+    .expect("draft with function defaults should build");
+
+    assert_eq!(draft.declarations.len(), 1);
+    let record = &draft.declarations[0];
+    let PublicDeclarationSemantics::Function(semantics) = &record.semantics else {
+        panic!("expected a function record");
+    };
+
+    assert_eq!(semantics.parameters.len(), 3);
+
+    assert_eq!(semantics.parameters[0].name.as_deref(), Some("prefix"));
+    assert_eq!(
+        &semantics.parameters[0].folded_default,
+        &Some(PublicFoldedValue::String("default-prefix".to_owned()))
+    );
+
+    assert_eq!(semantics.parameters[1].name.as_deref(), Some("count"));
+    assert_eq!(
+        &semantics.parameters[1].folded_default,
+        &Some(PublicFoldedValue::Int(42))
+    );
+
+    assert_eq!(semantics.parameters[2].name.as_deref(), Some("subject"));
+    assert_eq!(&semantics.parameters[2].folded_default, &None);
+}
+
+#[test]
+fn struct_retains_folded_field_defaults_in_authored_order() {
+    let mut string_table = StringTable::new();
+    let mut env = TypeEnvironment::new();
+    let int_id = env.builtins().int;
+    let bool_id = env.builtins().bool;
+    let string_id = env.builtins().string;
+
+    let field_defs = Box::new([
+        field_def("x", int_id, &mut string_table),
+        field_def("flag", bool_id, &mut string_table),
+        field_def("label", string_id, &mut string_table),
+    ]);
+
+    let (_, struct_type_id) =
+        register_struct(&mut env, &mut string_table, "Point", field_defs, None);
+
+    let fields = vec![
+        field_declaration_with_default(
+            "x",
+            int_id,
+            Expression::int(10, default_location(), immutable()),
+            &mut string_table,
+        ),
+        field_declaration_with_default(
+            "flag",
+            bool_id,
+            Expression::bool(true, default_location(), immutable()),
+            &mut string_table,
+        ),
+        field_declaration_no_default("label", string_id, &mut string_table),
+    ];
+
+    let root = struct_root("Point", struct_type_id, fields, &mut string_table);
+    let root_table = ResolvedPublicTypeRootTable {
+        roots: vec![root],
+        receiver_methods: vec![],
+        trait_source_facts: FxHashMap::default(),
+    };
+
+    let binding = ExportBinding::new(
+        module_origin(),
+        "Point".to_owned(),
+        OriginDeclarationId::Type(struct_origin("Point")),
+    );
+
+    let nominal_origins =
+        nominal_origins_map(vec![("Point", struct_origin("Point"))], &mut string_table);
+
+    let export_origin_draft = DefinedPublicExportOriginDraft::new(
+        module_origin(),
+        vec![binding],
+        nominal_origins.clone(),
+    );
+
+    let projection_input = AstPublicInterfaceProjectionInput {
+        root_table,
+        trait_roots: vec![],
+        receiver_catalog: Some(std::rc::Rc::new(ReceiverMethodCatalog::default())),
+    };
+
+    let registry = ExternalPackageRegistry::new();
+    let draft = PublicInterfaceDraftBuilder::new(PublicInterfaceDraftBuilderInput {
+        export_origin_draft,
+        public_interface_projection_input: projection_input,
+        public_source_nominal_type_origins: &nominal_origins,
+        public_source_trait_origins: &FxHashMap::default(),
+        type_environment: &env,
+        external_registry: &registry,
+        string_table: &string_table,
+        module_constants: &[],
+    })
+    .build()
+    .expect("draft with struct field defaults should build");
+
+    assert_eq!(draft.declarations.len(), 1);
+    let record = &draft.declarations[0];
+    let PublicDeclarationSemantics::Struct(semantics) = &record.semantics else {
+        panic!("expected a struct record");
+    };
+
+    assert_eq!(semantics.fields.len(), 3);
+
+    assert_eq!(semantics.fields[0].name.as_str(), "x");
+    assert_eq!(
+        &semantics.fields[0].folded_default,
+        &Some(PublicFoldedValue::Int(10))
+    );
+
+    assert_eq!(semantics.fields[1].name.as_str(), "flag");
+    assert_eq!(
+        &semantics.fields[1].folded_default,
+        &Some(PublicFoldedValue::Bool(true))
+    );
+
+    assert_eq!(semantics.fields[2].name.as_str(), "label");
+    assert_eq!(&semantics.fields[2].folded_default, &None);
+}
+
+#[test]
+fn choice_payload_fields_remain_default_free() {
+    let mut string_table = StringTable::new();
+    let mut env = TypeEnvironment::new();
+    let int_id = env.builtins().int;
+
+    let variant = ChoiceVariantDefinition {
+        name: string_table.intern("Some"),
+        tag: 0,
+        payload: ChoiceVariantPayloadDefinition::Record {
+            fields: Box::new([FieldDefinition {
+                name: path("value", &mut string_table),
+                type_id: int_id,
+                location: default_location(),
+            }]),
+        },
+        location: default_location(),
+    };
+
+    let choice_path = path("Option", &mut string_table);
+    env.register_nominal_choice(ChoiceTypeDefinition {
+        id: NominalTypeId(0),
+        path: choice_path,
+        variants: Box::new([variant]),
+        generic_parameters: None,
+    });
+
+    let choice_type_id = env
+        .type_id_for_nominal_id(NominalTypeId(0))
+        .expect("choice must have a TypeId");
+
+    let root = choice_root("Option", choice_type_id, &mut string_table);
+    let root_table = ResolvedPublicTypeRootTable {
+        roots: vec![root],
+        receiver_methods: vec![],
+        trait_source_facts: FxHashMap::default(),
+    };
+
+    let binding = ExportBinding::new(
+        module_origin(),
+        "Option".to_owned(),
+        OriginDeclarationId::Type(choice_origin("Option")),
+    );
+
+    let nominal_origins =
+        nominal_origins_map(vec![("Option", choice_origin("Option"))], &mut string_table);
+
+    let export_origin_draft = DefinedPublicExportOriginDraft::new(
+        module_origin(),
+        vec![binding],
+        nominal_origins.clone(),
+    );
+
+    let projection_input = AstPublicInterfaceProjectionInput {
+        root_table,
+        trait_roots: vec![],
+        receiver_catalog: Some(std::rc::Rc::new(ReceiverMethodCatalog::default())),
+    };
+
+    let registry = ExternalPackageRegistry::new();
+    let draft = PublicInterfaceDraftBuilder::new(PublicInterfaceDraftBuilderInput {
+        export_origin_draft,
+        public_interface_projection_input: projection_input,
+        public_source_nominal_type_origins: &nominal_origins,
+        public_source_trait_origins: &FxHashMap::default(),
+        type_environment: &env,
+        external_registry: &registry,
+        string_table: &string_table,
+        module_constants: &[],
+    })
+    .build()
+    .expect("draft with choice should build");
+
+    let record = &draft.declarations[0];
+    let PublicDeclarationSemantics::Choice(semantics) = &record.semantics else {
+        panic!("expected a choice record");
+    };
+
+    assert_eq!(semantics.variants.len(), 1);
+    let variant = &semantics.variants[0];
+    assert_eq!(variant.payload_fields.len(), 1);
+    assert_eq!(variant.payload_fields[0].name.as_str(), "value");
+    assert_eq!(&variant.payload_fields[0].folded_default, &None);
+}
+
+#[test]
+fn receiver_method_retains_folded_parameter_defaults() {
+    let mut string_table = StringTable::new();
+    let mut env = TypeEnvironment::new();
+    let string_id = env.builtins().string;
+
+    let (_, struct_type_id) =
+        register_struct(&mut env, &mut string_table, "Counter", empty_fields(), None);
+
+    let receiver_path = path("Counter", &mut string_table);
+    let method_fn_path = path("render", &mut string_table);
+
+    // The first parameter is the `this` receiver: it carries the struct TypeId and has no
+    // default. The second parameter is an ordinary parameter with a folded default.
+    let signature = FunctionSignature {
+        parameters: vec![
+            field_declaration_no_default("this", struct_type_id, &mut string_table),
+            field_declaration_with_default(
+                "label",
+                string_id,
+                Expression::string_slice(
+                    string_table.intern("fallback"),
+                    default_location(),
+                    immutable(),
+                ),
+                &mut string_table,
+            ),
+        ],
+        returns: vec![],
+    };
+
+    let entry = receiver_entry(
+        method_fn_path.clone(),
+        ReceiverKey::Struct(receiver_path.clone()),
+        signature,
+    );
+
+    let root = struct_root("Counter", struct_type_id, vec![], &mut string_table);
+    let root_table = ResolvedPublicTypeRootTable {
+        roots: vec![root],
+        receiver_methods: vec![entry.clone()],
+        trait_source_facts: FxHashMap::default(),
+    };
+
+    let binding = ExportBinding::new(
+        module_origin(),
+        "Counter".to_owned(),
+        OriginDeclarationId::Type(struct_origin("Counter")),
+    );
+
+    let nominal_origins = nominal_origins_map(
+        vec![("Counter", struct_origin("Counter"))],
+        &mut string_table,
+    );
+
+    let export_origin_draft = DefinedPublicExportOriginDraft::new(
+        module_origin(),
+        vec![binding],
+        nominal_origins.clone(),
+    );
+
+    let mut receiver_catalog = ReceiverMethodCatalog::default();
+    receiver_catalog
+        .by_function_path
+        .insert(method_fn_path, entry);
+
+    let projection_input = AstPublicInterfaceProjectionInput {
+        root_table,
+        trait_roots: vec![],
+        receiver_catalog: Some(std::rc::Rc::new(receiver_catalog)),
+    };
+
+    let registry = ExternalPackageRegistry::new();
+    let draft = PublicInterfaceDraftBuilder::new(PublicInterfaceDraftBuilderInput {
+        export_origin_draft,
+        public_interface_projection_input: projection_input,
+        public_source_nominal_type_origins: &nominal_origins,
+        public_source_trait_origins: &FxHashMap::default(),
+        type_environment: &env,
+        external_registry: &registry,
+        string_table: &string_table,
+        module_constants: &[],
+    })
+    .build()
+    .expect("draft with receiver method defaults should build");
+
+    let record = &draft.declarations[0];
+    let PublicDeclarationSemantics::Struct(semantics) = &record.semantics else {
+        panic!("expected a struct record");
+    };
+
+    assert_eq!(semantics.receiver_methods.len(), 1);
+    let method = &semantics.receiver_methods[0];
+
+    // The receiver slot remains default-free and authored order is preserved.
+    assert_eq!(method.parameters.len(), 2);
+
+    assert_eq!(method.parameters[0].name.as_deref(), Some("this"));
+    assert_eq!(&method.parameters[0].folded_default, &None);
+
+    assert_eq!(method.parameters[1].name.as_deref(), Some("label"));
+    assert_eq!(
+        &method.parameters[1].folded_default,
+        &Some(PublicFoldedValue::String("fallback".to_owned()))
     );
 }
 

@@ -191,6 +191,7 @@ fn build_table(
     nominal_ids: FxHashMap<InternedPath, TypeId>,
     aliases: FxHashMap<InternedPath, ResolvedTypeAnnotation>,
     declarations: Vec<Declaration>,
+    struct_fields: FxHashMap<InternedPath, Vec<Declaration>>,
     receiver_methods: ReceiverMethodCatalog,
     type_environment: &TypeEnvironment,
     trait_environment: &TraitEnvironment,
@@ -199,6 +200,7 @@ fn build_table(
     let declaration_table = TopLevelDeclarationTable::new(declarations);
     build_resolved_public_type_roots(BuildResolvedPublicTypeRootsInput {
         sorted_headers: &headers,
+        resolved_struct_fields_by_path: &struct_fields,
         resolved_function_signatures_by_path: &signatures,
         nominal_type_ids_by_path: &nominal_ids,
         resolved_type_aliases_by_path: &aliases,
@@ -290,12 +292,16 @@ fn retains_every_public_root_category_in_sorted_header_order() {
     let mut aliases = FxHashMap::default();
     aliases.insert(alias_path.to_owned(), resolved_alias(int_type_id));
 
+    let mut struct_fields = FxHashMap::default();
+    struct_fields.insert(struct_path.to_owned(), Vec::new());
+
     let table = build_table(
         headers,
         signatures,
         nominal_ids,
         aliases,
         vec![constant_declaration(int_type_id, const_path.to_owned())],
+        struct_fields,
         ReceiverMethodCatalog::default(),
         &type_environment,
         &trait_environment,
@@ -313,7 +319,7 @@ fn retains_every_public_root_category_in_sorted_header_order() {
     assert_eq!(table.roots[0].path, struct_path);
     assert!(matches!(
         &table.roots[0].kind,
-        ResolvedPublicTypeRootKind::Struct { type_id } if *type_id == struct_type_id
+        ResolvedPublicTypeRootKind::Struct { type_id, .. } if *type_id == struct_type_id
     ));
 
     assert_eq!(table.roots[1].path, func_path);
@@ -400,6 +406,7 @@ fn excludes_imported_root_private_and_non_declaration_headers() {
         FxHashMap::default(),
         FxHashMap::default(),
         Vec::new(),
+        FxHashMap::default(),
         ReceiverMethodCatalog::default(),
         &type_environment,
         &trait_environment,
@@ -527,12 +534,16 @@ fn retains_private_receiver_methods_for_public_nominal_receivers_in_order_indepe
         .by_function_path
         .insert(private_method_path.to_owned(), private_entry);
 
+    let mut struct_fields = FxHashMap::default();
+    struct_fields.insert(public_struct.to_owned(), Vec::new());
+
     let table = build_table(
         headers,
         signatures,
         nominal_ids,
         FxHashMap::default(),
         Vec::new(),
+        struct_fields,
         receiver_catalog,
         &type_environment,
         &trait_environment,
@@ -594,6 +605,7 @@ fn missing_alias_type_id_is_internal_error() {
         FxHashMap::default(),
         aliases,
         Vec::new(),
+        FxHashMap::default(),
         ReceiverMethodCatalog::default(),
         &type_environment,
         &trait_environment,
@@ -627,6 +639,7 @@ fn missing_resolved_function_signature_is_internal_error() {
         FxHashMap::default(),
         FxHashMap::default(),
         Vec::new(),
+        FxHashMap::default(),
         ReceiverMethodCatalog::default(),
         &type_environment,
         &trait_environment,
@@ -660,6 +673,7 @@ fn missing_nominal_type_id_is_internal_error() {
         FxHashMap::default(),
         FxHashMap::default(),
         Vec::new(),
+        FxHashMap::default(),
         ReceiverMethodCatalog::default(),
         &type_environment,
         &trait_environment,
@@ -693,6 +707,7 @@ fn missing_resolved_constant_is_internal_error() {
         FxHashMap::default(),
         FxHashMap::default(),
         Vec::new(),
+        FxHashMap::default(),
         ReceiverMethodCatalog::default(),
         &type_environment,
         &trait_environment,
@@ -755,6 +770,7 @@ fn missing_receiver_catalog_entry_is_internal_error() {
         nominal_ids,
         FxHashMap::default(),
         Vec::new(),
+        FxHashMap::default(),
         ReceiverMethodCatalog::default(),
         &type_environment,
         &trait_environment,
@@ -826,6 +842,7 @@ fn missing_active_root_function_signature_in_method_pass_is_internal_error() {
         nominal_ids,
         FxHashMap::default(),
         Vec::new(),
+        FxHashMap::default(),
         ReceiverMethodCatalog::default(),
         &type_environment,
         &trait_environment,
@@ -928,12 +945,16 @@ fn retains_source_trait_fact_for_generic_struct_bound() {
     let mut nominal_ids = FxHashMap::default();
     nominal_ids.insert(struct_path.to_owned(), struct_type_id);
 
+    let mut struct_fields = FxHashMap::default();
+    struct_fields.insert(struct_path.to_owned(), Vec::new());
+
     let table = build_table(
         headers,
         FxHashMap::default(),
         nominal_ids,
         FxHashMap::default(),
         Vec::new(),
+        struct_fields,
         ReceiverMethodCatalog::default(),
         &type_environment,
         &trait_environment,
@@ -985,12 +1006,16 @@ fn retains_core_trait_fact_for_generic_struct_bound() {
     let mut nominal_ids = FxHashMap::default();
     nominal_ids.insert(struct_path.to_owned(), struct_type_id);
 
+    let mut struct_fields = FxHashMap::default();
+    struct_fields.insert(struct_path.to_owned(), Vec::new());
+
     let table = build_table(
         headers,
         FxHashMap::default(),
         nominal_ids,
         FxHashMap::default(),
         Vec::new(),
+        struct_fields,
         ReceiverMethodCatalog::default(),
         &type_environment,
         &trait_environment,
@@ -1047,6 +1072,7 @@ fn missing_trait_definition_for_bound_is_compiler_error() {
         nominal_ids,
         FxHashMap::default(),
         Vec::new(),
+        FxHashMap::default(),
         ReceiverMethodCatalog::default(),
         &type_environment,
         &trait_environment,
@@ -1056,5 +1082,59 @@ fn missing_trait_definition_for_bound_is_compiler_error() {
     assert!(
         matches!(result, Err(CompilerError { .. })),
         "a bound TraitId with no trait definition and no core classification must be a CompilerError"
+    );
+}
+
+#[test]
+fn missing_resolved_struct_fields_is_internal_error() {
+    let mut string_table = StringTable::new();
+    let mut type_environment = TypeEnvironment::new();
+    let trait_environment = TraitEnvironment::new();
+
+    let struct_path = path("public_struct", &mut string_table);
+
+    let (_, struct_type_id) = type_environment.register_nominal_struct(StructTypeDefinition {
+        id: NominalTypeId(0),
+        path: struct_path.clone(),
+        fields: Box::new([]),
+        generic_parameters: None,
+        const_record: false,
+    });
+
+    let headers = vec![header(
+        struct_kind(),
+        struct_path.to_owned(),
+        FileRole::ActiveModuleRoot,
+        HeaderExportMode::Public,
+        &mut string_table,
+    )];
+
+    let mut nominal_ids = FxHashMap::default();
+    nominal_ids.insert(struct_path.to_owned(), struct_type_id);
+
+    // Omit the struct from resolved_struct_fields_by_path so the root-table builder
+    // rejects it instead of silently producing a root with no retained declarations.
+    let result = build_table(
+        headers,
+        FxHashMap::default(),
+        nominal_ids,
+        FxHashMap::default(),
+        Vec::new(),
+        FxHashMap::default(),
+        ReceiverMethodCatalog::default(),
+        &type_environment,
+        &trait_environment,
+        &string_table,
+    );
+
+    let CompilerError { msg, .. } = match result {
+        Err(error) => error,
+        Ok(_) => {
+            panic!("a public struct missing resolved field declarations must be a CompilerError")
+        }
+    };
+    assert!(
+        msg.contains("no resolved field declarations"),
+        "expected a missing-struct-fields diagnostic, got: {msg}"
     );
 }

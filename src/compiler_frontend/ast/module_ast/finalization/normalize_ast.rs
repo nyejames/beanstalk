@@ -41,6 +41,7 @@ use super::finalizer::AstFinalizer;
 use super::template_helpers::{
     FinalizedTemplateValue, TemplateValueFinalizationInputs, finalize_template_value,
 };
+use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, LoopBindings, NodeKind};
 use crate::compiler_frontend::ast::expressions::call_argument::CallArgument;
 use crate::compiler_frontend::ast::expressions::expression::{
@@ -49,6 +50,11 @@ use crate::compiler_frontend::ast::expressions::expression::{
 use crate::compiler_frontend::ast::expressions::expression_rpn::{
     ExpressionRpnItem, PlaceExpression, PlaceExpressionKind,
 };
+use crate::compiler_frontend::ast::module_ast::environment::ResolvedPublicTypeRootKind;
+use crate::compiler_frontend::ast::module_ast::scope_context::{
+    ReceiverMethodCatalog, ReceiverMethodEntry,
+};
+use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::statements::match_patterns::MatchPattern;
 use crate::compiler_frontend::ast::statements::value_production::types::ValueBlock;
 use crate::compiler_frontend::ast::templates::error::TemplateError;
@@ -69,12 +75,14 @@ use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, InvalidTemplateSlotReason, InvalidTemplateStructureReason,
 };
 use crate::compiler_frontend::datatypes::DataType;
+use crate::compiler_frontend::datatypes::definitions::TypeDefinition;
 use crate::compiler_frontend::instrumentation::{AstCounter, increment_ast_counter};
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::value_mode::ValueMode;
+use rustc_hash::{FxHashMap, FxHashSet};
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::rc::Rc;
@@ -129,6 +137,557 @@ impl AstFinalizer<'_, '_> {
 
         Ok(())
     }
+
+    /// Synchronize normalized emitted declaration defaults into the retained public root
+    /// table and receiver catalog, and normalize retained-only generic defaults.
+    ///
+    /// WHAT: after the emitted AST is normalized once (function signature parameter defaults
+    /// and struct field defaults folded alongside function bodies), copy the exact normalized
+    /// signatures and fields into the retained public root table and receiver catalog so the
+    /// public-interface draft reads one normalized copy. Generic free functions, generic structs
+    /// and generic receiver methods have no emitted declaration node, so their retained defaults
+    /// are normalized in place through the same [`normalize_expression_templates`] helper using
+    /// their exact source-file context: the generic template's retained source file for generic
+    /// functions, and the canonical source metadata for generic structs.
+    ///
+    /// WHY: folding the emitted copy and retained copy independently would create a second
+    /// normalization interpretation. Synchronizing from the single emitted fold guarantees one
+    /// owner. Generic declarations without an emitted node still need their defaults normalized
+    /// so the draft receives no live TIR references. The receiver catalog is synchronized as an
+    /// exact bidirectional invariant: every primary joins exactly one secondary entry in each
+    /// index and every secondary entry joins exactly one primary.
+    pub(super) fn synchronize_normalized_public_defaults(
+        &mut self,
+        emitted_ast: &[AstNode],
+        project_path_resolver: &ProjectPathResolver,
+        string_table: &mut StringTable,
+    ) -> Result<ReceiverMethodCatalog, TemplateNormalizationError> {
+        let EmittedDeclarationDefaults {
+            function_signatures_by_path: normalized_function_signatures_by_path,
+            struct_fields_by_path: normalized_struct_fields_by_path,
+        } = collect_emitted_declaration_defaults(emitted_ast)?;
+
+        let generic_function_templates_by_path =
+            &self.environment.lookups.generic_function_templates_by_path;
+        let canonical_source_by_symbol_path = &self
+            .environment
+            .lookups
+            .module_symbols
+            .canonical_source_by_symbol_path;
+        let type_environment = &self.environment.type_environment;
+        let path_format_config = &self.context.path_format_config;
+        let template_const_loop_iteration_limit = self.context.template_const_loop_iteration_limit;
+        let template_ir_store = Rc::clone(&self.context.template_ir_store);
+
+        // Synchronize root table function and struct defaults. Branch on authoritative generic
+        // metadata before choosing a source: a non-generic declaration must have exactly one
+        // emitted node; a generic declaration must have no emitted node and its retained defaults
+        // are normalized in place.
+        let mut root_table = std::mem::take(&mut self.environment.resolved_public_type_roots);
+        for root in &mut root_table.roots {
+            match &mut root.kind {
+                ResolvedPublicTypeRootKind::Function {
+                    signature,
+                    generic_parameter_list_id,
+                } => {
+                    if let Some(root_generic_parameter_list_id) = generic_parameter_list_id.as_ref()
+                    {
+                        // Generic free function: must have no emitted node.
+                        if normalized_function_signatures_by_path.contains_key(&root.path) {
+                            return Err(CompilerError::compiler_error(format!(
+                                "public default synchronization: a generic free-function root at {:?} has an emitted declaration node; generic functions must not emit an ordinary declaration",
+                                root.path
+                            ))
+                            .into());
+                        }
+                        let template = generic_function_templates_by_path
+                            .get(&root.path)
+                            .ok_or_else(|| {
+                                CompilerError::compiler_error(format!(
+                                    "public default synchronization: a generic free-function root at {:?} has no retained generic-template metadata; every generic function must carry its source file",
+                                    root.path
+                                ))
+                            })?;
+                        if template.generic_parameter_list_id != *root_generic_parameter_list_id {
+                            return Err(CompilerError::compiler_error(format!(
+                                "public default synchronization: a generic free-function root at {:?} has a generic-parameter-list mismatch: root GenericParameterListId({}) vs retained template GenericParameterListId({})",
+                                root.path,
+                                root_generic_parameter_list_id.0,
+                                template.generic_parameter_list_id.0
+                            ))
+                            .into());
+                        }
+                        let source_file = template.source_file.clone();
+                        normalize_retained_signature_defaults(
+                            signature,
+                            &source_file,
+                            project_path_resolver,
+                            path_format_config,
+                            template_const_loop_iteration_limit,
+                            &template_ir_store,
+                            string_table,
+                        )?;
+                    } else {
+                        // Non-generic free function: must have exactly one emitted signature.
+                        let normalized = normalized_function_signatures_by_path
+                            .get(&root.path)
+                            .ok_or_else(|| {
+                                CompilerError::compiler_error(format!(
+                                    "public default synchronization: a non-generic free-function root at {:?} has no emitted declaration node; only generic functions may omit an emitted node",
+                                    root.path
+                                ))
+                            })?;
+                        *signature = normalized.clone();
+                    }
+                }
+                ResolvedPublicTypeRootKind::Struct { type_id, fields } => {
+                    let definition = type_environment.get(*type_id).ok_or_else(|| {
+                        CompilerError::compiler_error(format!(
+                            "public default synchronization: a struct root at {:?} references TypeId({}) which has no type definition in the type environment",
+                            root.path,
+                            type_id.0
+                        ))
+                    })?;
+                    let TypeDefinition::Struct(struct_definition) = definition else {
+                        return Err(CompilerError::compiler_error(format!(
+                            "public default synchronization: a struct root at {:?} references TypeId({}) which is not a struct definition",
+                            root.path,
+                            type_id.0
+                        ))
+                        .into());
+                    };
+                    if struct_definition.generic_parameters.is_some() {
+                        // Generic struct: must have no emitted node.
+                        if normalized_struct_fields_by_path.contains_key(&root.path) {
+                            return Err(CompilerError::compiler_error(format!(
+                                "public default synchronization: a generic struct root at {:?} (TypeId({})) has an emitted declaration node; generic structs must not emit an ordinary declaration",
+                                root.path,
+                                type_id.0
+                            ))
+                            .into());
+                        }
+                        let source_file = canonical_source_by_symbol_path
+                            .get(&root.path)
+                            .ok_or_else(|| {
+                                CompilerError::compiler_error(format!(
+                                    "public default synchronization: a generic struct root at {:?} has no canonical source metadata; every retained-only normalization requires exact source-file context",
+                                    root.path
+                                ))
+                            })?
+                            .to_owned();
+                        normalize_retained_field_defaults(
+                            fields,
+                            &source_file,
+                            project_path_resolver,
+                            path_format_config,
+                            template_const_loop_iteration_limit,
+                            &template_ir_store,
+                            string_table,
+                        )?;
+                    } else {
+                        // Non-generic struct: must have exactly one emitted declaration.
+                        let normalized = normalized_struct_fields_by_path
+                            .get(&root.path)
+                            .ok_or_else(|| {
+                                CompilerError::compiler_error(format!(
+                                    "public default synchronization: a non-generic struct root at {:?} (TypeId({})) has no emitted declaration node; only generic structs may omit an emitted node",
+                                    root.path,
+                                    type_id.0
+                                ))
+                            })?;
+                        *fields = normalized.clone();
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        // Reject duplicate receiver-method function paths in the root table before joining each
+        // root entry to exactly one primary catalog entry.
+        reject_duplicate_receiver_method_paths(&root_table.receiver_methods)?;
+
+        // Synchronize receiver catalog: update existing entries in place, preserving vector
+        // order in every index. Do not rebuild secondary vectors by iterating the unordered
+        // by_function_path map.
+        let mut catalog = (*self.environment.lookups.receiver_methods).clone();
+
+        // First, synchronize every by_function_path entry by branching on generic metadata.
+        for (function_path, entry) in &mut catalog.by_function_path {
+            if generic_function_templates_by_path.contains_key(function_path) {
+                // Generic receiver method: must have no emitted node.
+                if normalized_function_signatures_by_path.contains_key(function_path) {
+                    return Err(CompilerError::compiler_error(format!(
+                        "public default synchronization: a generic receiver method at {:?} has an emitted declaration node; generic functions must not emit an ordinary declaration",
+                        function_path
+                    ))
+                    .into());
+                }
+                let source_file = generic_function_templates_by_path
+                    .get(function_path)
+                    .map(|template| template.source_file.clone())
+                    .ok_or_else(|| {
+                        CompilerError::compiler_error(format!(
+                            "public default synchronization: a generic receiver method at {:?} has no retained generic-template metadata; every generic function must carry its source file",
+                            function_path
+                        ))
+                    })?;
+                normalize_retained_signature_defaults(
+                    &mut entry.signature,
+                    &source_file,
+                    project_path_resolver,
+                    path_format_config,
+                    template_const_loop_iteration_limit,
+                    &template_ir_store,
+                    string_table,
+                )?;
+            } else {
+                // Non-generic receiver method: must have exactly one emitted node.
+                let normalized = normalized_function_signatures_by_path
+                    .get(function_path)
+                    .ok_or_else(|| {
+                        CompilerError::compiler_error(format!(
+                            "public default synchronization: a non-generic receiver method at {:?} has no emitted declaration node; only generic functions may omit an emitted node",
+                            function_path
+                        ))
+                    })?;
+                entry.signature = normalized.clone();
+            }
+        }
+
+        // Synchronize the secondary indexes as an exact bidirectional invariant and copy the
+        // synchronized signatures from the primary index in place, preserving vector order.
+        synchronize_receiver_secondary_indexes(&mut catalog)?;
+
+        // Synchronize every root table receiver method entry by exact path. A missing catalog
+        // entry is a CompilerError, not a silent no-op.
+        for root_entry in &mut root_table.receiver_methods {
+            let synchronized = catalog
+                .by_function_path
+                .get(&root_entry.function_path)
+                .ok_or_else(|| {
+                    CompilerError::compiler_error(format!(
+                        "public default synchronization: a root table receiver method at {:?} has no matching catalog entry; every root receiver method must join exactly one catalog entry",
+                        root_entry.function_path
+                    ))
+                })?;
+            root_entry.signature = synchronized.signature.clone();
+        }
+
+        self.environment.resolved_public_type_roots = root_table;
+
+        Ok(catalog)
+    }
+}
+
+/// Normalize retained-only function signature parameter defaults through the existing helper.
+///
+/// WHAT: creates a [`TemplateNormalizationContext`] with the exact source-file scope and folds
+/// each parameter default in place. Parameters with `NoValue` (no default) are no-ops. The
+/// caller resolves the exact source file: the generic template's retained source file for
+/// generic functions, never a fallback to the symbol path itself.
+fn normalize_retained_signature_defaults(
+    signature: &mut FunctionSignature,
+    source_file: &InternedPath,
+    project_path_resolver: &ProjectPathResolver,
+    path_format_config: &PathStringFormatConfig,
+    template_const_loop_iteration_limit: usize,
+    template_ir_store: &Rc<RefCell<TemplateIrStore>>,
+    string_table: &mut StringTable,
+) -> Result<(), TemplateNormalizationError> {
+    let mut context = TemplateNormalizationContext {
+        source_file_scope: source_file,
+        path_format_config,
+        project_path_resolver,
+        template_const_loop_iteration_limit,
+        string_table,
+        template_ir_store: Rc::clone(template_ir_store),
+    };
+
+    for parameter in &mut signature.parameters {
+        normalize_expression_templates(&mut parameter.value, &mut context)?;
+    }
+
+    Ok(())
+}
+
+/// Normalize retained-only struct field defaults through the existing helper.
+///
+/// WHAT: creates a [`TemplateNormalizationContext`] with the exact source-file scope and folds
+/// each field default in place. Fields with `NoValue` (no default) are no-ops. The caller
+/// resolves the exact source file from canonical source metadata, never a fallback to the
+/// symbol path itself.
+fn normalize_retained_field_defaults(
+    fields: &mut [Declaration],
+    source_file: &InternedPath,
+    project_path_resolver: &ProjectPathResolver,
+    path_format_config: &PathStringFormatConfig,
+    template_const_loop_iteration_limit: usize,
+    template_ir_store: &Rc<RefCell<TemplateIrStore>>,
+    string_table: &mut StringTable,
+) -> Result<(), TemplateNormalizationError> {
+    let mut context = TemplateNormalizationContext {
+        source_file_scope: source_file,
+        path_format_config,
+        project_path_resolver,
+        template_const_loop_iteration_limit,
+        string_table,
+        template_ir_store: Rc::clone(template_ir_store),
+    };
+
+    for field in fields {
+        normalize_expression_templates_with_context(
+            &mut field.value,
+            &mut context,
+            HelperArtifactPolicy::AllowNestedHelperContent,
+        )?;
+    }
+
+    Ok(())
+}
+
+/// Total normalized emitted declaration defaults keyed by declaration path.
+///
+/// WHAT: the function-signature and struct-field maps collected from the once-normalized
+/// emitted AST. A named result keeps each map's role explicit at the synchronization join.
+struct EmittedDeclarationDefaults {
+    function_signatures_by_path: FxHashMap<InternedPath, FunctionSignature>,
+    struct_fields_by_path: FxHashMap<InternedPath, Vec<Declaration>>,
+}
+
+/// Collect normalized function signatures and struct fields from the once-normalized emitted
+/// AST into total lookup maps keyed by declaration path.
+///
+/// WHY: a duplicate emitted path is an internal invariant violation, not a silent overwrite.
+/// Extracting the collection makes that invariant independently testable and keeps the
+/// synchronization orchestration focused on its joins.
+fn collect_emitted_declaration_defaults(
+    emitted_ast: &[AstNode],
+) -> Result<EmittedDeclarationDefaults, CompilerError> {
+    let mut normalized_function_signatures_by_path: FxHashMap<InternedPath, FunctionSignature> =
+        FxHashMap::default();
+    let mut normalized_struct_fields_by_path: FxHashMap<InternedPath, Vec<Declaration>> =
+        FxHashMap::default();
+
+    for node in emitted_ast {
+        if let NodeKind::Function(path, signature, _) = &node.kind {
+            match normalized_function_signatures_by_path.entry(path.to_owned()) {
+                std::collections::hash_map::Entry::Occupied(_) => {
+                    return Err(CompilerError::compiler_error(format!(
+                        "public default synchronization: duplicate emitted function declaration at path {:?}; the emitted AST must not contain two nodes with the same path",
+                        path
+                    )));
+                }
+                std::collections::hash_map::Entry::Vacant(slot) => {
+                    slot.insert(signature.clone());
+                }
+            }
+        } else if let NodeKind::StructDefinition(path, fields) = &node.kind {
+            match normalized_struct_fields_by_path.entry(path.to_owned()) {
+                std::collections::hash_map::Entry::Occupied(_) => {
+                    return Err(CompilerError::compiler_error(format!(
+                        "public default synchronization: duplicate emitted struct declaration at path {:?}; the emitted AST must not contain two nodes with the same path",
+                        path
+                    )));
+                }
+                std::collections::hash_map::Entry::Vacant(slot) => {
+                    slot.insert(fields.clone());
+                }
+            }
+        }
+    }
+
+    Ok(EmittedDeclarationDefaults {
+        function_signatures_by_path: normalized_function_signatures_by_path,
+        struct_fields_by_path: normalized_struct_fields_by_path,
+    })
+}
+
+/// Reject duplicate function paths among the retained root-table receiver methods.
+///
+/// WHAT: each root receiver method must join exactly one primary catalog entry, so a repeated
+/// function path in the root table is an internal invariant violation.
+fn reject_duplicate_receiver_method_paths(
+    receiver_methods: &[ReceiverMethodEntry],
+) -> Result<(), CompilerError> {
+    let mut seen_paths: FxHashSet<&InternedPath> = FxHashSet::default();
+    for entry in receiver_methods {
+        if !seen_paths.insert(&entry.function_path) {
+            return Err(CompilerError::compiler_error(format!(
+                "public default synchronization: a root table receiver method at {:?} is duplicated; each root receiver method must join exactly one catalog entry",
+                entry.function_path
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// Synchronize the receiver catalog secondary indexes as an exact bidirectional invariant.
+///
+/// WHAT: every `by_function_path` primary must join exactly one matching entry under
+/// `(primary.receiver, function_path.name())` in `by_receiver_and_name` and exactly one
+/// matching entry under `function_path.name()` in `by_method_name`. Every secondary entry must
+/// join exactly one primary, be stored under the key matching its own receiver and name, and
+/// carry non-signature metadata consistent with its primary. A missing method name, missing or
+/// duplicate secondary entry, extra secondary entry, wrong receiver/name key, or inconsistent
+/// non-signature metadata is a `CompilerError`. Synchronized signatures are copied in place so
+/// vector order is preserved in every index.
+/// WHY: the catalog is an internal side-table; an inconsistent index is a compiler bug, not a
+/// silent skip. Extracting the synchronization makes the bidirectional invariant testable.
+fn synchronize_receiver_secondary_indexes(
+    catalog: &mut ReceiverMethodCatalog,
+) -> Result<(), CompilerError> {
+    // Validate that every primary joins exactly one secondary entry in each index before
+    // copying any signature.
+    for (function_path, primary) in &catalog.by_function_path {
+        if primary.function_path != *function_path {
+            return Err(CompilerError::compiler_error(format!(
+                "public default synchronization: a receiver catalog by_function_path primary at {:?} carries the different function path {:?}; the map key and entry path must match",
+                function_path, primary.function_path
+            )));
+        }
+
+        let method_name = function_path.name().ok_or_else(|| {
+            CompilerError::compiler_error(format!(
+                "public default synchronization: a receiver catalog by_function_path entry at {:?} has no resolvable method name; every receiver method path must have a final name component",
+                function_path
+            ))
+        })?;
+
+        let receiver_name_entries = catalog
+            .by_receiver_and_name
+            .get(&(primary.receiver.clone(), method_name))
+            .ok_or_else(|| {
+                CompilerError::compiler_error(format!(
+                    "public default synchronization: a receiver catalog by_function_path primary at {:?} has no matching by_receiver_and_name entry; every primary must join exactly one secondary entry",
+                    function_path
+                ))
+            })?;
+        match receiver_name_entries
+            .iter()
+            .filter(|entry| entry.function_path == *function_path)
+            .count()
+        {
+            0 => {
+                return Err(CompilerError::compiler_error(format!(
+                    "public default synchronization: a receiver catalog by_function_path primary at {:?} has no matching by_receiver_and_name entry; every primary must join exactly one secondary entry",
+                    function_path
+                )));
+            }
+            1 => {}
+            count => {
+                return Err(CompilerError::compiler_error(format!(
+                    "public default synchronization: a receiver catalog by_function_path primary at {:?} has {} matching by_receiver_and_name entries; every primary must join exactly one secondary entry",
+                    function_path, count
+                )));
+            }
+        }
+
+        let method_name_entries = catalog.by_method_name.get(&method_name).ok_or_else(|| {
+            CompilerError::compiler_error(format!(
+                "public default synchronization: a receiver catalog by_function_path primary at {:?} has no matching by_method_name entry; every primary must join exactly one secondary entry",
+                function_path
+            ))
+        })?;
+        match method_name_entries
+            .iter()
+            .filter(|entry| entry.function_path == *function_path)
+            .count()
+        {
+            0 => {
+                return Err(CompilerError::compiler_error(format!(
+                    "public default synchronization: a receiver catalog by_function_path primary at {:?} has no matching by_method_name entry; every primary must join exactly one secondary entry",
+                    function_path
+                )));
+            }
+            1 => {}
+            count => {
+                return Err(CompilerError::compiler_error(format!(
+                    "public default synchronization: a receiver catalog by_function_path primary at {:?} has {} matching by_method_name entries; every primary must join exactly one secondary entry",
+                    function_path, count
+                )));
+            }
+        }
+    }
+
+    // Copy synchronized signatures from the primary index into every by_receiver_and_name entry,
+    // validating the key and non-signature metadata of each secondary entry in place.
+    for ((key_receiver, key_name), entries) in &mut catalog.by_receiver_and_name {
+        for entry in entries.iter_mut() {
+            if entry.receiver != *key_receiver {
+                return Err(CompilerError::compiler_error(format!(
+                    "public default synchronization: a receiver catalog by_receiver_and_name entry at {:?} is stored under the wrong receiver key; the entry receiver does not match the index key",
+                    entry.function_path
+                )));
+            }
+            if entry.function_path.name() != Some(*key_name) {
+                return Err(CompilerError::compiler_error(format!(
+                    "public default synchronization: a receiver catalog by_receiver_and_name entry at {:?} is stored under the wrong method-name key; the entry name does not match the index key",
+                    entry.function_path
+                )));
+            }
+            let primary = catalog
+                .by_function_path
+                .get(&entry.function_path)
+                .ok_or_else(|| {
+                    CompilerError::compiler_error(format!(
+                        "public default synchronization: a receiver catalog by_receiver_and_name entry at {:?} has no matching by_function_path primary; every secondary entry must join exactly one primary",
+                        entry.function_path
+                    ))
+                })?;
+            if !secondary_metadata_matches_primary(entry, primary) {
+                return Err(CompilerError::compiler_error(format!(
+                    "public default synchronization: a receiver catalog by_receiver_and_name entry at {:?} has non-signature metadata inconsistent with its by_function_path primary",
+                    entry.function_path
+                )));
+            }
+            entry.signature = primary.signature.clone();
+        }
+    }
+
+    // Copy synchronized signatures from the primary index into every by_method_name entry,
+    // validating the key and non-signature metadata of each secondary entry in place.
+    for (key_name, entries) in &mut catalog.by_method_name {
+        for entry in entries.iter_mut() {
+            if entry.function_path.name() != Some(*key_name) {
+                return Err(CompilerError::compiler_error(format!(
+                    "public default synchronization: a receiver catalog by_method_name entry at {:?} is stored under the wrong method-name key; the entry name does not match the index key",
+                    entry.function_path
+                )));
+            }
+            let primary = catalog
+                .by_function_path
+                .get(&entry.function_path)
+                .ok_or_else(|| {
+                    CompilerError::compiler_error(format!(
+                        "public default synchronization: a receiver catalog by_method_name entry at {:?} has no matching by_function_path primary; every secondary entry must join exactly one primary",
+                        entry.function_path
+                    ))
+                })?;
+            if !secondary_metadata_matches_primary(entry, primary) {
+                return Err(CompilerError::compiler_error(format!(
+                    "public default synchronization: a receiver catalog by_method_name entry at {:?} has non-signature metadata inconsistent with its by_function_path primary",
+                    entry.function_path
+                )));
+            }
+            entry.signature = primary.signature.clone();
+        }
+    }
+
+    Ok(())
+}
+
+/// Compare the non-signature metadata of a secondary catalog entry against its primary.
+///
+/// WHAT: `function_path` is the lookup key by construction, so only `receiver`, `source_file`
+/// and `receiver_mutable` are compared. A mismatch means the secondary index was built or
+/// mutated inconsistently with the primary index.
+fn secondary_metadata_matches_primary(
+    secondary: &ReceiverMethodEntry,
+    primary: &ReceiverMethodEntry,
+) -> bool {
+    secondary.receiver == primary.receiver
+        && secondary.source_file == primary.source_file
+        && secondary.receiver_mutable == primary.receiver_mutable
 }
 
 /// Normalizes templates in an AST node by routing to category-specific handlers.
@@ -160,7 +719,16 @@ fn normalize_ast_node_templates(
             normalize_expression_templates(value, context)
         }
 
-        NodeKind::Function(_, _, body) => normalize_nodes(body, context),
+        NodeKind::Function(_, signature, body) => {
+            for parameter in &mut signature.parameters {
+                normalize_expression_templates_with_context(
+                    &mut parameter.value,
+                    context,
+                    HelperArtifactPolicy::AllowNestedHelperContent,
+                )?;
+            }
+            normalize_nodes(body, context)
+        }
 
         NodeKind::Return(values) => normalize_expressions(values, context),
 
@@ -1024,7 +1592,6 @@ fn normalize_owned_runtime_template_node_for_hir(
 
     Ok(())
 }
-
 #[cfg(test)]
 #[path = "tests/normalize_ast_tests.rs"]
 mod normalize_ast_tests;

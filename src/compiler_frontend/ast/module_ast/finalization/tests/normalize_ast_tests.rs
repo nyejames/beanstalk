@@ -34,6 +34,7 @@ use crate::compiler_frontend::ast::templates::{
 };
 use crate::compiler_frontend::compiler_messages::DiagnosticPayload;
 use crate::compiler_frontend::datatypes::DataType;
+use crate::compiler_frontend::datatypes::ReceiverKey;
 use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
@@ -2846,5 +2847,479 @@ fn helper_artifact_rejected_after_final_view_traversal() {
             }
         ),
         "diagnostic must be HelperOutsideWrapperSlot"
+    );
+}
+
+#[test]
+fn retained_signature_default_normalizes_template_to_string_slice() {
+    // Proves the retained-only generic default normalization path exercised by generic
+    // declarations without an emitted node: a `FunctionSignature` parameter whose default is a
+    // live TIR template normalizes to a TIR-free `StringSlice` through the real
+    // `normalize_retained_signature_defaults` helper used by
+    // `synchronize_normalized_public_defaults`, not through a direct
+    // `normalize_expression_templates` call labelled generic.
+    let mut string_table = StringTable::new();
+    let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
+    let context = TemplateViewContext::default();
+    let text = string_table.intern("generic default text");
+    let template = registered_text_template(text, context, &template_ir_store, &string_table);
+
+    let parameter_default = Expression::template(template, ValueMode::ImmutableOwned);
+    let mut signature = FunctionSignature {
+        parameters: vec![Declaration {
+            id: InternedPath::new(),
+            value: parameter_default,
+        }],
+        returns: Vec::new(),
+    };
+
+    let project_path_resolver = test_project_path_resolver();
+    let path_format_config = PathStringFormatConfig::default();
+    let source_file = InternedPath::new();
+
+    normalize_retained_signature_defaults(
+        &mut signature,
+        &source_file,
+        &project_path_resolver,
+        &path_format_config,
+        DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
+        &template_ir_store,
+        &mut string_table,
+    )
+    .expect("a const text template default should normalize to a folded string");
+
+    assert!(
+        matches!(
+            &signature.parameters[0].value.kind,
+            ExpressionKind::StringSlice(normalized) if *normalized == text,
+        ),
+        "a retained template default must normalize to a TIR-free StringSlice, got {:?}",
+        signature.parameters[0].value.kind
+    );
+}
+
+// ---------------------------------------------------------------------------
+//  Emitted-default collection and receiver secondary-index synchronization
+// ---------------------------------------------------------------------------
+//
+// Focused tests for the extracted `collect_emitted_declaration_defaults` and
+// `synchronize_receiver_secondary_indexes` helpers. These are internal
+// side-table invariants integration output cannot inspect, so they own a
+// focused test beside the synchronization owner.
+
+fn function_node(path: InternedPath) -> AstNode {
+    AstNode {
+        kind: NodeKind::Function(
+            path,
+            FunctionSignature {
+                parameters: Vec::new(),
+                returns: Vec::new(),
+            },
+            Vec::new(),
+        ),
+        location: SourceLocation::default(),
+        scope: InternedPath::new(),
+    }
+}
+
+fn struct_node(path: InternedPath) -> AstNode {
+    AstNode {
+        kind: NodeKind::StructDefinition(path, Vec::new()),
+        location: SourceLocation::default(),
+        scope: InternedPath::new(),
+    }
+}
+
+fn marker_signature(parameter_count: usize) -> FunctionSignature {
+    FunctionSignature {
+        parameters: (0..parameter_count)
+            .map(|_| Declaration {
+                id: InternedPath::new(),
+                value: Expression::no_value(
+                    SourceLocation::default(),
+                    DataType::Inferred,
+                    ValueMode::default(),
+                ),
+            })
+            .collect(),
+        returns: Vec::new(),
+    }
+}
+
+fn receiver_entry(
+    function_path: InternedPath,
+    receiver: ReceiverKey,
+    source_file: InternedPath,
+    signature: FunctionSignature,
+) -> ReceiverMethodEntry {
+    ReceiverMethodEntry {
+        function_path,
+        receiver,
+        source_file,
+        receiver_mutable: false,
+        signature,
+    }
+}
+
+#[test]
+fn collect_emitted_declaration_defaults_rejects_duplicate_function_paths() {
+    let mut string_table = StringTable::new();
+    let path = InternedPath::from_single_str("dup_func", &mut string_table);
+    let emitted = vec![function_node(path.clone()), function_node(path.clone())];
+
+    let result = collect_emitted_declaration_defaults(&emitted);
+
+    assert!(
+        result.is_err(),
+        "duplicate emitted function declaration paths must be rejected"
+    );
+}
+
+#[test]
+fn collect_emitted_declaration_defaults_rejects_duplicate_struct_paths() {
+    let mut string_table = StringTable::new();
+    let path = InternedPath::from_single_str("dup_struct", &mut string_table);
+    let emitted = vec![struct_node(path.clone()), struct_node(path.clone())];
+
+    let result = collect_emitted_declaration_defaults(&emitted);
+
+    assert!(
+        result.is_err(),
+        "duplicate emitted struct declaration paths must be rejected"
+    );
+}
+
+#[test]
+fn synchronize_receiver_secondary_indexes_copies_signatures_and_preserves_order() {
+    let mut string_table = StringTable::new();
+    let struct_a = InternedPath::from_single_str("StructA", &mut string_table);
+    let struct_b = InternedPath::from_single_str("StructB", &mut string_table);
+    let source_file = InternedPath::from_single_str("root.bst", &mut string_table);
+
+    // Both methods share the bare method name "shared" but live on different receivers, so
+    // by_method_name holds two entries under one name while by_receiver_and_name splits them
+    // across two keys. The paths differ by their receiver parent, so the function paths are
+    // distinct while the method names match. The insertion order [a, b] must survive
+    // synchronization.
+    let method_a = struct_a.join_str("shared", &mut string_table);
+    let method_b = struct_b.join_str("shared", &mut string_table);
+    let shared_name = method_a
+        .name()
+        .expect("multi-component path has a final name");
+
+    let primary_a = receiver_entry(
+        method_a.clone(),
+        ReceiverKey::Struct(struct_a.clone()),
+        source_file.clone(),
+        marker_signature(2),
+    );
+    let primary_b = receiver_entry(
+        method_b.clone(),
+        ReceiverKey::Struct(struct_b.clone()),
+        source_file.clone(),
+        marker_signature(3),
+    );
+
+    // Secondary entries intentionally carry stale zero-parameter signatures so the copy from
+    // the primary index is observable.
+    let secondary_a = receiver_entry(
+        method_a.clone(),
+        ReceiverKey::Struct(struct_a.clone()),
+        source_file.clone(),
+        marker_signature(0),
+    );
+    let secondary_b = receiver_entry(
+        method_b.clone(),
+        ReceiverKey::Struct(struct_b.clone()),
+        source_file.clone(),
+        marker_signature(0),
+    );
+
+    let mut catalog = ReceiverMethodCatalog::default();
+    catalog.by_function_path.insert(method_a.clone(), primary_a);
+    catalog.by_function_path.insert(method_b.clone(), primary_b);
+    catalog.by_receiver_and_name.insert(
+        (ReceiverKey::Struct(struct_a.clone()), shared_name),
+        vec![secondary_a],
+    );
+    catalog.by_receiver_and_name.insert(
+        (ReceiverKey::Struct(struct_b.clone()), shared_name),
+        vec![secondary_b],
+    );
+    catalog.by_method_name.insert(
+        shared_name,
+        vec![
+            receiver_entry(
+                method_a.clone(),
+                ReceiverKey::Struct(struct_a.clone()),
+                source_file.clone(),
+                marker_signature(0),
+            ),
+            receiver_entry(
+                method_b.clone(),
+                ReceiverKey::Struct(struct_b.clone()),
+                source_file.clone(),
+                marker_signature(0),
+            ),
+        ],
+    );
+
+    synchronize_receiver_secondary_indexes(&mut catalog)
+        .expect("a consistent catalog must synchronize without error");
+
+    // by_receiver_and_name entries received the synchronized primary signatures.
+    let synced_a =
+        &catalog.by_receiver_and_name[&(ReceiverKey::Struct(struct_a.clone()), shared_name)][0];
+    assert_eq!(
+        synced_a.signature.parameters.len(),
+        2,
+        "by_receiver_and_name entry for method_a must copy the primary signature"
+    );
+    let synced_b =
+        &catalog.by_receiver_and_name[&(ReceiverKey::Struct(struct_b.clone()), shared_name)][0];
+    assert_eq!(
+        synced_b.signature.parameters.len(),
+        3,
+        "by_receiver_and_name entry for method_b must copy the primary signature"
+    );
+
+    // by_method_name preserves insertion order [method_a, method_b] and copied signatures.
+    let name_entries = &catalog.by_method_name[&shared_name];
+    assert_eq!(
+        name_entries.len(),
+        2,
+        "both shared-name methods are retained"
+    );
+    assert_eq!(
+        name_entries[0].function_path, method_a,
+        "vector order is preserved"
+    );
+    assert_eq!(
+        name_entries[1].function_path, method_b,
+        "vector order is preserved"
+    );
+    assert_eq!(
+        name_entries[0].signature.parameters.len(),
+        2,
+        "by_method_name entry for method_a must copy the primary signature"
+    );
+    assert_eq!(
+        name_entries[1].signature.parameters.len(),
+        3,
+        "by_method_name entry for method_b must copy the primary signature"
+    );
+}
+
+#[test]
+fn synchronize_receiver_secondary_indexes_rejects_missing_by_receiver_and_name_entry() {
+    let mut string_table = StringTable::new();
+    let struct_a = InternedPath::from_single_str("StructA", &mut string_table);
+    let source_file = InternedPath::from_single_str("root.bst", &mut string_table);
+    let method_a = InternedPath::from_single_str("method", &mut string_table);
+    let method_name = method_a.name().expect("single-component path has a name");
+
+    let primary = receiver_entry(
+        method_a.clone(),
+        ReceiverKey::Struct(struct_a.clone()),
+        source_file.clone(),
+        marker_signature(1),
+    );
+
+    let mut catalog = ReceiverMethodCatalog::default();
+    catalog.by_function_path.insert(method_a.clone(), primary);
+    // Omit by_receiver_and_name; by_method_name is present and consistent.
+    catalog.by_method_name.insert(
+        method_name,
+        vec![receiver_entry(
+            method_a.clone(),
+            ReceiverKey::Struct(struct_a.clone()),
+            source_file.clone(),
+            marker_signature(0),
+        )],
+    );
+
+    let result = synchronize_receiver_secondary_indexes(&mut catalog);
+
+    assert!(
+        result.is_err(),
+        "a primary with no matching by_receiver_and_name entry must be rejected"
+    );
+}
+
+#[test]
+fn synchronize_receiver_secondary_indexes_rejects_duplicate_by_receiver_and_name_entry() {
+    let mut string_table = StringTable::new();
+    let struct_a = InternedPath::from_single_str("StructA", &mut string_table);
+    let source_file = InternedPath::from_single_str("root.bst", &mut string_table);
+    let method_a = InternedPath::from_single_str("method", &mut string_table);
+    let method_name = method_a.name().expect("single-component path has a name");
+
+    let primary = receiver_entry(
+        method_a.clone(),
+        ReceiverKey::Struct(struct_a.clone()),
+        source_file.clone(),
+        marker_signature(1),
+    );
+    let duplicate = receiver_entry(
+        method_a.clone(),
+        ReceiverKey::Struct(struct_a.clone()),
+        source_file.clone(),
+        marker_signature(0),
+    );
+
+    let mut catalog = ReceiverMethodCatalog::default();
+    catalog.by_function_path.insert(method_a.clone(), primary);
+    catalog.by_receiver_and_name.insert(
+        (ReceiverKey::Struct(struct_a.clone()), method_name),
+        vec![duplicate.clone(), duplicate],
+    );
+    catalog.by_method_name.insert(
+        method_name,
+        vec![receiver_entry(
+            method_a.clone(),
+            ReceiverKey::Struct(struct_a.clone()),
+            source_file.clone(),
+            marker_signature(0),
+        )],
+    );
+
+    let result = synchronize_receiver_secondary_indexes(&mut catalog);
+
+    assert!(
+        result.is_err(),
+        "two by_receiver_and_name entries joining one primary must be rejected"
+    );
+}
+
+#[test]
+fn synchronize_receiver_secondary_indexes_rejects_wrong_receiver_key() {
+    let mut string_table = StringTable::new();
+    let struct_a = InternedPath::from_single_str("StructA", &mut string_table);
+    let struct_b = InternedPath::from_single_str("StructB", &mut string_table);
+    let source_file = InternedPath::from_single_str("root.bst", &mut string_table);
+    let method_a = InternedPath::from_single_str("method", &mut string_table);
+    let method_name = method_a.name().expect("single-component path has a name");
+
+    // The primary is filed under StructA, and by_receiver_and_name stores the entry under the
+    // matching (StructA, name) key, but the entry itself claims receiver StructB. The primary
+    // validation passes (it finds the entry by function path), and the secondary loop must
+    // reject the wrong receiver key.
+    let primary = receiver_entry(
+        method_a.clone(),
+        ReceiverKey::Struct(struct_a.clone()),
+        source_file.clone(),
+        marker_signature(1),
+    );
+    let wrong_key_entry = receiver_entry(
+        method_a.clone(),
+        ReceiverKey::Struct(struct_b.clone()),
+        source_file.clone(),
+        marker_signature(0),
+    );
+
+    let mut catalog = ReceiverMethodCatalog::default();
+    catalog.by_function_path.insert(method_a.clone(), primary);
+    catalog.by_receiver_and_name.insert(
+        (ReceiverKey::Struct(struct_a.clone()), method_name),
+        vec![wrong_key_entry],
+    );
+    catalog.by_method_name.insert(
+        method_name,
+        vec![receiver_entry(
+            method_a.clone(),
+            ReceiverKey::Struct(struct_a.clone()),
+            source_file.clone(),
+            marker_signature(0),
+        )],
+    );
+
+    let result = synchronize_receiver_secondary_indexes(&mut catalog);
+
+    assert!(
+        result.is_err(),
+        "a by_receiver_and_name entry stored under the wrong receiver key must be rejected"
+    );
+}
+
+#[test]
+fn synchronize_receiver_secondary_indexes_rejects_primary_path_key_mismatch() {
+    let mut string_table = StringTable::new();
+    let receiver_path = InternedPath::from_single_str("Counter", &mut string_table);
+    let indexed_path = InternedPath::from_single_str("indexed", &mut string_table);
+    let claimed_path = InternedPath::from_single_str("claimed", &mut string_table);
+    let source_file = InternedPath::from_single_str("root.bst", &mut string_table);
+
+    let primary = receiver_entry(
+        claimed_path,
+        ReceiverKey::Struct(receiver_path),
+        source_file,
+        marker_signature(1),
+    );
+
+    let mut catalog = ReceiverMethodCatalog::default();
+    catalog.by_function_path.insert(indexed_path, primary);
+
+    let result = synchronize_receiver_secondary_indexes(&mut catalog);
+
+    assert!(
+        result.is_err(),
+        "a by_function_path map key that differs from its entry path must be rejected"
+    );
+}
+
+#[test]
+fn synchronize_receiver_secondary_indexes_rejects_extra_secondary_entry() {
+    let mut string_table = StringTable::new();
+    let struct_a = InternedPath::from_single_str("StructA", &mut string_table);
+    let struct_b = InternedPath::from_single_str("StructB", &mut string_table);
+    let source_file = InternedPath::from_single_str("root.bst", &mut string_table);
+    let method_a = InternedPath::from_single_str("method", &mut string_table);
+    let orphan = InternedPath::from_single_str("orphan", &mut string_table);
+    let method_name = method_a.name().expect("single-component path has a name");
+    let orphan_name = orphan.name().expect("single-component path has a name");
+
+    let primary = receiver_entry(
+        method_a.clone(),
+        ReceiverKey::Struct(struct_a.clone()),
+        source_file.clone(),
+        marker_signature(1),
+    );
+
+    let mut catalog = ReceiverMethodCatalog::default();
+    catalog.by_function_path.insert(method_a.clone(), primary);
+    catalog.by_receiver_and_name.insert(
+        (ReceiverKey::Struct(struct_a.clone()), method_name),
+        vec![receiver_entry(
+            method_a.clone(),
+            ReceiverKey::Struct(struct_a.clone()),
+            source_file.clone(),
+            marker_signature(0),
+        )],
+    );
+    catalog.by_method_name.insert(
+        method_name,
+        vec![receiver_entry(
+            method_a.clone(),
+            ReceiverKey::Struct(struct_a.clone()),
+            source_file.clone(),
+            marker_signature(0),
+        )],
+    );
+    // An extra by_receiver_and_name entry whose function path is not a primary.
+    catalog.by_receiver_and_name.insert(
+        (ReceiverKey::Struct(struct_b.clone()), orphan_name),
+        vec![receiver_entry(
+            orphan.clone(),
+            ReceiverKey::Struct(struct_b.clone()),
+            source_file.clone(),
+            marker_signature(0),
+        )],
+    );
+
+    let result = synchronize_receiver_secondary_indexes(&mut catalog);
+
+    assert!(
+        result.is_err(),
+        "a by_receiver_and_name entry with no matching by_function_path primary must be rejected"
     );
 }

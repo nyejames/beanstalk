@@ -45,6 +45,8 @@
 
 use crate::compiler_frontend::ast::ReceiverMethodEntry;
 use crate::compiler_frontend::ast::ResolvedTraitSourceFact;
+use crate::compiler_frontend::ast::ast_nodes::Declaration;
+use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::statements::functions::{
     FunctionSignature, ReturnChannel, ReturnSlot,
 };
@@ -66,16 +68,19 @@ use crate::compiler_frontend::datatypes::ids::{
     GenericParameterId, GenericParameterListId, NominalTypeId, TypeId,
 };
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
+use crate::compiler_frontend::folded_value::{
+    PublicFoldedValue, convert_expression_to_folded_value,
+};
 use crate::compiler_frontend::semantic_identity::{
     DefinedPublicExportOrigins, ExportBinding, OriginConstantId, OriginDeclarationId,
     OriginFunctionId, OriginTraitId, OriginTypeCategory, OriginTypeId, ReceiverSurfaceOrigins,
 };
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
-use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::traits::environment::CoreTraitKind;
 use crate::compiler_frontend::traits::ids::TraitId;
 
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 // ---------------------------------------------------------------------------
 //  Stable type-surface value types
@@ -104,10 +109,20 @@ pub(crate) struct DefinedPublicTypeSurface {
 /// WHAT: a draft/public semantic leaf type that crosses the draft boundary inside
 /// [`PublicFunctionSemantics`] and [`PublicReceiverMethodSemantics`]. `name` is the owned
 /// authored parameter name, or `None` when the source signature omits it.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct PublicParameterTypeSlot {
     pub(crate) name: Option<String>,
     pub(crate) type_identity: CanonicalTypeIdentity,
+    /// The owned folded default value, or `None` when the parameter has no default.
+    ///
+    /// WHAT: retains the compile-time default expression as an owned backend-neutral
+    /// [`PublicFoldedValue`]. Constant references are resolved and inlined by the
+    /// established function-signature and struct-default owners before finalization;
+    /// finalization normalizes template payloads and synchronizes emitted declarations
+    /// into the retained root table and receiver catalog. The receiver parameter itself
+    /// normally has no default and remains `None`. Choice payload fields remain
+    /// default-free.
+    pub(crate) folded_default: Option<PublicFoldedValue>,
 }
 
 /// One return slot in a public function or receiver-method semantic record.
@@ -155,10 +170,19 @@ pub(crate) struct DefinedPublicFunctionTypeSurface {
 ///
 /// WHAT: a draft/public semantic leaf type that crosses the draft boundary inside
 /// [`PublicStructSemantics`] and [`PublicChoiceVariantSurface`].
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct PublicFieldTypeSlot {
     pub(crate) name: String,
     pub(crate) type_identity: CanonicalTypeIdentity,
+    /// The owned folded default value, or `None` when the field has no default.
+    ///
+    /// WHAT: retains the compile-time default expression as an owned backend-neutral
+    /// [`PublicFoldedValue`]. Constant references are resolved and inlined by the
+    /// established function-signature and struct-default owners before finalization;
+    /// finalization normalizes template payloads and synchronizes emitted declarations
+    /// into the retained root table and receiver catalog. Choice payload fields remain
+    /// default-free.
+    pub(crate) folded_default: Option<PublicFoldedValue>,
 }
 
 /// One choice variant in a public choice semantic record.
@@ -512,7 +536,7 @@ pub(crate) fn build_defined_public_type_surface(
                     string_table,
                 )?);
             }
-            ResolvedPublicTypeRootKind::Struct { type_id } => {
+            ResolvedPublicTypeRootKind::Struct { type_id, fields } => {
                 let OriginDeclarationId::Type(type_origin) = binding.origin() else {
                     return Err(origin_category_mismatch_error("struct", binding));
                 };
@@ -522,6 +546,7 @@ pub(crate) fn build_defined_public_type_surface(
                 nominal_types.push(project_struct(
                     type_origin.clone(),
                     *type_id,
+                    fields,
                     type_environment,
                     &projection_context,
                     &root_table.trait_source_facts,
@@ -673,7 +698,7 @@ fn register_generic_parameter_origins(
                 ..
             } => {}
 
-            ResolvedPublicTypeRootKind::Struct { type_id } => {
+            ResolvedPublicTypeRootKind::Struct { type_id, .. } => {
                 register_nominal_generic_origins(
                     generic_resolver,
                     *type_id,
@@ -914,9 +939,16 @@ fn project_free_function(
                 type_environment,
                 context,
             )?;
+            let folded_default = project_folded_default(
+                &declaration.value,
+                type_environment,
+                context,
+                string_table,
+            )?;
             Ok(PublicParameterTypeSlot {
                 name,
                 type_identity,
+                folded_default,
             })
         })
         .collect::<Result<Vec<_>, CompilerError>>()?;
@@ -977,6 +1009,7 @@ fn project_return_slots(
 fn project_struct(
     type_origin: OriginTypeId,
     type_id: TypeId,
+    fields: &[Declaration],
     type_environment: &TypeEnvironment,
     context: &CanonicalTypeProjectionContext,
     trait_source_facts: &FxHashMap<TraitId, ResolvedTraitSourceFact>,
@@ -1027,7 +1060,14 @@ fn project_struct(
         public_source_trait_origins,
     )?;
 
-    let fields = project_fields(struct_definition, type_environment, context, string_table)?;
+    let fields = project_fields_with_defaults(
+        type_id,
+        struct_definition,
+        fields,
+        type_environment,
+        context,
+        string_table,
+    )?;
 
     Ok(DefinedPublicNominalTypeSurface {
         origin: type_origin,
@@ -1103,36 +1143,118 @@ fn project_choice(
     })
 }
 
-/// Project struct fields into stable field type slots.
-fn project_fields(
+/// Total-join retained struct field declarations against the canonical
+/// [`StructTypeDefinition`] fields and project stable field type slots with folded defaults.
+///
+/// WHAT: the canonical `StructTypeDefinition.fields` is the sole type authority for field
+/// names, order and `TypeId`s. The retained `Declaration` values supply only the folded
+/// default expression for each field. The join rejects count, name/order, duplicate-name and
+/// declaration-value `TypeId` mismatches with a `CompilerError` so the retained declaration
+/// vector is never trusted as a parallel type authority. `root_type_id` is the canonical
+/// `TypeId` for the struct root, used in diagnostics; `StructTypeDefinition.id` is a nominal
+/// ID and does not identify the root `TypeId`.
+fn project_fields_with_defaults(
+    root_type_id: TypeId,
     struct_definition: &StructTypeDefinition,
+    field_declarations: &[Declaration],
     type_environment: &TypeEnvironment,
     context: &CanonicalTypeProjectionContext,
     string_table: &StringTable,
 ) -> Result<Vec<PublicFieldTypeSlot>, CompilerError> {
-    let mut fields = Vec::with_capacity(struct_definition.fields.len());
-    for field in struct_definition.fields.iter() {
-        let name = field
+    if struct_definition.fields.len() != field_declarations.len() {
+        return Err(CompilerError::compiler_error(format!(
+            "defined public type-surface projection: struct root TypeId({}) has {} canonical fields but {} retained field declarations; the retained declaration count must match the canonical struct definition",
+            root_type_id.0,
+            struct_definition.fields.len(),
+            field_declarations.len(),
+        )));
+    }
+
+    let mut seen_names: FxHashSet<StringId> = FxHashSet::default();
+
+    let mut projected_fields = Vec::with_capacity(struct_definition.fields.len());
+    for (canonical_field, declaration) in struct_definition
+        .fields
+        .iter()
+        .zip(field_declarations.iter())
+    {
+        let canonical_name_id = canonical_field.name.name();
+        let declaration_name_id = declaration.id.name();
+
+        if canonical_name_id != declaration_name_id {
+            return Err(CompilerError::compiler_error(format!(
+                "defined public type-surface projection: struct root TypeId({}) has a field name or order mismatch at canonical field {:?}; the retained declaration carries {:?}; the retained declarations must match the canonical field order",
+                root_type_id.0, canonical_field.name, declaration.id,
+            )));
+        }
+
+        if let Some(name_id) = canonical_name_id
+            && !seen_names.insert(name_id)
+        {
+            return Err(CompilerError::compiler_error(format!(
+                "defined public type-surface projection: struct root TypeId({}) has a duplicate \
+                 field name {:?}; canonical struct definitions must not contain duplicates",
+                root_type_id.0, canonical_field.name,
+            )));
+        }
+
+        let name = canonical_field
             .name
             .name_str(string_table)
             .map(|name| name.to_owned())
             .ok_or_else(|| {
                 CompilerError::compiler_error(format!(
-                    "defined public type-surface projection: a struct field has no resolvable \
-                     name (path: {:?})",
-                    field.name
+                    "defined public type-surface projection: a struct field has no resolvable name (path: {:?})",
+                    canonical_field.name
                 ))
             })?;
 
-        let type_identity =
-            project_type_id_to_canonical_identity(field.type_id, type_environment, context)?;
+        if canonical_field.type_id != declaration.value.type_id {
+            return Err(CompilerError::compiler_error(format!(
+                "defined public type-surface projection: struct root TypeId({}) field {:?} has a TypeId mismatch: canonical TypeId({}) vs retained declaration TypeId({}); the retained declaration must agree with the canonical struct definition",
+                root_type_id.0,
+                canonical_field.name,
+                canonical_field.type_id.0,
+                declaration.value.type_id.0,
+            )));
+        }
 
-        fields.push(PublicFieldTypeSlot {
+        let type_identity = project_type_id_to_canonical_identity(
+            canonical_field.type_id,
+            type_environment,
+            context,
+        )?;
+
+        let folded_default =
+            project_folded_default(&declaration.value, type_environment, context, string_table)?;
+        projected_fields.push(PublicFieldTypeSlot {
             name,
             type_identity,
+            folded_default,
         });
     }
-    Ok(fields)
+    Ok(projected_fields)
+}
+
+/// Project one parameter or field default expression to an owned [`PublicFoldedValue`].
+///
+/// WHAT: a NoValue expression means the slot has no default and returns None. Any other
+/// expression kind is converted through the shared folded-value converter, which expects the
+/// expression to be already normalized: templates folded to StringSlice by finalization and
+/// constant references resolved and inlined by the established function-signature and
+/// struct-default owners before finalization. A Template or Reference reaching this boundary
+/// is an internal CompilerError naming the invariant violation.
+fn project_folded_default(
+    expression: &Expression,
+    type_environment: &TypeEnvironment,
+    context: &CanonicalTypeProjectionContext,
+    string_table: &StringTable,
+) -> Result<Option<PublicFoldedValue>, CompilerError> {
+    if matches!(expression.kind, ExpressionKind::NoValue) {
+        return Ok(None);
+    }
+    convert_expression_to_folded_value(expression, type_environment, string_table, context)
+        .map(Some)
 }
 
 /// Project choice variants into stable variant type surfaces.
@@ -1172,6 +1294,7 @@ fn project_choice_variants(
                     projected_fields.push(PublicFieldTypeSlot {
                         name: field_name,
                         type_identity,
+                        folded_default: None,
                     });
                 }
                 projected_fields
@@ -1273,9 +1396,16 @@ fn project_receiver_methods(
                         type_environment,
                         context,
                     )?;
+                    let folded_default = project_folded_default(
+                        &declaration.value,
+                        type_environment,
+                        context,
+                        string_table,
+                    )?;
                     Ok(PublicParameterTypeSlot {
                         name,
                         type_identity,
+                        folded_default,
                     })
                 })
                 .collect::<Result<Vec<_>, CompilerError>>()?;

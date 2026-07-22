@@ -9,6 +9,7 @@
 //! donor-local AST data consumed before HIR; it never enters `CompiledModuleResult`,
 //! `Module`, or a cross-module interface.
 
+use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::generic_functions::GenericFunctionTemplate;
 use crate::compiler_frontend::ast::module_ast::environment::TopLevelDeclarationTable;
 use crate::compiler_frontend::ast::module_ast::scope_context::ReceiverMethodCatalog;
@@ -48,8 +49,16 @@ pub(crate) enum ResolvedPublicTypeRootKind {
         generic_parameter_list_id: Option<GenericParameterListId>,
     },
 
-    /// Public nominal struct with its canonical `TypeId`.
-    Struct { type_id: TypeId },
+    /// Public nominal struct with its canonical `TypeId` and resolved field declarations.
+    ///
+    /// WHAT: carries the resolved field `Declaration` values so field defaults (compile-time
+    /// expressions in each `Declaration.value`) survive alongside the `TypeId` for later
+    /// default projection. Choice payload fields remain default-free and do not need a
+    /// retained declaration copy.
+    Struct {
+        type_id: TypeId,
+        fields: Vec<Declaration>,
+    },
 
     /// Public nominal choice with its canonical `TypeId`.
     Choice { type_id: TypeId },
@@ -120,6 +129,7 @@ pub(crate) struct ResolvedPublicTypeRootTable {
 /// inputs named makes that boundary easier to audit than a long positional list.
 pub(crate) struct BuildResolvedPublicTypeRootsInput<'a> {
     pub sorted_headers: &'a [Header],
+    pub resolved_struct_fields_by_path: &'a FxHashMap<InternedPath, Vec<Declaration>>,
     pub resolved_function_signatures_by_path:
         &'a FxHashMap<InternedPath, ResolvedFunctionSignature>,
     pub nominal_type_ids_by_path: &'a FxHashMap<InternedPath, TypeId>,
@@ -151,6 +161,7 @@ pub(crate) fn build_resolved_public_type_roots(
 ) -> Result<ResolvedPublicTypeRootTable, CompilerError> {
     let BuildResolvedPublicTypeRootsInput {
         sorted_headers,
+        resolved_struct_fields_by_path,
         resolved_function_signatures_by_path,
         nominal_type_ids_by_path,
         resolved_type_aliases_by_path,
@@ -206,9 +217,13 @@ pub(crate) fn build_resolved_public_type_roots(
                     return Err(missing_nominal_type_id(path, string_table));
                 };
                 public_nominal_paths.insert(path.to_owned());
+                let fields = resolved_struct_fields_by_path
+                    .get(path)
+                    .cloned()
+                    .ok_or_else(|| missing_resolved_struct_fields(path, string_table))?;
                 roots.push(ResolvedPublicTypeRoot {
                     path: path.to_owned(),
-                    kind: ResolvedPublicTypeRootKind::Struct { type_id },
+                    kind: ResolvedPublicTypeRootKind::Struct { type_id, fields },
                 });
             }
 
@@ -393,7 +408,7 @@ fn collect_bound_trait_ids_from_roots(
                     &mut bound_trait_ids,
                 )?;
             }
-            ResolvedPublicTypeRootKind::Struct { type_id } => {
+            ResolvedPublicTypeRootKind::Struct { type_id, .. } => {
                 if let Some(list_id) =
                     nominal_generic_parameter_list_id(type_environment, *type_id)?
                 {
@@ -511,6 +526,16 @@ fn missing_resolved_function_signature(
 fn missing_nominal_type_id(path: &InternedPath, string_table: &StringTable) -> CompilerError {
     CompilerError::compiler_error(format!(
         "Public active-root nominal declaration '{}' had no canonical TypeId during root-table construction.",
+        path.to_string(string_table)
+    ))
+}
+
+fn missing_resolved_struct_fields(
+    path: &InternedPath,
+    string_table: &StringTable,
+) -> CompilerError {
+    CompilerError::compiler_error(format!(
+        "Public active-root struct '{}' had no resolved field declarations during root-table construction; every public struct must have an entry, including an empty vector for an empty struct.",
         path.to_string(string_table)
     ))
 }

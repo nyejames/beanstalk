@@ -17,6 +17,7 @@ pub(crate) mod builtins;
 pub(crate) mod canonical_type_identity;
 pub(crate) mod defined_public_export_origins;
 pub(crate) mod defined_public_type_surface;
+pub(crate) mod folded_value;
 pub(crate) mod instrumentation;
 pub(crate) mod keywords;
 pub(crate) mod public_interface_draft;
