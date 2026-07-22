@@ -42,9 +42,9 @@ theme_css #= [docs_font, $css:
                 ),
                 linear-gradient(
                     145deg,
-                    #0c1d17 0%,
-                    #101a18 48%,
-                    #081606 100%
+                    #0c1711 0%,
+                    #1b2019 48%,
+                    #081b06 100%
                 );
 
             background-repeat: no-repeat;
@@ -66,10 +66,10 @@ theme_css #= [docs_font, $css:
                 ),
                 linear-gradient(
                     145deg,
-                    #baf6d4 0%,
-                    #eeffe3 17%,
-                    #e2ffe2 77%,
-                    #b1fcec 100%
+                    #dcf9d3 0%,
+                    #f5f5f5 27%,
+                    #e6f2e6 86%,
+                    #ade8cd 100%
                 );
 
             background-repeat: no-repeat;
