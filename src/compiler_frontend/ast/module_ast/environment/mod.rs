@@ -13,6 +13,7 @@ mod function_signatures;
 mod input;
 mod lookups;
 mod public_surface;
+pub(in crate::compiler_frontend::ast) mod resolved_public_trait_roots;
 pub(in crate::compiler_frontend::ast) mod resolved_public_type_roots;
 mod traits;
 mod type_aliases;
@@ -27,6 +28,14 @@ pub(crate) use declaration_semantics::{DeclarationSemanticKind, DeclarationSeman
 pub(crate) use declaration_table::TopLevelDeclarationTable;
 pub(in crate::compiler_frontend::ast) use input::AstEnvironmentInput;
 pub(in crate::compiler_frontend::ast) use lookups::{AstModuleEnvironment, AstModuleLookups};
+pub(crate) use resolved_public_trait_roots::{
+    AstPublicInterfaceProjectionInput, ResolvedPublicTraitRoot, ResolvedTraitRequirementFact,
+    TraitReceiverAccessKind, build_resolved_public_trait_roots,
+};
+#[cfg(test)]
+pub(crate) use resolved_public_trait_roots::{
+    ResolvedTraitParameterFact, ResolvedTraitReceiverFact, ResolvedTraitReturnFact,
+};
 pub(in crate::compiler_frontend::ast) use resolved_public_type_roots::{
     BuildResolvedPublicTypeRootsInput, build_resolved_public_type_roots,
 };

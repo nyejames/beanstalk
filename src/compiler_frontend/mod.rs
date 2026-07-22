@@ -19,6 +19,7 @@ pub(crate) mod defined_public_export_origins;
 pub(crate) mod defined_public_type_surface;
 pub(crate) mod instrumentation;
 pub(crate) mod keywords;
+pub(crate) mod public_interface_draft;
 pub(crate) mod semantic_identity;
 pub(crate) mod source_module_origin;
 pub(crate) mod traits;

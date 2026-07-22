@@ -97,38 +97,6 @@ pub(crate) struct DefinedPublicTypeSurface {
     receiver_methods: Vec<DefinedPublicReceiverMethodTypeSurface>,
 }
 
-impl DefinedPublicTypeSurface {
-    /// The exported free-function type surfaces, in deterministic declaration order.
-    #[allow(dead_code)] // Test-only: asserted by focused surface projection tests.
-    pub(crate) fn free_functions(&self) -> &[DefinedPublicFunctionTypeSurface] {
-        &self.free_functions
-    }
-
-    /// The exported nominal type surfaces (structs and choices), in deterministic order.
-    #[allow(dead_code)] // Test-only: asserted by focused surface projection tests.
-    pub(crate) fn nominal_types(&self) -> &[DefinedPublicNominalTypeSurface] {
-        &self.nominal_types
-    }
-
-    /// The exported transparent alias type surfaces, in deterministic order.
-    #[allow(dead_code)] // Test-only: asserted by focused surface projection tests.
-    pub(crate) fn transparent_aliases(&self) -> &[DefinedPublicAliasTypeSurface] {
-        &self.transparent_aliases
-    }
-
-    /// The exported constant type surfaces, in deterministic order.
-    #[allow(dead_code)] // Test-only: asserted by focused surface projection tests.
-    pub(crate) fn constants(&self) -> &[DefinedPublicConstantTypeSurface] {
-        &self.constants
-    }
-
-    /// The exported receiver-method type surfaces, in deterministic receiver/method order.
-    #[allow(dead_code)] // Test-only: asserted by focused surface projection tests.
-    pub(crate) fn receiver_methods(&self) -> &[DefinedPublicReceiverMethodTypeSurface] {
-        &self.receiver_methods
-    }
-}
-
 /// One exported parameter slot in a function or receiver-method type surface.
 ///
 /// `name` is the owned authored parameter name, or `None` when the source signature omits it.
@@ -138,32 +106,10 @@ pub(crate) struct DefinedPublicParameterTypeSlot {
     type_identity: CanonicalTypeIdentity,
 }
 
-impl DefinedPublicParameterTypeSlot {
-    /// The owned authored parameter name, or `None` when the source signature omits it.
-    #[allow(dead_code)] // Test-only: asserted by focused surface projection tests.
-    pub(crate) fn name(&self) -> Option<&str> {
-        self.name.as_deref()
-    }
-
-    /// The canonical type identity of this parameter slot.
-    #[allow(dead_code)] // Test-only: asserted by focused surface projection tests.
-    pub(crate) fn type_identity(&self) -> &CanonicalTypeIdentity {
-        &self.type_identity
-    }
-}
-
 /// One exported return slot in a function or receiver-method type surface.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct DefinedPublicReturnTypeSlot {
     type_identity: CanonicalTypeIdentity,
-}
-
-impl DefinedPublicReturnTypeSlot {
-    /// The canonical type identity of this return slot.
-    #[allow(dead_code)] // Test-only: asserted by focused surface projection tests.
-    pub(crate) fn type_identity(&self) -> &CanonicalTypeIdentity {
-        &self.type_identity
-    }
 }
 
 /// One exported generic parameter with its ordered canonical trait bound identities.
@@ -182,22 +128,6 @@ pub(crate) struct DefinedPublicGenericParameterSurface {
     bounds: Vec<CanonicalTraitIdentity>,
 }
 
-impl DefinedPublicGenericParameterSurface {
-    /// The stable exported generic parameter identity (owner + position + authored name).
-    #[allow(dead_code)] // Test-only: asserted by focused surface projection tests.
-    pub(crate) fn identity(&self) -> &ExportedGenericParameterIdentity {
-        &self.identity
-    }
-
-    /// The ordered canonical trait bound identities, in declaration-site bound order.
-    ///
-    /// Empty when the parameter has no bounds.
-    #[allow(dead_code)] // Test-only: asserted by focused surface projection tests.
-    pub(crate) fn bounds(&self) -> &[CanonicalTraitIdentity] {
-        &self.bounds
-    }
-}
-
 /// The type-only surface for one exported free function.
 ///
 /// `parameters` and `returns` preserve authored order. `error_return` is `None` when the
@@ -211,41 +141,6 @@ pub(crate) struct DefinedPublicFunctionTypeSurface {
     error_return: Option<CanonicalTypeIdentity>,
 }
 
-impl DefinedPublicFunctionTypeSurface {
-    /// The stable origin of this free function.
-    #[allow(dead_code)] // Test-only: asserted by focused surface projection tests.
-    pub(crate) fn origin(&self) -> &OriginFunctionId {
-        &self.origin
-    }
-
-    /// The exported generic parameter surfaces in declaration-local order.
-    ///
-    /// Empty for a non-generic free function. Each surface entry carries the stable parameter
-    /// identity plus its ordered canonical trait bound identities.
-    #[allow(dead_code)] // Test-only: asserted by focused surface projection tests.
-    pub(crate) fn generic_parameters(&self) -> &[DefinedPublicGenericParameterSurface] {
-        &self.generic_parameters
-    }
-
-    /// The parameter type slots in authored order.
-    #[allow(dead_code)] // Test-only: asserted by focused surface projection tests.
-    pub(crate) fn parameters(&self) -> &[DefinedPublicParameterTypeSlot] {
-        &self.parameters
-    }
-
-    /// The success-channel return type slots in authored order.
-    #[allow(dead_code)] // Test-only: asserted by focused surface projection tests.
-    pub(crate) fn returns(&self) -> &[DefinedPublicReturnTypeSlot] {
-        &self.returns
-    }
-
-    /// The error-channel return type, if any.
-    #[allow(dead_code)] // Test-only: asserted by focused surface projection tests.
-    pub(crate) fn error_return(&self) -> Option<&CanonicalTypeIdentity> {
-        self.error_return.as_ref()
-    }
-}
-
 /// One exported field in a struct or choice-variant-payload type surface.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct DefinedPublicFieldTypeSlot {
@@ -253,39 +148,11 @@ pub(crate) struct DefinedPublicFieldTypeSlot {
     type_identity: CanonicalTypeIdentity,
 }
 
-impl DefinedPublicFieldTypeSlot {
-    /// The owned authored field name.
-    #[allow(dead_code)] // Test-only: asserted by focused surface projection tests.
-    pub(crate) fn name(&self) -> &str {
-        &self.name
-    }
-
-    /// The canonical type identity of this field.
-    #[allow(dead_code)] // Test-only: asserted by focused surface projection tests.
-    pub(crate) fn type_identity(&self) -> &CanonicalTypeIdentity {
-        &self.type_identity
-    }
-}
-
 /// One exported choice variant in a choice type surface.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct DefinedPublicChoiceVariantTypeSurface {
     name: String,
     payload_fields: Vec<DefinedPublicFieldTypeSlot>,
-}
-
-impl DefinedPublicChoiceVariantTypeSurface {
-    /// The owned authored variant name.
-    #[allow(dead_code)] // Test-only: asserted by focused surface projection tests.
-    pub(crate) fn name(&self) -> &str {
-        &self.name
-    }
-
-    /// The payload field type slots for a record variant. Empty for unit variants.
-    #[allow(dead_code)] // Test-only: asserted by focused surface projection tests.
-    pub(crate) fn payload_fields(&self) -> &[DefinedPublicFieldTypeSlot] {
-        &self.payload_fields
-    }
 }
 
 /// The type-only surface for one exported nominal type (struct or choice).
@@ -297,55 +164,11 @@ pub(crate) struct DefinedPublicNominalTypeSurface {
     variants: Vec<DefinedPublicChoiceVariantTypeSurface>,
 }
 
-impl DefinedPublicNominalTypeSurface {
-    /// The stable origin of this nominal type.
-    #[allow(dead_code)] // Test-only: asserted by focused surface projection tests.
-    pub(crate) fn origin(&self) -> &OriginTypeId {
-        &self.origin
-    }
-
-    /// The exported generic parameter surfaces in declaration-local order.
-    ///
-    /// Empty for a non-generic struct or choice. Each surface entry carries the stable parameter
-    /// identity plus its ordered canonical trait bound identities. Receiver methods reuse their
-    /// receiver nominal's parameters and expose no independent list.
-    #[allow(dead_code)] // Test-only: asserted by focused surface projection tests.
-    pub(crate) fn generic_parameters(&self) -> &[DefinedPublicGenericParameterSurface] {
-        &self.generic_parameters
-    }
-
-    /// The struct field type slots in authored order. Empty for choices.
-    #[allow(dead_code)] // Test-only: asserted by focused surface projection tests.
-    pub(crate) fn fields(&self) -> &[DefinedPublicFieldTypeSlot] {
-        &self.fields
-    }
-
-    /// The choice variant surfaces in authored order. Empty for structs.
-    #[allow(dead_code)] // Test-only: asserted by focused surface projection tests.
-    pub(crate) fn variants(&self) -> &[DefinedPublicChoiceVariantTypeSurface] {
-        &self.variants
-    }
-}
-
 /// The type-only surface for one exported transparent alias.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct DefinedPublicAliasTypeSurface {
     origin: OriginTypeId,
     target_type_identity: CanonicalTypeIdentity,
-}
-
-impl DefinedPublicAliasTypeSurface {
-    /// The stable origin of this alias.
-    #[allow(dead_code)] // Test-only: asserted by focused surface projection tests.
-    pub(crate) fn origin(&self) -> &OriginTypeId {
-        &self.origin
-    }
-
-    /// The canonical identity of the alias target type.
-    #[allow(dead_code)] // Test-only: asserted by focused surface projection tests.
-    pub(crate) fn target_type_identity(&self) -> &CanonicalTypeIdentity {
-        &self.target_type_identity
-    }
 }
 
 /// The type-only surface for one exported constant.
@@ -355,20 +178,6 @@ impl DefinedPublicAliasTypeSurface {
 pub(crate) struct DefinedPublicConstantTypeSurface {
     origin: OriginConstantId,
     type_identity: CanonicalTypeIdentity,
-}
-
-impl DefinedPublicConstantTypeSurface {
-    /// The stable origin of this constant.
-    #[allow(dead_code)] // Test-only: asserted by focused surface projection tests.
-    pub(crate) fn origin(&self) -> &OriginConstantId {
-        &self.origin
-    }
-
-    /// The canonical type identity of the constant.
-    #[allow(dead_code)] // Test-only: asserted by focused surface projection tests.
-    pub(crate) fn type_identity(&self) -> &CanonicalTypeIdentity {
-        &self.type_identity
-    }
 }
 
 /// The type-only surface for one exported receiver method.
@@ -384,38 +193,6 @@ pub(crate) struct DefinedPublicReceiverMethodTypeSurface {
     error_return: Option<CanonicalTypeIdentity>,
 }
 
-impl DefinedPublicReceiverMethodTypeSurface {
-    /// The stable origin of the receiver type that owns this method.
-    #[allow(dead_code)] // Test-only: asserted by focused surface projection tests.
-    pub(crate) fn receiver_origin(&self) -> &OriginTypeId {
-        &self.receiver_origin
-    }
-
-    /// The stable origin of this receiver method.
-    #[allow(dead_code)] // Test-only: asserted by focused surface projection tests.
-    pub(crate) fn method_origin(&self) -> &OriginFunctionId {
-        &self.method_origin
-    }
-
-    /// The parameter type slots in authored order.
-    #[allow(dead_code)] // Test-only: asserted by focused surface projection tests.
-    pub(crate) fn parameters(&self) -> &[DefinedPublicParameterTypeSlot] {
-        &self.parameters
-    }
-
-    /// The success-channel return type slots in authored order.
-    #[allow(dead_code)] // Test-only: asserted by focused surface projection tests.
-    pub(crate) fn returns(&self) -> &[DefinedPublicReturnTypeSlot] {
-        &self.returns
-    }
-
-    /// The error-channel return type, if any.
-    #[allow(dead_code)] // Test-only: asserted by focused surface projection tests.
-    pub(crate) fn error_return(&self) -> Option<&CanonicalTypeIdentity> {
-        self.error_return.as_ref()
-    }
-}
-
 // ---------------------------------------------------------------------------
 //  Transient nominal origin resolver
 // ---------------------------------------------------------------------------
@@ -427,13 +204,13 @@ impl DefinedPublicReceiverMethodTypeSurface {
 /// imported project-graph nominals and private normal-file nominals exposed through a public alias
 /// resolve to their owning module origin; unexported, unregistered and source-package nominals
 /// without a project-module owner fail through `CompilerError`.
-struct TransientNominalOriginResolver<'a> {
+pub(crate) struct TransientNominalOriginResolver<'a> {
     type_environment: &'a TypeEnvironment,
     public_source_nominal_type_origins: &'a FxHashMap<InternedPath, OriginTypeId>,
 }
 
 impl<'a> TransientNominalOriginResolver<'a> {
-    fn new(
+    pub(crate) fn new(
         type_environment: &'a TypeEnvironment,
         public_source_nominal_type_origins: &'a FxHashMap<InternedPath, OriginTypeId>,
     ) -> Self {
@@ -983,10 +760,7 @@ fn project_exported_generic_parameter_surfaces(
         // Reject a duplicate resolved identity. Two distinct `GenericParameterId`s that resolve
         // to the same owner, position and name signal an inconsistent owner table rather than a
         // legitimate second declaration.
-        if surfaces
-            .iter()
-            .any(|surface| surface.identity() == &identity)
-        {
+        if surfaces.iter().any(|surface| surface.identity == identity) {
             return Err(CompilerError::compiler_error(format!(
                 "defined public type-surface projection: two exported generic parameters resolved to the same identity {:?}; a duplicate parameter identity must not enter the public type surface",
                 identity,

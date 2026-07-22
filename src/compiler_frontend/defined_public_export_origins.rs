@@ -72,6 +72,24 @@ pub(crate) struct DefinedPublicExportOriginDraft {
 }
 
 impl DefinedPublicExportOriginDraft {
+    /// Construct the pre-AST draft from the already-built, deterministically ordered bindings,
+    /// the public nominal-type origin index and the validated active module origin.
+    ///
+    /// Compiler-internal: the projection owner assembles the inputs in the documented
+    /// deterministic order before calling this. Focused tests build the draft directly to feed
+    /// the public-interface draft builder.
+    pub(crate) fn new(
+        module_origin: StableModuleOriginIdentity,
+        export_bindings: Vec<ExportBinding>,
+        public_nominal_type_origins: FxHashMap<InternedPath, OriginTypeId>,
+    ) -> Self {
+        Self {
+            module_origin,
+            export_bindings,
+            public_nominal_type_origins,
+        }
+    }
+
     /// Finalize the complete [`DefinedPublicExportOrigins`] by projecting receiver surface origins
     /// from the resolved AST receiver catalog.
     ///
@@ -133,11 +151,11 @@ pub(crate) fn build_defined_public_export_origin_draft(
     let export_bindings =
         collect_free_export_bindings(&active_origin, sorted_headers, module_symbols, string_table)?;
 
-    Ok(DefinedPublicExportOriginDraft {
-        module_origin: active_origin,
+    Ok(DefinedPublicExportOriginDraft::new(
+        active_origin,
         export_bindings,
         public_nominal_type_origins,
-    })
+    ))
 }
 
 /// Resolve the one active module origin from the per-file source-origin table.

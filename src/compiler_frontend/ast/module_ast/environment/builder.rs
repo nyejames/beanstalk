@@ -11,8 +11,8 @@ use crate::compiler_frontend::ast::generic_functions::GenericFunctionTemplate;
 use crate::compiler_frontend::ast::module_ast::build_context::AstPhaseContext;
 use crate::compiler_frontend::ast::module_ast::environment::{
     AstEnvironmentInput, AstModuleEnvironment, AstModuleLookups, BuildResolvedPublicTypeRootsInput,
-    DeclarationSemanticTable, ResolvedPublicTypeRootTable, TopLevelDeclarationTable,
-    build_resolved_public_type_roots,
+    DeclarationSemanticTable, ResolvedPublicTraitRoot, ResolvedPublicTypeRootTable,
+    TopLevelDeclarationTable, build_resolved_public_trait_roots, build_resolved_public_type_roots,
 };
 use crate::compiler_frontend::ast::module_ast::scope_context::ReceiverMethodCatalog;
 use crate::compiler_frontend::ast::templates::error::TemplateError;
@@ -58,6 +58,15 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
+
+/// Combined transient resolved public-surface outputs built during environment construction.
+///
+/// WHAT: bundles the type-only root table and the direct trait-root vector so
+/// `finish_environment` does not take them as separate positional arguments.
+struct ResolvedPublicSurfaceOutputs {
+    type_roots: ResolvedPublicTypeRootTable,
+    trait_roots: Vec<ResolvedPublicTraitRoot>,
+}
 
 pub(crate) struct AstModuleEnvironmentBuilder<'context, 'services> {
     pub(crate) context: &'context AstPhaseContext<'services>,
@@ -337,6 +346,12 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         );
         let _ = public_type_roots_start;
 
+        // Build the transient direct public trait-root vector from the same sorted headers.
+        // The type-root table stays type-only; trait-root facts live in their own owner.
+        let resolved_public_trait_roots =
+            build_resolved_public_trait_roots(sorted_headers, &trait_environment, string_table)
+                .map_err(|error| self.error_messages(error, string_table))?;
+
         benchmark_timer_log!(
             environment_start,
             "ast_build_environment_ms",
@@ -353,7 +368,10 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
             trait_environment,
             trait_evidence_environment,
             generic_declarations_by_path,
-            resolved_public_type_roots,
+            ResolvedPublicSurfaceOutputs {
+                type_roots: resolved_public_type_roots,
+                trait_roots: resolved_public_trait_roots,
+            },
             string_table,
         )
     }
@@ -370,7 +388,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         trait_environment: TraitEnvironment,
         trait_evidence_environment: TraitEvidenceEnvironment,
         generic_declarations_by_path: FxHashMap<InternedPath, GenericDeclarationMetadata>,
-        resolved_public_type_roots: ResolvedPublicTypeRootTable,
+        resolved_public_surface_outputs: ResolvedPublicSurfaceOutputs,
         string_table: &StringTable,
     ) -> Result<AstModuleEnvironment, CompilerMessages> {
         let declaration_semantics = DeclarationSemanticTable::from_environment(
@@ -417,7 +435,8 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 project_path_resolver: self.context.project_path_resolver.clone(),
                 path_format_config: self.context.path_format_config.clone(),
             }),
-            resolved_public_type_roots,
+            resolved_public_type_roots: resolved_public_surface_outputs.type_roots,
+            resolved_public_trait_roots: resolved_public_surface_outputs.trait_roots,
 
             type_environment: self.type_environment,
         })

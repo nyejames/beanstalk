@@ -117,10 +117,18 @@ pub(crate) mod templates;
 // WHY: the AST module should expose one obvious entry surface. Internal helpers,
 // pass implementations, and parser submodules stay private to `ast/`.
 pub use module_ast::build_context::AstBuildContext;
+pub(crate) use module_ast::environment::AstPublicInterfaceProjectionInput;
 pub(crate) use module_ast::environment::ResolvedPublicTypeRootTable;
 pub(crate) use module_ast::environment::TopLevelDeclarationTable;
 pub(crate) use module_ast::environment::{
+    ResolvedPublicTraitRoot, ResolvedTraitRequirementFact, TraitReceiverAccessKind,
+};
+pub(crate) use module_ast::environment::{
     ResolvedPublicTypeRoot, ResolvedPublicTypeRootKind, ResolvedTraitSourceFact,
+};
+#[cfg(test)]
+pub(crate) use module_ast::environment::{
+    ResolvedTraitParameterFact, ResolvedTraitReceiverFact, ResolvedTraitReturnFact,
 };
 pub use module_ast::scope_context::{ContextKind, ScopeContext};
 pub(crate) use receiver_methods::{ReceiverMethodCatalog, ReceiverMethodEntry};
@@ -155,7 +163,6 @@ use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::FileTokens;
-use std::rc::Rc;
 use std::time::Instant;
 
 /// Resolved choice definition carried from AST to HIR for pre-registration.
@@ -208,29 +215,20 @@ pub struct Ast {
     ///      const-ness without re-walking the AST.
     pub const_facts: AstConstFacts,
 
-    /// Resolved receiver-method catalog from the validated AST environment.
+    /// Consolidated transient AST-owned public-interface projection input.
     ///
-    /// WHAT: transient handoff of the [`ReceiverMethodCatalog`] built and validated during AST
-    ///       environment construction, consumed by receiver-surface origin projection at the
-    ///       semantic compilation boundary.
-    /// WHY: receiver-surface origins need the resolved [`ReceiverKey`](crate::compiler_frontend::datatypes::ReceiverKey)
-    ///      (including generic base resolution) rather than best-effort header-parsed receiver
-    ///      names. The catalog is taken from `Ast` before HIR lowering so HIR does not become
-    ///      its consumer.
-    pub resolved_receiver_catalog: Option<Rc<ReceiverMethodCatalog>>,
-
-    /// Transient AST-owned resolved public type-root handoff.
-    ///
-    /// WHAT: one deterministic table of directly-defined active-root public type roots and the
-    ///       receiver methods attached to directly-defined public nominal receivers, built from
-    ///       already-resolved AST facts. Production AST construction always populates this;
-    ///       synthetic AST fixtures use `ResolvedPublicTypeRootTable::default()`.
-    /// WHY: carried in `Ast` so the semantic orchestration can take it immediately before HIR
-    ///      lowering without reconstructing public semantics from HIR or source. Donor-local
-    ///      `TypeId`s stay inside this handoff and never enter a cross-module artefact. The
-    ///      orchestration consumes this table through `std::mem::take` before HIR lowering, so
-    ///      HIR never receives or reconstructs the transient root table.
-    pub resolved_public_type_roots: ResolvedPublicTypeRootTable,
+    /// WHAT: one closed [`AstPublicInterfaceProjectionInput`] bundling the resolved public
+    ///       type-root table, the directly-defined active-root public trait-root vector and
+    ///       the validated receiver-method catalog. Production AST construction always
+    ///       populates this; synthetic AST fixtures use a default projection input.
+    /// WHY: replaces the previous public-root and receiver-catalog field family on `Ast`
+    ///      with one owned projection input so the semantic orchestration takes a single
+    ///      value before HIR lowering. Donor-local `TypeId`s stay inside this projection
+    ///      input and never enter a cross-module artefact. The orchestration consumes it
+    ///      through `std::mem::take` before HIR lowering, so HIR never receives or
+    ///      reconstructs it. This field is taken before HIR and may not gain unrelated
+    ///      future facts.
+    pub public_interface_projection_input: AstPublicInterfaceProjectionInput,
 }
 
 /// Complete header-stage output consumed by AST construction.

@@ -16,6 +16,7 @@ use crate::compiler_frontend::ast::type_resolution::ResolvedFunctionSignature;
 use crate::compiler_frontend::ast::type_resolution::ResolvedTypeAnnotation;
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 
+use super::resolved_public_trait_roots::ResolvedPublicTraitRoot;
 use super::resolved_public_type_roots::ResolvedPublicTypeRootTable;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::ids::TypeId;
@@ -113,8 +114,14 @@ pub(crate) struct AstModuleEnvironment {
     // WHY: AST nodes carry compact TypeIds; the environment carries the canonical table.
     pub(crate) type_environment: TypeEnvironment,
 
-    // Transient AST-owned resolved public type-root handoff.
+    // Transient AST-owned resolved public type-root table (type-only).
     // WHY: carried immediately before HIR lowering so semantic orchestration can project
     // canonical roots without reconstructing public semantics from HIR or source.
     pub(crate) resolved_public_type_roots: ResolvedPublicTypeRootTable,
+
+    // Transient AST-owned resolved public trait-root vector.
+    // WHY: carried immediately before HIR lowering so the public-interface draft projection
+    // can build trait surfaces without reconstructing trait semantics from HIR or source.
+    // The type-root table stays type-only; trait-root facts live in their own owner.
+    pub(crate) resolved_public_trait_roots: Vec<ResolvedPublicTraitRoot>,
 }

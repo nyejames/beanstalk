@@ -7,7 +7,6 @@
 //!      handle the diagnostic-only placeholder.
 
 use crate::compiler_frontend::ast::Ast;
-use crate::compiler_frontend::ast::ResolvedPublicTypeRootTable;
 use crate::compiler_frontend::ast::ast_nodes::{
     AstNode, Declaration, MultiBindTarget, MultiBindTargetKind, NodeKind, SourceLocation,
 };
@@ -22,6 +21,9 @@ use crate::compiler_frontend::ast::expressions::expression_rpn::{
 use crate::compiler_frontend::ast::statements::fallible_handling::wrap_catch_expression;
 use crate::compiler_frontend::ast::statements::functions::{
     FunctionReturn, ReturnChannel, ReturnSlot,
+};
+use crate::compiler_frontend::ast::{
+    AstPublicInterfaceProjectionInput, ResolvedPublicTypeRootTable,
 };
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::datatypes::DataType;
@@ -702,8 +704,11 @@ pub(crate) fn build_ast_with_choices(
             .collect(),
         type_environment,
         const_facts: AstConstFacts::default(),
-        resolved_receiver_catalog: None,
-        resolved_public_type_roots: ResolvedPublicTypeRootTable::default(),
+        public_interface_projection_input: AstPublicInterfaceProjectionInput {
+            root_table: ResolvedPublicTypeRootTable::default(),
+            trait_roots: vec![],
+            receiver_catalog: None,
+        },
     }
 }
 

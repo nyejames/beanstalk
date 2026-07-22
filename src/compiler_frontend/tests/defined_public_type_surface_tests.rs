@@ -448,25 +448,25 @@ fn projects_free_function_parameter_and_return_types() {
     )
     .expect("free function projection should succeed");
 
-    assert_eq!(surface.free_functions().len(), 1);
-    let function = &surface.free_functions()[0];
-    assert_eq!(function.origin(), &free_function_origin("render"));
-    assert_eq!(function.parameters().len(), 1);
+    assert_eq!(surface.free_functions.len(), 1);
+    let function = &surface.free_functions[0];
+    assert_eq!(&function.origin, &free_function_origin("render"));
+    assert_eq!(function.parameters.len(), 1);
     assert_eq!(
-        function.parameters()[0].name(),
+        function.parameters[0].name.as_deref(),
         Some("value"),
         "parameter name must be preserved as an owned string"
     );
     assert_eq!(
-        function.parameters()[0].type_identity(),
+        &function.parameters[0].type_identity,
         &CanonicalTypeIdentity::Builtin(CanonicalBuiltinType::Int)
     );
-    assert_eq!(function.returns().len(), 1);
+    assert_eq!(function.returns.len(), 1);
     assert_eq!(
-        function.returns()[0].type_identity(),
+        &function.returns[0].type_identity,
         &CanonicalTypeIdentity::Builtin(CanonicalBuiltinType::Bool)
     );
-    assert!(function.error_return().is_none());
+    assert!(function.error_return.as_ref().is_none());
 }
 
 #[test]
@@ -516,14 +516,14 @@ fn projects_free_function_with_error_return() {
     )
     .expect("error-return projection should succeed");
 
-    let function = &surface.free_functions()[0];
-    assert_eq!(function.returns().len(), 1);
+    let function = &surface.free_functions[0];
+    assert_eq!(function.returns.len(), 1);
     assert_eq!(
-        function.returns()[0].type_identity(),
+        &function.returns[0].type_identity,
         &CanonicalTypeIdentity::Builtin(CanonicalBuiltinType::String)
     );
     assert_eq!(
-        function.error_return(),
+        function.error_return.as_ref(),
         Some(&CanonicalTypeIdentity::Builtin(CanonicalBuiltinType::Int)),
         "error return type must be projected separately"
     );
@@ -562,22 +562,22 @@ fn projects_struct_fields_to_canonical_field_types() {
     let surface = build_surface(&root_table, &origins, &nominal_map, &env, &string_table)
         .expect("struct projection should succeed");
 
-    assert_eq!(surface.nominal_types().len(), 1);
-    let nominal = &surface.nominal_types()[0];
-    assert_eq!(nominal.origin(), &struct_origin("Point"));
-    assert_eq!(nominal.fields().len(), 2);
-    assert_eq!(nominal.fields()[0].name(), "x");
+    assert_eq!(surface.nominal_types.len(), 1);
+    let nominal = &surface.nominal_types[0];
+    assert_eq!(&nominal.origin, &struct_origin("Point"));
+    assert_eq!(nominal.fields.len(), 2);
+    assert_eq!(nominal.fields[0].name.as_str(), "x");
     assert_eq!(
-        nominal.fields()[0].type_identity(),
+        &nominal.fields[0].type_identity,
         &CanonicalTypeIdentity::Builtin(CanonicalBuiltinType::Int)
     );
-    assert_eq!(nominal.fields()[1].name(), "flag");
+    assert_eq!(nominal.fields[1].name.as_str(), "flag");
     assert_eq!(
-        nominal.fields()[1].type_identity(),
+        &nominal.fields[1].type_identity,
         &CanonicalTypeIdentity::Builtin(CanonicalBuiltinType::Bool)
     );
     assert!(
-        nominal.variants().is_empty(),
+        nominal.variants.is_empty(),
         "struct surface has no variants"
     );
 }
@@ -624,24 +624,24 @@ fn projects_choice_variants_and_payload_fields() {
     let surface = build_surface(&root_table, &origins, &nominal_map, &env, &string_table)
         .expect("choice projection should succeed");
 
-    assert_eq!(surface.nominal_types().len(), 1);
-    let nominal = &surface.nominal_types()[0];
-    assert_eq!(nominal.origin(), &choice_origin("Counter"));
+    assert_eq!(surface.nominal_types.len(), 1);
+    let nominal = &surface.nominal_types[0];
+    assert_eq!(&nominal.origin, &choice_origin("Counter"));
     assert!(
-        nominal.fields().is_empty(),
+        nominal.fields.is_empty(),
         "choice surface has no struct fields"
     );
-    assert_eq!(nominal.variants().len(), 2);
-    assert_eq!(nominal.variants()[0].name(), "none");
+    assert_eq!(nominal.variants.len(), 2);
+    assert_eq!(nominal.variants[0].name.as_str(), "none");
     assert!(
-        nominal.variants()[0].payload_fields().is_empty(),
+        nominal.variants[0].payload_fields.is_empty(),
         "unit variant has no payload"
     );
-    assert_eq!(nominal.variants()[1].name(), "some");
-    assert_eq!(nominal.variants()[1].payload_fields().len(), 1);
-    assert_eq!(nominal.variants()[1].payload_fields()[0].name(), "count");
+    assert_eq!(nominal.variants[1].name.as_str(), "some");
+    assert_eq!(nominal.variants[1].payload_fields.len(), 1);
+    assert_eq!(nominal.variants[1].payload_fields[0].name.as_str(), "count");
     assert_eq!(
-        nominal.variants()[1].payload_fields()[0].type_identity(),
+        &nominal.variants[1].payload_fields[0].type_identity,
         &CanonicalTypeIdentity::Builtin(CanonicalBuiltinType::Int)
     );
 }
@@ -675,11 +675,11 @@ fn projects_transparent_alias_target_once() {
     )
     .expect("alias projection should succeed");
 
-    assert_eq!(surface.transparent_aliases().len(), 1);
-    let alias = &surface.transparent_aliases()[0];
-    assert_eq!(alias.origin(), &alias_origin("Count"));
+    assert_eq!(surface.transparent_aliases.len(), 1);
+    let alias = &surface.transparent_aliases[0];
+    assert_eq!(&alias.origin, &alias_origin("Count"));
     assert_eq!(
-        alias.target_type_identity(),
+        &alias.target_type_identity,
         &CanonicalTypeIdentity::Builtin(CanonicalBuiltinType::Int)
     );
 }
@@ -716,11 +716,11 @@ fn projects_constant_type_only() {
     )
     .expect("constant projection should succeed");
 
-    assert_eq!(surface.constants().len(), 1);
-    let constant = &surface.constants()[0];
-    assert_eq!(constant.origin(), &constant_origin("MaxRetries"));
+    assert_eq!(surface.constants.len(), 1);
+    let constant = &surface.constants[0];
+    assert_eq!(&constant.origin, &constant_origin("MaxRetries"));
     assert_eq!(
-        constant.type_identity(),
+        &constant.type_identity,
         &CanonicalTypeIdentity::Builtin(CanonicalBuiltinType::Int)
     );
 }
@@ -763,9 +763,9 @@ fn projects_nested_collection_and_option_types() {
     )
     .expect("nested constructed type projection should succeed");
 
-    let function = &surface.free_functions()[0];
+    let function = &surface.free_functions[0];
     assert_eq!(
-        function.parameters()[0].type_identity(),
+        &function.parameters[0].type_identity,
         &CanonicalTypeIdentity::Option(Box::new(CanonicalTypeIdentity::Collection(
             crate::compiler_frontend::canonical_type_identity::CollectionTypeIdentity::new(
                 CanonicalTypeIdentity::Builtin(CanonicalBuiltinType::Int),
@@ -775,7 +775,7 @@ fn projects_nested_collection_and_option_types() {
         "nested option(collection(int)) must project recursively"
     );
     assert_eq!(
-        function.returns()[0].type_identity(),
+        &function.returns[0].type_identity,
         &CanonicalTypeIdentity::Collection(
             crate::compiler_frontend::canonical_type_identity::CollectionTypeIdentity::new(
                 CanonicalTypeIdentity::Builtin(CanonicalBuiltinType::Int),
@@ -830,7 +830,7 @@ fn projects_open_exported_generic_function_parameter() {
     )
     .expect("generic function projection should succeed");
 
-    let function = &surface.free_functions()[0];
+    let function = &surface.free_functions[0];
     let expected_origin =
         crate::compiler_frontend::canonical_type_identity::GenericDeclarationOrigin::free_function(
             free_function_origin("identity"),
@@ -843,23 +843,21 @@ fn projects_open_exported_generic_function_parameter() {
             "T".to_owned(),
         );
     assert_eq!(
-        function.parameters()[0].type_identity(),
+        &function.parameters[0].type_identity,
         &CanonicalTypeIdentity::GenericParameter(expected_identity.clone()),
         "open exported generic parameter must project to its stable identity"
     );
     assert_eq!(
         function
-            .generic_parameters()
+            .generic_parameters
             .iter()
-            .map(|s| s.identity())
+            .map(|s| &s.identity)
             .collect::<Vec<_>>(),
         &[&expected_identity],
         "the generic free function must expose its single ordered exported generic parameter identity"
     );
     assert_eq!(
-        function.generic_parameters()[0]
-            .identity()
-            .declaration_origin(),
+        function.generic_parameters[0].identity.declaration_origin(),
         &expected_origin,
         "the exported generic parameter must name the function's stable origin"
     );
@@ -903,8 +901,8 @@ fn projects_generic_struct_field_with_open_generic_parameter() {
     let surface = build_surface(&root_table, &origins, &nominal_map, &env, &string_table)
         .expect("generic struct projection should succeed");
 
-    let nominal = &surface.nominal_types()[0];
-    assert_eq!(nominal.fields().len(), 1);
+    let nominal = &surface.nominal_types[0];
+    assert_eq!(nominal.fields.len(), 1);
     let expected_origin =
         crate::compiler_frontend::canonical_type_identity::GenericDeclarationOrigin::nominal_type(
             struct_origin("Box"),
@@ -917,23 +915,21 @@ fn projects_generic_struct_field_with_open_generic_parameter() {
             "T".to_owned(),
         );
     assert_eq!(
-        nominal.fields()[0].type_identity(),
+        &nominal.fields[0].type_identity,
         &CanonicalTypeIdentity::GenericParameter(expected_identity.clone()),
         "generic struct field must project the open parameter to its nominal-owned identity"
     );
     assert_eq!(
         nominal
-            .generic_parameters()
+            .generic_parameters
             .iter()
-            .map(|s| s.identity())
+            .map(|s| &s.identity)
             .collect::<Vec<_>>(),
         &[&expected_identity],
         "the generic struct must expose its single ordered exported generic parameter identity"
     );
     assert_eq!(
-        nominal.generic_parameters()[0]
-            .identity()
-            .declaration_origin(),
+        nominal.generic_parameters[0].identity.declaration_origin(),
         &expected_origin,
         "the exported generic parameter must name the struct's stable origin"
     );
@@ -975,7 +971,7 @@ fn non_generic_free_function_exposes_empty_generic_parameter_list() {
     .expect("non-generic free function projection should succeed");
 
     assert!(
-        surface.free_functions()[0].generic_parameters().is_empty(),
+        surface.free_functions[0].generic_parameters.is_empty(),
         "a non-generic free function must expose an empty generic parameter list"
     );
 }
@@ -1011,7 +1007,7 @@ fn non_generic_struct_exposes_empty_generic_parameter_list() {
         .expect("non-generic struct projection should succeed");
 
     assert!(
-        surface.nominal_types()[0].generic_parameters().is_empty(),
+        surface.nominal_types[0].generic_parameters.is_empty(),
         "a non-generic struct must expose an empty generic parameter list"
     );
 }
@@ -1059,7 +1055,7 @@ fn generic_free_function_exposes_ordered_generic_parameter_identities() {
     )
     .expect("generic function projection should succeed");
 
-    let function = &surface.free_functions()[0];
+    let function = &surface.free_functions[0];
     let expected_origin =
         crate::compiler_frontend::canonical_type_identity::GenericDeclarationOrigin::free_function(
             free_function_origin("pair"),
@@ -1080,9 +1076,9 @@ fn generic_free_function_exposes_ordered_generic_parameter_identities() {
 
     assert_eq!(
         function
-            .generic_parameters()
+            .generic_parameters
             .iter()
-            .map(|s| s.identity())
+            .map(|s| &s.identity)
             .collect::<Vec<_>>(),
         &[&expected_first, &expected_second],
         "the generic free function must expose its parameters in declaration-local order"
@@ -1134,7 +1130,7 @@ fn generic_choice_exposes_ordered_generic_parameter_identities() {
     let surface = build_surface(&root_table, &origins, &nominal_map, &env, &string_table)
         .expect("generic choice projection should succeed");
 
-    let nominal = &surface.nominal_types()[0];
+    let nominal = &surface.nominal_types[0];
     let expected_origin =
         crate::compiler_frontend::canonical_type_identity::GenericDeclarationOrigin::nominal_type(
             choice_origin("Result"),
@@ -1155,9 +1151,9 @@ fn generic_choice_exposes_ordered_generic_parameter_identities() {
 
     assert_eq!(
         nominal
-            .generic_parameters()
+            .generic_parameters
             .iter()
-            .map(|s| s.identity())
+            .map(|s| &s.identity)
             .collect::<Vec<_>>(),
         &[&expected_first, &expected_second],
         "the generic choice must expose its parameters in declaration-local order"
@@ -1232,15 +1228,15 @@ fn generic_parameter_identities_are_stable_across_donor_local_allocation() {
         "the two environments must allocate different donor-local GenericParameterIds for the target parameter so the stability premise is real"
     );
     assert_eq!(
-        surface_a.free_functions()[0]
-            .generic_parameters()
+        surface_a.free_functions[0]
+            .generic_parameters
             .iter()
-            .map(|s| s.identity())
+            .map(|s| &s.identity)
             .collect::<Vec<_>>(),
-        surface_b.free_functions()[0]
-            .generic_parameters()
+        surface_b.free_functions[0]
+            .generic_parameters
             .iter()
-            .map(|s| s.identity())
+            .map(|s| &s.identity)
             .collect::<Vec<_>>(),
         "exported generic parameter identities must be stable across donor-local GenericParameterId allocation"
     );
@@ -1412,14 +1408,14 @@ fn projects_receiver_method_attached_to_public_receiver() {
         .expect("receiver method projection should succeed");
 
     // The struct is in the nominal types, and the receiver method is in receiver_methods.
-    assert_eq!(surface.nominal_types().len(), 1);
-    assert_eq!(surface.receiver_methods().len(), 1);
-    let method = &surface.receiver_methods()[0];
-    assert_eq!(method.receiver_origin(), &struct_origin("Counter"));
-    assert_eq!(method.parameters().len(), 1);
-    assert_eq!(method.parameters()[0].name(), Some("delta"));
+    assert_eq!(surface.nominal_types.len(), 1);
+    assert_eq!(surface.receiver_methods.len(), 1);
+    let method = &surface.receiver_methods[0];
+    assert_eq!(&method.receiver_origin, &struct_origin("Counter"));
+    assert_eq!(method.parameters.len(), 1);
+    assert_eq!(method.parameters[0].name.as_deref(), Some("delta"));
     assert_eq!(
-        method.returns()[0].type_identity(),
+        &method.returns[0].type_identity,
         &CanonicalTypeIdentity::Builtin(CanonicalBuiltinType::Int)
     );
 }
@@ -1624,11 +1620,11 @@ fn top_level_entries_are_ordered_by_binding_order() {
 
     // The output must follow the binding order (alpha, beta), not the root insertion order.
     assert_eq!(
-        surface.free_functions()[0].origin(),
+        &surface.free_functions[0].origin,
         &free_function_origin("alpha")
     );
     assert_eq!(
-        surface.free_functions()[1].origin(),
+        &surface.free_functions[1].origin,
         &free_function_origin("beta")
     );
 }
@@ -1676,22 +1672,22 @@ fn output_types_recursively_contain_only_canonical_identities() {
         .expect("canonical identity test should succeed");
 
     // The struct field type is a canonical builtin.
-    let nominal = &surface.nominal_types()[0];
-    assert_eq!(nominal.fields()[0].name(), "count");
+    let nominal = &surface.nominal_types[0];
+    assert_eq!(nominal.fields[0].name.as_str(), "count");
     assert_eq!(
-        nominal.fields()[0].type_identity(),
+        &nominal.fields[0].type_identity,
         &CanonicalTypeIdentity::Builtin(CanonicalBuiltinType::Int)
     );
 
     // The function parameter type is a canonical source nominal.
-    let function = &surface.free_functions()[0];
+    let function = &surface.free_functions[0];
     assert_eq!(
-        function.parameters()[0].type_identity(),
+        &function.parameters[0].type_identity,
         &CanonicalTypeIdentity::SourceNominal(struct_origin("Widget")),
         "function parameter referencing the public struct must project to a canonical nominal"
     );
     assert_eq!(
-        function.returns()[0].type_identity(),
+        &function.returns[0].type_identity,
         &CanonicalTypeIdentity::Builtin(CanonicalBuiltinType::Int)
     );
 }
@@ -1776,10 +1772,10 @@ fn projects_imported_public_nominal_reference_to_provider_origin() {
     let surface = build_surface(&root_table, &origins, &nominal_map, &env, &string_table)
         .expect("imported nominal projection should succeed");
 
-    let nominal = &surface.nominal_types()[0];
-    assert_eq!(nominal.fields()[0].name(), "value");
+    let nominal = &surface.nominal_types[0];
+    assert_eq!(nominal.fields[0].name.as_str(), "value");
     assert_eq!(
-        nominal.fields()[0].type_identity(),
+        &nominal.fields[0].type_identity,
         &CanonicalTypeIdentity::SourceNominal(imported_struct_origin("Imported")),
         "a directly-defined public field referencing an imported public nominal must project \
          to SourceNominal(provider_origin), not the active module origin"
@@ -2008,17 +2004,17 @@ fn receiver_methods_join_by_exact_origin_not_rendered_name() {
     let surface = build_surface(&root_table, &origins, &nominal_map, &env, &string_table)
         .expect("exact-origin receiver join should succeed");
 
-    assert_eq!(surface.receiver_methods().len(), 2);
+    assert_eq!(surface.receiver_methods.len(), 2);
     let by_receiver: FxHashMap<&OriginTypeId, &DefinedPublicReceiverMethodTypeSurface> = surface
-        .receiver_methods()
+        .receiver_methods
         .iter()
-        .map(|method| (method.receiver_origin(), method))
+        .map(|method| (&method.receiver_origin, method))
         .collect();
     assert_eq!(
         by_receiver
             .get(&shapes_origin)
             .unwrap()
-            .method_origin()
+            .method_origin
             .defining_name(),
         "tick",
         "the shapes receiver method must join its own origin"
@@ -2027,7 +2023,7 @@ fn receiver_methods_join_by_exact_origin_not_rendered_name() {
         by_receiver
             .get(&imports_origin)
             .unwrap()
-            .method_origin()
+            .method_origin
             .defining_name(),
         "tick",
         "the imports receiver method must join its own origin"
@@ -2349,8 +2345,8 @@ fn generic_parameter_with_no_bounds_projects_empty_bound_list() {
     .expect("parameter with no bounds should project");
 
     assert!(
-        surface.free_functions()[0].generic_parameters()[0]
-            .bounds()
+        surface.free_functions[0].generic_parameters[0]
+            .bounds
             .is_empty(),
         "a parameter with no bounds must project an empty bound list"
     );
@@ -2408,7 +2404,7 @@ fn generic_parameter_with_source_trait_bound_projects_canonical_source_identity(
     .expect("source trait bound should project");
 
     assert_eq!(
-        surface.free_functions()[0].generic_parameters()[0].bounds(),
+        &surface.free_functions[0].generic_parameters[0].bounds,
         &[CanonicalTraitIdentity::Source(trait_origin("RENDERABLE"))],
         "a source trait bound must project to its canonical source identity"
     );
@@ -2466,7 +2462,7 @@ fn generic_parameter_with_displayable_core_bound_projects_canonical_core_identit
     .expect("displayable core bound should project");
 
     assert_eq!(
-        surface.free_functions()[0].generic_parameters()[0].bounds(),
+        &surface.free_functions[0].generic_parameters[0].bounds,
         &[CanonicalTraitIdentity::Core(
             CanonicalCoreTraitIdentity::Displayable
         )],
@@ -2525,7 +2521,7 @@ fn generic_parameter_with_cast_core_bound_projects_canonical_cast_identity() {
     .expect("cast core bound should project");
 
     assert_eq!(
-        surface.free_functions()[0].generic_parameters()[0].bounds(),
+        &surface.free_functions[0].generic_parameters[0].bounds,
         &[CanonicalTraitIdentity::Core(
             CanonicalCoreTraitIdentity::Castable {
                 target: BuiltinCastTarget::Int,
@@ -2606,7 +2602,7 @@ fn multiple_bounds_preserve_declaration_order() {
     .expect("multiple bounds should project in order");
 
     assert_eq!(
-        surface.free_functions()[0].generic_parameters()[0].bounds(),
+        &surface.free_functions[0].generic_parameters[0].bounds,
         &[
             CanonicalTraitIdentity::Source(trait_origin("RENDERABLE")),
             CanonicalTraitIdentity::Core(CanonicalCoreTraitIdentity::Displayable),
@@ -2845,7 +2841,7 @@ fn source_trait_bound_resolves_to_provider_module_origin_not_active_origin() {
     .expect("a source trait bound from a provider module should project");
 
     assert_eq!(
-        surface.free_functions()[0].generic_parameters()[0].bounds(),
+        &surface.free_functions[0].generic_parameters[0].bounds,
         &[CanonicalTraitIdentity::Source(provider_trait_origin)],
         "a source-bound trait must resolve to its provider module origin, not the active module origin"
     );

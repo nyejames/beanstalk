@@ -1,8 +1,7 @@
-//! Transient AST-owned resolved public type-root handoff.
+//! Transient AST-owned resolved public type-root table.
 //!
 //! WHAT: builds one deterministic vector of directly-defined active-root public type-root
 //! records plus the receiver methods attached to directly-defined public nominal receivers,
-//! records plus the receiver methods attached to directly-defined public nominal receivers
 //! and the transient trait source facts for exported generic bounds, from the same
 //! already-resolved facts consumed by public-surface validation.
 //! WHY: canonical type projection needs resolved roots available immediately before HIR
@@ -34,7 +33,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 ///
 /// WHAT: one root admitted by the active-root public declaration-kind gate, carrying the
 /// resolved `TypeId` facts already produced by AST environment construction.
-/// WHY: keeps the handoff value-shaped and deterministic so later projection reads named
+/// WHY: keeps the table value-shaped and deterministic so later projection reads named
 /// roots and their resolved identities without re-scanning headers or HIR.
 /// Consumed by the defined public type-surface projection immediately before HIR lowering.
 #[derive(Clone, Debug)]
@@ -81,15 +80,17 @@ pub(crate) struct ResolvedPublicTypeRoot {
 /// core classifier. It never carries the `TraitEnvironment`, requirement bodies, evidence
 /// or a `TraitId` registry handle.
 /// WHY: generic-bound projection needs to resolve each local bound `TraitId` to a stable
-/// canonical trait identity. Retaining only these two facts keeps the transient handoff
-/// minimal and consumed with the rest of `ResolvedPublicTypeRootTable` before HIR.
+/// canonical trait identity. Retaining only these two facts keeps the transient table
+/// minimal and consumed with the rest of [`ResolvedPublicTypeRootTable`] before HIR.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum ResolvedTraitSourceFact {
-    Source(InternedPath),
+    /// A compiler-owned core trait identified by its canonical kind.
     Core(CoreTraitKind),
+    /// A source-defined trait identified by its canonical declaration path.
+    Source(InternedPath),
 }
 
-/// Transient AST-owned table of resolved public type roots for the module handoff.
+/// Transient AST-owned table of resolved public type roots for the module.
 ///
 /// WHAT: `roots` holds the named declaration roots in deterministic sorted-header order;
 /// `receiver_methods` holds the receiver methods attached to directly-defined public
@@ -98,9 +99,10 @@ pub(crate) enum ResolvedTraitSourceFact {
 /// `trait_source_facts` retains only the resolved trait identity source facts needed by
 /// generic bounds on the exported free-function and struct/choice roots, so bound
 /// projection can resolve each local bound `TraitId` without the `TraitEnvironment`.
-/// WHY: the semantic orchestration consumes this immediately before HIR lowering in the
-/// next slice. Donor-local `TypeId`s and `TraitId`s must not cross the module result
-/// boundary.
+/// WHY: the semantic orchestration consumes this immediately before HIR lowering. This
+/// table is type-only: direct trait-root facts and their requirement construction live in
+/// [`super::resolved_public_trait_roots`]. Donor-local `TypeId`s and `TraitId`s must not
+/// cross the module result boundary.
 /// Consumed by the defined public type-surface projection immediately before HIR lowering;
 /// retained as transient donor-local AST data that never crosses the module result boundary.
 #[derive(Clone, Default)]
@@ -132,16 +134,14 @@ pub(crate) struct BuildResolvedPublicTypeRootsInput<'a> {
 
 /// Build the resolved public type-root table from completed AST environment facts.
 ///
-/// WHAT: walks `sorted_headers` in two deterministic passes. The first pass admits only
-/// directly-defined active-root public declarations: free functions, nominal structs/choices,
-/// transparent aliases and constants become roots, and the complete set of public nominal
-/// paths is collected. The second pass selects receiver methods: every active-root function
-/// header whose resolved receiver is one of the directly-defined public nominal roots is
-/// admitted as a method entry, regardless of the method header's own export mode. Real
-/// methods on a public receiver are normally private headers outside `export:`, so the method
-/// pass ignores export mode and selects by receiver ownership. Every admitted root requires
-/// an already-resolved fact; missing data is an internal `CompilerError` rather than silent
-/// omission.
+/// WHAT: two passes over the same sorted headers collect every directly-defined active-root
+/// public type-root and the receiver methods attached to directly-defined public nominal
+/// receivers. Pass 1 collects declaration roots (functions, structs, choices, transparent
+/// aliases and constants) and the complete public nominal path set. Pass 2 selects receiver
+/// methods by nominal receiver ownership, independent of the method's own export binding.
+/// Trait-source facts for exported generic bounds are resolved from the `TraitEnvironment`.
+/// A missing, wrong-category or unresolvable fact is an internal `CompilerError` rather than
+/// silent omission.
 /// WHY: two passes over the same sorted headers keep a single deterministic owner and let
 /// the method pass see the complete public nominal set even when a method precedes its
 /// receiver in supplied order. One pass would miss methods that appear before their nominal
@@ -251,10 +251,10 @@ pub(crate) fn build_resolved_public_type_roots(
                 });
             }
 
-            // Trait/evidence semantic projection remains a later slice; trait declarations
-            // pass the declaration-kind gate but are not type-root categories yet.
-            HeaderKind::Trait { .. } => {}
-            HeaderKind::ConstTemplate { .. }
+            // Trait declarations are not type roots. Direct trait-root facts are built by
+            // `build_resolved_public_trait_roots` in the dedicated trait-roots owner.
+            HeaderKind::Trait { .. }
+            | HeaderKind::ConstTemplate { .. }
             | HeaderKind::StartFunction
             | HeaderKind::TraitConformance { .. }
             | HeaderKind::TraitIncompatibility { .. } => {}
@@ -320,7 +320,7 @@ pub(crate) fn build_resolved_public_type_roots(
 /// a `CompilerError`, never a silent omission.
 /// WHY: the transient facts let bound projection resolve each local `TraitId` after the
 /// `TraitEnvironment` is dropped. Only the facts needed by exported generic bounds are
-/// retained, keeping the handoff minimal.
+/// retained, keeping the table minimal.
 fn build_trait_source_facts(
     roots: &[ResolvedPublicTypeRoot],
     type_environment: &TypeEnvironment,

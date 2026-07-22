@@ -576,13 +576,11 @@ impl ExportBinding {
     }
 
     /// The public API name the exporting module exposes the declaration under.
-    #[allow(dead_code)]
     pub(crate) fn public_name(&self) -> &str {
         &self.public_name
     }
 
     /// The stable origin identity of the exported declaration.
-    #[allow(dead_code)]
     pub(crate) fn origin(&self) -> &OriginDeclarationId {
         &self.origin
     }
@@ -678,14 +676,12 @@ impl DefinedPublicExportOrigins {
 
     /// The free-namespace export bindings for directly defined public declarations, in
     /// deterministic order. Excludes receiver methods.
-    #[allow(dead_code)]
     pub(crate) fn export_bindings(&self) -> &[ExportBinding] {
         &self.export_bindings
     }
 
     /// The receiver-method origins attached to exported nominal type surfaces, in deterministic
     /// order. Not free-namespace bindings.
-    #[allow(dead_code)]
     pub(crate) fn receiver_surfaces(&self) -> &[ReceiverSurfaceOrigins] {
         &self.receiver_surfaces
     }

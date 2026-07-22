@@ -20,7 +20,6 @@ use crate::compiler_frontend::compiler_messages::ModuleDiagnostics;
 use crate::compiler_frontend::defined_public_export_origins::build_defined_public_export_origin_draft;
 use crate::compiler_frontend::defined_public_export_origins::build_public_source_nominal_origin_index;
 use crate::compiler_frontend::defined_public_export_origins::build_public_source_trait_origin_index;
-use crate::compiler_frontend::defined_public_type_surface::build_defined_public_type_surface;
 use crate::compiler_frontend::external_packages::{
     ExternalFunctionId, ExternalPackageId, ExternalPackageRegistry,
 };
@@ -34,6 +33,9 @@ use crate::compiler_frontend::instrumentation::{FrontendCounter, add_frontend_co
 use crate::compiler_frontend::module_dependencies::SortedHeaders;
 use crate::compiler_frontend::module_metadata::HirLoweringResult;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
+use crate::compiler_frontend::public_interface_draft::{
+    PublicInterfaceDraftBuilder, PublicInterfaceDraftBuilderInput,
+};
 use crate::compiler_frontend::semantic_identity::StableModuleOriginIdentity;
 use crate::compiler_frontend::source_module_origin::SourceModuleOriginTable;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
@@ -927,67 +929,39 @@ impl FrontendModuleBuildContext<'_> {
                     )
                 })?;
 
-            // Take the resolved receiver-method catalog from the AST before HIR lowering consumes
-            // it, so HIR does not become the catalog's consumer. The catalog was built and
-            // validated during AST environment construction, so receiver-surface origin projection
-            // sees the resolved ReceiverKey (including generic base resolution) rather than
-            // best-effort header-parsed receiver names.
-            let resolved_receiver_catalog =
-                module_ast.resolved_receiver_catalog.take().ok_or_else(|| {
-                    CompilerMessages::from_error_ref(
-                        CompilerError::compiler_error(
-                            "AST finalization did not retain its resolved receiver-method catalog",
-                        ),
-                        &compiler.string_table,
-                    )
-                })?;
+            // Take the consolidated transient public-interface projection input from the AST
+            // before HIR lowering consumes it. It bundles the resolved public type-root table,
+            // the directly-defined active-root public trait-root vector and the validated
+            // receiver-method catalog. Donor-local TypeIds stay inside this projection input
+            // and never enter a cross-module artefact.
+            let public_interface_projection_input =
+                std::mem::take(&mut module_ast.public_interface_projection_input);
 
-            // Take the transient resolved public type-root table from the AST before HIR lowering
-            // consumes it, so HIR never receives or reconstructs the donor-local root table. The
-            // table was built from already-resolved AST facts; canonical projection consumes it
-            // immediately to produce the stable type-only surface below.
-            let resolved_public_type_roots =
-                std::mem::take(&mut module_ast.resolved_public_type_roots);
-
-            // 4. Finalize the stable defined-public-export identity component and build the stable
-            //    type-only public surface before HIR consumes the AST. Both components are built
-            //    from already-resolved facts (the receiver catalog, the resolved public type-root
-            //    table, the export-origin draft and the module TypeEnvironment) without a second
-            //    source scan or HIR scan. They are retained only on overall semantic success.
-            //
-            // The export-origin finalization projects receiver surface origins from the resolved
-            // AST receiver catalog. This runs after AST receiver validation succeeds, so valid
-            // generic receiver methods attach to their generic nominal base origin and invalid
-            // receiver declarations already failed in the AST diagnostic owner.
-            //
-            // The type-surface projection joins each resolved root to its stable export-binding
-            // origin and projects every required TypeId into canonical identities through the
-            // existing canonical_type_identity projection owner. The output carries only owned
-            // stable values; no donor-local TypeId, NominalTypeId, GenericParameterId,
-            // TraitId, CoreTraitKind or InternedPath crosses the module result boundary. Ordered
-            // canonical generic bounds are now present. It is not the final
-            // PublicSemanticInterface: folded constants, generic template bodies, trait
-            // requirements and evidence, access/effect summaries, provenance, re-export
-            // interfaces and cross-module call lowering remain for later phases.
-            // Finalize the export-origin component (receiver surfaces use the draft's
-            // directly-defined active-root nominal index), then build the stable type-only
-            // surface. The surface's transient nominal resolver consumes the expanded
-            // public source-nominal origin index built above, which includes direct public,
-            // imported project-graph and public-alias-target nominals.
-            let defined_public_export_origins = export_origin_draft
-                .finalize(resolved_receiver_catalog.as_ref(), &compiler.string_table)
+            // 4. Build the one aggregate public-interface draft before HIR consumes the AST. The
+            //    draft is the sole pre-HIR public-semantic handoff: the export-origin
+            //    finalization, the canonical type-surface projection and the corrected
+            //    trait-requirement projection are internal builder steps. They run from
+            //    already-resolved facts (the receiver catalog, the resolved public type-root
+            //    table, the resolved public trait-root vector, the export-origin draft and the
+            //    module TypeEnvironment) without a second source scan or HIR scan, and are
+            //    retained only on overall semantic success. No
+            //    donor-local TypeId, NominalTypeId, GenericParameterId, TraitId, CoreTraitKind
+            //    or InternedPath crosses the module result boundary. It is not the final
+            //    PublicSemanticInterface: folded constants, generic template bodies, evidence,
+            //    access/effect summaries, provenance, re-export interfaces and cross-module call
+            //    lowering remain for later phases.
+            let public_interface_draft =
+                PublicInterfaceDraftBuilder::new(PublicInterfaceDraftBuilderInput {
+                    export_origin_draft,
+                    public_interface_projection_input,
+                    public_source_nominal_type_origins: &public_source_nominal_type_origins,
+                    public_source_trait_origins: &public_source_trait_origins,
+                    type_environment: &module_ast.type_environment,
+                    external_registry: compiler.external_package_registry.as_ref(),
+                    string_table: &compiler.string_table,
+                })
+                .build()
                 .map_err(|error| CompilerMessages::from_error_ref(error, &compiler.string_table))?;
-
-            let defined_public_type_surface = build_defined_public_type_surface(
-                &resolved_public_type_roots,
-                &defined_public_export_origins,
-                &public_source_nominal_type_origins,
-                &public_source_trait_origins,
-                &module_ast.type_environment,
-                compiler.external_package_registry.as_ref(),
-                &compiler.string_table,
-            )
-            .map_err(|error| CompilerMessages::from_error_ref(error, &compiler.string_table))?;
 
             // 5. Resolve const fragment StringIds to strings before AST is consumed by HIR.
             let const_top_level_fragments = module_ast
@@ -1010,7 +984,7 @@ impl FrontendModuleBuildContext<'_> {
                 metadata: lowering_metadata,
             } = hir_lowering;
 
-            // 5b. Validate extracted non-HIR compiler metadata before a successful module is
+            // 7. Validate extracted non-HIR compiler metadata before a successful module is
             // returned. Invalid compiler metadata is an internal CompilerError.
             if let Err(error) = lowering_metadata.validate() {
                 return Err(CompilerMessages::from_error_ref(
@@ -1019,7 +993,7 @@ impl FrontendModuleBuildContext<'_> {
                 ));
             }
 
-            // 6. Run static analysis (Borrow Checker).
+            // 8. Run static analysis (Borrow Checker).
             let borrow_analysis = timed_frontend_stage(
                 "frontend.borrow",
                 "Borrow checking completed in: ",
@@ -1119,8 +1093,7 @@ impl FrontendModuleBuildContext<'_> {
                         root_activity,
                     ),
                 },
-                defined_public_export_origins,
-                defined_public_type_surface,
+                public_interface_draft,
             ))
         })();
 
@@ -1130,14 +1103,13 @@ impl FrontendModuleBuildContext<'_> {
         // (an infrastructure failure recovered losslessly from its structured payload). This is
         // the single lossless ownership transfer; graph and render consumers never re-classify.
         match compile_result {
-            Ok((module, defined_public_export_origins, defined_public_type_surface)) => {
+            Ok((module, public_interface_draft)) => {
                 let string_table = compiler.string_table;
                 Ok(ModuleCompilationOutcome::Success(Box::new(
                     CompiledModuleResult {
                         module,
                         string_table,
-                        defined_public_export_origins,
-                        defined_public_type_surface,
+                        public_interface_draft,
                     },
                 )))
             }

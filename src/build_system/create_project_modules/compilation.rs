@@ -379,16 +379,16 @@ pub(crate) fn compile_single_file_frontend(
     // 6. Merge local results back into the global build context.
     let merge_delta_start = crate::timing::start_pipeline_timing();
     let remap = string_table.merge_delta_from(&result.string_table, base_len);
-    // The transient `CompiledModuleResult` also carries the stable defined-public-export
-    // identity component for the next graph/interface slice. The legacy flat `Vec<Module>`
-    // handoff drops it here at the migration boundary; the accepted three-lane `Module` does
-    // not store it.
+    // The transient `CompiledModuleResult` also carries the aggregate public-interface draft
+    // for the next graph/interface slice. The legacy flat `Vec<Module>` handoff drops it here
+    // at the migration boundary; the accepted three-lane `Module` does not store it.
     let CompiledModuleResult {
         mut module,
         string_table: _,
-        defined_public_export_origins: _,
-        defined_public_type_surface: _,
+        public_interface_draft,
     } = result;
+    // Explicit drop keeps production ownership honest until the graph consumer lands.
+    drop(public_interface_draft);
     if !remap.is_identity() {
         module.remap_string_ids(&remap);
     }
@@ -741,16 +741,17 @@ pub(crate) fn compile_directory_frontend(
             &success.compiled.string_table,
             success.string_table_base_len,
         );
-        // The transient `CompiledModuleResult` also carries the stable defined-public-export
-        // identity component for the next graph/interface slice. The legacy flat `Vec<Module>`
-        // handoff drops it here at the migration boundary; the accepted three-lane `Module`
-        // does not store it.
+        // The transient `CompiledModuleResult` also carries the aggregate public-interface
+        // draft for the next graph/interface slice. The legacy flat `Vec<Module>` handoff
+        // drops it here at the migration boundary; the accepted three-lane `Module` does not
+        // store it.
         let CompiledModuleResult {
             mut module,
             string_table: _,
-            defined_public_export_origins: _,
-            defined_public_type_surface: _,
+            public_interface_draft,
         } = success.compiled;
+        // Explicit drop keeps production ownership honest until the graph consumer lands.
+        drop(public_interface_draft);
         if !remap.is_identity() {
             module.remap_string_ids(&remap);
         }

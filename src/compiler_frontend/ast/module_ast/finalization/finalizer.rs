@@ -12,7 +12,7 @@ use super::normalize_ast::TemplateNormalizationError;
 use crate::compiler_frontend::ast::templates::top_level_templates::{
     collect_and_strip_comment_templates, collect_const_top_level_fragments,
 };
-use crate::compiler_frontend::ast::{Ast, AstChoiceDefinition};
+use crate::compiler_frontend::ast::{Ast, AstChoiceDefinition, AstPublicInterfaceProjectionInput};
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::headers::parse_file_headers::TopLevelConstFragment;
@@ -206,6 +206,7 @@ impl<'context, 'services> AstFinalizer<'context, 'services> {
             lookups,
             type_environment,
             resolved_public_type_roots,
+            resolved_public_trait_roots,
         } = self.environment;
 
         #[cfg(debug_assertions)]
@@ -234,8 +235,11 @@ impl<'context, 'services> AstFinalizer<'context, 'services> {
             choice_definitions,
             type_environment,
             const_facts,
-            resolved_receiver_catalog,
-            resolved_public_type_roots,
+            public_interface_projection_input: AstPublicInterfaceProjectionInput {
+                root_table: resolved_public_type_roots,
+                trait_roots: resolved_public_trait_roots,
+                receiver_catalog: resolved_receiver_catalog,
+            },
         })
     }
 

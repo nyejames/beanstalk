@@ -20,27 +20,27 @@ This document replaces the previous incremental phase sequence at the same path.
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/canonical-module-compilation-and-scoped-packages-plan.md
 STATUS: active
-CURRENT_SLICE: R1 — replace the parallel direct export/type outputs with one aggregate public-interface draft, including corrected direct trait requirement projection
+CURRENT_SLICE: R1 accepted — checkpoint the aggregate public-interface draft, then continue with R2a declaration-centric direct records
 LAST_ACCEPTED_COMMIT: 4a0cd4e012b868b88263a91501061dc6d5e5a0cd
-WORKTREE: main at c60f0fbd1; unrelated staged memory-documentation additions must remain untouched
-REQUIRED_RELOADS: startup files, this plan, current public-interface source, current diff and prior Phase 7c2e task/handoff
+WORKTREE: main at b184744ee; unrelated documentation/CSS work was committed separately and no unrelated changes remain
+REQUIRED_RELOADS: startup files, this plan, current public-interface source and current diff
 RELEVANT_CONTEXT_NOW:
 - docs: compiler-design-overview.md and build-system-design.md own the draft/final interface and orchestration boundaries
-- code: semantic_identity.rs, defined_public_type_surface.rs, AST resolved public roots, build.rs and frontend_orchestration.rs own the current parallel producer path
+- code: public_interface_draft.rs, semantic_identity.rs, defined_public_type_surface.rs, AST resolved public roots, build.rs and frontend_orchestration.rs own the aggregate producer path
 ACCEPTANCE_CRITERIA:
-- one PublicInterfaceDraftBuilder produces one owned PublicInterfaceDraft covering direct export origins, canonical declaration types, receiver surfaces, generic bounds and corrected trait requirements
-- CompiledModuleResult carries exactly one aggregate draft and no separate defined_public_* fields
-- trait receiver SelfType projection validates the owning trait this_type invariant and no open-ended AST handoff bag or compatibility path remains
+- R1 source, tests and this plan are staged without unrelated documentation or CSS changes
+- checkpoint commit records the accepted aggregate draft and corrected trait-self projection
+- continuation refreshes LAST_ACCEPTED_COMMIT and scopes the first coherent R2 declaration-centric record slice
 VALIDATION_STATE:
-- cargo fmt: not run for this slice
-- focused tests: not run for this slice
-- just validate: not run for this slice
+- cargo fmt --all -- --check: passed
+- focused public-interface, defined-public and trait-root tests: passed
+- just validate: passed; cross-target Clippy, 3,619 Rust tests, 1,793 integration runs, docs check and 28 benchmark cases
 DOCS_IMPACT: active plan only; progress matrix unchanged because R1 changes no user-visible support
 BLOCKERS_OR_OPEN_DECISIONS: none
 DELEGATION_DECISION: ollama - user requires Ollama for every worker slice
 NEXT_WORKER_ORDER: ollama only
 STOP_REASON: none
-NEXT_RESUME_ACTION: launch the bounded R1 aggregate-draft implementation through Ollama
+NEXT_RESUME_ACTION: commit the accepted R1 checkpoint, refresh its hash, then define and launch R2a through Ollama
 ```
 
 Do not append worktree-specific notes, complete validation histories or worker transcripts to this plan. Keep this status block current and concise. Git history is the validation history.
@@ -483,6 +483,8 @@ Exit gate:
 - no claim that worker-only validation accepted 7c2e
 
 ## Milestone R1: Consolidate the public-interface producer boundary
+
+Status: completed by the accepted R1 aggregate-draft checkpoint.
 
 Goal: one pre-HIR aggregate instead of another parallel interface component.
 

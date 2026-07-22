@@ -52,5 +52,9 @@ mod scope_context_tests;
 mod resolved_public_type_roots_tests;
 
 #[cfg(test)]
+#[path = "../tests/resolved_public_trait_roots_tests.rs"]
+mod resolved_public_trait_roots_tests;
+
+#[cfg(test)]
 #[path = "../tests/finalizer_tests.rs"]
 mod finalizer_tests;
