@@ -6,9 +6,10 @@
 //! WHY: module inventory is the Stage 0 bridge between the structural graph and parallel frontend
 //! compilation. The graph-owned `StableModuleOriginIdentity` travels with each module so semantic
 //! compilation receives a canonical identity instead of reconstructing one from an entry path.
-//! Entry root paths and deterministic entry order come from the graph's compile waves so entry
-//! classification has one owner; root setup and source-backed package validation live in sibling
-//! modules.
+//! Entry root paths and deterministic compile-wave grouping come from the graph's compile waves so
+//! entry classification has one owner; the directory compiler consumes one wave at a time,
+//! permitting parallelism only within a ready wave. Root setup and source-backed package
+//! validation live in sibling modules.
 
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_messages::InvalidConfigReason;
@@ -80,18 +81,49 @@ pub(crate) struct DiscoveredModule {
     pub(crate) input_files: Vec<PreparedSourceInput>,
 }
 
+/// Normal entry modules grouped by the populated graph's compile waves.
+///
+/// WHAT: owns the wave-preserving data contract between module inventory and directory
+///       semantic compilation. Each wave holds the normal entry modules of one retained graph
+///       dependency wave, preserving the populated graph's dependency ordering and deterministic
+///       `ModuleId` order. Waves containing only non-entry modules (support roots, facade) are
+///       excluded so the inventory carries only modules the directory compiler will actually
+///       compile. This is the temporary normal-entry job inventory; current entry-closure payload
+///       semantics are unchanged, and no immutable provider interface is produced or consumed yet
+///       — that remains a Phase 5d concern.
+/// WHY: preserving wave boundaries lets the directory compiler execute semantic compilation one
+///      dependency wave at a time, with Rayon parallelism only within a ready wave. The graph
+///      owns compile-wave order; this contract is the single owner of that order at the inventory
+///      boundary so the compiler does not recompute waves or flatten them back into one batch.
+pub(crate) struct ModuleEntryCompileWaves {
+    waves: Vec<Vec<DiscoveredModule>>,
+}
+
+impl ModuleEntryCompileWaves {
+    /// Read-only access to the compile waves in deterministic graph order.
+    ///
+    /// Each wave is non-empty and contains only normal entry modules.
+    pub(crate) fn waves(&self) -> &[Vec<DiscoveredModule>] {
+        &self.waves
+    }
+
+    /// Consume the inventory into owned waves for sequential directory compilation.
+    pub(crate) fn into_waves(self) -> Vec<Vec<DiscoveredModule>> {
+        self.waves
+    }
+}
+
 /// Discovers every normal entry module in the directory project and its reachable dependencies.
 ///
 /// Entry root files are seeded from the graph's normal entry modules in deterministic `ModuleId`
 /// order. Reachable-file discovery retains one local structural dependency fact per cross-module
 /// import resolution; after discovery completes the facts are merged into the graph as
 /// provider-before-consumer edges, and the returned modules are ordered by the populated
-/// graph's compile waves (filtered to normal entry modules). That order is the deterministic
-/// inventory/result position only; the directory compiler still feeds the returned vector to a
-/// Rayon batch, so actual dependency-wave semantic scheduling is a later Phase 5 slice. Support
-/// roots and the project package facade are never entries. A defensive graph cycle, a missing
-/// project-local root or a graph/inventory disagreement surfaces through the existing
-/// `CompilerMessages`/string-table boundary without panicking.
+/// graph's compile waves (filtered to normal entry modules, with empty waves excluded). The
+/// directory compiler consumes these waves sequentially, permitting Rayon parallelism only within
+/// a ready wave. Support roots and the project package facade are never entries. A defensive
+/// graph cycle, a missing project-local root or a graph/inventory disagreement surfaces through
+/// the existing `CompilerMessages`/string-table boundary without panicking.
 pub(crate) fn discover_all_modules_in_project(
     config: &Config,
     project_path_resolver: &ProjectPathResolver,
@@ -99,7 +131,7 @@ pub(crate) fn discover_all_modules_in_project(
     style_directives: &StyleDirectiveRegistry,
     external_imports: &mut ExternalImportDiscoveryState<'_>,
     string_table: &mut StringTable,
-) -> Result<Vec<DiscoveredModule>, CompilerMessages> {
+) -> Result<ModuleEntryCompileWaves, CompilerMessages> {
     let seeds = normal_entry_seeds_in_module_id_order(project_module_graph);
 
     if seeds.is_empty() {
@@ -179,11 +211,10 @@ pub(crate) fn discover_all_modules_in_project(
     merge_local_structural_dependencies(project_module_graph, &dependency_facts, string_table)?;
 
     // Order the discovered modules by the now-populated graph's compile waves so providers precede
-    // consumers in the returned inventory order. Discovery seeded entries in `ModuleId` order;
-    // this reorders the result to the dependency-ordered wave order without re-running discovery.
-    // The directory compiler still feeds this vector to a Rayon batch, so Phase 5b establishes
-    // deterministic dependency-ordered inventory position only; actual dependency-wave semantic
-    // scheduling is a later Phase 5 slice.
+    // consumers in the returned inventory waves. Discovery seeded entries in `ModuleId` order;
+    // this groups the result into dependency-ordered compile waves without re-running discovery.
+    // Each wave contains only normal entry modules (empty waves are excluded), and the directory
+    // compiler consumes one wave at a time with parallelism only within a ready wave.
     order_discovered_modules_by_compile_waves(project_module_graph, drafts, string_table)
 }
 
@@ -305,14 +336,15 @@ fn graph_inventory_mismatch_error(
     CompilerMessages::from_error_ref(CompilerError::compiler_error(reason), string_table)
 }
 
-/// Reorder discovered module drafts to match the populated graph's compile-wave order and lift
-/// each draft to a `DiscoveredModule` carrying its graph-owned stable origin.
+/// Group discovered module drafts by the populated graph's compile waves and lift each draft to
+/// a `DiscoveredModule` carrying its graph-owned stable origin.
 ///
-/// WHAT: flattens the graph's compile waves, keeps only normal entry modules, and reorders the
-///       discovered drafts so providers precede consumers in the returned inventory order.
-///       Drafts are keyed by their graph-assigned `ModuleId`, so the reorder matches by identity
-///       rather than re-deriving identity from a root path. Each lifted `DiscoveredModule` carries
-///       the exact `StableModuleOriginIdentity` the graph assigned to that module.
+/// WHAT: iterates the graph's compile waves, keeps only normal entry modules, and groups the
+///       discovered drafts into waves so providers precede consumers. Drafts are keyed by their
+///       graph-assigned `ModuleId`, so the grouping matches by identity rather than re-deriving
+///       identity from a root path. Each lifted `DiscoveredModule` carries the exact
+///       `StableModuleOriginIdentity` the graph assigned to that module. Waves containing no
+///       entry modules are excluded from the returned inventory.
 /// WHY: discovery seeds entries in `ModuleId` order and collects dependency facts; the graph
 ///      inserts edges from those facts, so the dependency-ordered wave order is only known after
 ///      the merge. The graph and discovery must agree exactly on the normal entry set: every
@@ -324,7 +356,7 @@ fn order_discovered_modules_by_compile_waves(
     project_module_graph: &ProjectModuleGraph,
     drafts: Vec<DiscoveredModuleDraft>,
     string_table: &mut StringTable,
-) -> Result<Vec<DiscoveredModule>, CompilerMessages> {
+) -> Result<ModuleEntryCompileWaves, CompilerMessages> {
     let waves = project_module_graph
         .compile_waves()
         .map_err(|error| CompilerMessages::from_error_ref(error, string_table))?;
@@ -333,12 +365,6 @@ fn order_discovered_modules_by_compile_waves(
         .entry_modules()
         .iter()
         .copied()
-        .collect();
-
-    let ordered_entry_module_ids: Vec<ModuleId> = waves
-        .iter()
-        .flat_map(|wave| wave.iter().copied())
-        .filter(|module_id| entry_modules.contains(module_id))
         .collect();
 
     // Index discovered drafts by their graph-assigned `ModuleId`. A duplicate `ModuleId` means
@@ -358,32 +384,41 @@ fn order_discovered_modules_by_compile_waves(
         }
     }
 
-    // Consume drafts in dependency-ordered wave order and lift each to a `DiscoveredModule`
-    // carrying the graph-owned stable origin. A graph entry with no matching discovered draft
-    // means discovery and the graph disagree on the normal entry set.
-    let mut ordered = Vec::with_capacity(ordered_entry_module_ids.len());
-    for module_id in &ordered_entry_module_ids {
-        let draft = match draft_by_module_id.remove(module_id) {
-            Some(draft) => draft,
-            None => {
-                return Err(graph_inventory_mismatch_error(
-                    format!(
-                        "The project module graph lists normal entry ModuleId {} that has no matching discovered module inventory",
-                        module_id.index()
-                    ),
-                    string_table,
-                ));
+    // Group drafts by compile wave, keeping only normal entry modules. Each wave preserves
+    // deterministic `ModuleId` order from the graph. Waves with no entry modules are skipped so
+    // the inventory carries only modules the directory compiler will compile.
+    let mut grouped_waves = Vec::new();
+    for wave in &waves {
+        let mut wave_modules = Vec::new();
+        for module_id in wave {
+            if !entry_modules.contains(module_id) {
+                continue;
             }
-        };
-        let stable_origin = project_module_graph
-            .node(*module_id)
-            .stable_origin()
-            .clone();
-        ordered.push(DiscoveredModule {
-            stable_origin,
-            entry_point: draft.entry_point,
-            input_files: draft.input_files,
-        });
+            let draft = match draft_by_module_id.remove(module_id) {
+                Some(draft) => draft,
+                None => {
+                    return Err(graph_inventory_mismatch_error(
+                        format!(
+                            "The project module graph lists normal entry ModuleId {} that has no matching discovered module inventory",
+                            module_id.index()
+                        ),
+                        string_table,
+                    ));
+                }
+            };
+            let stable_origin = project_module_graph
+                .node(*module_id)
+                .stable_origin()
+                .clone();
+            wave_modules.push(DiscoveredModule {
+                stable_origin,
+                entry_point: draft.entry_point,
+                input_files: draft.input_files,
+            });
+        }
+        if !wave_modules.is_empty() {
+            grouped_waves.push(wave_modules);
+        }
     }
 
     // Any remaining inventory has no graph entry, so discovery returned a module the graph
@@ -398,7 +433,9 @@ fn order_discovered_modules_by_compile_waves(
         ));
     }
 
-    Ok(ordered)
+    Ok(ModuleEntryCompileWaves {
+        waves: grouped_waves,
+    })
 }
 
 /// Serial provider-capable fallback.

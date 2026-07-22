@@ -128,7 +128,7 @@ fn discover_modules_for_test(
     config: &Config,
     resolver: &ProjectPathResolver,
     style_directives: &StyleDirectiveRegistry,
-) -> Result<Vec<DiscoveredModule>, CompilerMessages> {
+) -> Result<ModuleEntryCompileWaves, CompilerMessages> {
     let mut string_table = StringTable::new();
     let project_root = fs::canonicalize(&config.entry_dir).expect("project root should resolve");
     let entry_root =
@@ -172,7 +172,7 @@ fn discover_modules_for_test_with_providers(
     resolver: &ProjectPathResolver,
     style_directives: &StyleDirectiveRegistry,
     external_import_providers: &ExternalImportProviderRegistry,
-) -> Result<Vec<DiscoveredModule>, CompilerMessages> {
+) -> Result<ModuleEntryCompileWaves, CompilerMessages> {
     let mut string_table = StringTable::new();
     let project_root = fs::canonicalize(&config.entry_dir).expect("project root should resolve");
     let entry_root =
@@ -217,7 +217,7 @@ fn discover_modules_and_graph_for_test(
     resolver: &ProjectPathResolver,
     style_directives: &StyleDirectiveRegistry,
 ) -> (
-    Vec<DiscoveredModule>,
+    ModuleEntryCompileWaves,
     super::project_module_graph::ProjectModuleGraph,
     StringTable,
 ) {
@@ -304,7 +304,7 @@ fn discover_modules_for_test_messages(
     config: &Config,
     resolver: &ProjectPathResolver,
     style_directives: &StyleDirectiveRegistry,
-) -> Result<Vec<DiscoveredModule>, CompilerMessages> {
+) -> Result<ModuleEntryCompileWaves, CompilerMessages> {
     discover_modules_for_test(config, resolver, style_directives)
 }
 
@@ -1676,6 +1676,7 @@ fn discover_modules_uses_reachable_files_only() {
 
     let modules = discover_modules_for_test(&config, &resolver, &style_directives)
         .expect("module discovery should pass");
+    let modules: Vec<_> = modules.waves().iter().flatten().collect();
 
     assert_eq!(modules.len(), 2);
 
@@ -1741,6 +1742,7 @@ fn discover_modules_resolves_relative_child_imports() {
 
     let modules = discover_modules_for_test(&config, &resolver, &style_directives)
         .expect("module discovery should pass");
+    let modules: Vec<_> = modules.waves().iter().flatten().collect();
     assert_eq!(modules.len(), 1, "expected exactly one entry module");
 
     let discovered = modules[0]
@@ -1800,6 +1802,7 @@ fn entry_root_fallback_wins_for_unmatched_non_relative_imports() {
 
     let modules = discover_modules_for_test(&config, &resolver, &style_directives)
         .expect("module discovery should pass");
+    let modules: Vec<_> = modules.waves().iter().flatten().collect();
     assert_eq!(modules.len(), 1, "expected exactly one entry module");
 
     let source_theme = fs::canonicalize(src.join("helpers/theme.bst")).expect("canonical source");
@@ -1858,6 +1861,7 @@ fn discover_all_modules_finds_multiple_hash_entries_per_root() {
 
     let modules = discover_modules_for_test(&config, &resolver, &style_directives)
         .expect("module discovery should pass");
+    let modules: Vec<_> = modules.waves().iter().flatten().collect();
     assert_eq!(modules.len(), 3, "expected one module per root directory");
 
     let entry_names = modules
@@ -3199,6 +3203,7 @@ fn beandown_files_are_reachable_without_import_scanning() {
 
     let modules = discover_modules_for_test(&config, &resolver, &style_directives)
         .expect(".bd body text must not be scanned for imports");
+    let modules: Vec<_> = modules.waves().iter().flatten().collect();
 
     let input_paths: HashSet<_> = modules[0]
         .input_files
@@ -3253,6 +3258,7 @@ fn reachable_beandown_queues_same_directory_root_file() {
 
     let modules = discover_modules_for_test(&config, &resolver, &style_directives)
         .expect("reachable .bd should discover same-directory hash root");
+    let modules: Vec<_> = modules.waves().iter().flatten().collect();
 
     // The entry module imports a Beandown file from the `docs` module root, so `docs` is its
     // provider and precedes it in the returned inventory order. Find the entry module by its
@@ -3325,6 +3331,7 @@ fn unimported_beandown_file_under_entry_root_is_ignored() {
 
     let modules = discover_modules_for_test(&config, &resolver, &style_directives)
         .expect("unimported .bd file should not affect discovery");
+    let modules: Vec<_> = modules.waves().iter().flatten().collect();
 
     assert_eq!(modules[0].input_files.len(), 1);
     assert_eq!(
@@ -3377,6 +3384,7 @@ fn extensionless_bst_import_and_virtual_package_import_still_work() {
 
     let modules = discover_modules_for_test(&config, &resolver, &style_directives)
         .expect("module discovery should pass");
+    let modules: Vec<_> = modules.waves().iter().flatten().collect();
     assert_eq!(modules.len(), 1);
 
     let discovered = modules[0]
@@ -3428,6 +3436,7 @@ fn reachable_file_discovery_markdown_files_are_reachable_without_import_scanning
 
     let modules = discover_modules_for_test(&config, &resolver, &style_directives)
         .expect(".md body text must not be scanned for imports");
+    let modules: Vec<_> = modules.waves().iter().flatten().collect();
 
     let input_paths: HashSet<_> = modules[0]
         .input_files
@@ -3483,6 +3492,7 @@ fn reachable_file_discovery_markdown_does_not_queue_unrelated_module_root_file()
 
     let modules = discover_modules_for_test(&config, &resolver, &style_directives)
         .expect("reachable .md should not queue an unrelated module root");
+    let modules: Vec<_> = modules.waves().iter().flatten().collect();
 
     let input_paths: HashSet<_> = modules[0]
         .input_files
@@ -3537,6 +3547,7 @@ fn reachable_file_discovery_unimported_markdown_file_is_ignored() {
 
     let modules = discover_modules_for_test(&config, &resolver, &style_directives)
         .expect("unimported .md file should not affect discovery");
+    let modules: Vec<_> = modules.waves().iter().flatten().collect();
 
     assert_eq!(modules[0].input_files.len(), 1);
     assert_eq!(
@@ -3701,6 +3712,7 @@ fn stage0_reuses_scanned_bst_source_when_assembling_input_files() {
     super::source_loading::reset_source_read_count_for_test(&canonical_root);
     let modules = discover_modules_for_test(&config, &resolver, &style_directives)
         .expect("module discovery should pass");
+    let modules: Vec<_> = modules.waves().iter().flatten().collect();
 
     assert_eq!(modules.len(), 1);
     assert_eq!(
@@ -3760,6 +3772,7 @@ fn stage0_loads_asset_sources_and_preserves_deterministic_input_order() {
 
     let modules = discover_modules_for_test(&config, &resolver, &style_directives)
         .expect("asset source discovery should pass");
+    let modules: Vec<_> = modules.waves().iter().flatten().collect();
     let input_files = &modules[0].input_files;
     let input_names = input_files
         .iter()
@@ -3903,6 +3916,7 @@ fn provider_backed_imports_are_resolved_without_becoming_source_inputs() {
     let modules =
         discover_modules_for_test_with_providers(&config, &resolver, &style_directives, &providers)
             .expect("provider-backed import should resolve during discovery");
+    let modules: Vec<_> = modules.waves().iter().flatten().collect();
 
     assert_eq!(calls.load(Ordering::Relaxed), 1);
     assert_eq!(modules[0].input_files.len(), 1);
@@ -3961,6 +3975,7 @@ fn provider_free_multi_entry_discovery_is_deterministic_and_uses_parallel_path()
 
     let modules = discover_modules_for_test(&config, &resolver, &style_directives)
         .expect("provider-free multi-entry discovery should pass");
+    let modules: Vec<_> = modules.waves().iter().flatten().collect();
 
     assert_eq!(
         super::source_loading::source_read_count_for_test(),
@@ -4066,6 +4081,7 @@ fn provider_backed_import_in_multi_entry_falls_back_to_serial_and_calls_provider
     let modules =
         discover_modules_for_test_with_providers(&config, &resolver, &style_directives, &providers)
             .expect("provider-backed multi-entry discovery should fall back and succeed");
+    let modules: Vec<_> = modules.waves().iter().flatten().collect();
 
     assert_eq!(
         calls.load(Ordering::Relaxed),
@@ -4139,6 +4155,7 @@ fn provider_required_replay_reuses_classification_cache_without_retokenizing() {
     let modules =
         discover_modules_for_test_with_providers(&config, &resolver, &style_directives, &providers)
             .expect("provider-required replay should succeed");
+    let modules: Vec<_> = modules.waves().iter().flatten().collect();
 
     // Three unique Beanstalk sources: #pageA.bst, shared/helper.bst, and #pageB.bst.
     // Classification reads each once while completing the full local traversal. The serial
@@ -4284,6 +4301,7 @@ fn provider_free_parallel_preserves_cross_module_root_queuing() {
 
     let modules = discover_modules_for_test(&config, &resolver, &style_directives)
         .expect("cross-module root discovery should pass");
+    let modules: Vec<_> = modules.waves().iter().flatten().collect();
 
     assert_eq!(modules.len(), 2);
 
@@ -4360,6 +4378,7 @@ fn stage0_retains_beanstalk_tokens_and_leaves_non_tokenized_sources_without_toke
 
     let modules = discover_modules_for_test(&config, &resolver, &style_directives)
         .expect("retained-token discovery should pass");
+    let modules: Vec<_> = modules.waves().iter().flatten().collect();
     let input_files = &modules[0].input_files;
 
     // Every Beanstalk input carries the retained Stage 0 token stream by type; Beandown and
@@ -4452,6 +4471,7 @@ fn provider_free_parallel_retains_beanstalk_tokens_for_every_reachable_file() {
 
     let modules = discover_modules_for_test(&config, &resolver, &style_directives)
         .expect("provider-free parallel discovery should pass");
+    let modules: Vec<_> = modules.waves().iter().flatten().collect();
 
     assert_eq!(modules.len(), 2);
 
@@ -4564,23 +4584,37 @@ fn local_dependency_edge_is_recorded_provider_before_consumer() {
     );
 
     // The returned modules follow the dependency-ordered wave order: module_b is the provider
-    // and must precede consumer module_a. Phase 5b establishes inventory position only; the
-    // directory compiler still feeds this vector to a Rayon batch.
-    let entry_order: Vec<std::path::PathBuf> = modules
+    // and must appear in an earlier compile wave than consumer module_a. The inventory
+    // preserves wave boundaries so the directory compiler can schedule providers before
+    // consumers.
+    let waves = modules.waves();
+    let provider_wave = waves
         .iter()
-        .map(|module| module.entry_point.clone())
-        .collect();
-    let module_a_position = entry_order
+        .position(|wave| {
+            wave.iter()
+                .any(|module| module.entry_point.file_name() == Some(OsStr::new("#api.bst")))
+        })
+        .expect("module_b should appear in a compile wave");
+    let consumer_wave = waves
         .iter()
-        .position(|path| path.file_name().is_some_and(|name| name == "#pageA.bst"))
-        .expect("module_a should be in the returned order");
-    let module_b_position = entry_order
-        .iter()
-        .position(|path| path.file_name().is_some_and(|name| name == "#api.bst"))
-        .expect("module_b should be in the returned order");
+        .position(|wave| {
+            wave.iter()
+                .any(|module| module.entry_point.file_name() == Some(OsStr::new("#pageA.bst")))
+        })
+        .expect("module_a should appear in a compile wave");
     assert!(
-        module_b_position < module_a_position,
-        "provider module_b must precede consumer module_a in compile-wave order"
+        provider_wave < consumer_wave,
+        "provider module_b must be in an earlier wave than consumer module_a"
+    );
+    assert_eq!(
+        waves[provider_wave].len(),
+        1,
+        "the provider is the sole entry in its wave"
+    );
+    assert_eq!(
+        waves[consumer_wave].len(),
+        1,
+        "the sole consumer is the only entry in its wave"
     );
 
     fs::remove_dir_all(&root).expect("should remove temp root");
@@ -4620,7 +4654,108 @@ fn same_module_import_creates_no_project_graph_edge() {
     // Same-module imports create no project-graph edge, so the graph has no edges and one wave.
     let waves = graph.compile_waves().expect("no-edge graph waves cleanly");
     assert_eq!(waves.len(), 1, "no edges means a single ready wave");
-    assert_eq!(modules.len(), 1);
+    assert_eq!(
+        modules.waves().iter().map(|wave| wave.len()).sum::<usize>(),
+        1
+    );
+
+    // The inventory preserves wave boundaries: the single no-edge entry is the sole module in
+    // one ready wave.
+    let inventory_waves = modules.waves();
+    assert_eq!(
+        inventory_waves.len(),
+        1,
+        "one no-edge entry produces one inventory wave"
+    );
+    assert_eq!(
+        inventory_waves[0].len(),
+        1,
+        "the singleton wave contains the one no-edge entry"
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn independent_no_edge_entries_are_grouped_in_one_ready_wave() {
+    // Two entry modules with no cross-module dependency edges must be grouped in the same
+    // compile wave so the directory compiler can compile them in parallel within that wave.
+    let root = temp_dir("phase5c_no_edge_same_wave");
+    let src = root.join("src");
+    let module_a = src.join("module_a");
+    let module_b = src.join("module_b");
+    fs::create_dir_all(&module_a).expect("should create module_a");
+    fs::create_dir_all(&module_b).expect("should create module_b");
+
+    fs::write(
+        root.join(settings::CONFIG_FILE_NAME),
+        "entry_root #= \"src\"\n",
+    )
+    .expect("should write config");
+    // Two independent entry modules with no cross-module imports.
+    fs::write(module_a.join("#pageA.bst"), "#[:pageA]\n").expect("should write pageA");
+    fs::write(module_b.join("#pageB.bst"), "#[:pageB]\n").expect("should write pageB");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config should parse");
+    let resolver = configured_resolver(&config);
+
+    let (modules, graph, _string_table) =
+        discover_modules_and_graph_for_test(&config, &resolver, &style_directives);
+
+    // No cross-module edges means a single ready wave containing both entries.
+    let graph_waves = graph.compile_waves().expect("no-edge graph waves cleanly");
+    assert_eq!(graph_waves.len(), 1, "no edges means a single ready wave");
+
+    let inventory_waves = modules.waves();
+    assert_eq!(
+        inventory_waves.len(),
+        1,
+        "two no-edge entries produce one inventory wave"
+    );
+    assert_eq!(
+        inventory_waves[0].len(),
+        2,
+        "both no-edge entries are grouped in the same wave"
+    );
+
+    // The inventory wave preserves the graph's canonical ModuleId order exactly. Derive the
+    // expected entry order from the graph wave rather than assuming a filename sort, then assert
+    // the inventory matches it position-for-position. Every node in this no-edge wave is a normal
+    // entry, so the graph wave order is the expected entry order.
+    let expected_order: Vec<String> = graph_waves[0]
+        .iter()
+        .map(|module_id| {
+            graph
+                .node(*module_id)
+                .root_file()
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .to_string()
+        })
+        .collect();
+    let inventory_order: Vec<String> = inventory_waves[0]
+        .iter()
+        .map(|module| {
+            module
+                .entry_point
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .to_string()
+        })
+        .collect();
+    assert_eq!(
+        inventory_order, expected_order,
+        "the inventory wave preserves the graph's canonical ModuleId order"
+    );
 
     fs::remove_dir_all(&root).expect("should remove temp root");
 }
@@ -4704,26 +4839,47 @@ fn duplicate_fan_in_deduplicates_edges_and_orders_provider_first() {
         .expect("module_c should appear in a wave");
     assert!(
         provider_wave < consumer_a_wave && provider_wave < consumer_c_wave,
-        "the shared provider must precede both consumers in the returned inventory order"
+        "the shared provider must precede both consumers in compile-wave order"
+    );
+    assert_eq!(
+        consumer_a_wave, consumer_c_wave,
+        "two independent consumers of the same provider must be grouped in the same ready wave"
     );
 
-    // The returned modules follow the wave order: the provider precedes both consumers.
-    let entry_order: Vec<std::path::PathBuf> = modules
-        .iter()
-        .map(|module| module.entry_point.clone())
-        .collect();
-    let provider_position = entry_order
-        .iter()
-        .position(|path| path.file_name().is_some_and(|name| name == "#api.bst"))
-        .expect("module_b should be in the returned order");
+    // The inventory preserves wave boundaries: the provider is alone in the first wave and the
+    // two independent consumers are grouped together in the next wave. Both consumers share one
+    // wave, which makes them eligible for intra-wave parallel compilation.
+    let inventory_waves = modules.waves();
+    assert_eq!(
+        inventory_waves.len(),
+        2,
+        "one provider wave and one consumer wave"
+    );
+    assert_eq!(
+        inventory_waves[0].len(),
+        1,
+        "the provider is the sole entry in the first wave"
+    );
     assert!(
-        entry_order[provider_position..]
-            .iter()
-            .any(|path| path.file_name().is_some_and(|name| name == "#pageA.bst"))
-            && entry_order[provider_position..]
-                .iter()
-                .any(|path| path.file_name().is_some_and(|name| name == "#pageC.bst")),
-        "both consumers must follow the provider in returned module order"
+        inventory_waves[0][0]
+            .entry_point
+            .file_name()
+            .is_some_and(|name| name == "#api.bst"),
+        "module_b is the provider in the first wave"
+    );
+    assert_eq!(
+        inventory_waves[1].len(),
+        2,
+        "both consumers are grouped in the second wave"
+    );
+    let consumer_names: HashSet<&OsStr> = inventory_waves[1]
+        .iter()
+        .map(|module| module.entry_point.file_name().unwrap())
+        .collect();
+    assert!(
+        consumer_names.contains(OsStr::new("#pageA.bst"))
+            && consumer_names.contains(OsStr::new("#pageC.bst")),
+        "the second wave contains both consumers"
     );
 
     fs::remove_dir_all(&root).expect("should remove temp root");
@@ -4777,11 +4933,11 @@ fn discovered_modules_carry_their_graph_assigned_stable_origin() {
         discover_modules_and_graph_for_test(&config, &resolver, &style_directives);
 
     assert!(
-        !modules.is_empty(),
+        modules.waves().iter().map(|wave| wave.len()).sum::<usize>() > 0,
         "the cross-module project should discover at least one normal entry module"
     );
 
-    for module in &modules {
+    for module in modules.waves().iter().flatten() {
         let matching_node = graph
             .nodes()
             .iter()
@@ -4811,6 +4967,8 @@ fn discovered_module_origin_is_not_rederived_from_a_path_component() {
 
     let (modules, _graph, _string_table) =
         discover_modules_and_graph_for_test(&config, &resolver, &style_directives);
+
+    let modules: Vec<_> = modules.waves().iter().flatten().collect();
 
     // Each module carries a distinct stable origin keyed by its logical module path. The two
     // cross-module roots have different logical paths, so their origins must differ.

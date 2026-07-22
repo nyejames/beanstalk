@@ -9,19 +9,19 @@ Replace entry-closure compilation with canonical project and package graphs, imm
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/canonical-module-compilation-and-scoped-packages-plan.md
 STATUS: active
-CURRENT_SLICE: Phase 7c2a accepted; checkpoint commit pending
-LAST_ACCEPTED_COMMIT: e4b61ceb4 (Phase 7c1 canonical closed type identities)
-WORKTREE: main at e4b61ceb4 with accepted Phase 7c2a source, focused tests and this plan update; unrelated user documentation work may appear and must be preserved
+CURRENT_SLICE: Phase 5c dependency-wave semantic scheduling accepted; next Phase 5d canonical per-node semantic jobs and immutable provider interfaces
+LAST_ACCEPTED_COMMIT: d3e00618a (Phase 7c2a stable exported generic-parameter identities); Phase 5c checkpoint pending commit
+WORKTREE: main at d3e00618a with the accepted Phase 5c code, tests and this plan update; unrelated user documentation work may appear and must be preserved
 REQUIRED_RELOADS: startup files, this plan, semantic identity and direct-export origins, TypeEnvironment and AST lookup owners, retained header binding, graph scheduling and current module-result owners
 RELEVANT_CONTEXT_NOW:
 - docs: build-system-design.md Project and package topology plus Deterministic scheduling define canonical graph nodes, strict support scope, facade placement and deterministic waves
-- code: graph/synthetic origins reach semantic compilation; DefinedPublicExportOrigins records direct free and receiver export bindings, but source re-exports and provider binding still require canonical type/value facts that contain no donor-local semantic IDs
+- code: ModuleEntryCompileWaves preserves populated ProjectModuleGraph wave boundaries and directory compilation now exhausts each temporary entry-job wave before starting the next; canonical per-node jobs, immutable provider interfaces and blocked consumers remain absent
 ACCEPTANCE_CRITERIA:
-- stable exported generic-parameter identity derives from a validated free-function or struct/choice declaration origin plus declaration-local parameter position/name without retaining GenericParameterId or StringId
-- the existing canonical TypeId projector resolves open exported parameters through one explicit origin resolver and recursively projects open constructed shapes
-- missing, synthetic, receiver-method and transparent-alias ownership fails through CompilerError without name guessing or sentinels
-- every existing closed-type projection and the separate module-local TypeIdentityKey bridge remain unchanged
-- focused stability, owner-distinction, nested-open-shape and missing-owner tests pass without user-visible behavior changes
+- replace entry-only closure jobs with one semantic job per canonical graph node, including support roots and the optional project package facade
+- bind each job against immutable interfaces from successful providers instead of reopening or copying provider source state
+- prevent a diagnosed provider from semantically compiling its consumers while independent ready branches continue
+- preserve deterministic wave, result, string-table and diagnostic order and keep single-file behavior unchanged
+- focused tests protect compile-once node identity, provider interface consumption, support/facade scheduling and blocked-consumer behavior
 VALIDATION_STATE:
 - Phase 4d just validate: passed; cross-target Clippy, 3419 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases
 - Phase 4e focused validation: passed; 2 import-scanning, 5 reachability, 178 module-discovery, 19 orchestration, 5 token-remap and 116 header tests plus cargo check --tests and git diff --check
@@ -44,12 +44,14 @@ VALIDATION_STATE:
 - Phase 7c1 just validate: passed after clearing generated Cargo artifacts following a no-space environmental failure; cross-target Clippy, 3497 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases (0ms average)
 - Phase 7c2a focused validation: passed after closing receiver-method owner construction; 42 canonical identity tests plus cargo check --tests, cargo clippy --tests -D warnings, formatting and git diff --check
 - Phase 7c2a just validate: passed; cross-target Clippy, 3507 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases (-1ms average)
+- Phase 5c focused validation: passed after removing flat test-only compatibility APIs; 101 create-project-modules/frontend-orchestration tests plus cargo check --tests, cargo clippy --tests -D warnings, formatting and git diff --check
+- Phase 5c just validate: passed; cross-target Clippy, 3508 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases (+1ms average)
 DOCS_IMPACT: index.md names the canonical cross-module type identity and projection owner; progress matrix unchanged for internal interface groundwork
-BLOCKERS_OR_OPEN_DECISIONS: Phase 7c2b must build the exact AST-to-semantic-boundary public type-surface snapshot from completed lookups without retaining the full AST environment or inventing a partial PublicSemanticInterface; source re-exports still wait for provider interfaces
+BLOCKERS_OR_OPEN_DECISIONS: Phase 5d must define the smallest non-transitional owner split that replaces entry-only closure jobs with canonical per-node compilation; production public type-surface projection remains blocked until provider interfaces carry correct donor origins
 DELEGATION_DECISION: ollama - user requires Ollama for every worker slice
 NEXT_WORKER_ORDER: ollama only; no provider substitution for this run
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit the Phase 7c2a checkpoint, record its hash, then scope the direct public type-surface snapshot through Ollama
+NEXT_RESUME_ACTION: commit the accepted Phase 5c checkpoint, then inspect current inventory, preparation, binding and module-result owners to bound Phase 5d without a transitional duplicate path
 ```
 
 ## Hard prerequisites
@@ -482,6 +484,20 @@ Accepted Phase 5b checkpoint:
 - graph/inventory mismatch and absent fact roots fail through release-safe internal
   `CompilerError` boundaries. Focused tests cover edge direction, same-module exclusion,
   duplicate fan-in, deterministic ordering and exact source-location retention.
+
+Accepted Phase 5c checkpoint:
+
+- `ModuleEntryCompileWaves` is the one wave-preserving inventory contract for the temporary normal
+  entry jobs. It filters graph waves with no current entry job without adding a flattened adapter,
+  compatibility iterator or second wave computation.
+- directory semantic compilation exhausts each retained graph wave before starting the next,
+  using Rayon only when one ready wave contains multiple jobs. Frontend counters now distinguish
+  singleton serial jobs from actual intra-wave parallel tasks.
+- current entry-closure payload semantics, single-file compilation and deterministic entry-path
+  result, string-table and diagnostic aggregation remain unchanged. No immutable provider
+  interface is claimed or consumed before canonical per-node jobs land.
+- focused inventory tests protect provider-before-consumer waves, same-wave independent jobs,
+  deterministic graph `ModuleId` order and fan-in consumers sharing a ready wave.
 
 ### Phase 6: Add graph outcomes and immutable module artefact lanes
 

@@ -39,7 +39,7 @@ pub(crate) mod source_package_discovery;
 mod source_tree_index;
 
 #[cfg(test)]
-pub(super) use module_inventory::{DiscoveredModule, discover_all_modules_in_project};
+pub(super) use module_inventory::{ModuleEntryCompileWaves, discover_all_modules_in_project};
 
 pub(crate) use project_roots::resolve_project_entry_root;
 pub(crate) use source_loading::extract_source_code;

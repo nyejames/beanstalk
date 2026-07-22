@@ -579,7 +579,7 @@ pub(crate) fn compile_directory_frontend(
     };
 
     let module_inventory_start = crate::timing::start_pipeline_timing();
-    let discovered_modules = match module_inventory::discover_all_modules_in_project(
+    let module_waves = match module_inventory::discover_all_modules_in_project(
         config,
         &project_path_resolver,
         &mut project_setup.project_module_graph,
@@ -587,7 +587,7 @@ pub(crate) fn compile_directory_frontend(
         &mut external_imports,
         string_table,
     ) {
-        Ok(discovered_modules) => discovered_modules,
+        Ok(module_waves) => module_waves,
         Err(messages) => {
             log_stage_timing("stage0.directory.module_inventory", module_inventory_start);
             log_stage_timing("stage0.directory.total", total_start);
@@ -600,10 +600,15 @@ pub(crate) fn compile_directory_frontend(
     // directory modules may compile in parallel and can safely read the same Arc.
     let external_packages = Arc::new(builder_surface.binding_packages.clone());
 
-    // 3. Compile modules, each with its own local string-table delta.
+    // 3. Compile modules one compile wave at a time, each with its own local string-table delta.
     //
-    // The fork source owns one shared base snapshot for the whole batch. Individual module forks
-    // then keep only strings introduced during that module's frontend pipeline.
+    // The fork source owns one shared base snapshot for the whole project. Individual module forks
+    // then keep only strings introduced during that module's frontend pipeline. Phase 5c schedules
+    // the temporary normal-entry jobs in graph wave order: waves are consumed sequentially so a
+    // provider's entry job finishes before its consumers' entry jobs start, and within a ready
+    // wave Rayon parallelism is used only when the wave has multiple entry jobs. This preserves
+    // wave boundaries only; current entry-closure payload semantics are unchanged and no immutable
+    // provider interface is produced or consumed yet, which remains a Phase 5d concern.
     let string_table_fork_source = string_table.fork_source();
     let compile_context = DirectoryModuleCompileContext {
         string_table_fork_source: &string_table_fork_source,
@@ -614,31 +619,41 @@ pub(crate) fn compile_directory_frontend(
         external_packages: &external_packages,
         builder_surface,
     };
-    let compile_in_parallel = discovered_modules.len() > 1;
-    if compile_in_parallel {
-        add_frontend_counter(
-            FrontendCounter::ModuleCompilationParallelTaskCount,
-            discovered_modules.len(),
-        );
-    } else {
-        add_frontend_counter(
-            FrontendCounter::ModuleCompilationSerialCount,
-            discovered_modules.len(),
-        );
+
+    // Record frontend counters per wave: multi-job waves contribute to the parallel-task count and
+    // singleton waves contribute to the serial count. This avoids claiming cross-wave tasks as
+    // parallel when only intra-wave jobs run concurrently.
+    for wave in module_waves.waves() {
+        if wave.len() > 1 {
+            add_frontend_counter(
+                FrontendCounter::ModuleCompilationParallelTaskCount,
+                wave.len(),
+            );
+        } else {
+            add_frontend_counter(FrontendCounter::ModuleCompilationSerialCount, wave.len());
+        }
     }
 
     let module_compile_batch_start = crate::timing::start_pipeline_timing();
-    let results: Vec<DirectoryModuleTaskResult> = if compile_in_parallel {
-        discovered_modules
-            .into_par_iter()
-            .map(|discovered| compile_context.compile(discovered))
-            .collect()
-    } else {
-        discovered_modules
-            .into_iter()
-            .map(|discovered| compile_context.compile(discovered))
-            .collect()
-    };
+
+    // Compile one wave at a time. Results are appended in deterministic graph order so the
+    // subsequent entry-path sort and string-table/diagnostic aggregation are independent of
+    // worker completion order. A wave with 0 or 1 entry jobs compiles serially; a wave with
+    // multiple ready jobs uses the existing Rayon indexed parallel iterator. Each wave finishes
+    // before the next starts.
+    let mut results: Vec<DirectoryModuleTaskResult> = Vec::new();
+    for wave in module_waves.into_waves() {
+        let wave_results = if wave.len() > 1 {
+            wave.into_par_iter()
+                .map(|discovered| compile_context.compile(discovered))
+                .collect::<Vec<DirectoryModuleTaskResult>>()
+        } else {
+            wave.into_iter()
+                .map(|discovered| compile_context.compile(discovered))
+                .collect::<Vec<DirectoryModuleTaskResult>>()
+        };
+        results.extend(wave_results);
+    }
     log_stage_timing(
         "stage0.directory.module_compile_batch",
         module_compile_batch_start,
@@ -646,7 +661,6 @@ pub(crate) fn compile_directory_frontend(
 
     // 4. Deterministic ordering by entry path.
     let result_sort_start = crate::timing::start_pipeline_timing();
-    let mut results = results;
     results.sort_by(|a, b| a.entry_path.cmp(&b.entry_path));
     log_stage_timing("stage0.directory.result_sort", result_sort_start);
 
