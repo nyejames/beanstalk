@@ -14,6 +14,7 @@ pub(crate) mod style_directives;
 pub(crate) mod tokenizer;
 
 pub(crate) mod builtins;
+pub(crate) mod canonical_type_identity;
 pub(crate) mod defined_public_export_origins;
 pub(crate) mod instrumentation;
 pub(crate) mod keywords;
@@ -75,6 +76,7 @@ pub enum FrontendBuildProfile {
 pub(crate) mod tests {
     pub(crate) mod ast_fixture_support;
     pub(crate) mod borrow_fixture_support;
+    mod canonical_type_identity_tests;
     pub(crate) mod external_package_support;
     pub(crate) mod hir_fixture_support;
     mod keyword_tests;

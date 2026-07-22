@@ -994,3 +994,259 @@ fn register_package_always_produces_binding_backed_metadata() {
         "register_package must preserve the supplied origin"
     );
 }
+
+// ---------------------------------------------------------------------------
+//  Reverse lookup: ExternalTypeId -> owned stable package/symbol path
+// ---------------------------------------------------------------------------
+
+/// Verifies the O(1) reverse lookup from `ExternalTypeId` to the owned stable package path and
+/// structured symbol path for the built-in `io.input.Input` type.
+///
+/// WHAT: `IO_INPUT_EXTERNAL_TYPE_ID` resolves to `@core/io` and the structured path
+/// `input.Input`, never exposing `ExternalPackageId` or `ExternalTypeId` in the returned
+/// identity.
+/// WHY: canonical binding-backed type identity embeds the owned package path and symbol path,
+/// not build-local IDs.
+#[test]
+fn reverse_lookup_resolves_builtin_external_type_to_owned_identity() {
+    let registry = ExternalPackageRegistry::new();
+
+    let (package_path, symbol_path) = registry
+        .resolve_type_package_and_symbol_path(IO_INPUT_EXTERNAL_TYPE_ID)
+        .expect("io.input.Input must resolve to its stable identity");
+
+    assert_eq!(package_path, "@core/io");
+    assert_eq!(
+        symbol_path.display_text(),
+        "input.Input",
+        "the structured symbol path must preserve namespace components"
+    );
+}
+
+/// Verifies that a dynamically registered external type populates the reverse lookup through the
+/// single registration path.
+#[test]
+fn reverse_lookup_resolves_dynamically_registered_external_type() {
+    let mut registry = ExternalPackageRegistry::default();
+    let package_id = registry
+        .register_package(
+            "@test/canvas",
+            crate::builder_surface::PackageOrigin::Builder,
+        )
+        .expect("test package should register");
+
+    let path = ExternalSymbolPath::from_components(vec!["render".to_owned(), "Context".to_owned()]);
+    registry
+        .register_type_at_path(
+            package_id,
+            path,
+            ExternalTypeId(42),
+            ExternalTypeDef {
+                name: "Context".to_owned(),
+                package_id,
+                abi_type: ExternalAbiType::Handle,
+            },
+        )
+        .expect("test type should register at a structured path");
+
+    let (package_path, symbol_path) = registry
+        .resolve_type_package_and_symbol_path(ExternalTypeId(42))
+        .expect("dynamically registered type must resolve through the reverse lookup");
+
+    assert_eq!(package_path, "@test/canvas");
+    assert_eq!(symbol_path.display_text(), "render.Context");
+}
+
+/// Verifies that an unregistered `ExternalTypeId` returns `None` from the reverse lookup rather
+/// than panicking or inventing an identity.
+#[test]
+fn reverse_lookup_returns_none_for_unregistered_external_type() {
+    let registry = ExternalPackageRegistry::new();
+    assert!(
+        registry
+            .resolve_type_package_and_symbol_path(ExternalTypeId(9999))
+            .is_none(),
+        "an unregistered ExternalTypeId must not resolve to a stable identity"
+    );
+}
+
+/// Verifies that cloning the registry preserves the type reverse lookup so a cloned registry
+/// remains self-consistent.
+#[test]
+fn clone_preserves_type_reverse_lookup() {
+    let mut registry = ExternalPackageRegistry::default();
+    let package_id = registry
+        .register_package(
+            "@test/clone",
+            crate::builder_surface::PackageOrigin::Builder,
+        )
+        .expect("test package should register");
+    registry
+        .register_type_in_package(
+            package_id,
+            ExternalTypeId(7),
+            ExternalTypeDef {
+                name: "Handle".to_owned(),
+                package_id,
+                abi_type: ExternalAbiType::Handle,
+            },
+        )
+        .expect("test type should register");
+
+    let cloned = registry.clone();
+    let (package_path, symbol_path) = cloned
+        .resolve_type_package_and_symbol_path(ExternalTypeId(7))
+        .expect("cloned registry must preserve the type reverse lookup");
+
+    assert_eq!(package_path, "@test/clone");
+    assert_eq!(symbol_path.display_text(), "Handle");
+}
+
+/// Verifies that duplicate type registration at the same path remains a `CompilerError`, so the
+/// reverse lookup never observes inconsistent state.
+#[test]
+fn duplicate_type_registration_remains_compiler_error() {
+    let mut registry = ExternalPackageRegistry::default();
+    let package_id = registry
+        .register_package("@test/dup", crate::builder_surface::PackageOrigin::Builder)
+        .expect("test package should register");
+
+    let first = registry.register_type_in_package(
+        package_id,
+        ExternalTypeId(1),
+        ExternalTypeDef {
+            name: "Thing".to_owned(),
+            package_id,
+            abi_type: ExternalAbiType::Handle,
+        },
+    );
+    assert!(first.is_ok(), "first registration should succeed");
+
+    let second = registry.register_type_in_package(
+        package_id,
+        ExternalTypeId(2),
+        ExternalTypeDef {
+            name: "Thing".to_owned(),
+            package_id,
+            abi_type: ExternalAbiType::Handle,
+        },
+    );
+    assert!(
+        second.is_err(),
+        "duplicate type registration at the same path must remain a CompilerError"
+    );
+}
+
+/// Verifies that reusing one `ExternalTypeId` at a second distinct path is a `CompilerError` and
+/// leaves the original reverse identity intact. The duplicate is rejected before any registry
+/// state mutates, so the first registration's package path and symbol path survive unchanged.
+#[test]
+fn duplicate_external_type_id_at_distinct_path_is_rejected_and_preserves_original_identity() {
+    let mut registry = ExternalPackageRegistry::default();
+    let package_id = registry
+        .register_package(
+            "@test/reuse",
+            crate::builder_surface::PackageOrigin::Builder,
+        )
+        .expect("test package should register");
+
+    let first_path =
+        ExternalSymbolPath::from_components(vec!["shapes".to_owned(), "Origin".to_owned()]);
+    registry
+        .register_type_at_path(
+            package_id,
+            first_path,
+            ExternalTypeId(11),
+            ExternalTypeDef {
+                name: "Origin".to_owned(),
+                package_id,
+                abi_type: ExternalAbiType::Handle,
+            },
+        )
+        .expect("first type registration should succeed");
+
+    // Reuse the same ExternalTypeId at a different path in the same package.
+    let second_path =
+        ExternalSymbolPath::from_components(vec!["render".to_owned(), "Duplicate".to_owned()]);
+    let duplicate = registry.register_type_at_path(
+        package_id,
+        second_path,
+        ExternalTypeId(11),
+        ExternalTypeDef {
+            name: "Duplicate".to_owned(),
+            package_id,
+            abi_type: ExternalAbiType::Handle,
+        },
+    );
+    assert!(
+        duplicate.is_err(),
+        "reusing an ExternalTypeId at a second path must be a CompilerError"
+    );
+
+    // The original reverse identity must remain intact after the failed duplicate.
+    let (package_path, symbol_path) = registry
+        .resolve_type_package_and_symbol_path(ExternalTypeId(11))
+        .expect("the original reverse identity must survive the failed duplicate");
+    assert_eq!(package_path, "@test/reuse");
+    assert_eq!(
+        symbol_path.display_text(),
+        "shapes.Origin",
+        "the original symbol path must not be overwritten by the failed duplicate"
+    );
+
+    // The second path must not resolve to any registered type identity.
+    assert!(
+        registry
+            .resolve_type_package_and_symbol_path(ExternalTypeId(12))
+            .is_none(),
+        "no new ExternalTypeId should have been created by the rejected duplicate"
+    );
+}
+
+/// Verifies that reusing one `ExternalTypeId` across two distinct packages is a `CompilerError`
+/// and preserves the first package's reverse identity.
+#[test]
+fn duplicate_external_type_id_across_distinct_packages_is_rejected() {
+    let mut registry = ExternalPackageRegistry::default();
+    let alpha_id = registry
+        .register_package(
+            "@test/alpha",
+            crate::builder_surface::PackageOrigin::Builder,
+        )
+        .expect("alpha package should register");
+    let beta_id = registry
+        .register_package("@test/beta", crate::builder_surface::PackageOrigin::Builder)
+        .expect("beta package should register");
+
+    registry
+        .register_type_in_package(
+            alpha_id,
+            ExternalTypeId(5),
+            ExternalTypeDef {
+                name: "Handle".to_owned(),
+                package_id: alpha_id,
+                abi_type: ExternalAbiType::Handle,
+            },
+        )
+        .expect("alpha type registration should succeed");
+
+    let duplicate = registry.register_type_in_package(
+        beta_id,
+        ExternalTypeId(5),
+        ExternalTypeDef {
+            name: "Handle".to_owned(),
+            package_id: beta_id,
+            abi_type: ExternalAbiType::Handle,
+        },
+    );
+    assert!(
+        duplicate.is_err(),
+        "reusing an ExternalTypeId in a second package must be a CompilerError"
+    );
+
+    let (package_path, symbol_path) = registry
+        .resolve_type_package_and_symbol_path(ExternalTypeId(5))
+        .expect("the original alpha reverse identity must survive the failed duplicate");
+    assert_eq!(package_path, "@test/alpha");
+    assert_eq!(symbol_path.display_text(), "Handle");
+}

@@ -9,21 +9,19 @@ Replace entry-closure compilation with canonical project and package graphs, imm
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/canonical-module-compilation-and-scoped-packages-plan.md
 STATUS: active
-CURRENT_SLICE: Phase 7a/7b accepted; checkpoint commit pending
-LAST_ACCEPTED_COMMIT: 16a9c9d22 (Phase 6c typed module compilation outcomes)
-WORKTREE: main at 16a9c9d22 with accepted Phase 7a/7b source, focused tests, index and this plan update; unrelated user documentation work may appear and must be preserved
-REQUIRED_RELOADS: startup files, this plan, stable semantic identity, graph/inventory, retained preparation, bound/sorted headers, public-export validation, semantic compilation and current module-result owners
+CURRENT_SLICE: Phase 7c1 accepted; checkpoint commit pending
+LAST_ACCEPTED_COMMIT: b8119583f (Phase 7a/7b stable direct export origins)
+WORKTREE: main at b8119583f with accepted Phase 7c1 source, focused tests, index and this plan update; unrelated user documentation work may appear and must be preserved
+REQUIRED_RELOADS: startup files, this plan, semantic identity and direct-export origins, TypeEnvironment and AST lookup owners, retained header binding, graph scheduling and current module-result owners
 RELEVANT_CONTEXT_NOW:
 - docs: build-system-design.md Project and package topology plus Deterministic scheduling define canonical graph nodes, strict support scope, facade placement and deterministic waves
-- code: graph/synthetic origins reach semantic compilation; direct free export identities come from bound/sorted active-root declarations and receiver surfaces finalize after AST validation from a transient resolved ReceiverMethodCatalog that is taken before HIR
+- code: graph/synthetic origins reach semantic compilation; DefinedPublicExportOrigins records direct free and receiver export bindings, but source re-exports and provider binding still require canonical type/value facts that contain no donor-local semantic IDs
 ACCEPTANCE_CRITERIA:
-- directory discovery carries the graph-owned stable module origin with each canonical module inventory instead of re-deriving it from entry paths
-- single-file synthetic-module compilation constructs one deterministic stable origin from the configured project identity, empty logical module path and normal-root role
-- retained preparation and semantic compilation receive and consume that identity without reparsing paths or introducing an incomplete PublicSemanticInterface
-- one immutable compiler-owned DefinedPublicExportOrigins component records stable origin IDs and ExportBinding values for declarations defined directly in the active module root; receiver methods remain attached to receiver surfaces rather than free namespace bindings
-- source re-exports, canonical type/value/effect facts and imported provider interfaces remain explicitly absent rather than being represented by donor-local paths or placeholder facts
-- impossible missing name or receiver metadata aborts through CompilerError instead of silently omitting an export; private receiver surfaces remain intentionally absent
-- focused tests protect declaration/category/module identity, deterministic declaration order, receiver ownership, private/start exclusion, graph-origin preservation and single-file identity; behavior and backend output remain unchanged
+- introduce the canonical cross-module identity vocabulary for closed builtin, source nominal, binding-backed opaque and constructed types without rendered-name equality or donor-local TypeId transport
+- map module-local TypeId values through an explicit stable source-nominal context and binding registry, returning CompilerError for missing origins, generic parameters and other unsupported incomplete states instead of inventing placeholders
+- keep the existing diagnostic/HIR TypeIdentityKey bridge separate; it remains module-local and is not repurposed as the public-interface identity
+- add stable binding-backed type identity lookup rooted in owned package and symbol paths rather than build-local package/type IDs
+- add focused tests for builtin, nominal, external, option, collection, fixed collection, map, fallible and concrete generic nominal projection; preserve user-visible behavior and backend output
 VALIDATION_STATE:
 - Phase 4d just validate: passed; cross-target Clippy, 3419 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases
 - Phase 4e focused validation: passed; 2 import-scanning, 5 reachability, 178 module-discovery, 19 orchestration, 5 token-remap and 116 header tests plus cargo check --tests and git diff --check
@@ -42,12 +40,14 @@ VALIDATION_STATE:
 - Phase 6c just validate: passed; cross-target Clippy, 3447 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases (0ms average)
 - Phase 7a/7b focused validation: passed; 8 defined-export-origin, 18 semantic-identity, 116 header, 30 compiler-frontend, 20 frontend-orchestration, 100 module-discovery and 50 Stage 0 identity tests plus full 3458-test unit suite, all 8 receiver regressions and the full 1793-case integration suite, cargo check --tests, cargo clippy --tests -D warnings, formatting and git diff --check
 - Phase 7a/7b just validate: passed after resolved-receiver correction; cross-target Clippy, 3458 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases (-1ms average)
-DOCS_IMPACT: index.md names the new compiler-owned defined-export-origin component and its deliberate boundary from the final PublicSemanticInterface; progress matrix unchanged for internal interface groundwork
-BLOCKERS_OR_OPEN_DECISIONS: current entry-closure compilation cannot assign source re-export origins correctly without compiled provider interfaces, so this slice records only directly defined exports and must not encode re-exports with donor-local paths
+- Phase 7c1 focused validation: passed after atomic reverse-identity and generic-base corrections; 78 canonical-type/external-registry tests plus cargo check --tests, cargo clippy --tests -D warnings, formatting and git diff --check
+- Phase 7c1 just validate: passed after clearing generated Cargo artifacts following a no-space environmental failure; cross-target Clippy, 3497 Rust tests, 1793 integration executions, docs check and 28/28 benchmark cases (0ms average)
+DOCS_IMPACT: index.md names the canonical cross-module type identity and projection owner; progress matrix unchanged for internal interface groundwork
+BLOCKERS_OR_OPEN_DECISIONS: exported generic-parameter ownership and complete exported surface projection remain the next Phase 7c slice; do not create an incomplete PublicSemanticInterface or represent source re-exports before provider interfaces exist
 DELEGATION_DECISION: ollama - user requires Ollama for every worker slice
 NEXT_WORKER_ORDER: ollama only; no provider substitution for this run
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit the Phase 7a/7b checkpoint, record its hash, then scope the immutable source-provider interface prerequisite for source re-export bindings through Ollama
+NEXT_RESUME_ACTION: commit the Phase 7c1 checkpoint, record its hash, then scope exported generic-parameter ownership and public type-surface projection through Ollama
 ```
 
 ## Hard prerequisites
@@ -555,6 +555,24 @@ See `docs/compiler-design-overview.md` "Public semantic interfaces" and "Stable 
 - HIR represents cross-module calls with explicit stable module-function targets. The callee body is never copied into the caller.
 - Borrow validation runs once per canonical module and once per generated function. Public function interfaces carry parameter access modes, mutation, consumption, return aliasing and reactive effects.
 - Cross-module call transfer consumes summaries without opening the callee's HIR.
+
+Accepted Phase 7c1 checkpoint:
+
+- `canonical_type_identity.rs` owns hashable cross-module identities for closed builtin, source
+  nominal, binding-backed opaque, collection, map, option, fallible and concrete generic nominal
+  types. The vocabulary embeds no donor-local `TypeId`, `NominalTypeId`, `InternedPath`,
+  `StringId`, external numeric ID, source location or absolute path.
+- one total projector consumes a module-local `TypeEnvironment`, an explicit nominal-origin
+  resolver and the external registry. Missing origins, unregistered external identities,
+  unresolved generic parameters, function/tuple shapes, malformed constructor arity and invalid
+  generic-instance bases fail through `CompilerError` rather than omission or sentinels.
+- `ExternalPackageRegistry` owns one atomic reverse identity from external type ID to package and
+  structured symbol path, rejects ID reuse before mutation and preserves the record across clone.
+- the existing `TypeIdentityKey` remains the module-local HIR/diagnostic bridge; it is not reused
+  as a cross-module identity because it deliberately carries local paths and IDs.
+- exported generic-parameter ownership, complete public type surfaces and production provider
+  interface wiring remain Phase 7c2; the current vocabulary has focused dead-code allowances that
+  name that immediate consumer.
 
 ### Phase 8: Add generated sidecars and the fixed-point worklist
 

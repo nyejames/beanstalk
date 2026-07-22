@@ -39,6 +39,22 @@ impl ExternalPackageSymbolKey {
     }
 }
 
+/// Atomic reverse-identity record for one registered external type.
+///
+/// WHAT: carries the build-local owning package handle plus the owned structured symbol path
+/// for a single `ExternalTypeId`. The stable identity exposed to callers remains the package
+/// path plus symbol path; this record never surfaces the build-local `ExternalPackageId`.
+/// WHY: a single atomic record makes duplicate-ExternalTypeId rejection and clone consistency
+/// one ownership decision instead of two parallel maps (`type_package_by_id` and
+/// `type_symbol_path_by_id`) that could disagree if one insert succeeded and the other failed.
+/// `resolve_type_package_and_symbol_path` reads through this record and the package table in O(1)
+/// without scanning the package surface map.
+#[derive(Debug, Clone)]
+struct ExternalTypeReverseIdentity {
+    package_id: ExternalPackageId,
+    symbol_path: ExternalSymbolPath,
+}
+
 /// Match between an import path and the longest registered external package prefix.
 ///
 /// WHAT: records the package that matched plus how many import-path components belong to it.
@@ -72,6 +88,16 @@ pub struct ExternalPackageRegistry {
     /// WHY: `ExternalFunctionDef` does not store its package ID; this map keeps the
     /// registry as the single owner of package membership.
     function_package_by_id: HashMap<ExternalFunctionId, ExternalPackageId>,
+    /// Atomic reverse-identity lookup: type ID -> owning package handle plus symbol path.
+    ///
+    /// WHAT: one record keyed by `ExternalTypeId` carrying the build-local package handle and
+    /// the owned structured symbol path. The stable identity exposed to callers is derived from
+    /// this record and the package table, never from the build-local IDs directly.
+    /// WHY: `ExternalTypeDef` stores its package ID, but the canonical identity must not embed
+    /// the build-local `ExternalPackageId` or `ExternalTypeId`. One atomic record keeps the
+    /// registry as the single owner of type reverse identity, makes duplicate-ExternalTypeId
+    /// rejection mutation-free and keeps clone consistency in one place.
+    type_reverse_identity_by_id: HashMap<ExternalTypeId, ExternalTypeReverseIdentity>,
     /// Prelude symbols that are auto-imported into every module.
     /// Bare-name lookup is only valid for the prelude.
     prelude_symbols_by_name: HashMap<&'static str, ExternalSymbolId>,
@@ -103,6 +129,7 @@ impl Clone for ExternalPackageRegistry {
             type_ids_by_package_symbol: self.type_ids_by_package_symbol.clone(),
             constant_ids_by_package_symbol: self.constant_ids_by_package_symbol.clone(),
             function_package_by_id: self.function_package_by_id.clone(),
+            type_reverse_identity_by_id: self.type_reverse_identity_by_id.clone(),
             prelude_symbols_by_name: self.prelude_symbols_by_name.clone(),
             prelude_namespace_aliases_by_name: self.prelude_namespace_aliases_by_name.clone(),
             next_package_id: self.next_package_id,
@@ -260,6 +287,31 @@ impl ExternalPackageRegistry {
         self.reject_duplicate_path(&package_path_str, package_id, &path, &type_def.name, "type")?;
 
         let key = ExternalPackageSymbolKey::new(package_id, path);
+        // Reject a duplicate ExternalTypeId before mutating any registry state. A type already
+        // registered at one path must not be re-registered at another; the failure leaves the
+        // original type definition, package surface and reverse identity untouched.
+        if let Some(existing_identity) = self.type_reverse_identity_by_id.get(&id) {
+            let existing_package_path = self
+                .packages
+                .get(&existing_identity.package_id)
+                .ok_or_else(|| {
+                    CompilerError::compiler_error(format!(
+                        "External type id {id:?} has reverse identity for missing package {:?}.",
+                        existing_identity.package_id
+                    ))
+                })?
+                .path
+                .as_str();
+            return_compiler_error!(
+                "External type id {:?} is already registered as '{}.{}'; it cannot be reused as \
+                 '{}.{}'.",
+                id,
+                existing_package_path,
+                existing_identity.symbol_path,
+                package_path_str,
+                key.path
+            );
+        }
         if self.type_ids_by_package_symbol.contains_key(&key) {
             return_compiler_error!(
                 "External type '{}' is already registered in package '{}'.",
@@ -274,7 +326,14 @@ impl ExternalPackageRegistry {
             .expect("package that was just looked up disappeared during type registration");
         package.type_ids.insert(key.path.clone(), id);
         self.types_by_id.insert(id, type_def);
-        self.type_ids_by_package_symbol.insert(key, id);
+        self.type_ids_by_package_symbol.insert(key.clone(), id);
+        self.type_reverse_identity_by_id.insert(
+            id,
+            ExternalTypeReverseIdentity {
+                package_id,
+                symbol_path: key.path,
+            },
+        );
         Ok(())
     }
 
@@ -793,6 +852,24 @@ impl ExternalPackageRegistry {
     ///      construct deterministic wrapper names.
     pub fn resolve_function_package_id(&self, id: ExternalFunctionId) -> Option<ExternalPackageId> {
         self.function_package_by_id.get(&id).copied()
+    }
+
+    /// Returns the owned stable external type identity for a build-local `ExternalTypeId`.
+    ///
+    /// WHAT: O(1) reverse lookup from a stable type ID to the owning package path and the
+    /// structured package-local symbol path. Both are borrowed from registry-owned storage so
+    /// the caller can construct an owned canonical identity without embedding `ExternalPackageId`
+    /// or `ExternalTypeId`.
+    /// WHY: canonical binding-backed type identity embeds the owned package path and symbol path,
+    /// never the build-local IDs. A missing entry means the type was never registered through the
+    /// single registration path, which is an inconsistent-registry invariant, not a user failure.
+    pub fn resolve_type_package_and_symbol_path(
+        &self,
+        id: ExternalTypeId,
+    ) -> Option<(&str, &ExternalSymbolPath)> {
+        let reverse_identity = self.type_reverse_identity_by_id.get(&id)?;
+        let package = self.packages.get(&reverse_identity.package_id)?;
+        Some((package.path.as_str(), &reverse_identity.symbol_path))
     }
 
     /// Checks whether an import path should be treated as a virtual package import
