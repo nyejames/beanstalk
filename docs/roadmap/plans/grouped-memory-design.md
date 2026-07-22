@@ -1,9 +1,5 @@
 # Declared Lifetime Regions and Grouped Memory Design
 
-Status: roadmap design draft  
-Scope: accepted region direction plus one isolated unresolved ownership question, not an implementation plan  
-Replacement target: `docs/roadmap/plans/grouped-memory-design.md`
-
 ## Purpose
 
 Grouped memory gives the programmer a direct way to state that a set of fresh runtime values shares one lifetime owner and one destruction boundary.
