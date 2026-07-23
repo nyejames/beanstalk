@@ -142,11 +142,43 @@ pub(crate) struct PublicTraitRequirementParameter {
     type_identity: TraitSurfaceTypeIdentity,
 }
 
+// The canonical encoder is intentionally exposed before R7 wires its bytes into fingerprints.
+#[allow(dead_code)]
+impl PublicTraitRequirementParameter {
+    /// Read the private requirement fields for the frontend-owned canonical encoder.
+    pub(crate) fn canonical_encoding_name(&self) -> Option<&str> {
+        self.name.as_deref()
+    }
+
+    /// Read the parameter access mode for the frontend-owned canonical encoder.
+    pub(crate) fn canonical_encoding_value_mode(&self) -> &ValueMode {
+        &self.value_mode
+    }
+
+    /// Read the parameter type identity for the frontend-owned canonical encoder.
+    pub(crate) fn canonical_encoding_type_identity(&self) -> &TraitSurfaceTypeIdentity {
+        &self.type_identity
+    }
+}
+
 /// One return slot in a trait requirement surface.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct PublicTraitRequirementReturn {
     channel: ReturnChannel,
     type_identity: TraitSurfaceTypeIdentity,
+}
+
+#[allow(dead_code)]
+impl PublicTraitRequirementReturn {
+    /// Read the return channel for the frontend-owned canonical encoder.
+    pub(crate) fn canonical_encoding_channel(&self) -> ReturnChannel {
+        self.channel
+    }
+
+    /// Read the return type identity for the frontend-owned canonical encoder.
+    pub(crate) fn canonical_encoding_type_identity(&self) -> &TraitSurfaceTypeIdentity {
+        &self.type_identity
+    }
 }
 
 /// One method requirement in a trait surface, in authored order.
@@ -156,6 +188,29 @@ pub(crate) struct PublicTraitRequirementSurface {
     receiver_access: PublicTraitReceiverAccess,
     parameters: Vec<PublicTraitRequirementParameter>,
     returns: Vec<PublicTraitRequirementReturn>,
+}
+
+#[allow(dead_code)]
+impl PublicTraitRequirementSurface {
+    /// Read the requirement name for the frontend-owned canonical encoder.
+    pub(crate) fn canonical_encoding_name(&self) -> &str {
+        &self.name
+    }
+
+    /// Read receiver access for the frontend-owned canonical encoder.
+    pub(crate) fn canonical_encoding_receiver_access(&self) -> PublicTraitReceiverAccess {
+        self.receiver_access
+    }
+
+    /// Read authored parameters for the frontend-owned canonical encoder.
+    pub(crate) fn canonical_encoding_parameters(&self) -> &[PublicTraitRequirementParameter] {
+        &self.parameters
+    }
+
+    /// Read authored returns for the frontend-owned canonical encoder.
+    pub(crate) fn canonical_encoding_returns(&self) -> &[PublicTraitRequirementReturn] {
+        &self.returns
+    }
 }
 
 /// The trait surface for one exported trait authored directly in the active module root.
@@ -180,8 +235,9 @@ pub(crate) struct DefinedPublicTraitSurface {
 /// are separate variants so nominal meaning is never implicit in empty field/variant vectors.
 /// Each variant carries only the semantic facts already produced at R1; folded constant
 /// values are owned by the constant variant. The free-function variant carries an explicit
-/// generic-template descriptor when the function is generic. Evidence, provenance,
-/// borrow/effect summaries, generic template bodies and re-exports remain outside this enum.
+/// generic-template descriptor when the function is generic. Evidence, provenance, generic
+/// template bodies and re-exports remain outside this enum. Callable borrow/effect summaries
+/// remain inside the function and receiver-method semantic values.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum PublicDeclarationSemantics {
     Function(PublicFunctionSemantics),
@@ -358,9 +414,9 @@ pub(crate) struct PublicEvidenceRecord {
 /// `TraitId`, `InternedPath` or `StringId` crosses this boundary.
 ///
 /// It is deliberately not the final `PublicSemanticInterface`. Generic template bodies,
-/// access/effect summaries, provenance, re-export interfaces and cross-module call lowering
-/// remain for later phases. Folded constant values are owned by each constant declaration
-/// record. Reusable evidence is a separate collection, not a declaration variant.
+/// provenance, re-export interfaces and cross-module call lowering remain for later phases.
+/// Folded constant values are owned by each constant declaration record. Reusable evidence is a
+/// separate collection, not a declaration variant.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct PublicInterfaceDraft {
     pub(crate) module_origin: StableModuleOriginIdentity,
@@ -596,6 +652,15 @@ impl<'a> PublicInterfaceDraftBuilder<'a> {
 }
 
 impl PublicInterfaceDraft {
+    /// Encode every semantic fact retained by this post-borrow draft into deterministic bytes.
+    ///
+    /// The encoder remains a frontend hash-input owner. It does not choose a digest, persistent
+    /// format or cache schema, and it intentionally has no access to HIR provenance side tables.
+    #[allow(dead_code)]
+    pub(crate) fn canonical_bytes(&self) -> Result<Vec<u8>, CompilerError> {
+        crate::compiler_frontend::public_interface_encoding::encode_public_interface_draft(self)
+    }
+
     /// Finalize direct callable declaration records after borrow validation.
     ///
     /// WHAT: joins each exported free function and receiver method to exactly one stable
@@ -2129,3 +2194,7 @@ fn project_one_evidence_record(
 #[cfg(test)]
 #[path = "tests/public_interface_draft_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "tests/public_interface_encoding_tests.rs"]
+mod public_interface_encoding;

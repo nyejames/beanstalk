@@ -68,6 +68,15 @@ impl FiniteFloat {
         let normalized = if value == 0.0 { 0.0 } else { value };
         Ok(Self(normalized))
     }
+
+    /// Return the exact normalized IEEE-754 bits used by the canonical interface encoder.
+    ///
+    /// The encoder consumes this read-only value rather than formatting a float, so distinct
+    /// finite semantic values remain distinct while `-0.0` and `0.0` share one canonical form.
+    #[allow(dead_code)]
+    pub(crate) fn normalized_bits(&self) -> u64 {
+        self.0.to_bits()
+    }
 }
 
 impl Eq for FiniteFloat {}

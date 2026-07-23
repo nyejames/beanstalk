@@ -20,31 +20,27 @@ This document replaces the previous incremental phase sequence at the same path.
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/canonical-module-compilation-and-scoped-packages-plan.md
 STATUS: active
-CURRENT_SLICE: R2i complete — direct local call summaries finalized; checkpoint ready to commit
-LAST_ACCEPTED_COMMIT: 0379bd195 (R2h)
-WORKTREE: main at 0379bd195 with reviewed R2i code, tests and this plan update; origin/main 911fa955a; preserve and ignore unrelated documentation work if it appears
-REQUIRED_RELOADS: startup files, this plan, current source/diff and the R2 item 11 fingerprint-encoder owners
+CURRENT_SLICE: R2j complete — direct public-interface canonical bytes; checkpoint ready to commit
+LAST_ACCEPTED_COMMIT: 3dfcc5ede (R2i)
+WORKTREE: main at 3dfcc5ede with reviewed R2j code, tests and this plan update; origin/main 911fa955a; preserve and ignore unrelated documentation work if it appears
+REQUIRED_RELOADS: startup files, this plan, current source/diff and the complete R2 commit range for the required phase audit
 RELEVANT_CONTEXT_NOW:
-- docs: compiler-design-overview.md requires stable semantic identities, declaration-centric public call effects and Stage 6 summary joins without foreign HIR inspection or HIR mutation
-- code: public_call_summary.rs owns shared summary vocabulary; the draft/HIR join retains exact stable origin-to-local FunctionId relationships for non-generic direct callables, while exported generic templates remain explicitly PendingGenerated for R3
+- docs: compiler-design-overview.md requires the public-interface fingerprint to cover canonical semantic contents while excluding locations, warnings, formatting metadata and dormant root activity
+- code: public_interface_encoding.rs now owns deterministic hash input for every direct draft fact; direct function provenance remains an explicit HIR side table for later interface/link propagation
 ACCEPTANCE_CRITERIA:
-- every directly exported non-generic free function and receiver method with a local HIR function receives exactly one owned complete PublicCallSummary after borrow validation
-- an exported generic template with no base local FunctionId remains represented by an explicit pending-generated-summary state owned by the R3 worklist contract; it must not masquerade as finalized or make an existing valid facade fail
-- the one-time join uses an explicit stable OriginFunctionId-to-local FunctionId relationship retained during lowering, never rendered names, display paths, rendered types or declaration order
-- private functions and implicit start retain local summaries but receive no consumer-visible origin and do not enter direct declaration records
-- missing, extra, duplicate, category-mismatched or parameter-shape-inconsistent public joins fail through CompilerError
-- borrow analysis and the declaration draft share one semantic call-summary vocabulary without duplicated interpretation; borrow validation remains read-only over HIR
-- no source re-exports, provider/cross-module/generated/binding summary transport, lifetime facts, fingerprint encoders, backend changes or user-visible semantic expansion enter this slice
+- review all code touched across R2 against architecture ownership, draft completeness, call-summary finalization, stable identity and canonical-encoding contracts
+- report findings only; corrections remain bounded implementation-worker slices and receive their own accepted commits
+- preserve R3 generated-sidecar ownership, R4 provider joining and R7 five-fingerprint policy without implementing them during audit
 VALIDATION_STATE:
-- parent cargo fmt --all -- --check passed
-- parent focused checks passed: 76 public-interface-draft tests, 3 HIR-origin tests, 27 borrow-summary tests and the generic/free/receiver facade HTML cases
-- parent just validate passed: native/Linux/Windows Clippy, 3746 Rust tests, 1793 integration runs, docs check and 28 benchmark sanity cases
+- R2i accepted at 3dfcc5ede after full just validate
+- R2j focused checks passed: 7 encoder tests, 83 draft tests, formatting and cargo check
+- R2j just validate passed: native/Linux/Windows Clippy, 3753 Rust tests, 1793 integration runs, docs check and 28 benchmark sanity cases
 DOCS_IMPACT: active plan only; progress matrix should remain unchanged because this slice retains internal direct-interface facts for already-supported behavior
-BLOCKERS_OR_OPEN_DECISIONS: locked decision 11 assigns concrete generic call summaries to R3 sidecars, so R2i preserves explicit PendingGenerated state and does not claim a base FunctionId join for generic templates; no user decision is required
+BLOCKERS_OR_OPEN_DECISIONS: none
 DELEGATION_DECISION: codex-cli - use Codex CLI for every remaining implementation, correction and audit slice after the completed Ollama attempt
 NEXT_WORKER_ORDER: codex-cli only
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit the accepted R2i checkpoint, then launch R2 item 11 deterministic canonical encoders through Codex CLI
+NEXT_RESUME_ACTION: commit the accepted R2j checkpoint, then launch required R2 audit cycle 1 through Codex CLI
 ```
 
 Do not append worktree-specific notes, complete validation histories or worker transcripts to this plan. Keep this status block current and concise. Git history is the validation history.
@@ -561,6 +557,11 @@ R2i checkpoint: borrow validation and the direct declaration draft now share one
 call-summary vocabulary. Non-generic exported free functions and receiver methods join exactly once
 through stable function origins and local HIR IDs after borrow validation. Exported generic
 templates carry an explicit pending-generated state until R3 sidecars produce concrete summaries.
+
+R2j checkpoint: one frontend-owned encoder now produces deterministic, unambiguous canonical
+bytes for every semantic fact retained by the completed direct draft. It sorts semantic sets by
+stable identity, preserves authored-order contracts, rejects incomplete or wrong-owner states and
+chooses neither a digest nor a persistent cache format ahead of R7.
 
 Goal: make one declaring module able to produce every direct semantic fact required by a future provider interface.
 

@@ -20,12 +20,9 @@
 //! HIR/diagnostic bridge boundary, so the duplication is superficial and the owners remain
 //! separate.
 //!
-//! Dead-code allowance: the vocabulary and projection are permanent foundational types that do
-//! not yet have production wiring. They are consumed by the next plan slice (public semantic
-//! surface projection), which builds `PublicSemanticInterface` over these identities. No earlier
-//! production caller can construct a `CanonicalTypeProjectionContext` because the nominal-origin
-//! and generic-parameter resolvers are owned by the public semantic surface projection work that
-//! follows this slice.
+//! The vocabulary and projection feed the direct public-interface draft and its canonical byte
+//! encoder. The encoder exposes hash input before the later fingerprint owner wires it into
+//! artefact invalidation. No persistent representation or digest algorithm belongs here.
 
 use crate::compiler_frontend::builtins::casts::targets::{
     BuiltinCastFallibility, BuiltinCastTarget,
@@ -97,7 +94,7 @@ pub(crate) enum CanonicalBuiltinType {
 /// WHY: a binding-backed type is identified by where it lives in its package namespace, not by a
 /// build-local ID. Two builds that register the same opaque type under the same package and
 /// symbol path produce the same canonical identity.
-#[allow(dead_code)] // Consumed by the next plan slice: public semantic surface projection.
+#[allow(dead_code)] // The R2j encoder is exposed before R7 wires bytes into invalidation.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct ExternalOpaqueTypeIdentity {
     package_path: String,
@@ -116,13 +113,13 @@ impl ExternalOpaqueTypeIdentity {
     }
 
     /// The owned stable package path spelling.
-    #[allow(dead_code)]
+    #[allow(dead_code)] // The R2j encoder is exposed before R7 wires bytes into invalidation.
     pub(crate) fn package_path(&self) -> &str {
         &self.package_path
     }
 
     /// The structured package-local symbol path.
-    #[allow(dead_code)]
+    #[allow(dead_code)] // The R2j encoder is exposed before R7 wires bytes into invalidation.
     pub(crate) fn symbol_path(&self) -> &ExternalSymbolPath {
         &self.symbol_path
     }
@@ -132,7 +129,7 @@ impl ExternalOpaqueTypeIdentity {
 ///
 /// `fixed_capacity` is `None` for growable `{T}` and `Some(cap)` for fixed `{N T}`. Fixed
 /// capacity is semantic identity, not an allocation hint, so the two shapes are distinct.
-#[allow(dead_code)] // Consumed by the next plan slice: public semantic surface projection.
+#[allow(dead_code)] // The R2j encoder is exposed before R7 wires bytes into invalidation.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct CollectionTypeIdentity {
     element: Box<CanonicalTypeIdentity>,
@@ -151,13 +148,13 @@ impl CollectionTypeIdentity {
     }
 
     /// The canonical element identity.
-    #[allow(dead_code)]
+    #[allow(dead_code)] // The R2j encoder is exposed before R7 wires bytes into invalidation.
     pub(crate) fn element(&self) -> &CanonicalTypeIdentity {
         &self.element
     }
 
     /// The fixed capacity, or `None` for a growable collection.
-    #[allow(dead_code)]
+    #[allow(dead_code)] // The R2j encoder is exposed before R7 wires bytes into invalidation.
     pub(crate) fn fixed_capacity(&self) -> Option<usize> {
         self.fixed_capacity
     }
@@ -165,7 +162,7 @@ impl CollectionTypeIdentity {
 
 /// Ordered map canonical identity. Key and value are stored directly so `{K = V}` order is
 /// preserved.
-#[allow(dead_code)] // Consumed by the next plan slice: public semantic surface projection.
+#[allow(dead_code)] // The R2j encoder is exposed before R7 wires bytes into invalidation.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct OrderedMapTypeIdentity {
     key: Box<CanonicalTypeIdentity>,
@@ -184,20 +181,20 @@ impl OrderedMapTypeIdentity {
     }
 
     /// The canonical key identity.
-    #[allow(dead_code)]
+    #[allow(dead_code)] // The R2j encoder is exposed before R7 wires bytes into invalidation.
     pub(crate) fn key(&self) -> &CanonicalTypeIdentity {
         &self.key
     }
 
     /// The canonical value identity.
-    #[allow(dead_code)]
+    #[allow(dead_code)] // The R2j encoder is exposed before R7 wires bytes into invalidation.
     pub(crate) fn value(&self) -> &CanonicalTypeIdentity {
         &self.value
     }
 }
 
 /// Fallible carrier canonical identity. Success and error are stored in order.
-#[allow(dead_code)] // Consumed by the next plan slice: public semantic surface projection.
+#[allow(dead_code)] // The R2j encoder is exposed before R7 wires bytes into invalidation.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct FallibleCarrierTypeIdentity {
     success: Box<CanonicalTypeIdentity>,
@@ -216,13 +213,13 @@ impl FallibleCarrierTypeIdentity {
     }
 
     /// The canonical success-channel identity.
-    #[allow(dead_code)]
+    #[allow(dead_code)] // The R2j encoder is exposed before R7 wires bytes into invalidation.
     pub(crate) fn success(&self) -> &CanonicalTypeIdentity {
         &self.success
     }
 
     /// The canonical error-channel identity.
-    #[allow(dead_code)]
+    #[allow(dead_code)] // The R2j encoder is exposed before R7 wires bytes into invalidation.
     pub(crate) fn error(&self) -> &CanonicalTypeIdentity {
         &self.error
     }
@@ -233,7 +230,7 @@ impl FallibleCarrierTypeIdentity {
 /// WHAT: keyed by the stable base `OriginTypeId` plus recursively canonical concrete arguments.
 /// WHY: two instances of the same generic nominal with the same canonical arguments share one
 /// canonical identity across module boundaries.
-#[allow(dead_code)] // Consumed by the next plan slice: public semantic surface projection.
+#[allow(dead_code)] // The R2j encoder is exposed before R7 wires bytes into invalidation.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct GenericInstanceTypeIdentity {
     base: OriginTypeId,
@@ -250,13 +247,13 @@ impl GenericInstanceTypeIdentity {
     }
 
     /// The stable base nominal origin identity.
-    #[allow(dead_code)]
+    #[allow(dead_code)] // The R2j encoder is exposed before R7 wires bytes into invalidation.
     pub(crate) fn base(&self) -> &OriginTypeId {
         &self.base
     }
 
     /// The recursively canonical concrete arguments.
-    #[allow(dead_code)]
+    #[allow(dead_code)] // The R2j encoder is exposed before R7 wires bytes into invalidation.
     pub(crate) fn arguments(&self) -> &[CanonicalTypeIdentity] {
         &self.arguments
     }
@@ -284,6 +281,16 @@ pub(crate) struct GenericDeclarationOrigin {
 enum GenericDeclarationOriginInner {
     FreeFunction(OriginFunctionId),
     NominalType(OriginTypeId),
+}
+
+/// The borrowed stable owner view for one valid generic declaration origin.
+///
+/// Keeping the discriminated view next to [`GenericDeclarationOrigin`] lets consumers inspect
+/// the validated owner domain without reconstructing it from parallel optional accessors.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum GenericDeclarationOwner<'a> {
+    FreeFunction(&'a OriginFunctionId),
+    NominalType(&'a OriginTypeId),
 }
 
 impl GenericDeclarationOrigin {
@@ -316,6 +323,18 @@ impl GenericDeclarationOrigin {
                 "a receiver method is not a valid exported generic declaration owner; only free \
                  functions declare standalone generic parameters",
             )),
+        }
+    }
+
+    /// Return the validated stable owner domain for this generic declaration.
+    pub(crate) fn owner(&self) -> GenericDeclarationOwner<'_> {
+        match &self.inner {
+            GenericDeclarationOriginInner::FreeFunction(origin) => {
+                GenericDeclarationOwner::FreeFunction(origin)
+            }
+            GenericDeclarationOriginInner::NominalType(origin) => {
+                GenericDeclarationOwner::NominalType(origin)
+            }
         }
     }
 }
@@ -452,6 +471,15 @@ impl CanonicalEvidenceIdentity {
     pub(crate) fn trait_identity(&self) -> &CanonicalTraitIdentity {
         &self.trait_identity
     }
+
+    /// The canonical identity of the conformance target.
+    ///
+    /// The canonical public-interface encoder uses this read-only view to encode the complete
+    /// target-plus-trait evidence key.
+    #[allow(dead_code)]
+    pub(crate) fn target_type_identity(&self) -> &CanonicalTypeIdentity {
+        &self.target_type_identity
+    }
 }
 
 /// Stable cross-module identity for one trait requirement.
@@ -487,6 +515,15 @@ impl StableTraitRequirementIdentity {
     /// The owned defining requirement name as authored in the trait declaration.
     pub(crate) fn requirement_name(&self) -> &str {
         &self.requirement_name
+    }
+
+    /// The canonical trait identity owning this requirement.
+    ///
+    /// The canonical public-interface encoder uses this read-only view to encode the complete
+    /// stable requirement key.
+    #[allow(dead_code)]
+    pub(crate) fn trait_identity(&self) -> &CanonicalTraitIdentity {
+        &self.trait_identity
     }
 }
 
