@@ -5,7 +5,10 @@
 //! here so statement transfer can stay focused on state transitions.
 
 use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckError;
-use crate::compiler_frontend::analysis::borrow_checker::types::FunctionReturnAliasSummary;
+use crate::compiler_frontend::analysis::borrow_checker::types::{
+    FunctionReturnAliasSummary, PublicCallParameterAccess, PublicCallParameterSummary,
+    PublicCallTransferEffect, PublicCallTransferEligibility,
+};
 use crate::compiler_frontend::compiler_errors::SourceLocation;
 use crate::compiler_frontend::external_packages::{
     CallTarget, ExternalAccessKind, ExternalFunctionDef, ExternalFunctionId, ExternalReturnAlias,
@@ -16,7 +19,7 @@ use super::BorrowTransferContext;
 #[derive(Debug, Clone)]
 pub(super) struct CallSemantics {
     pub(super) arg_effects: Vec<ArgEffect>,
-    pub(super) return_alias: CallResultAlias,
+    pub(super) return_alias: FunctionReturnAliasSummary,
 }
 
 /// Per-argument effect contract consumed by transfer.
@@ -29,13 +32,8 @@ pub(super) enum ArgEffect {
     SharedBorrow,
     MutableBorrow,
     MayConsume,
-}
-
-#[derive(Debug, Clone)]
-pub(super) enum CallResultAlias {
-    Fresh,
-    AliasArgs(Vec<usize>),
-    Unknown,
+    MayConsumeShared,
+    MayConsumeMutable,
 }
 
 pub(super) fn resolve_call_semantics(
@@ -47,60 +45,48 @@ pub(super) fn resolve_call_semantics(
     match target {
         CallTarget::UserFunction(function_id) => {
             let function_id = *function_id;
-            let Some(param_mutability) = context.function_param_mutability.get(&function_id) else {
+            let Some(summary) = context.public_call_summaries.get(&function_id) else {
                 return Err(context.diagnostics.internal_error(
                     format!(
-                        "Borrow checker is missing parameter mutability metadata for function '{}'",
+                        "Borrow checker is missing the public call summary for function '{}'",
                         context.diagnostics.function_name(function_id)
                     ),
                     context.diagnostics.function_error_location(function_id),
                 ));
             };
 
-            if param_mutability.len() != arg_len {
+            if summary.parameters.len() != arg_len {
                 return Err(context.diagnostics.internal_error(
                     format!(
                         "Borrow checker found argument count mismatch for function '{}': expected {}, got {}",
                         context.diagnostics.function_name(function_id),
-                        param_mutability.len(),
+                        summary.parameters.len(),
                         arg_len
                     ),
                     location,
                 ));
             }
 
-            let return_alias = match context.function_return_alias.get(&function_id) {
-                Some(FunctionReturnAliasSummary::Fresh) => CallResultAlias::Fresh,
-                Some(FunctionReturnAliasSummary::AliasParams(indices)) => {
-                    validate_alias_indices(
-                        context,
-                        indices,
-                        arg_len,
-                        location.clone(),
-                        &format!(
-                            "user function '{}'",
-                            context.diagnostics.function_name(function_id)
-                        ),
-                    )?;
-                    CallResultAlias::AliasArgs(indices.clone())
-                }
-                Some(FunctionReturnAliasSummary::Unknown) | None => CallResultAlias::Unknown,
-            };
+            validate_return_alias_summary(
+                context,
+                &summary.return_alias,
+                arg_len,
+                location.clone(),
+                &format!(
+                    "user function '{}'",
+                    context.diagnostics.function_name(function_id)
+                ),
+            )?;
 
             Ok(CallSemantics {
-                // Mutable user parameters can either borrow mutably or consume ownership.
-                // Transfer chooses the concrete behavior with last-use analysis.
-                arg_effects: param_mutability
+                // Ordinary immutable and mutable parameters can both receive optional transfer
+                // responsibility at a proven final use. Reactive handles remain shared reads.
+                arg_effects: summary
+                    .parameters
                     .iter()
-                    .map(|is_mutable| {
-                        if *is_mutable {
-                            ArgEffect::MayConsume
-                        } else {
-                            ArgEffect::SharedBorrow
-                        }
-                    })
+                    .map(parameter_arg_effect)
                     .collect(),
-                return_alias,
+                return_alias: summary.return_alias.clone(),
             })
         }
 
@@ -128,7 +114,7 @@ pub(super) fn resolve_call_semantics(
                 .collect::<Vec<_>>();
 
             let return_alias = match host_def.hir_return_alias() {
-                ExternalReturnAlias::Fresh => CallResultAlias::Fresh,
+                ExternalReturnAlias::Fresh => FunctionReturnAliasSummary::Fresh,
                 ExternalReturnAlias::AliasArgs(indices) => {
                     validate_alias_indices(
                         context,
@@ -137,7 +123,7 @@ pub(super) fn resolve_call_semantics(
                         location.clone(),
                         &format!("host function '{}'", host_def.name),
                     )?;
-                    CallResultAlias::AliasArgs(indices)
+                    FunctionReturnAliasSummary::AliasParams(indices)
                 }
             };
 
@@ -191,5 +177,42 @@ fn validate_alias_indices(
         ));
     }
 
+    Ok(())
+}
+
+fn parameter_arg_effect(parameter: &PublicCallParameterSummary) -> ArgEffect {
+    match parameter.access {
+        PublicCallParameterAccess::Reactive => ArgEffect::SharedBorrow,
+        PublicCallParameterAccess::Shared | PublicCallParameterAccess::Mutable => {
+            match (parameter.transfer_eligibility, parameter.transfer_effect) {
+                (
+                    PublicCallTransferEligibility::Eligible,
+                    PublicCallTransferEffect::MayConsume | PublicCallTransferEffect::AlwaysConsumes,
+                ) if parameter.access == PublicCallParameterAccess::Shared => {
+                    ArgEffect::MayConsumeShared
+                }
+                (
+                    PublicCallTransferEligibility::Eligible,
+                    PublicCallTransferEffect::MayConsume | PublicCallTransferEffect::AlwaysConsumes,
+                ) => ArgEffect::MayConsumeMutable,
+                (_, _) if parameter.access == PublicCallParameterAccess::Mutable => {
+                    ArgEffect::MutableBorrow
+                }
+                _ => ArgEffect::SharedBorrow,
+            }
+        }
+    }
+}
+
+fn validate_return_alias_summary(
+    context: &BorrowTransferContext<'_>,
+    return_alias: &FunctionReturnAliasSummary,
+    arg_len: usize,
+    location: SourceLocation,
+    callee_name: &str,
+) -> Result<(), BorrowCheckError> {
+    if let FunctionReturnAliasSummary::AliasParams(indices) = return_alias {
+        validate_alias_indices(context, indices, arg_len, location, callee_name)?;
+    }
     Ok(())
 }

@@ -6,14 +6,18 @@
 //! rules remain the only mutation authority.
 
 use super::super::types::{
-    ReactiveInvalidationFact, ReactiveInvalidationKind, ReactivePlaceWriteKind,
+    FunctionReturnAliasSummary, LocalMode, PublicCallParameterAccess, PublicCallReactiveEffect,
+    PublicCallTransferEffect, PublicCallTransferEligibility, ReactiveInvalidationFact,
+    ReactiveInvalidationKind, ReactivePlaceWriteKind, ValueAccessClassification,
 };
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::call_argument::{CallAccessMode, CallArgument};
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ReactiveSource, ReactiveSourceKind, ReactiveTemplateMetadata,
 };
-use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
+use crate::compiler_frontend::ast::statements::functions::{
+    FunctionReturn, FunctionSignature, ReturnChannel, ReturnSlot,
+};
 use crate::compiler_frontend::ast::templates::template::ReactiveSubscription;
 use crate::compiler_frontend::compiler_messages::InvalidMutableAccessReason;
 use crate::compiler_frontend::datatypes::{DataType, builtin_type_ids};
@@ -92,6 +96,122 @@ fn reactive_assignment_records_invalidation_after_initialization() {
         facts[0].kind,
         ReactiveInvalidationKind::Assignment
     ));
+}
+
+#[test]
+fn reactive_parameter_summary_retains_subscription_without_transfer() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = entry_and_start(&mut string_table);
+    let external_package_registry = default_external_package_registry(&mut string_table);
+    let render_name = symbol("render_reactive_parameter", &mut string_table);
+    let render_name_for_lookup = render_name.clone();
+    let parameter_path = symbol("source", &mut string_table);
+    let view_path = symbol("view", &mut string_table);
+    let mut parameter = param_with_type_id(
+        parameter_path.clone(),
+        builtin_type_ids::INT,
+        false,
+        test_location(1),
+    );
+    parameter.value.reactive_source = Some(reactive_source(
+        parameter_path.clone(),
+        ReactiveSourceKind::Parameter,
+    ));
+
+    let render = function_node(
+        render_name,
+        FunctionSignature {
+            parameters: vec![parameter],
+            returns: vec![ReturnSlot {
+                value: FunctionReturn::Value(DataType::StringSlice),
+                type_id: Some(builtin_type_ids::STRING),
+                reactive_template: None,
+                channel: ReturnChannel::Success,
+            }],
+        },
+        vec![
+            node(
+                NodeKind::VariableDeclaration(make_test_variable(
+                    view_path.clone(),
+                    Expression::string_slice(
+                        string_table.intern("reactive"),
+                        test_location(2),
+                        ValueMode::ImmutableOwned,
+                    ),
+                )),
+                test_location(2),
+            ),
+            node(
+                NodeKind::Return(vec![
+                    reference_expr(
+                        view_path,
+                        DataType::StringSlice,
+                        builtin_type_ids::STRING,
+                        test_location(2),
+                    )
+                    .with_reactive_template_metadata(
+                        metadata_with_subscription(
+                            reactive_source(parameter_path, ReactiveSourceKind::Parameter),
+                            test_location(2),
+                        ),
+                    ),
+                ]),
+                test_location(2),
+            ),
+        ],
+        test_location(1),
+    );
+
+    let start = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![],
+        },
+        vec![],
+        test_location(3),
+    );
+
+    let hir = lower_hir(
+        build_ast(vec![render, start], entry_path),
+        &mut string_table,
+    );
+    let report = run_borrow_checker(&hir, &external_package_registry, &string_table)
+        .expect("reactive parameter summary should validate");
+    let render_id = hir
+        .functions
+        .iter()
+        .find(|function| {
+            hir.side_table
+                .function_name_path(function.id)
+                .is_some_and(|path| path.name() == render_name_for_lookup.name())
+        })
+        .expect("reactive render function should lower to HIR")
+        .id;
+    let summary = report
+        .analysis
+        .public_call_summaries
+        .get(&render_id)
+        .expect("reactive render function should have a retained summary");
+
+    assert_eq!(summary.parameters.len(), 1);
+    assert_eq!(
+        summary.parameters[0].access,
+        PublicCallParameterAccess::Reactive
+    );
+    assert_eq!(
+        summary.parameters[0].transfer_eligibility,
+        PublicCallTransferEligibility::Ineligible
+    );
+    assert_eq!(
+        summary.parameters[0].transfer_effect,
+        PublicCallTransferEffect::NeverConsumes
+    );
+    assert_eq!(
+        summary.parameters[0].reactive_effect,
+        PublicCallReactiveEffect::Subscribes
+    );
+    assert_eq!(summary.return_alias, FunctionReturnAliasSummary::Fresh);
 }
 
 #[test]
@@ -252,6 +372,146 @@ fn mutable_call_argument_records_reactive_invalidation() {
             argument_index: 0,
         }
     ));
+
+    let source_local = hir
+        .side_table
+        .reactive_source(source_id)
+        .expect("reactive source should resolve")
+        .local_id;
+    let call_block = hir
+        .blocks
+        .iter()
+        .find(|block| {
+            block
+                .statements
+                .iter()
+                .any(|statement| statement.id == facts[0].statement_id)
+        })
+        .expect("mutable reactive call should belong to a reachable block");
+    let exit_snapshot = report
+        .analysis
+        .block_exit_states
+        .get(&call_block.id)
+        .expect("mutable reactive call should retain an exit snapshot");
+    let source_snapshot = exit_snapshot
+        .locals
+        .iter()
+        .find(|snapshot| snapshot.local == source_local)
+        .expect("mutable reactive source should remain in the exit snapshot");
+    assert!(
+        !source_snapshot.mode.is_definitely_uninit(),
+        "mutable reactive access must not consume the stable source root"
+    );
+}
+
+#[test]
+fn reactive_source_shared_optional_transfer_falls_back_to_read() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = entry_and_start(&mut string_table);
+    let external_package_registry = default_external_package_registry(&mut string_table);
+    let inspect_path = symbol("inspect", &mut string_table);
+    let parameter_path = symbol("value", &mut string_table);
+    let count_path = symbol("count", &mut string_table);
+    let source = reactive_source(count_path.clone(), ReactiveSourceKind::Declaration);
+
+    let inspect = function_node(
+        inspect_path.clone(),
+        FunctionSignature {
+            parameters: vec![param_with_type_id(
+                parameter_path,
+                builtin_type_ids::INT,
+                false,
+                test_location(1),
+            )],
+            returns: vec![],
+        },
+        vec![],
+        test_location(1),
+    );
+
+    let start = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![],
+        },
+        vec![
+            node(
+                NodeKind::VariableDeclaration(make_test_variable(
+                    count_path.clone(),
+                    Expression::int(1, test_location(2), ValueMode::MutableOwned)
+                        .with_reactive_source(source),
+                )),
+                test_location(2),
+            ),
+            node(
+                NodeKind::ExpressionStatement(Expression::function_call_with_arguments(
+                    inspect_path,
+                    vec![CallArgument::positional(
+                        reference_expr(
+                            count_path.clone(),
+                            DataType::Int,
+                            builtin_type_ids::INT,
+                            test_location(3),
+                        ),
+                        CallAccessMode::Shared,
+                        test_location(3),
+                    )],
+                    vec![],
+                    test_location(3),
+                )),
+                test_location(3),
+            ),
+        ],
+        test_location(2),
+    );
+
+    let hir = lower_hir(
+        build_ast(vec![inspect, start], entry_path),
+        &mut string_table,
+    );
+    let source_id = reactive_source_id_for_path(&hir, &count_path);
+    let report = run_borrow_checker(&hir, &external_package_registry, &string_table)
+        .expect("shared reactive source access should remain a read at final use");
+
+    assert!(
+        all_reactive_invalidations(&report).is_empty(),
+        "shared optional transfer must not create a reactive invalidation"
+    );
+
+    let call = hir
+        .blocks
+        .iter()
+        .flat_map(|block| block.statements.iter())
+        .find_map(|statement| match &statement.kind {
+            HirStatementKind::Call { args, .. } => args.first(),
+            _ => None,
+        })
+        .expect("shared reactive call should lower to a call statement");
+    let value_fact = report
+        .analysis
+        .value_fact(call.id)
+        .expect("shared reactive call argument should have a value fact");
+    assert_eq!(
+        value_fact.classification,
+        ValueAccessClassification::SharedRead
+    );
+
+    let source_local = hir
+        .side_table
+        .reactive_source(source_id)
+        .expect("reactive source should resolve")
+        .local_id;
+    let source_remains_initialized = report.analysis.block_exit_states.values().any(|snapshot| {
+        snapshot
+            .locals
+            .iter()
+            .any(|local| local.local == source_local && !local.mode.contains(LocalMode::UNINIT))
+    });
+    assert!(
+        source_remains_initialized,
+        "shared optional transfer must not consume the stable source root"
+    );
 }
 
 #[test]

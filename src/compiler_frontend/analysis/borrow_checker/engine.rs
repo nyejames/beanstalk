@@ -15,7 +15,7 @@ use crate::compiler_frontend::analysis::borrow_checker::transfer::{
 };
 use crate::compiler_frontend::analysis::borrow_checker::types::{
     BorrowCheckReport, BorrowCheckStats, BorrowDropSite, BorrowDropSiteKind, FunctionBorrowSummary,
-    FunctionReturnAliasSummary, LocalMode,
+    LocalMode, PublicCallSummary,
 };
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::hir::functions::HirFunction;
@@ -36,9 +36,8 @@ pub(super) struct BorrowChecker<'a> {
     // Fast ID lookups used throughout analysis.
     pub(super) block_index_by_id: FxHashMap<BlockId, usize>,
     pub(super) region_parent_by_id: FxHashMap<RegionId, Option<RegionId>>,
-    // Call/signature metadata caches used by transfer for O(1) access.
-    pub(super) function_param_mutability: FxHashMap<FunctionId, Vec<bool>>,
-    pub(super) function_return_alias: FxHashMap<FunctionId, FunctionReturnAliasSummary>,
+    // One summary-owned local call contract used by transfer and retained for later consumers.
+    pub(super) public_call_summaries: FxHashMap<FunctionId, PublicCallSummary>,
 }
 
 impl<'a> BorrowChecker<'a> {
@@ -67,27 +66,30 @@ impl<'a> BorrowChecker<'a> {
             diagnostics: BorrowDiagnostics::new(module, string_table),
             block_index_by_id,
             region_parent_by_id,
-            function_param_mutability: FxHashMap::default(),
-            function_return_alias: FxHashMap::default(),
+            public_call_summaries: FxHashMap::default(),
         }
     }
 
     pub(super) fn run(mut self) -> Result<BorrowCheckReport, BorrowCheckError> {
-        // WHAT: run the module-level borrow-analysis driver in three phases:
-        // metadata precomputation, per-function fixed-point transfer, then fact/report assembly.
+        // WHAT: run the module-level borrow-analysis driver in four phases:
+        // metadata precomputation, per-function fixed-point transfer, summary finalization, then
+        // fact/report assembly.
         // WHY: transfer needs allocation-light O(1) metadata lookups, while downstream tooling
         //      expects one consolidated report containing both facts and summary snapshots.
-        self.build_function_param_mutability()?;
-        self.build_function_return_alias_summaries()?;
+        self.build_public_call_summaries()?;
 
         let mut report = BorrowCheckReport::default();
 
-        for function in &self.module.functions {
-            let function_stats = self.analyze_function(function, &mut report)?;
+        for function_index in 0..self.module.functions.len() {
+            let function_stats = self.analyze_function(function_index, &mut report)?;
             report.stats.functions_analyzed += 1;
             report.stats.blocks_analyzed += function_stats.reachable_blocks;
             report.stats.worklist_iterations += function_stats.worklist_iterations;
         }
+
+        self.finalize_public_call_summary_effects_to_fixed_point(&mut report)?;
+
+        report.analysis.public_call_summaries = self.public_call_summaries;
 
         borrow_log!(format!(
             "[Borrow] Completed borrow checking: functions={} blocks={} states={} facts={{stmt:{} term:{} value:{}}}",
@@ -103,14 +105,15 @@ impl<'a> BorrowChecker<'a> {
     }
 
     fn analyze_function(
-        &self,
-        function: &HirFunction,
+        &mut self,
+        function_index: usize,
         report: &mut BorrowCheckReport,
     ) -> Result<FunctionBorrowSummary, BorrowCheckError> {
         // Function analysis pipeline:
         // 1) Build per-function local layout and visibility masks.
         // 2) Run forward worklist transfer to fixed point.
         // 3) Persist facts + entry/exit snapshots for reachable blocks.
+        let function = &self.module.functions[function_index];
         let reachable_blocks = self.collect_reachable_blocks(function)?;
         let reachable_block_set = reachable_blocks.iter().copied().collect::<FxHashSet<_>>();
         let layout = self.build_function_layout(function, &reachable_blocks)?;
@@ -119,8 +122,7 @@ impl<'a> BorrowChecker<'a> {
 
         let transfer_context = BorrowTransferContext {
             external_package_registry: self.external_package_registry,
-            function_param_mutability: &self.function_param_mutability,
-            function_return_alias: &self.function_return_alias,
+            public_call_summaries: &self.public_call_summaries,
             diagnostics: BorrowDiagnostics::new(self.module, self.string_table),
         };
 
@@ -318,6 +320,42 @@ impl<'a> BorrowChecker<'a> {
             .insert(function.id, summary.clone());
 
         Ok(summary)
+    }
+
+    fn finalize_public_call_summary_effects_to_fixed_point(
+        &mut self,
+        report: &mut BorrowCheckReport,
+    ) -> Result<(), BorrowCheckError> {
+        let parameter_count = self
+            .module
+            .functions
+            .iter()
+            .map(|function| function.params.len())
+            .sum::<usize>();
+        let max_iterations = parameter_count.saturating_add(1);
+
+        for _ in 0..max_iterations {
+            let mut changed = false;
+            for function_index in 0..self.module.functions.len() {
+                let function = self.module.functions[function_index].clone();
+                let reachable_blocks = self.collect_reachable_blocks(&function)?;
+                changed |= self.finalize_public_call_summary_effects(
+                    &function,
+                    &reachable_blocks,
+                    report,
+                )?;
+            }
+
+            if !changed {
+                return Ok(());
+            }
+        }
+
+        Err(self.diagnostics.internal_error(
+            "Borrow checker could not stabilize local mutation summaries",
+            self.diagnostics
+                .function_error_location(self.module.start_function),
+        ))
     }
 
     fn record_advisory_drop_sites(

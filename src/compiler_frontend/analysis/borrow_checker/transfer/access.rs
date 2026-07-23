@@ -5,7 +5,7 @@
 //! and emits statement/terminator/value facts.
 
 use super::super::diagnostics::BorrowDiagnostics;
-use super::call_semantics::{ArgEffect, CallResultAlias, resolve_call_semantics};
+use super::call_semantics::{ArgEffect, resolve_call_semantics};
 use super::facts::{StatementAccessTracker, ValueFactBuffer, roots_to_local_ids};
 use super::{BlockTransferStats, BorrowTransferContext};
 use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckError;
@@ -424,6 +424,21 @@ fn mutable_argument_roots(
     let mut roots = RootSet::empty(layout.local_count());
     collect_expression_roots(layout, state, expression, &mut roots, location, diagnostics)?;
     Ok(roots)
+}
+
+// WHAT: identifies a call argument that still denotes one direct HIR place after a transparent
+//      result projection.
+// WHY: optional transfer must decide move-versus-borrow on the place itself. A fallible success
+//      unwrap around a load must not first register an independent shared read of that same place.
+//      Computed and aggregate expressions intentionally stay on the recursive read path.
+fn transparent_place_from_expression(expression: &HirExpression) -> Option<&HirPlace> {
+    match &expression.kind {
+        HirExpressionKind::Load(place) => Some(place),
+        HirExpressionKind::FallibleUnwrapSuccess { result } => {
+            transparent_place_from_expression(result)
+        }
+        _ => None,
+    }
 }
 
 fn direct_place_roots_from_expression(

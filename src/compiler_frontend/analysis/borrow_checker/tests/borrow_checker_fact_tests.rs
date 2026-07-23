@@ -5,10 +5,21 @@
 //! before it reaches higher-level diagnostics.
 
 use crate::compiler_frontend::analysis::borrow_checker::LocalMode;
+use crate::compiler_frontend::analysis::borrow_checker::types::FunctionReturnAliasSummary;
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
-use crate::compiler_frontend::ast::expressions::expression::Expression;
-use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
+use crate::compiler_frontend::ast::expressions::call_argument::{CallAccessMode, CallArgument};
+use crate::compiler_frontend::ast::expressions::expression::{
+    Expression, FallibleExpressionHandling, HandledFallibleHostFunctionCallInput,
+};
+use crate::compiler_frontend::ast::statements::functions::{
+    FunctionReturn, FunctionSignature, ReturnChannel, ReturnSlot,
+};
+use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::{DataType, builtin_type_ids};
+use crate::compiler_frontend::external_packages::{
+    CallTarget, ExternalAbiType, ExternalFunctionDef, ExternalFunctionLowerings, ExternalParameter,
+    ExternalReturnSlot, ExternalSignatureType,
+};
 use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind, HirMapOp};
 use crate::compiler_frontend::hir::hir_side_table::HirLocation;
 use crate::compiler_frontend::hir::ids::{BlockId, HirNodeId, HirValueId, LocalId};
@@ -17,7 +28,7 @@ use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
 use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tests::ast_fixture_support::{
-    assignment_target, function_node, make_test_variable, node, reference_expr, symbol,
+    assignment_target, function_node, make_test_variable, node, param, reference_expr, symbol,
     test_location,
 };
 use crate::compiler_frontend::tests::borrow_fixture_support::run_borrow_checker;
@@ -27,6 +38,7 @@ use crate::compiler_frontend::tests::parse_support::parse_single_file_ast;
 use crate::compiler_frontend::value_mode::ValueMode;
 use rustc_hash::FxHashSet;
 use std::collections::VecDeque;
+use std::sync::Arc;
 
 #[test]
 fn statement_terminator_and_value_facts_are_populated() {
@@ -613,6 +625,431 @@ sentinel = 0"#;
         "nested literal should move the inner inserted value root, got mode {:?} with aliases {:?}",
         value_snapshot.mode,
         value_snapshot.alias_roots
+    );
+}
+
+#[test]
+fn retained_alias_result_borrows_named_final_use_argument() {
+    let source = r#"alias |input String| -> input:
+    return input
+;
+value ~= "hello"
+result = alias(value)
+sentinel = 0
+"#;
+    let (ast, mut string_table) = parse_single_file_ast(source);
+    let hir = lower_hir(ast, &mut string_table);
+    let external_package_registry = default_external_package_registry(&mut string_table);
+    let report = run_borrow_checker(&hir, &external_package_registry, &string_table)
+        .expect("a retained aliased result should borrow its final-use argument");
+
+    let value_local = find_local_by_name(&hir, &string_table, "value")
+        .expect("should locate the aliased argument local");
+    let result_local = find_local_by_name(&hir, &string_table, "result")
+        .expect("should locate the retained result local");
+    let sentinel_statement =
+        find_assign_statement_id_for_local_name(&hir, &string_table, "sentinel")
+            .expect("should locate the sentinel statement");
+    let entry_state = report
+        .analysis
+        .statement_entry_states
+        .get(&sentinel_statement)
+        .expect("sentinel statement should have an entry snapshot");
+    let value_snapshot = entry_state
+        .locals
+        .iter()
+        .find(|snapshot| snapshot.local == value_local)
+        .expect("entry snapshot should include the aliased argument");
+    let result_snapshot = entry_state
+        .locals
+        .iter()
+        .find(|snapshot| snapshot.local == result_local)
+        .expect("entry snapshot should include the retained result");
+
+    assert!(
+        !value_snapshot.mode.is_definitely_uninit(),
+        "a retained alias result must not move its source root, got mode {:?}",
+        value_snapshot.mode
+    );
+    assert!(
+        result_snapshot.mode.contains(LocalMode::ALIAS),
+        "retained alias result should remain rooted in its argument, got mode {:?}",
+        result_snapshot.mode
+    );
+    assert!(
+        result_snapshot.alias_roots.contains(&value_local),
+        "retained alias result should retain the named argument root, got {:?}",
+        result_snapshot.alias_roots
+    );
+}
+
+#[test]
+fn transparent_fallible_success_projection_preserves_retained_alias_root() {
+    // WHAT: a fallible success projection passed to an alias-retaining call is one direct
+    //      place access, and the returned alias must retain that place's root.
+    // WHY: optional transfer first records argument roots before deciding whether the call
+    //      borrows or moves; treating the unwrap as an aggregate creates a self-conflict and
+    //      can lose the root needed by the retained-result state.
+    let source = r#"User = |
+    score Int,
+|
+
+identity |value User| -> value:
+    return value
+;
+
+load_user || -> User, Error!:
+    return! Error("missing user")
+;
+
+compute || -> User, Error!:
+    return identity(load_user()!)
+;
+"#;
+    let (ast, mut string_table) = parse_single_file_ast(source);
+    let hir = lower_hir(ast, &mut string_table);
+    let external_package_registry = default_external_package_registry(&mut string_table);
+    let report = run_borrow_checker(&hir, &external_package_registry, &string_table)
+        .expect("transparent fallible success projection should not self-conflict");
+    let identity_name = symbol("identity", &mut string_table);
+
+    let identity_id = hir
+        .functions
+        .iter()
+        .find(|function| {
+            hir.side_table
+                .function_name_path(function.id)
+                .is_some_and(|path| path.name() == identity_name.name())
+        })
+        .expect("should locate the alias-retaining function")
+        .id;
+    let (compute_block, call_statement_id, argument_root, result_local) = hir
+        .blocks
+        .iter()
+        .find_map(|block| {
+            block.statements.iter().find_map(|statement| {
+                let HirStatementKind::Call {
+                    target: CallTarget::UserFunction(target),
+                    args,
+                    result: Some(result),
+                } = &statement.kind
+                else {
+                    return None;
+                };
+                if *target != identity_id || args.len() != 1 {
+                    return None;
+                }
+                let HirExpressionKind::FallibleUnwrapSuccess { result: payload } = &args[0].kind
+                else {
+                    return None;
+                };
+                let HirExpressionKind::Load(HirPlace::Local(root)) = &payload.kind else {
+                    return None;
+                };
+                Some((block.id, statement.id, *root, *result))
+            })
+        })
+        .expect("should locate the identity call with a transparent fallible projection");
+
+    let fact = report
+        .analysis
+        .statement_fact(call_statement_id)
+        .expect("identity call should have a statement fact");
+    assert!(
+        fact.shared_roots.contains(&argument_root),
+        "alias-retaining optional transfer should record the direct root as shared, got {:?}",
+        fact.shared_roots
+    );
+    assert!(
+        !fact.mutable_roots.contains(&argument_root),
+        "alias-retaining optional transfer must not move the direct root, got {:?}",
+        fact.mutable_roots
+    );
+
+    let exit_state = report
+        .analysis
+        .block_exit_states
+        .get(&compute_block)
+        .expect("compute block should have an exit snapshot");
+    let result_snapshot = exit_state
+        .locals
+        .iter()
+        .find(|snapshot| snapshot.local == result_local)
+        .expect("exit snapshot should include the retained identity result");
+    assert!(
+        result_snapshot.mode.contains(LocalMode::ALIAS),
+        "identity result should retain alias mode, got {:?}",
+        result_snapshot.mode
+    );
+    assert!(
+        result_snapshot.alias_roots.contains(&argument_root),
+        "identity result should retain the projected root, got {:?}",
+        result_snapshot.alias_roots
+    );
+}
+
+#[test]
+fn retained_unknown_result_borrows_possible_final_use_argument() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = entry_and_start(&mut string_table);
+    let mut external_package_registry = default_external_package_registry(&mut string_table);
+    let external_id = Arc::make_mut(&mut external_package_registry)
+        .register_function(ExternalFunctionDef {
+            name: "unknown_external".to_owned(),
+            parameters: vec![ExternalParameter {
+                language_type: ExternalSignatureType::Abi(ExternalAbiType::Utf8Str),
+                access_kind:
+                    crate::compiler_frontend::external_packages::ExternalAccessKind::Shared,
+            }],
+            returns: vec![
+                ExternalReturnSlot::fresh(ExternalAbiType::Utf8Str),
+                ExternalReturnSlot::fresh(ExternalAbiType::Utf8Str),
+            ],
+            error_return_type: Some(ExternalSignatureType::Abi(ExternalAbiType::Utf8Str)),
+            lowerings: ExternalFunctionLowerings::default(),
+        })
+        .expect("unknown external fixture registration should succeed");
+
+    let unknown_name = symbol("unknown", &mut string_table);
+    let input_name = symbol("input", &mut string_table);
+    let argument_name = symbol("argument", &mut string_table);
+    let result_name = symbol("result", &mut string_table);
+    let caller_name = symbol("caller", &mut string_table);
+    let sentinel_name = symbol("sentinel", &mut string_table);
+    let mut expression_types = TypeEnvironment::new();
+    let external_call = Expression::handled_fallible_host_function_call_with_typed_arguments(
+        HandledFallibleHostFunctionCallInput {
+            id: external_id,
+            args: vec![CallArgument::positional(
+                reference_expr(
+                    input_name.clone(),
+                    DataType::StringSlice,
+                    builtin_type_ids::STRING,
+                    test_location(2),
+                ),
+                CallAccessMode::Shared,
+                test_location(2),
+            )],
+            result_type_ids: vec![builtin_type_ids::STRING, builtin_type_ids::STRING],
+            error_type_id: builtin_type_ids::STRING,
+            handling: FallibleExpressionHandling::Propagate,
+            location: test_location(2),
+        },
+        &mut expression_types,
+    );
+    let unknown = function_node(
+        unknown_name.clone(),
+        FunctionSignature {
+            parameters: vec![param(
+                input_name,
+                DataType::StringSlice,
+                builtin_type_ids::STRING,
+                false,
+                test_location(1),
+            )],
+            returns: vec![
+                ReturnSlot {
+                    value: FunctionReturn::Value(DataType::StringSlice),
+                    type_id: Some(builtin_type_ids::STRING),
+                    reactive_template: None,
+                    channel: ReturnChannel::Success,
+                },
+                ReturnSlot {
+                    value: FunctionReturn::Value(DataType::StringSlice),
+                    type_id: Some(builtin_type_ids::STRING),
+                    reactive_template: None,
+                    channel: ReturnChannel::Success,
+                },
+                ReturnSlot {
+                    value: FunctionReturn::Value(DataType::StringSlice),
+                    type_id: Some(builtin_type_ids::STRING),
+                    reactive_template: None,
+                    channel: ReturnChannel::Error,
+                },
+            ],
+        },
+        vec![node(
+            NodeKind::Return(vec![external_call]),
+            test_location(2),
+        )],
+        test_location(1),
+    );
+    let caller = function_node(
+        caller_name.clone(),
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![
+                ReturnSlot {
+                    value: FunctionReturn::Value(DataType::StringSlice),
+                    type_id: Some(builtin_type_ids::STRING),
+                    reactive_template: None,
+                    channel: ReturnChannel::Success,
+                },
+                ReturnSlot {
+                    value: FunctionReturn::Value(DataType::StringSlice),
+                    type_id: Some(builtin_type_ids::STRING),
+                    reactive_template: None,
+                    channel: ReturnChannel::Success,
+                },
+                ReturnSlot {
+                    value: FunctionReturn::Value(DataType::StringSlice),
+                    type_id: Some(builtin_type_ids::STRING),
+                    reactive_template: None,
+                    channel: ReturnChannel::Error,
+                },
+            ],
+        },
+        vec![
+            node(
+                NodeKind::VariableDeclaration(make_test_variable(
+                    argument_name.clone(),
+                    Expression::string_slice(
+                        string_table.intern("hello"),
+                        test_location(5),
+                        ValueMode::MutableOwned,
+                    ),
+                )),
+                test_location(5),
+            ),
+            node(
+                NodeKind::VariableDeclaration(make_test_variable(
+                    result_name.clone(),
+                    Expression::handled_fallible_function_call_with_typed_arguments(
+                        unknown_name.clone(),
+                        vec![CallArgument::positional(
+                            reference_expr(
+                                argument_name,
+                                DataType::StringSlice,
+                                builtin_type_ids::STRING,
+                                test_location(6),
+                            ),
+                            CallAccessMode::Shared,
+                            test_location(6),
+                        )],
+                        vec![builtin_type_ids::STRING, builtin_type_ids::STRING],
+                        FallibleExpressionHandling::Propagate,
+                        &mut expression_types,
+                        test_location(6),
+                    ),
+                )),
+                test_location(6),
+            ),
+            node(
+                NodeKind::VariableDeclaration(make_test_variable(
+                    sentinel_name,
+                    Expression::int(0, test_location(7), ValueMode::ImmutableOwned),
+                )),
+                test_location(7),
+            ),
+            node(
+                NodeKind::Return(vec![
+                    Expression::string_slice(
+                        string_table.intern("done"),
+                        test_location(8),
+                        ValueMode::ImmutableOwned,
+                    ),
+                    Expression::string_slice(
+                        string_table.intern("done"),
+                        test_location(8),
+                        ValueMode::ImmutableOwned,
+                    ),
+                ]),
+                test_location(8),
+            ),
+        ],
+        test_location(5),
+    );
+    let start = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![],
+        },
+        vec![],
+        test_location(9),
+    );
+    let hir = lower_hir(
+        build_ast(vec![unknown, caller, start], entry_path),
+        &mut string_table,
+    );
+    let report = run_borrow_checker(&hir, &external_package_registry, &string_table)
+        .expect("a retained unknown result should borrow a possible aliased argument");
+
+    let unknown_function_id = hir
+        .functions
+        .iter()
+        .find(|function| {
+            hir.side_table
+                .function_name_path(function.id)
+                .is_some_and(|path| path.name() == unknown_name.name())
+        })
+        .expect("should locate the unknown-return function")
+        .id;
+    assert_eq!(
+        report
+            .analysis
+            .public_call_summaries
+            .get(&unknown_function_id)
+            .expect("unknown-return function should have a call summary")
+            .return_alias,
+        FunctionReturnAliasSummary::Unknown
+    );
+
+    let argument_local = find_local_by_name(&hir, &string_table, "argument")
+        .expect("should locate the possible aliased argument local");
+    let result_assignment = find_assign_statement_id_for_local_name(&hir, &string_table, "result")
+        .expect("should locate the retained result assignment");
+    let caller_function = hir
+        .functions
+        .iter()
+        .find(|function| {
+            hir.side_table
+                .function_name_path(function.id)
+                .is_some_and(|path| path.name() == caller_name.name())
+        })
+        .expect("should locate the caller function");
+    let caller_block = &hir.blocks[caller_function.entry.0 as usize];
+    let call_result_local = caller_block
+        .statements
+        .iter()
+        .find_map(|statement| match &statement.kind {
+            HirStatementKind::Call {
+                result: Some(result),
+                ..
+            } => Some(*result),
+            _ => None,
+        })
+        .expect("caller should retain the call result before assignment");
+    let entry_state = report
+        .analysis
+        .statement_entry_states
+        .get(&result_assignment)
+        .expect("result assignment should have an entry snapshot");
+    let argument_snapshot = entry_state
+        .locals
+        .iter()
+        .find(|snapshot| snapshot.local == argument_local)
+        .expect("result assignment entry should include the possible aliased argument");
+    let result_snapshot = entry_state
+        .locals
+        .iter()
+        .find(|snapshot| snapshot.local == call_result_local)
+        .expect("result assignment entry should include the retained call result");
+
+    assert!(
+        !argument_snapshot.mode.is_definitely_uninit(),
+        "a retained unknown result must not move a possible source root, got mode {:?}",
+        argument_snapshot.mode
+    );
+    assert!(
+        result_snapshot.mode.contains(LocalMode::ALIAS),
+        "retained unknown result should retain possible alias roots, got mode {:?}",
+        result_snapshot.mode
+    );
+    assert!(
+        result_snapshot.alias_roots.contains(&argument_local),
+        "retained unknown result should retain the possible argument root, got {:?}",
+        result_snapshot.alias_roots
     );
 }
 

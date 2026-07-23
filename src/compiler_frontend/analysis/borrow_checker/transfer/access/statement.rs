@@ -5,6 +5,7 @@
 //! entrypoint easier to inspect without changing the borrow-analysis model.
 
 use super::*;
+use crate::compiler_frontend::analysis::borrow_checker::types::FunctionReturnAliasSummary;
 use crate::compiler_frontend::external_packages::CallTarget;
 use crate::compiler_frontend::hir::expressions::HirMapOp;
 use crate::compiler_frontend::hir::ids::LocalId;
@@ -205,7 +206,7 @@ pub(crate) fn transfer_statement(
                     effect: ArgEffect::SharedBorrow,
                 }],
                 *result,
-                CallResultAlias::Fresh,
+                FunctionReturnAliasSummary::Fresh,
             )?;
         }
 
@@ -229,7 +230,7 @@ pub(crate) fn transfer_statement(
                     effect: ArgEffect::SharedBorrow,
                 }],
                 Some(*result),
-                CallResultAlias::Fresh,
+                FunctionReturnAliasSummary::Fresh,
             )?;
         }
 
@@ -260,7 +261,7 @@ pub(crate) fn transfer_statement(
                 },
                 &call_args,
                 Some(*result),
-                CallResultAlias::Fresh,
+                FunctionReturnAliasSummary::Fresh,
             )?;
         }
 
@@ -418,12 +419,14 @@ fn transfer_call_arguments_and_result(
     input: &mut CallTransferContext<'_, '_, '_, '_, '_, '_>,
     args: &[CallArgumentTransfer<'_>],
     result: Option<LocalId>,
-    return_alias: CallResultAlias,
+    return_alias: FunctionReturnAliasSummary,
 ) -> Result<(), BorrowCheckError> {
-    if args
-        .iter()
-        .any(|arg| !matches!(arg.effect, ArgEffect::SharedBorrow))
-    {
+    if args.iter().any(|arg| {
+        matches!(
+            arg.effect,
+            ArgEffect::MutableBorrow | ArgEffect::MayConsume | ArgEffect::MayConsumeMutable
+        )
+    }) {
         input.stats.mutable_call_sites += 1;
     }
 
@@ -443,7 +446,42 @@ fn transfer_call_arguments_and_result(
             &argument_location,
             &mut arg_roots[arg_index],
         )?;
-        transfer_call_argument_access(input, argument, arg.effect, argument_location)?;
+    }
+
+    for (arg_index, arg) in args.iter().enumerate() {
+        let argument_location = input
+            .context
+            .diagnostics
+            .value_error_location(arg.argument.id, input.location.clone());
+        let effect = effective_call_argument_effect(
+            arg.effect,
+            arg_index,
+            &arg_roots,
+            result.is_some(),
+            &return_alias,
+        );
+        if matches!(arg.effect, ArgEffect::MayConsumeShared)
+            && matches!(effect, ArgEffect::SharedBorrow)
+        {
+            let mut read_env = SharedReadEnv {
+                context: input.context,
+                layout: input.layout,
+                state: input.state,
+                block_id: input.block_id,
+                tracker: input.tracker,
+                location: argument_location.clone(),
+                current_order: input.current_order,
+                stats: input.stats,
+                value_fact_buffer: input.value_fact_buffer,
+            };
+            record_shared_reads_in_expression(
+                &mut read_env,
+                arg.argument,
+                argument_location.clone(),
+                &mut RootSet::empty(input.layout.local_count()),
+            )?;
+        }
+        transfer_call_argument_access(input, arg.argument, effect, argument_location)?;
     }
 
     transfer_call_result_alias(input, result, return_alias, &arg_roots)
@@ -456,8 +494,13 @@ fn record_call_argument_reads(
     argument_location: &SourceLocation,
     arg_roots: &mut RootSet,
 ) -> Result<(), BorrowCheckError> {
-    if matches!(effect, ArgEffect::MutableBorrow | ArgEffect::MayConsume)
-        && let HirExpressionKind::Load(place) = &argument.kind
+    if matches!(
+        effect,
+        ArgEffect::MutableBorrow
+            | ArgEffect::MayConsume
+            | ArgEffect::MayConsumeShared
+            | ArgEffect::MayConsumeMutable
+    ) && let Some(place) = transparent_place_from_expression(argument)
     {
         let mut read_env = SharedReadEnv {
             context: input.context,
@@ -530,7 +573,8 @@ fn transfer_call_argument_access(
             );
             Ok(())
         }
-        ArgEffect::MayConsume => {
+        ArgEffect::MayConsume | ArgEffect::MayConsumeShared | ArgEffect::MayConsumeMutable => {
+            let fallback_effect = fallback_call_argument_effect(effect);
             let mutable_roots = mutable_argument_roots(
                 input.layout,
                 input.state,
@@ -538,15 +582,72 @@ fn transfer_call_argument_access(
                 argument_location.clone(),
                 &input.context.diagnostics,
             )?;
-            check_call_may_consume(input, &mutable_roots, argument_location)?;
+            check_call_may_consume(input, &mutable_roots, argument_location, fallback_effect)?;
             input.value_fact_buffer.record(
                 argument.id,
-                ValueAccessClassification::MutableArgument,
+                if matches!(fallback_effect, ArgEffect::SharedBorrow) {
+                    ValueAccessClassification::SharedRead
+                } else {
+                    ValueAccessClassification::MutableArgument
+                },
                 &mutable_roots,
             );
             Ok(())
         }
     }
+}
+
+fn effective_call_argument_effect(
+    effect: ArgEffect,
+    argument_index: usize,
+    argument_roots: &[RootSet],
+    retains_result: bool,
+    return_alias: &FunctionReturnAliasSummary,
+) -> ArgEffect {
+    let optional_transfer = matches!(
+        effect,
+        ArgEffect::MayConsume | ArgEffect::MayConsumeShared | ArgEffect::MayConsumeMutable
+    );
+    if !optional_transfer {
+        return effect;
+    }
+
+    // A retained result must keep any root it may alias alive until the result is consumed.
+    // Downgrade only the affected optional arguments so unrelated final-use arguments can still
+    // receive inferred transfer responsibility.
+    let result_may_alias_argument = retains_result
+        && match return_alias {
+            FunctionReturnAliasSummary::Fresh => false,
+            FunctionReturnAliasSummary::AliasParams(indices) => indices.contains(&argument_index),
+            FunctionReturnAliasSummary::Unknown => !argument_roots[argument_index].is_empty(),
+        };
+    let has_same_statement_use =
+        argument_roots
+            .iter()
+            .enumerate()
+            .any(|(other_index, other_roots)| {
+                other_index != argument_index
+                    && roots_overlap(&argument_roots[argument_index], other_roots)
+            });
+    if !result_may_alias_argument && !has_same_statement_use {
+        return effect;
+    }
+
+    fallback_call_argument_effect(effect)
+}
+
+fn fallback_call_argument_effect(effect: ArgEffect) -> ArgEffect {
+    match effect {
+        ArgEffect::MayConsumeShared => ArgEffect::SharedBorrow,
+        ArgEffect::MayConsumeMutable | ArgEffect::MayConsume => ArgEffect::MutableBorrow,
+        _ => effect,
+    }
+}
+
+fn roots_overlap(left: &RootSet, right: &RootSet) -> bool {
+    let mut overlap = left.clone();
+    overlap.intersect_with(right);
+    !overlap.is_empty()
 }
 
 fn check_call_mutable_borrow(
@@ -584,9 +685,22 @@ fn check_call_may_consume(
     input: &mut CallTransferContext<'_, '_, '_, '_, '_, '_>,
     mutable_roots: &RootSet,
     location: SourceLocation,
+    fallback_effect: ArgEffect,
 ) -> Result<(), BorrowCheckError> {
     if mutable_roots.is_empty() {
         return Ok(());
+    }
+
+    // Reactive sources represent stable observable storage. Optional destruction responsibility
+    // must never consume that root, so use the call slot's ordinary access contract instead.
+    if mutable_roots.iter_ones().any(|root_index| {
+        input
+            .context
+            .diagnostics
+            .reactive_source_id_for_local(input.layout.local_ids[root_index])
+            .is_some()
+    }) {
+        return check_call_borrow_fallback(input, mutable_roots, location, fallback_effect);
     }
 
     match classify_move_decision(
@@ -595,7 +709,9 @@ fn check_call_may_consume(
         mutable_roots,
         input.current_order,
     ) {
-        MoveDecision::Borrow => check_call_mutable_borrow(input, mutable_roots, location),
+        MoveDecision::Borrow | MoveDecision::Inconsistent(_) => {
+            check_call_borrow_fallback(input, mutable_roots, location, fallback_effect)
+        }
         MoveDecision::Move => {
             let mut check = AccessCheckContext {
                 context: input.context,
@@ -623,23 +739,49 @@ fn check_call_may_consume(
             }
             Ok(())
         }
-        MoveDecision::Inconsistent(root_index) => Err(input
-            .context
-            .diagnostics
-            .invalid_access_after_possible_ownership_transfer(
-                input
-                    .context
-                    .diagnostics
-                    .local_place(input.layout.local_ids[root_index]),
-                location,
-            )),
     }
+}
+
+fn check_call_borrow_fallback(
+    input: &mut CallTransferContext<'_, '_, '_, '_, '_, '_>,
+    roots: &RootSet,
+    location: SourceLocation,
+    fallback_effect: ArgEffect,
+) -> Result<(), BorrowCheckError> {
+    if matches!(fallback_effect, ArgEffect::SharedBorrow) {
+        check_call_shared_borrow(input, roots, location)
+    } else {
+        check_call_mutable_borrow(input, roots, location)
+    }
+}
+
+fn check_call_shared_borrow(
+    input: &mut CallTransferContext<'_, '_, '_, '_, '_, '_>,
+    roots: &RootSet,
+    location: SourceLocation,
+) -> Result<(), BorrowCheckError> {
+    if roots.is_empty() {
+        return Ok(());
+    }
+
+    let mut check = AccessCheckContext {
+        context: input.context,
+        layout: input.layout,
+        state: input.state,
+        block_id: input.block_id,
+        tracker: input.tracker,
+        location,
+        stats: input.stats,
+        actor_index_hint: None,
+        current_order: input.current_order,
+    };
+    check_shared_access(&mut check, roots)
 }
 
 fn transfer_call_result_alias(
     input: &mut CallTransferContext<'_, '_, '_, '_, '_, '_>,
     result: Option<LocalId>,
-    return_alias: CallResultAlias,
+    return_alias: FunctionReturnAliasSummary,
     arg_roots: &[RootSet],
 ) -> Result<(), BorrowCheckError> {
     let Some(result_local) = result else {
@@ -657,8 +799,8 @@ fn transfer_call_result_alias(
     };
 
     let alias_roots = match return_alias {
-        CallResultAlias::Fresh => None,
-        CallResultAlias::AliasArgs(ref arg_indices) => {
+        FunctionReturnAliasSummary::Fresh => None,
+        FunctionReturnAliasSummary::AliasParams(ref arg_indices) => {
             let mut roots = RootSet::empty(input.layout.local_count());
             for arg_index in arg_indices {
                 let Some(arg_root_set) = arg_roots.get(*arg_index) else {
@@ -673,7 +815,7 @@ fn transfer_call_result_alias(
             }
             Some(roots)
         }
-        CallResultAlias::Unknown => {
+        FunctionReturnAliasSummary::Unknown => {
             let mut roots = RootSet::empty(input.layout.local_count());
             for arg_root_set in arg_roots {
                 roots.union_with(arg_root_set);
@@ -707,11 +849,11 @@ fn map_argument_effect(op: HirMapOp, arg_index: usize) -> ArgEffect {
     }
 }
 
-fn map_result_alias(op: HirMapOp) -> CallResultAlias {
+fn map_result_alias(op: HirMapOp) -> FunctionReturnAliasSummary {
     if matches!(op, HirMapOp::Get) {
-        CallResultAlias::AliasArgs(vec![0])
+        FunctionReturnAliasSummary::AliasParams(vec![0])
     } else {
-        CallResultAlias::Fresh
+        FunctionReturnAliasSummary::Fresh
     }
 }
 
@@ -819,7 +961,10 @@ fn reactive_mutable_call_invalidations(
     let mut invalidations = Vec::new();
 
     for (argument_index, arg) in args.iter().enumerate() {
-        if matches!(arg.effect, ArgEffect::SharedBorrow) {
+        if !matches!(
+            arg.effect,
+            ArgEffect::MutableBorrow | ArgEffect::MayConsumeMutable
+        ) {
             continue;
         }
 

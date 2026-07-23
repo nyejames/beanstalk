@@ -8,7 +8,8 @@ use crate::compiler_frontend::ast::expressions::call_argument::{
     CallAccessMode, CallArgument, CallPassingMode,
 };
 use crate::compiler_frontend::ast::expressions::expression::{
-    Expression, FallibleExpressionHandling, Operator,
+    Expression, FallibleExpressionHandling, HandledFallibleHostFunctionCallInput, Operator,
+    ReactiveSource, ReactiveSourceKind,
 };
 use crate::compiler_frontend::ast::expressions::expression_rpn::{
     ExpressionRpn, ExpressionRpnItem,
@@ -23,11 +24,15 @@ use crate::compiler_frontend::compiler_messages::{
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::datatypes::{DataType, builtin_type_ids};
-use crate::compiler_frontend::external_packages::ExternalFunctionId;
 use crate::compiler_frontend::external_packages::test_support::{
     TestExternalAbiType as ExternalAbiType, TestExternalAccessKind as ExternalAccessKind,
     TestExternalReturnAlias as ExternalReturnAlias,
 };
+use crate::compiler_frontend::external_packages::{
+    ExternalAbiType as RegistryAbiType, ExternalFunctionDef, ExternalFunctionId,
+    ExternalFunctionLowerings, ExternalReturnSlot, ExternalSignatureType,
+};
+use crate::compiler_frontend::hir::ids::LocalId;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tests::ast_fixture_support::{
@@ -42,9 +47,17 @@ use crate::compiler_frontend::tests::external_package_support::{
     default_external_package_registry, register_external_function,
 };
 use crate::compiler_frontend::tests::hir_fixture_support::{build_ast, entry_and_start, lower_hir};
+use crate::compiler_frontend::tests::parse_support::parse_single_file_ast;
+use crate::compiler_frontend::tests::type_id_fixture_support::param_with_type_id;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
 use crate::compiler_frontend::value_mode::ValueMode;
+use std::sync::Arc;
+
+use super::super::types::{
+    FunctionReturnAliasSummary, PublicCallMutationEffect, PublicCallParameterAccess,
+    PublicCallReactiveEffect, PublicCallTransferEffect, PublicCallTransferEligibility,
+};
 
 fn function_call_node(
     name: InternedPath,
@@ -72,6 +85,536 @@ fn host_function_call_node(
         result_type_ids,
         location,
     ))
+}
+
+#[test]
+fn public_call_summaries_cover_zero_parameter_and_parameter_effects() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = entry_and_start(&mut string_table);
+    let external_package_registry = default_external_package_registry(&mut string_table);
+
+    let summary_target = symbol("summary_target", &mut string_table);
+    let summary_target_name = summary_target.clone();
+    let shared_parameter = symbol("shared_parameter", &mut string_table);
+    let mutable_parameter = symbol("mutable_parameter", &mut string_table);
+    let untouched_mutable_parameter = symbol("untouched_mutable_parameter", &mut string_table);
+    let reactive_parameter = symbol("reactive_parameter", &mut string_table);
+    let mut reactive_parameter_declaration = param_with_type_id(
+        reactive_parameter.clone(),
+        builtin_type_ids::INT,
+        false,
+        test_location(1),
+    );
+    reactive_parameter_declaration.value.reactive_source = Some(ReactiveSource {
+        path: reactive_parameter.clone(),
+        kind: ReactiveSourceKind::Parameter,
+    });
+
+    let target = function_node(
+        summary_target,
+        FunctionSignature {
+            parameters: vec![
+                param(
+                    shared_parameter,
+                    DataType::Int,
+                    builtin_type_ids::INT,
+                    false,
+                    test_location(1),
+                ),
+                param(
+                    mutable_parameter.clone(),
+                    DataType::Int,
+                    builtin_type_ids::INT,
+                    true,
+                    test_location(1),
+                ),
+                param(
+                    untouched_mutable_parameter,
+                    DataType::Int,
+                    builtin_type_ids::INT,
+                    true,
+                    test_location(1),
+                ),
+                reactive_parameter_declaration,
+            ],
+            returns: vec![],
+        },
+        vec![node(
+            NodeKind::Assignment {
+                target: assignment_target(
+                    mutable_parameter,
+                    DataType::Int,
+                    builtin_type_ids::INT,
+                    test_location(2),
+                ),
+                value: Expression::int(2, test_location(2), ValueMode::ImmutableOwned),
+            },
+            test_location(2),
+        )],
+        test_location(1),
+    );
+
+    let start = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![],
+        },
+        vec![],
+        test_location(3),
+    );
+
+    let hir = lower_hir(
+        build_ast(vec![target, start], entry_path),
+        &mut string_table,
+    );
+    let report = run_borrow_checker(&hir, &external_package_registry, &string_table)
+        .expect("public call summary construction should succeed");
+
+    assert_eq!(
+        report.analysis.public_call_summaries.len(),
+        hir.functions.len()
+    );
+
+    let target_id = hir
+        .functions
+        .iter()
+        .find(|function| {
+            hir.side_table
+                .function_name_path(function.id)
+                .is_some_and(|path| path.name() == summary_target_name.name())
+        })
+        .expect("summary target should lower to HIR")
+        .id;
+    let target_summary = report
+        .analysis
+        .public_call_summaries
+        .get(&target_id)
+        .expect("every local function should have one retained summary");
+
+    assert_eq!(target_summary.parameters.len(), 4);
+    assert_eq!(
+        target_summary.parameters[0].access,
+        PublicCallParameterAccess::Shared
+    );
+    assert_eq!(
+        target_summary.parameters[0].mutation,
+        PublicCallMutationEffect::NoWrite
+    );
+    assert_eq!(
+        target_summary.parameters[0].transfer_eligibility,
+        PublicCallTransferEligibility::Eligible
+    );
+    assert_eq!(
+        target_summary.parameters[0].transfer_effect,
+        PublicCallTransferEffect::MayConsume
+    );
+
+    assert_eq!(
+        target_summary.parameters[1].access,
+        PublicCallParameterAccess::Mutable
+    );
+    assert_eq!(
+        target_summary.parameters[1].mutation,
+        PublicCallMutationEffect::Writes
+    );
+    assert_eq!(
+        target_summary.parameters[1].transfer_effect,
+        PublicCallTransferEffect::MayConsume
+    );
+
+    assert_eq!(
+        target_summary.parameters[2].access,
+        PublicCallParameterAccess::Mutable
+    );
+    assert_eq!(
+        target_summary.parameters[2].mutation,
+        PublicCallMutationEffect::NoWrite
+    );
+
+    assert_eq!(
+        target_summary.parameters[3].access,
+        PublicCallParameterAccess::Reactive
+    );
+    assert_eq!(
+        target_summary.parameters[3].transfer_eligibility,
+        PublicCallTransferEligibility::Ineligible
+    );
+    assert_eq!(
+        target_summary.parameters[3].transfer_effect,
+        PublicCallTransferEffect::NeverConsumes
+    );
+    assert_eq!(
+        target_summary.parameters[3].reactive_effect,
+        PublicCallReactiveEffect::None
+    );
+
+    let start_id = hir.start_function;
+    let start_summary = report
+        .analysis
+        .public_call_summaries
+        .get(&start_id)
+        .expect("the zero-parameter start function should have a summary");
+    assert!(start_summary.parameters.is_empty());
+    assert_eq!(
+        start_summary.return_alias,
+        super::super::types::FunctionReturnAliasSummary::Fresh
+    );
+
+    let rendered = format!("{target_summary:?}");
+    assert!(!rendered.contains("LocalId"));
+    assert!(!rendered.contains("BlockId"));
+    assert!(!rendered.contains("SourceLocation"));
+    assert!(!rendered.contains("InternedPath"));
+}
+
+#[test]
+fn incomplete_public_call_summary_metadata_uses_infrastructure_lane() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = entry_and_start(&mut string_table);
+    let external_package_registry = default_external_package_registry(&mut string_table);
+    let start = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![],
+        },
+        vec![],
+        test_location(1),
+    );
+
+    let mut hir = lower_hir(build_ast(vec![start], entry_path), &mut string_table);
+    hir.functions[0].params.push(LocalId(999_999));
+
+    let error = run_borrow_checker(&hir, &external_package_registry, &string_table)
+        .expect_err("partial parameter metadata should fail summary construction");
+    assert_infrastructure_error_contains(
+        &error,
+        ErrorType::Compiler,
+        &["could not resolve mutability for parameter local"],
+    );
+}
+
+#[test]
+fn public_call_summary_keeps_mutable_but_unwritten_call_path_read_only() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = entry_and_start(&mut string_table);
+    let external_package_registry = default_external_package_registry(&mut string_table);
+    let mutator_name = symbol("mutator", &mut string_table);
+    let wrapper_name = symbol("wrapper", &mut string_table);
+    let wrapper_name_for_lookup = wrapper_name.clone();
+    let parameter_name = symbol("value", &mut string_table);
+
+    let mutator = function_node(
+        mutator_name.clone(),
+        FunctionSignature {
+            parameters: vec![param(
+                symbol("input", &mut string_table),
+                DataType::Int,
+                builtin_type_ids::INT,
+                true,
+                test_location(1),
+            )],
+            returns: vec![],
+        },
+        vec![],
+        test_location(1),
+    );
+    let wrapper = function_node(
+        wrapper_name,
+        FunctionSignature {
+            parameters: vec![param(
+                parameter_name.clone(),
+                DataType::Int,
+                builtin_type_ids::INT,
+                true,
+                test_location(2),
+            )],
+            returns: vec![],
+        },
+        vec![node(
+            function_call_node(
+                mutator_name,
+                vec![CallArgument::positional(
+                    reference_expr(
+                        parameter_name,
+                        DataType::Int,
+                        builtin_type_ids::INT,
+                        test_location(3),
+                    ),
+                    CallAccessMode::Mutable,
+                    test_location(3),
+                )],
+                vec![],
+                test_location(3),
+            ),
+            test_location(3),
+        )],
+        test_location(2),
+    );
+    let start = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![],
+        },
+        vec![],
+        test_location(4),
+    );
+
+    let hir = lower_hir(
+        build_ast(vec![mutator, wrapper, start], entry_path),
+        &mut string_table,
+    );
+    let report = run_borrow_checker(&hir, &external_package_registry, &string_table)
+        .expect("mutable parameter call path should validate");
+    let wrapper_id = hir
+        .functions
+        .iter()
+        .find(|function| {
+            hir.side_table
+                .function_name_path(function.id)
+                .is_some_and(|path| path.name() == wrapper_name_for_lookup.name())
+        })
+        .expect("wrapper function should lower to HIR")
+        .id;
+    let summary = report
+        .analysis
+        .public_call_summaries
+        .get(&wrapper_id)
+        .expect("wrapper should have a retained call summary");
+    assert_eq!(
+        summary.parameters[0].mutation,
+        PublicCallMutationEffect::NoWrite
+    );
+}
+
+#[test]
+fn public_call_summary_tracks_mixed_argument_access_by_position() {
+    let source = r#"mutator |shared Int, mutable ~Int|:
+;
+
+wrapper |shared Int, mutable ~Int|:
+    mutator(shared, ~mutable)
+;"#;
+    let (ast, mut string_table) = parse_single_file_ast(source);
+    let hir = lower_hir(ast, &mut string_table);
+    let external_package_registry = default_external_package_registry(&mut string_table);
+    let wrapper_name = symbol("wrapper", &mut string_table);
+    let report = run_borrow_checker(&hir, &external_package_registry, &string_table)
+        .expect("mixed shared and mutable call arguments should validate");
+
+    let wrapper_id = hir
+        .functions
+        .iter()
+        .find(|function| {
+            hir.side_table
+                .function_name_path(function.id)
+                .is_some_and(|path| path.name() == wrapper_name.name())
+        })
+        .expect("wrapper function should lower to HIR")
+        .id;
+    let summary = report
+        .analysis
+        .public_call_summaries
+        .get(&wrapper_id)
+        .expect("wrapper should have a retained call summary");
+
+    assert_eq!(
+        summary.parameters[0].mutation,
+        PublicCallMutationEffect::NoWrite
+    );
+    assert_eq!(
+        summary.parameters[1].mutation,
+        PublicCallMutationEffect::NoWrite
+    );
+}
+
+fn local_call_mutation_summary_in_order(
+    callee_body: &str,
+    callee_declared_first: bool,
+) -> (PublicCallMutationEffect, PublicCallMutationEffect) {
+    let callee = format!("mutator |input ~Int|:\n{callee_body}\n;\n");
+    let wrapper = "wrapper |value ~Int|:\n    mutator(~value)\n;\n";
+    let source = if callee_declared_first {
+        format!("{callee}\n{wrapper}")
+    } else {
+        format!("{wrapper}\n{callee}")
+    };
+    let (ast, mut string_table) = parse_single_file_ast(&source);
+    let hir = lower_hir(ast, &mut string_table);
+    let external_package_registry = default_external_package_registry(&mut string_table);
+    let mutator_name = symbol("mutator", &mut string_table);
+    let wrapper_name = symbol("wrapper", &mut string_table);
+    let mutator_id = hir
+        .functions
+        .iter()
+        .find(|function| {
+            hir.side_table
+                .function_name_path(function.id)
+                .is_some_and(|path| path.name() == mutator_name.name())
+        })
+        .expect("mutator function should lower to HIR")
+        .id;
+    let wrapper_id = hir
+        .functions
+        .iter()
+        .find(|function| {
+            hir.side_table
+                .function_name_path(function.id)
+                .is_some_and(|path| path.name() == wrapper_name.name())
+        })
+        .expect("wrapper function should lower to HIR")
+        .id;
+    let report = run_borrow_checker(&hir, &external_package_registry, &string_table)
+        .expect("local mutation summary fixture should validate");
+
+    let mutator_mutation = report
+        .analysis
+        .public_call_summaries
+        .get(&mutator_id)
+        .expect("mutator should have a retained call summary")
+        .parameters[0]
+        .mutation;
+    let wrapper_mutation = report
+        .analysis
+        .public_call_summaries
+        .get(&wrapper_id)
+        .expect("wrapper should have a retained call summary")
+        .parameters[0]
+        .mutation;
+
+    (mutator_mutation, wrapper_mutation)
+}
+
+#[test]
+fn local_mutation_summary_keeps_unwritten_mutable_callee_order_independent() {
+    for callee_declared_first in [true, false] {
+        let (mutator_mutation, wrapper_mutation) =
+            local_call_mutation_summary_in_order("", callee_declared_first);
+        assert_eq!(mutator_mutation, PublicCallMutationEffect::NoWrite);
+        assert_eq!(wrapper_mutation, PublicCallMutationEffect::NoWrite);
+    }
+}
+
+#[test]
+fn local_mutation_summary_propagates_writes_order_independently() {
+    for callee_declared_first in [true, false] {
+        let (mutator_mutation, wrapper_mutation) =
+            local_call_mutation_summary_in_order("    input = 1", callee_declared_first);
+        assert_eq!(mutator_mutation, PublicCallMutationEffect::Writes);
+        assert_eq!(wrapper_mutation, PublicCallMutationEffect::Writes);
+    }
+}
+
+#[test]
+fn public_call_summary_map_set_only_writes_receiver_parameter() {
+    let source = r#"mutate |scores ~{String = String}, key String, value String|:
+    ~scores.set(key, value) catch:
+    ;
+;"#;
+    let (ast, mut string_table) = parse_single_file_ast(source);
+    let hir = lower_hir(ast, &mut string_table);
+    let external_package_registry = default_external_package_registry(&mut string_table);
+    let mutate_name = symbol("mutate", &mut string_table);
+    let report = run_borrow_checker(&hir, &external_package_registry, &string_table)
+        .expect("map set with mutable receiver should validate");
+
+    let function_id = hir
+        .functions
+        .iter()
+        .find(|function| {
+            hir.side_table
+                .function_name_path(function.id)
+                .is_some_and(|path| path.name() == mutate_name.name())
+        })
+        .expect("map mutator function should lower to HIR")
+        .id;
+    let summary = report
+        .analysis
+        .public_call_summaries
+        .get(&function_id)
+        .expect("map mutator should have a retained call summary");
+
+    assert_eq!(
+        summary.parameters[0].mutation,
+        PublicCallMutationEffect::Writes
+    );
+    assert_eq!(
+        summary.parameters[1].mutation,
+        PublicCallMutationEffect::NoWrite
+    );
+    assert_eq!(
+        summary.parameters[2].mutation,
+        PublicCallMutationEffect::NoWrite
+    );
+}
+
+#[test]
+fn immutable_shared_parameter_optional_transfer_remains_legal() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = entry_and_start(&mut string_table);
+    let external_package_registry = default_external_package_registry(&mut string_table);
+    let reader_name = symbol("reader", &mut string_table);
+    let value_name = symbol("value", &mut string_table);
+
+    let reader = function_node(
+        reader_name.clone(),
+        FunctionSignature {
+            parameters: vec![param(
+                symbol("input", &mut string_table),
+                DataType::Int,
+                builtin_type_ids::INT,
+                false,
+                test_location(1),
+            )],
+            returns: vec![],
+        },
+        vec![],
+        test_location(1),
+    );
+    let start = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![],
+        },
+        vec![
+            node(
+                NodeKind::VariableDeclaration(make_test_variable(
+                    value_name.clone(),
+                    Expression::int(1, test_location(2), ValueMode::ImmutableOwned),
+                )),
+                test_location(2),
+            ),
+            node(
+                function_call_node(
+                    reader_name,
+                    vec![CallArgument::positional(
+                        reference_expr(
+                            value_name,
+                            DataType::Int,
+                            builtin_type_ids::INT,
+                            test_location(3),
+                        ),
+                        CallAccessMode::Shared,
+                        test_location(3),
+                    )],
+                    vec![],
+                    test_location(3),
+                ),
+                test_location(3),
+            ),
+        ],
+        test_location(2),
+    );
+
+    let hir = lower_hir(
+        build_ast(vec![reader, start], entry_path),
+        &mut string_table,
+    );
+    run_borrow_checker(&hir, &external_package_registry, &string_table)
+        .expect("optional transfer of an immutable shared parameter should fall back to borrowing");
 }
 
 #[test]
@@ -184,23 +727,35 @@ fn fallible_alias_return_propagation_validates_success_alias_metadata() {
 
     let source_fn = symbol("source_fn", &mut string_table);
     let source_param = symbol("source_param", &mut string_table);
+    let source_unused = symbol("source_unused", &mut string_table);
     let forward_fn = symbol("forward_fn", &mut string_table);
     let forward_param = symbol("forward_param", &mut string_table);
+    let source_fn_name_for_lookup = source_fn.clone();
+    let forward_fn_name_for_lookup = forward_fn.clone();
 
     let source = function_node(
         source_fn.clone(),
         FunctionSignature {
-            parameters: vec![param(
-                source_param.clone(),
-                DataType::StringSlice,
-                builtin_type_ids::STRING,
-                false,
-                test_location(20),
-            )],
+            parameters: vec![
+                param(
+                    source_param,
+                    DataType::StringSlice,
+                    builtin_type_ids::STRING,
+                    false,
+                    test_location(20),
+                ),
+                param(
+                    source_unused.clone(),
+                    DataType::StringSlice,
+                    builtin_type_ids::STRING,
+                    false,
+                    test_location(20),
+                ),
+            ],
             returns: vec![
                 ReturnSlot {
                     value: FunctionReturn::AliasCandidates {
-                        parameter_indices: vec![0],
+                        parameter_indices: vec![1],
                         data_type: DataType::StringSlice,
                     },
                     type_id: Some(builtin_type_ids::STRING),
@@ -217,7 +772,7 @@ fn fallible_alias_return_propagation_validates_success_alias_metadata() {
         },
         vec![node(
             NodeKind::Return(vec![reference_expr(
-                source_param,
+                source_unused,
                 DataType::StringSlice,
                 builtin_type_ids::STRING,
                 test_location(21),
@@ -230,16 +785,27 @@ fn fallible_alias_return_propagation_validates_success_alias_metadata() {
     let mut expression_types = TypeEnvironment::new();
     let propagated_call = Expression::handled_fallible_function_call_with_typed_arguments(
         source_fn,
-        vec![CallArgument::positional(
-            reference_expr(
-                forward_param.clone(),
-                DataType::StringSlice,
-                builtin_type_ids::STRING,
+        vec![
+            CallArgument::positional(
+                Expression::string_slice(
+                    string_table.intern("unused"),
+                    test_location(30),
+                    ValueMode::ImmutableOwned,
+                ),
+                CallAccessMode::Shared,
                 test_location(30),
             ),
-            CallAccessMode::Shared,
-            test_location(30),
-        )],
+            CallArgument::positional(
+                reference_expr(
+                    forward_param.clone(),
+                    DataType::StringSlice,
+                    builtin_type_ids::STRING,
+                    test_location(30),
+                ),
+                CallAccessMode::Shared,
+                test_location(30),
+            ),
+        ],
         vec![builtin_type_ids::STRING],
         FallibleExpressionHandling::Propagate,
         &mut expression_types,
@@ -295,8 +861,36 @@ fn fallible_alias_return_propagation_validates_success_alias_metadata() {
         build_ast(vec![source, forward, start], entry_path),
         &mut string_table,
     );
-    run_borrow_checker(&hir, &external_package_registry, &string_table)
+    let report = run_borrow_checker(&hir, &external_package_registry, &string_table)
         .expect("fallible alias forwarding should validate declared success alias metadata");
+
+    for (function_name, expected_alias) in [
+        (
+            &source_fn_name_for_lookup,
+            FunctionReturnAliasSummary::AliasParams(vec![1]),
+        ),
+        (
+            &forward_fn_name_for_lookup,
+            FunctionReturnAliasSummary::AliasParams(vec![0]),
+        ),
+    ] {
+        let function_id = hir
+            .functions
+            .iter()
+            .find(|function| {
+                hir.side_table
+                    .function_name_path(function.id)
+                    .is_some_and(|path| path.name() == function_name.name())
+            })
+            .expect("fallible alias function should lower to HIR")
+            .id;
+        let summary = report
+            .analysis
+            .public_call_summaries
+            .get(&function_id)
+            .expect("fallible alias function should have a retained call summary");
+        assert_eq!(summary.return_alias, expected_alias);
+    }
 }
 
 #[test]
@@ -306,6 +900,7 @@ fn fresh_user_return_does_not_alias_caller_roots() {
     let external_package_registry = default_external_package_registry(&mut string_table);
 
     let fresh_fn = symbol("fresh_fn", &mut string_table);
+    let fresh_fn_name_for_lookup = fresh_fn.clone();
     let p = symbol("p", &mut string_table);
     let x = symbol("x", &mut string_table);
     let y = symbol("y", &mut string_table);
@@ -384,8 +979,240 @@ fn fresh_user_return_does_not_alias_caller_roots() {
         build_ast(vec![callee, caller], entry_path),
         &mut string_table,
     );
-    run_borrow_checker(&hir, &external_package_registry, &string_table)
+    let report = run_borrow_checker(&hir, &external_package_registry, &string_table)
         .expect("fresh callee returns should not alias caller roots");
+    let fresh_function_id = hir
+        .functions
+        .iter()
+        .find(|function| {
+            hir.side_table
+                .function_name_path(function.id)
+                .is_some_and(|path| path.name() == fresh_fn_name_for_lookup.name())
+        })
+        .expect("fresh function should lower to HIR")
+        .id;
+    let fresh_summary = report
+        .analysis
+        .public_call_summaries
+        .get(&fresh_function_id)
+        .expect("fresh function should have a retained call summary");
+    assert_eq!(
+        fresh_summary.return_alias,
+        FunctionReturnAliasSummary::Fresh
+    );
+}
+
+#[test]
+fn multi_return_fallible_external_retains_unknown_alias_summary() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = entry_and_start(&mut string_table);
+    let mut external_package_registry = default_external_package_registry(&mut string_table);
+    let external_id = Arc::make_mut(&mut external_package_registry)
+        .register_function(ExternalFunctionDef {
+            name: "imprecise_external".to_owned(),
+            parameters: vec![],
+            returns: vec![
+                ExternalReturnSlot::fresh(RegistryAbiType::I32),
+                ExternalReturnSlot::fresh(RegistryAbiType::I32),
+            ],
+            error_return_type: Some(ExternalSignatureType::Abi(RegistryAbiType::I32)),
+            lowerings: ExternalFunctionLowerings::default(),
+        })
+        .expect("fallible external fixture registration should succeed");
+
+    let imprecise_return_name = symbol("imprecise_return", &mut string_table);
+    let mut expression_types = TypeEnvironment::new();
+    let fallible_external_call =
+        Expression::handled_fallible_host_function_call_with_typed_arguments(
+            HandledFallibleHostFunctionCallInput {
+                id: external_id,
+                args: vec![],
+                result_type_ids: vec![builtin_type_ids::INT, builtin_type_ids::INT],
+                error_type_id: builtin_type_ids::INT,
+                handling: FallibleExpressionHandling::Propagate,
+                location: test_location(2),
+            },
+            &mut expression_types,
+        );
+    let imprecise_return = function_node(
+        imprecise_return_name.clone(),
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![
+                ReturnSlot {
+                    value: FunctionReturn::Value(DataType::Int),
+                    type_id: Some(builtin_type_ids::INT),
+                    reactive_template: None,
+                    channel: ReturnChannel::Success,
+                },
+                ReturnSlot {
+                    value: FunctionReturn::Value(DataType::Int),
+                    type_id: Some(builtin_type_ids::INT),
+                    reactive_template: None,
+                    channel: ReturnChannel::Success,
+                },
+                ReturnSlot {
+                    value: FunctionReturn::Value(DataType::Int),
+                    type_id: Some(builtin_type_ids::INT),
+                    reactive_template: None,
+                    channel: ReturnChannel::Error,
+                },
+            ],
+        },
+        vec![node(
+            NodeKind::Return(vec![fallible_external_call]),
+            test_location(2),
+        )],
+        test_location(1),
+    );
+    let forward_name = symbol("forward_imprecise_return", &mut string_table);
+    let mut forward_expression_types = TypeEnvironment::new();
+    let forwarded_call = Expression::handled_fallible_function_call_with_typed_arguments(
+        imprecise_return_name.clone(),
+        vec![],
+        vec![builtin_type_ids::INT, builtin_type_ids::INT],
+        FallibleExpressionHandling::Propagate,
+        &mut forward_expression_types,
+        test_location(3),
+    );
+    let forward = function_node(
+        forward_name.clone(),
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![
+                ReturnSlot {
+                    value: FunctionReturn::Value(DataType::Int),
+                    type_id: Some(builtin_type_ids::INT),
+                    reactive_template: None,
+                    channel: ReturnChannel::Success,
+                },
+                ReturnSlot {
+                    value: FunctionReturn::Value(DataType::Int),
+                    type_id: Some(builtin_type_ids::INT),
+                    reactive_template: None,
+                    channel: ReturnChannel::Success,
+                },
+                ReturnSlot {
+                    value: FunctionReturn::Value(DataType::Int),
+                    type_id: Some(builtin_type_ids::INT),
+                    reactive_template: None,
+                    channel: ReturnChannel::Error,
+                },
+            ],
+        },
+        vec![node(
+            NodeKind::Return(vec![forwarded_call]),
+            test_location(3),
+        )],
+        test_location(3),
+    );
+    let start = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![],
+        },
+        vec![],
+        test_location(3),
+    );
+
+    let hir = lower_hir(
+        build_ast(vec![imprecise_return, forward, start], entry_path),
+        &mut string_table,
+    );
+    let report = run_borrow_checker(&hir, &external_package_registry, &string_table)
+        .expect("fallible external return should validate");
+    let mut reversed_hir = hir.clone();
+    reversed_hir.functions.reverse();
+    let reversed_report =
+        run_borrow_checker(&reversed_hir, &external_package_registry, &string_table)
+            .expect("reversed fallible external return should validate");
+
+    for analysis in [&report.analysis, &reversed_report.analysis] {
+        for function_name in [&imprecise_return_name, &forward_name] {
+            let function_id = hir
+                .functions
+                .iter()
+                .find(|function| {
+                    hir.side_table
+                        .function_name_path(function.id)
+                        .is_some_and(|path| path.name() == function_name.name())
+                })
+                .expect("imprecise return function should lower to HIR")
+                .id;
+            let summary = analysis
+                .public_call_summaries
+                .get(&function_id)
+                .expect("forwarded imprecise function should have a retained call summary");
+            assert_eq!(summary.return_alias, FunctionReturnAliasSummary::Unknown);
+        }
+    }
+}
+
+#[test]
+fn checked_numeric_return_local_retains_fresh_alias_summary() {
+    let source = r#"
+increment |input Int| -> Int, Error!:
+    return input + 1
+;
+"#;
+    let (ast, mut string_table) = parse_single_file_ast(source);
+    let increment_name = symbol("increment", &mut string_table);
+    let hir = lower_hir(ast, &mut string_table);
+    let external_package_registry = default_external_package_registry(&mut string_table);
+    let report = run_borrow_checker(&hir, &external_package_registry, &string_table)
+        .expect("checked numeric return should validate");
+
+    let function_id = hir
+        .functions
+        .iter()
+        .find(|function| {
+            hir.side_table
+                .function_name_path(function.id)
+                .is_some_and(|path| path.name() == increment_name.name())
+        })
+        .expect("numeric return function should lower to HIR")
+        .id;
+    let summary = report
+        .analysis
+        .public_call_summaries
+        .get(&function_id)
+        .expect("numeric return function should have a call summary");
+
+    assert_eq!(summary.return_alias, FunctionReturnAliasSummary::Fresh);
+}
+
+#[test]
+fn map_remove_return_local_retains_fresh_alias_summary() {
+    let source = r#"
+remove_value |scores ~{String = String}| -> String, Error!:
+    return ~scores.remove("key")!
+;
+"#;
+    let (ast, mut string_table) = parse_single_file_ast(source);
+    let remove_value_name = symbol("remove_value", &mut string_table);
+    let hir = lower_hir(ast, &mut string_table);
+    let external_package_registry = default_external_package_registry(&mut string_table);
+    let report = run_borrow_checker(&hir, &external_package_registry, &string_table)
+        .expect("map remove return should validate");
+
+    let function_id = hir
+        .functions
+        .iter()
+        .find(|function| {
+            hir.side_table
+                .function_name_path(function.id)
+                .is_some_and(|path| path.name() == remove_value_name.name())
+        })
+        .expect("map return function should lower to HIR")
+        .id;
+    let summary = report
+        .analysis
+        .public_call_summaries
+        .get(&function_id)
+        .expect("map return function should have a call summary");
+
+    assert_eq!(summary.return_alias, FunctionReturnAliasSummary::Fresh);
 }
 
 #[test]

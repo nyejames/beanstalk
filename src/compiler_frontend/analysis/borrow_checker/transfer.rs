@@ -14,7 +14,7 @@ use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckError;
 use crate::compiler_frontend::analysis::borrow_checker::diagnostics::BorrowDiagnostics;
 use crate::compiler_frontend::analysis::borrow_checker::state::{BorrowState, FunctionLayout};
 use crate::compiler_frontend::analysis::borrow_checker::types::{
-    BorrowStateSnapshot, FunctionReturnAliasSummary, ReactiveInvalidationFact, StatementBorrowFact,
+    BorrowStateSnapshot, PublicCallSummary, ReactiveInvalidationFact, StatementBorrowFact,
     TerminatorBorrowFact, ValueBorrowFact,
 };
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
@@ -31,8 +31,7 @@ pub(super) struct BorrowTransferContext<'a> {
     // WHAT: shared lookup/diagnostic tables for one function transfer pass.
     // WHY: avoids repeated module scans while statements/terminators are analyzed.
     pub external_package_registry: &'a ExternalPackageRegistry,
-    pub function_param_mutability: &'a FxHashMap<FunctionId, Vec<bool>>,
-    pub function_return_alias: &'a FxHashMap<FunctionId, FunctionReturnAliasSummary>,
+    pub public_call_summaries: &'a FxHashMap<FunctionId, PublicCallSummary>,
     pub diagnostics: BorrowDiagnostics<'a>,
 }
 

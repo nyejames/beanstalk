@@ -1,15 +1,21 @@
 //! Borrow-checker metadata construction helpers.
 //!
-//! WHAT: builds the per-function layout, parameter mutability tables, and return-alias summaries
-//! that the fixed-point driver needs before it can run transfer over reachable blocks.
+//! WHAT: builds the retained public-call summaries and per-function layouts that the fixed-point
+//! driver needs before it can run transfer over reachable blocks.
 //! WHY: HIR remains immutable during borrow validation, so signature and layout facts are cached
 //! beside the analysis rather than written back into HIR nodes.
 
 use super::engine::BorrowChecker;
 use super::state::{FunctionLayout, FunctionLayoutInputs, RootSet};
-use super::types::FunctionReturnAliasSummary;
+use super::types::{
+    FunctionReturnAliasSummary, PublicCallMutationEffect, PublicCallParameterAccess,
+    PublicCallParameterSummary, PublicCallReactiveEffect, PublicCallSummary,
+    PublicCallTransferEffect, PublicCallTransferEligibility,
+};
 use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckError;
-use crate::compiler_frontend::external_packages::CallTarget;
+use crate::compiler_frontend::external_packages::{
+    CallTarget, ExternalAccessKind, ExternalReturnAlias,
+};
 use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind};
 use crate::compiler_frontend::hir::functions::HirFunction;
 use crate::compiler_frontend::hir::hir_side_table::HirLocation;
@@ -17,16 +23,26 @@ use crate::compiler_frontend::hir::ids::{BlockId, FunctionId, LocalId};
 use crate::compiler_frontend::hir::numeric::HirNumericOperands;
 use crate::compiler_frontend::hir::patterns::HirPattern;
 use crate::compiler_frontend::hir::places::HirPlace;
+use crate::compiler_frontend::hir::reactivity::HirReactiveSourceKind;
 use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
 use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::hir::utils::terminator_targets;
 use rustc_hash::{FxHashMap, FxHashSet};
-use std::collections::VecDeque;
+
+/// Immutable inputs for projecting one callee return-alias summary through a caller.
+struct AliasProjectionContext<'a> {
+    function: &'a HirFunction,
+    return_alias: &'a FunctionReturnAliasSummary,
+    args: &'a [HirExpression],
+    param_index_by_local: &'a FxHashMap<LocalId, usize>,
+    reachable_blocks: &'a [BlockId],
+    callee_description: &'a str,
+}
 
 impl<'a> BorrowChecker<'a> {
-    pub(super) fn build_function_param_mutability(&mut self) -> Result<(), BorrowCheckError> {
-        // Parameter mutability is stored on locals. Gather it once globally,
-        // then materialize each function's param mutability vector in order.
+    pub(super) fn build_public_call_summaries(&mut self) -> Result<(), BorrowCheckError> {
+        // Parameter mutability is stored on locals. Gather it once globally, then project
+        // parameter-order access and transfer facts into the single retained call contract.
         let mut local_mutability_by_id = FxHashMap::default();
         for block in &self.module.blocks {
             for local in &block.locals {
@@ -34,10 +50,36 @@ impl<'a> BorrowChecker<'a> {
             }
         }
 
-        for function in &self.module.functions {
-            let mut param_mutability = Vec::with_capacity(function.params.len());
+        let mut parameter_owner_by_local = FxHashMap::default();
+        let mut function_ids = FxHashSet::default();
 
-            for param in &function.params {
+        for function in &self.module.functions {
+            if !function_ids.insert(function.id) {
+                return Err(self.diagnostics.internal_error(
+                    format!(
+                        "Borrow checker found duplicate local function id '{}' while building public call summaries",
+                        function.id
+                    ),
+                    self.diagnostics.function_error_location(function.id),
+                ));
+            }
+
+            let mut parameters = Vec::with_capacity(function.params.len());
+            let mut parameter_locals = FxHashSet::default();
+
+            for (position, param) in function.params.iter().enumerate() {
+                if !parameter_locals.insert(*param) {
+                    return Err(self.diagnostics.internal_error(
+                        format!(
+                            "Borrow checker found duplicate parameter local '{}' at position {} in function '{}'",
+                            self.diagnostics.local_name(*param),
+                            position,
+                            self.diagnostics.function_name(function.id)
+                        ),
+                        self.diagnostics.function_error_location(function.id),
+                    ));
+                }
+
                 let Some(is_mutable) = local_mutability_by_id.get(param).copied() else {
                     return Err(self.diagnostics.internal_error(
                         format!(
@@ -49,43 +91,459 @@ impl<'a> BorrowChecker<'a> {
                     ));
                 };
 
-                param_mutability.push(is_mutable);
+                if parameter_owner_by_local
+                    .insert(*param, (function.id, position))
+                    .is_some()
+                {
+                    return Err(self.diagnostics.internal_error(
+                        format!(
+                            "Borrow checker found parameter local '{}' owned by more than one function",
+                            self.diagnostics.local_name(*param)
+                        ),
+                        self.diagnostics.function_error_location(function.id),
+                    ));
+                }
+
+                let access = match self.module.side_table.reactive_source_id_for_local(*param) {
+                    Some(source_id) => {
+                        let Some(source) = self.module.side_table.reactive_source(source_id) else {
+                            return Err(self.diagnostics.internal_error(
+                                format!(
+                                    "Borrow checker could not resolve reactive source metadata for parameter local '{}'",
+                                    self.diagnostics.local_name(*param)
+                                ),
+                                self.diagnostics.function_error_location(function.id),
+                            ));
+                        };
+
+                        match source.kind {
+                            HirReactiveSourceKind::Parameter if is_mutable => {
+                                return Err(self.diagnostics.internal_error(
+                                    format!(
+                                        "Reactive parameter '{}' in function '{}' is marked mutable",
+                                        self.diagnostics.local_name(*param),
+                                        self.diagnostics.function_name(function.id)
+                                    ),
+                                    source.location.clone(),
+                                ));
+                            }
+                            HirReactiveSourceKind::Parameter => PublicCallParameterAccess::Reactive,
+                            HirReactiveSourceKind::Declaration => {
+                                return Err(self.diagnostics.internal_error(
+                                    format!(
+                                        "Reactive declaration metadata is attached to parameter local '{}' in function '{}'",
+                                        self.diagnostics.local_name(*param),
+                                        self.diagnostics.function_name(function.id)
+                                    ),
+                                    source.location.clone(),
+                                ));
+                            }
+                        }
+                    }
+                    None if is_mutable => PublicCallParameterAccess::Mutable,
+                    None => PublicCallParameterAccess::Shared,
+                };
+
+                let (transfer_eligibility, transfer_effect) = match access {
+                    PublicCallParameterAccess::Reactive => (
+                        PublicCallTransferEligibility::Ineligible,
+                        PublicCallTransferEffect::NeverConsumes,
+                    ),
+                    PublicCallParameterAccess::Shared | PublicCallParameterAccess::Mutable => (
+                        PublicCallTransferEligibility::Eligible,
+                        PublicCallTransferEffect::MayConsume,
+                    ),
+                };
+
+                parameters.push(PublicCallParameterSummary {
+                    access,
+                    mutation: PublicCallMutationEffect::NoWrite,
+                    transfer_eligibility,
+                    transfer_effect,
+                    reactive_effect: PublicCallReactiveEffect::None,
+                });
             }
 
-            self.function_param_mutability
-                .insert(function.id, param_mutability);
+            self.public_call_summaries.insert(
+                function.id,
+                PublicCallSummary {
+                    parameters,
+                    return_alias: declared_return_alias_summary(function),
+                },
+            );
+        }
+
+        for source in self.module.side_table.reactive_sources() {
+            if source.kind != HirReactiveSourceKind::Parameter {
+                continue;
+            }
+
+            if parameter_owner_by_local.contains_key(&source.local_id) {
+                continue;
+            }
+
+            return Err(self.diagnostics.internal_error(
+                format!(
+                    "Reactive parameter source metadata points at local '{}' that is not a function parameter",
+                    self.diagnostics.local_name(source.local_id)
+                ),
+                source.location.clone(),
+            ));
+        }
+
+        self.retain_hir_reactive_parameter_effects(&parameter_owner_by_local)?;
+
+        self.stabilize_return_alias_summaries()?;
+
+        if self.public_call_summaries.len() != self.module.functions.len() {
+            return Err(self.diagnostics.internal_error(
+                format!(
+                    "Borrow checker retained {} public call summaries for {} local functions",
+                    self.public_call_summaries.len(),
+                    self.module.functions.len()
+                ),
+                self.diagnostics
+                    .function_error_location(self.module.start_function),
+            ));
         }
 
         Ok(())
     }
 
-    pub(super) fn build_function_return_alias_summaries(&mut self) -> Result<(), BorrowCheckError> {
-        // Signature metadata is authoritative for user-function return aliasing.
-        // The classifier is used as a validator so contradictory lowering states
-        // are rejected early instead of silently degrading call-site behavior.
-        for function in &self.module.functions {
-            let mut alias_indices = function
-                .return_aliases
-                .iter()
-                .filter_map(|candidates| candidates.as_ref())
-                .flatten()
-                .copied()
-                .collect::<Vec<_>>();
-            alias_indices.sort_unstable();
-            alias_indices.dedup();
+    fn stabilize_return_alias_summaries(&mut self) -> Result<(), BorrowCheckError> {
+        // Return aliases form a finite monotone lattice. Recompute every function from the same
+        // retained map, then publish the whole pass so local call chains cannot depend on HIR
+        // declaration order.
+        let parameter_count = self
+            .module
+            .functions
+            .iter()
+            .map(|function| function.params.len())
+            .sum::<usize>();
+        let max_iterations = parameter_count
+            .saturating_add(self.module.functions.len().saturating_mul(2))
+            .saturating_add(1);
 
-            let summary = if alias_indices.is_empty() {
-                FunctionReturnAliasSummary::Fresh
-            } else {
-                FunctionReturnAliasSummary::AliasParams(alias_indices)
-            };
+        for _ in 0..max_iterations {
+            let mut retained_by_function = Vec::with_capacity(self.module.functions.len());
+            for function in &self.module.functions {
+                let classified = self.classify_function_return_alias(function)?;
+                let declared = declared_return_alias_summary(function);
+                let retained = retained_return_alias(
+                    &declared,
+                    classified.clone(),
+                    function.return_aliases.is_empty(),
+                );
+                retained_by_function.push((function.id, classified, retained));
+            }
 
-            let classified = self.classify_function_return_alias(function)?;
-            self.validate_return_alias_consistency(function, &summary, &classified)?;
-            self.function_return_alias.insert(function.id, summary);
+            let mut changed = false;
+            for (function_id, _, retained) in &retained_by_function {
+                let Some(summary) = self.public_call_summaries.get_mut(function_id) else {
+                    return Err(self.diagnostics.internal_error(
+                        format!(
+                            "Borrow checker is missing the public call summary for function '{}'",
+                            self.diagnostics.function_name(*function_id)
+                        ),
+                        self.diagnostics.function_error_location(*function_id),
+                    ));
+                };
+
+                if summary.return_alias != *retained {
+                    summary.return_alias = retained.clone();
+                    changed = true;
+                }
+            }
+
+            if !changed {
+                for (function_id, classified, _) in retained_by_function {
+                    let Some(function) = self
+                        .module
+                        .functions
+                        .iter()
+                        .find(|function| function.id == function_id)
+                    else {
+                        return Err(self.diagnostics.internal_error(
+                            format!(
+                                "Borrow checker could not resolve function '{}' while validating return aliases",
+                                self.diagnostics.function_name(function_id)
+                            ),
+                            self.diagnostics.function_error_location(function_id),
+                        ));
+                    };
+                    self.validate_return_alias_consistency(
+                        function,
+                        &declared_return_alias_summary(function),
+                        &classified,
+                    )?;
+                }
+
+                return Ok(());
+            }
+        }
+
+        Err(self.diagnostics.internal_error(
+            "Borrow checker could not stabilize local return-alias summaries",
+            self.diagnostics
+                .function_error_location(self.module.start_function),
+        ))
+    }
+
+    fn retain_hir_reactive_parameter_effects(
+        &mut self,
+        parameter_owner_by_local: &FxHashMap<LocalId, (FunctionId, usize)>,
+    ) -> Result<(), BorrowCheckError> {
+        for template in self.module.side_table.reactive_templates() {
+            for dependency in &template.dependencies {
+                let Some(source) = self.module.side_table.reactive_source(dependency.source) else {
+                    return Err(self.diagnostics.internal_error(
+                        format!(
+                            "Reactive template metadata references unknown source {:?}",
+                            dependency.source
+                        ),
+                        dependency.location.clone(),
+                    ));
+                };
+
+                if source.kind != HirReactiveSourceKind::Parameter {
+                    continue;
+                }
+
+                self.mark_reactive_subscription(parameter_owner_by_local, source.local_id)?;
+            }
+
+            for dependency in &template.template_value_parameters {
+                self.mark_reactive_subscription(parameter_owner_by_local, dependency.parameter)?;
+            }
         }
 
         Ok(())
+    }
+
+    fn mark_reactive_subscription(
+        &mut self,
+        parameter_owner_by_local: &FxHashMap<LocalId, (FunctionId, usize)>,
+        parameter_local: LocalId,
+    ) -> Result<(), BorrowCheckError> {
+        let Some((function_id, position)) = parameter_owner_by_local.get(&parameter_local) else {
+            return Err(self.diagnostics.internal_error(
+                format!(
+                    "Reactive template metadata references local '{}' that is not a function parameter",
+                    self.diagnostics.local_name(parameter_local)
+                ),
+                self.diagnostics.function_error_location(self.module.start_function),
+            ));
+        };
+
+        let Some(summary) = self.public_call_summaries.get_mut(function_id) else {
+            return Err(self.diagnostics.internal_error(
+                format!(
+                    "Borrow checker is missing the public call summary for function '{}'",
+                    self.diagnostics.function_name(*function_id)
+                ),
+                self.diagnostics.function_error_location(*function_id),
+            ));
+        };
+
+        let Some(parameter) = summary.parameters.get_mut(*position) else {
+            return Err(self.diagnostics.internal_error(
+                format!(
+                    "Reactive template metadata references out-of-range parameter position {} in function '{}'",
+                    position,
+                    self.diagnostics.function_name(*function_id)
+                ),
+                self.diagnostics.function_error_location(*function_id),
+            ));
+        };
+        parameter.reactive_effect = parameter.reactive_effect.with_subscription();
+        Ok(())
+    }
+
+    pub(super) fn finalize_public_call_summary_effects(
+        &mut self,
+        function: &HirFunction,
+        reachable_blocks: &[BlockId],
+        report: &mut super::types::BorrowCheckReport,
+    ) -> Result<bool, BorrowCheckError> {
+        let mut parameter_positions = FxHashMap::default();
+        for (position, parameter) in function.params.iter().enumerate() {
+            parameter_positions.insert(*parameter, position);
+        }
+
+        let mut mutation_positions = FxHashSet::default();
+        let mut invalidated_positions = FxHashSet::default();
+
+        for block_id in reachable_blocks {
+            let block = self.block_by_id_or_error(*block_id, function.id)?;
+            for statement in &block.statements {
+                let Some(statement_fact) = report.analysis.statement_facts.get(&statement.id)
+                else {
+                    return Err(self.diagnostics.internal_error(
+                        format!(
+                            "Borrow checker is missing statement facts while finalizing public call summary for function '{}'",
+                            self.diagnostics.function_name(function.id)
+                        ),
+                        self.diagnostics.statement_error_location(statement),
+                    ));
+                };
+
+                let mut mutates_parameter = |root: &LocalId| {
+                    if let Some(position) = parameter_positions.get(root) {
+                        mutation_positions.insert(*position);
+                    }
+                };
+
+                match &statement.kind {
+                    HirStatementKind::Assign { .. } => {
+                        for root in &statement_fact.mutable_roots {
+                            mutates_parameter(root);
+                        }
+                    }
+                    HirStatementKind::Call { target, args, .. } => {
+                        for (argument_index, argument) in args.iter().enumerate() {
+                            if !self.call_argument_writes(target, argument_index)? {
+                                continue;
+                            }
+
+                            let Some(argument_fact) = report.analysis.value_facts.get(&argument.id)
+                            else {
+                                return Err(self.diagnostics.internal_error(
+                                    format!(
+                                        "Borrow checker is missing value facts for argument {} while finalizing public call summary for function '{}'",
+                                        argument_index,
+                                        self.diagnostics.function_name(function.id)
+                                    ),
+                                    self.diagnostics.statement_error_location(statement),
+                                ));
+                            };
+                            for root in &argument_fact.roots {
+                                mutates_parameter(root);
+                            }
+                        }
+                    }
+                    HirStatementKind::MapOp { op, receiver, .. }
+                        if op.requires_mutable_receiver() =>
+                    {
+                        let Some(receiver_fact) = report.analysis.value_facts.get(&receiver.id)
+                        else {
+                            return Err(self.diagnostics.internal_error(
+                                format!(
+                                    "Borrow checker is missing map receiver value facts while finalizing public call summary for function '{}'",
+                                    self.diagnostics.function_name(function.id)
+                                ),
+                                self.diagnostics.statement_error_location(statement),
+                            ));
+                        };
+                        for root in &receiver_fact.roots {
+                            mutates_parameter(root);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+
+            for statement in &block.statements {
+                let Some(invalidations) = report.analysis.reactive_invalidations.get(&statement.id)
+                else {
+                    continue;
+                };
+                for invalidation in invalidations {
+                    let Some(source) = self.module.side_table.reactive_source(invalidation.source)
+                    else {
+                        return Err(self.diagnostics.internal_error(
+                            format!(
+                                "Borrow checker reactive invalidation references unknown source {:?}",
+                                invalidation.source
+                            ),
+                            invalidation.location.clone(),
+                        ));
+                    };
+                    if let Some(position) = parameter_positions.get(&source.local_id) {
+                        invalidated_positions.insert(*position);
+                    }
+                }
+            }
+        }
+
+        let Some(summary) = self.public_call_summaries.get_mut(&function.id) else {
+            return Err(self.diagnostics.internal_error(
+                format!(
+                    "Borrow checker is missing the public call summary for function '{}'",
+                    self.diagnostics.function_name(function.id)
+                ),
+                self.diagnostics.function_error_location(function.id),
+            ));
+        };
+
+        let mut changed = false;
+        for (position, parameter) in summary.parameters.iter_mut().enumerate() {
+            if mutation_positions.contains(&position)
+                && parameter.mutation != PublicCallMutationEffect::Writes
+            {
+                parameter.mutation = PublicCallMutationEffect::Writes;
+                changed = true;
+            }
+            if invalidated_positions.contains(&position) {
+                parameter.reactive_effect = parameter.reactive_effect.with_invalidation();
+            }
+        }
+
+        Ok(changed)
+    }
+
+    fn call_argument_writes(
+        &self,
+        target: &CallTarget,
+        argument_index: usize,
+    ) -> Result<bool, BorrowCheckError> {
+        match target {
+            CallTarget::UserFunction(function_id) => {
+                let Some(summary) = self.public_call_summaries.get(function_id) else {
+                    return Err(self.diagnostics.internal_error(
+                        format!(
+                            "Borrow checker is missing the public call summary for function '{}'",
+                            self.diagnostics.function_name(*function_id)
+                        ),
+                        self.diagnostics.function_error_location(*function_id),
+                    ));
+                };
+                let Some(parameter) = summary.parameters.get(argument_index) else {
+                    return Err(self.diagnostics.internal_error(
+                        format!(
+                            "Borrow checker found out-of-range argument {} while finalizing call summary for function '{}'",
+                            argument_index,
+                            self.diagnostics.function_name(*function_id)
+                        ),
+                        self.diagnostics.function_error_location(*function_id),
+                    ));
+                };
+                Ok(parameter.mutation == PublicCallMutationEffect::Writes)
+            }
+            CallTarget::ExternalFunction(function_id) => {
+                let Some(definition) = self
+                    .external_package_registry
+                    .get_function_by_id(*function_id)
+                else {
+                    return Err(self.diagnostics.internal_error(
+                        format!(
+                            "Borrow checker could not resolve host call target '{}' while finalizing public call summary",
+                            function_id.name()
+                        ),
+                        self.diagnostics.function_error_location(FunctionId(0)),
+                    ));
+                };
+                let Some(parameter) = definition.parameters.get(argument_index) else {
+                    return Err(self.diagnostics.internal_error(
+                        format!(
+                            "Borrow checker found out-of-range argument {} while finalizing host call summary for '{}'",
+                            argument_index, definition.name
+                        ),
+                        self.diagnostics.function_error_location(FunctionId(0)),
+                    ));
+                };
+                Ok(parameter.access_kind == ExternalAccessKind::Mutable)
+            }
+        }
     }
 
     fn validate_return_alias_consistency(
@@ -198,117 +656,171 @@ impl<'a> BorrowChecker<'a> {
         expression: &HirExpression,
         param_index_by_local: &FxHashMap<LocalId, usize>,
     ) -> Result<FunctionReturnAliasSummary, BorrowCheckError> {
-        if let HirExpressionKind::FallibleUnwrapSuccess { result } = &expression.kind {
-            return self.classify_unwrapped_success_payload(
-                function,
-                reachable_blocks,
-                result,
-                param_index_by_local,
-            );
-        }
+        let mut visiting_locals = FxHashSet::default();
+        self.classify_return_expression_with_visiting(
+            function,
+            reachable_blocks,
+            expression,
+            param_index_by_local,
+            &mut visiting_locals,
+        )
+    }
 
-        // Direct `return load(param_root)` is a precise alias.
-        // For non-parameter roots, inspect local assignment shape:
-        // - direct-load chains from params => AliasParams
-        // - pure expression writes => Fresh
-        // - mixed/unknown writes (for example call results) => Unknown
-        if let HirExpressionKind::Load(place) = &expression.kind {
-            let Some(root_local) = root_local_for_place(place) else {
-                return Ok(FunctionReturnAliasSummary::Unknown);
-            };
+    fn classify_return_expression_with_visiting(
+        &self,
+        function: &HirFunction,
+        reachable_blocks: &[BlockId],
+        expression: &HirExpression,
+        param_index_by_local: &FxHashMap<LocalId, usize>,
+        visiting_locals: &mut FxHashSet<LocalId>,
+    ) -> Result<FunctionReturnAliasSummary, BorrowCheckError> {
+        match &expression.kind {
+            HirExpressionKind::FallibleUnwrapSuccess { result } => self
+                .classify_unwrapped_success_payload(
+                    function,
+                    reachable_blocks,
+                    result,
+                    param_index_by_local,
+                    visiting_locals,
+                ),
+            HirExpressionKind::Load(place) => {
+                let Some(root_local) = root_local_for_place(place) else {
+                    return Ok(FunctionReturnAliasSummary::Unknown);
+                };
 
-            if let Some(param_index) = param_index_by_local.get(&root_local).copied() {
-                return Ok(FunctionReturnAliasSummary::AliasParams(vec![param_index]));
-            }
-
-            let mut alias_param_indices = Vec::new();
-            let mut saw_fresh_write = false;
-            let mut saw_unknown_write = false;
-            let mut saw_any_write = false;
-
-            let mut queue = VecDeque::new();
-            let mut visited = FxHashSet::default();
-            queue.push_back(root_local);
-            visited.insert(root_local);
-
-            while let Some(local_to_scan) = queue.pop_front() {
-                for block_id in reachable_blocks {
-                    let block = self.block_by_id_or_error(*block_id, function.id)?;
-
-                    for statement in &block.statements {
-                        match &statement.kind {
-                            HirStatementKind::Assign { target, value } => {
-                                let HirPlace::Local(target_local) = target else {
-                                    continue;
-                                };
-                                if *target_local != local_to_scan {
-                                    continue;
-                                }
-
-                                saw_any_write = true;
-
-                                if let HirExpressionKind::Load(source_place) = &value.kind {
-                                    let Some(source_root_local) =
-                                        root_local_for_place(source_place)
-                                    else {
-                                        saw_unknown_write = true;
-                                        continue;
-                                    };
-
-                                    if let Some(param_index) =
-                                        param_index_by_local.get(&source_root_local).copied()
-                                    {
-                                        alias_param_indices.push(param_index);
-                                        continue;
-                                    }
-
-                                    if visited.insert(source_root_local) {
-                                        queue.push_back(source_root_local);
-                                    }
-                                } else {
-                                    saw_fresh_write = true;
-                                }
-                            }
-                            HirStatementKind::Call {
-                                result: Some(result_local),
-                                ..
-                            }
-                            | HirStatementKind::CastOp {
-                                result: Some(result_local),
-                                ..
-                            } if *result_local == local_to_scan => {
-                                saw_any_write = true;
-                                saw_fresh_write = true;
-                            }
-                            _ => {}
-                        }
-                    }
+                if let Some(param_index) = param_index_by_local.get(&root_local).copied() {
+                    return Ok(FunctionReturnAliasSummary::AliasParams(vec![param_index]));
                 }
+
+                self.classify_return_local(
+                    function,
+                    reachable_blocks,
+                    root_local,
+                    param_index_by_local,
+                    visiting_locals,
+                )
             }
+            // Copies and computed/constructed expressions produce independent results. Their
+            // input aliases do not become aliases of the result.
+            _ => Ok(FunctionReturnAliasSummary::Fresh),
+        }
+    }
 
-            if !alias_param_indices.is_empty() {
-                alias_param_indices.sort_unstable();
-                alias_param_indices.dedup();
-
-                return Ok(if saw_fresh_write || saw_unknown_write {
-                    FunctionReturnAliasSummary::Unknown
-                } else {
-                    FunctionReturnAliasSummary::AliasParams(alias_param_indices)
-                });
-            }
-
-            if saw_unknown_write {
-                return Ok(FunctionReturnAliasSummary::Unknown);
-            }
-
-            if saw_fresh_write || saw_any_write {
-                return Ok(FunctionReturnAliasSummary::Fresh);
-            }
-
+    fn classify_return_local(
+        &self,
+        function: &HirFunction,
+        reachable_blocks: &[BlockId],
+        local: LocalId,
+        param_index_by_local: &FxHashMap<LocalId, usize>,
+        visiting_locals: &mut FxHashSet<LocalId>,
+    ) -> Result<FunctionReturnAliasSummary, BorrowCheckError> {
+        if !visiting_locals.insert(local) {
             return Ok(FunctionReturnAliasSummary::Unknown);
         }
 
-        Ok(FunctionReturnAliasSummary::Fresh)
+        let mut alias_param_indices = Vec::new();
+        let mut saw_fresh_write = false;
+        let mut saw_unknown_write = false;
+        let mut saw_any_write = false;
+
+        for block_id in reachable_blocks {
+            let block = self.block_by_id_or_error(*block_id, function.id)?;
+
+            for statement in &block.statements {
+                let writer_summary = match &statement.kind {
+                    HirStatementKind::Assign { target, value } => {
+                        let HirPlace::Local(target_local) = target else {
+                            continue;
+                        };
+                        if *target_local != local {
+                            continue;
+                        }
+
+                        Some(self.classify_return_expression_with_visiting(
+                            function,
+                            reachable_blocks,
+                            value,
+                            param_index_by_local,
+                            visiting_locals,
+                        )?)
+                    }
+                    HirStatementKind::Call {
+                        target,
+                        args,
+                        result: Some(result_local),
+                    } if *result_local == local => Some(self.classify_call_result(
+                        function,
+                        target.clone(),
+                        args,
+                        param_index_by_local,
+                        reachable_blocks,
+                        visiting_locals,
+                    )?),
+                    HirStatementKind::MapOp {
+                        op,
+                        receiver,
+                        result: Some(result_local),
+                        ..
+                    } if *result_local == local => Some(self.classify_map_result(
+                        *op,
+                        receiver,
+                        function,
+                        reachable_blocks,
+                        param_index_by_local,
+                        visiting_locals,
+                    )?),
+                    HirStatementKind::CastOp {
+                        result: Some(result_local),
+                        ..
+                    }
+                    | HirStatementKind::NumericOp {
+                        result: result_local,
+                        ..
+                    }
+                    | HirStatementKind::FormatFloat {
+                        result: result_local,
+                        ..
+                    }
+                    | HirStatementKind::ValidateFloat {
+                        result: result_local,
+                        ..
+                    } if *result_local == local => Some(FunctionReturnAliasSummary::Fresh),
+                    _ => None,
+                };
+
+                let Some(writer_summary) = writer_summary else {
+                    continue;
+                };
+
+                saw_any_write = true;
+                match writer_summary {
+                    FunctionReturnAliasSummary::Fresh => saw_fresh_write = true,
+                    FunctionReturnAliasSummary::AliasParams(indices) => {
+                        alias_param_indices.extend(indices);
+                    }
+                    FunctionReturnAliasSummary::Unknown => saw_unknown_write = true,
+                }
+            }
+        }
+
+        visiting_locals.remove(&local);
+
+        alias_param_indices.sort_unstable();
+        alias_param_indices.dedup();
+
+        Ok(if !alias_param_indices.is_empty() {
+            if saw_fresh_write || saw_unknown_write {
+                FunctionReturnAliasSummary::Unknown
+            } else {
+                FunctionReturnAliasSummary::AliasParams(alias_param_indices)
+            }
+        } else if saw_unknown_write {
+            FunctionReturnAliasSummary::Unknown
+        } else if saw_fresh_write || saw_any_write {
+            FunctionReturnAliasSummary::Fresh
+        } else {
+            FunctionReturnAliasSummary::Unknown
+        })
     }
 
     fn classify_unwrapped_success_payload(
@@ -317,6 +829,7 @@ impl<'a> BorrowChecker<'a> {
         reachable_blocks: &[BlockId],
         result: &HirExpression,
         param_index_by_local: &FxHashMap<LocalId, usize>,
+        visiting_locals: &mut FxHashSet<LocalId>,
     ) -> Result<FunctionReturnAliasSummary, BorrowCheckError> {
         // Direct `return fallible_call()!` unwraps the success payload from a fresh carrier local.
         // The carrier itself is not an alias; payload aliasing comes from the callee metadata and
@@ -325,69 +838,315 @@ impl<'a> BorrowChecker<'a> {
             return Ok(FunctionReturnAliasSummary::Unknown);
         };
 
+        self.classify_unwrapped_success_local(
+            function,
+            reachable_blocks,
+            *result_local,
+            param_index_by_local,
+            visiting_locals,
+        )
+    }
+
+    fn classify_unwrapped_success_local(
+        &self,
+        function: &HirFunction,
+        reachable_blocks: &[BlockId],
+        result_local: LocalId,
+        param_index_by_local: &FxHashMap<LocalId, usize>,
+        visiting_locals: &mut FxHashSet<LocalId>,
+    ) -> Result<FunctionReturnAliasSummary, BorrowCheckError> {
+        if !visiting_locals.insert(result_local) {
+            return Ok(FunctionReturnAliasSummary::Unknown);
+        }
+
+        let mut summary = FunctionReturnAliasSummary::Fresh;
+        let mut saw_writer = false;
+
         for block_id in reachable_blocks {
             let block = self.block_by_id_or_error(*block_id, function.id)?;
 
             for statement in &block.statements {
-                match &statement.kind {
+                let writer_summary = match &statement.kind {
                     HirStatementKind::Call {
                         target,
                         args,
                         result: Some(call_result),
                         ..
-                    } => {
-                        if call_result != result_local {
-                            continue;
-                        }
-                        return self.classify_unwrapped_user_call_success(
-                            function,
-                            target.clone(),
-                            args,
-                            param_index_by_local,
-                        );
-                    }
-                    HirStatementKind::CastOp {
-                        result: Some(call_result),
+                    } if *call_result == result_local => Some(self.classify_call_success_payload(
+                        function,
+                        target.clone(),
+                        args,
+                        param_index_by_local,
+                        reachable_blocks,
+                        visiting_locals,
+                    )?),
+                    HirStatementKind::MapOp {
+                        op,
+                        receiver,
+                        result: Some(operation_result),
                         ..
-                    } => {
-                        if call_result != result_local {
-                            continue;
+                    } if *operation_result == result_local => Some(self.classify_map_result(
+                        *op,
+                        receiver,
+                        function,
+                        reachable_blocks,
+                        param_index_by_local,
+                        visiting_locals,
+                    )?),
+                    HirStatementKind::Assign {
+                        target: HirPlace::Local(target_local),
+                        value,
+                    } if *target_local == result_local => match &value.kind {
+                        HirExpressionKind::Load(HirPlace::Local(source_local)) => {
+                            Some(self.classify_unwrapped_success_local(
+                                function,
+                                reachable_blocks,
+                                *source_local,
+                                param_index_by_local,
+                                visiting_locals,
+                            )?)
                         }
-                        // A builtin cast never forwards an alias from its source into the
-                        // success payload; the result is freshly owned.
-                        return Ok(FunctionReturnAliasSummary::Fresh);
+                        _ => Some(FunctionReturnAliasSummary::Unknown),
+                    },
+                    HirStatementKind::CastOp {
+                        result: Some(operation_result),
+                        ..
                     }
-                    _ => continue,
+                    | HirStatementKind::NumericOp {
+                        result: operation_result,
+                        ..
+                    }
+                    | HirStatementKind::FormatFloat {
+                        result: operation_result,
+                        ..
+                    }
+                    | HirStatementKind::ValidateFloat {
+                        result: operation_result,
+                        ..
+                    } if *operation_result == result_local => {
+                        Some(FunctionReturnAliasSummary::Fresh)
+                    }
+                    _ => None,
+                };
+
+                let Some(writer_summary) = writer_summary else {
+                    continue;
+                };
+
+                saw_writer = true;
+                summary = merge_return_alias(summary, writer_summary);
+                if matches!(summary, FunctionReturnAliasSummary::Unknown) {
+                    visiting_locals.remove(&result_local);
+                    return Ok(FunctionReturnAliasSummary::Unknown);
                 }
             }
         }
 
-        Ok(FunctionReturnAliasSummary::Unknown)
+        visiting_locals.remove(&result_local);
+
+        if saw_writer {
+            Ok(summary)
+        } else {
+            Ok(FunctionReturnAliasSummary::Unknown)
+        }
     }
 
-    fn classify_unwrapped_user_call_success(
+    fn classify_call_result(
         &self,
         function: &HirFunction,
         target: CallTarget,
         args: &[HirExpression],
         param_index_by_local: &FxHashMap<LocalId, usize>,
+        reachable_blocks: &[BlockId],
+        visiting_locals: &mut FxHashSet<LocalId>,
     ) -> Result<FunctionReturnAliasSummary, BorrowCheckError> {
-        let CallTarget::UserFunction(callee_id) = target else {
-            return Ok(FunctionReturnAliasSummary::Unknown);
+        match target {
+            CallTarget::UserFunction(callee_id)
+                if self.function_returns_success_channel(callee_id)? =>
+            {
+                // The call local carries a fallible result object. Its success payload gets
+                // classified only by classify_call_success_payload after an explicit unwrap.
+                Ok(FunctionReturnAliasSummary::Fresh)
+            }
+            CallTarget::UserFunction(callee_id) => self.project_local_call_return_alias(
+                function,
+                callee_id,
+                args,
+                param_index_by_local,
+                reachable_blocks,
+                visiting_locals,
+            ),
+            CallTarget::ExternalFunction(function_id) => {
+                let Some(definition) = self
+                    .external_package_registry
+                    .get_function_by_id(function_id)
+                else {
+                    return Err(self.diagnostics.internal_error(
+                        format!(
+                            "Borrow checker could not resolve host call target '{}' while classifying a return",
+                            function_id.name()
+                        ),
+                        self.diagnostics.function_error_location(function.id),
+                    ));
+                };
+
+                if definition.is_fallible() {
+                    return Ok(FunctionReturnAliasSummary::Fresh);
+                }
+
+                self.project_external_return_alias(
+                    function,
+                    &definition.hir_return_alias(),
+                    args,
+                    param_index_by_local,
+                    reachable_blocks,
+                    visiting_locals,
+                )
+            }
+        }
+    }
+
+    fn classify_call_success_payload(
+        &self,
+        function: &HirFunction,
+        target: CallTarget,
+        args: &[HirExpression],
+        param_index_by_local: &FxHashMap<LocalId, usize>,
+        reachable_blocks: &[BlockId],
+        visiting_locals: &mut FxHashSet<LocalId>,
+    ) -> Result<FunctionReturnAliasSummary, BorrowCheckError> {
+        match target {
+            CallTarget::UserFunction(callee_id) => self.project_local_call_return_alias(
+                function,
+                callee_id,
+                args,
+                param_index_by_local,
+                reachable_blocks,
+                visiting_locals,
+            ),
+            CallTarget::ExternalFunction(function_id) => {
+                let Some(definition) = self
+                    .external_package_registry
+                    .get_function_by_id(function_id)
+                else {
+                    return Err(self.diagnostics.internal_error(
+                        format!(
+                            "Borrow checker could not resolve host call target '{}' while classifying a success payload",
+                            function_id.name()
+                        ),
+                        self.diagnostics.function_error_location(function.id),
+                    ));
+                };
+
+                let [return_slot] = definition.returns.as_slice() else {
+                    // The compact borrow summary has no per-slot projection for a multi-return
+                    // external boundary, so keep this genuinely imprecise shape conservative.
+                    return Ok(FunctionReturnAliasSummary::Unknown);
+                };
+
+                self.project_external_return_alias(
+                    function,
+                    &return_slot.alias,
+                    args,
+                    param_index_by_local,
+                    reachable_blocks,
+                    visiting_locals,
+                )
+            }
+        }
+    }
+
+    fn project_local_call_return_alias(
+        &self,
+        function: &HirFunction,
+        callee_id: FunctionId,
+        args: &[HirExpression],
+        param_index_by_local: &FxHashMap<LocalId, usize>,
+        reachable_blocks: &[BlockId],
+        visiting_locals: &mut FxHashSet<LocalId>,
+    ) -> Result<FunctionReturnAliasSummary, BorrowCheckError> {
+        let Some(callee_summary) = self.public_call_summaries.get(&callee_id) else {
+            return Err(self.diagnostics.internal_error(
+                format!(
+                    "Borrow checker is missing the public call summary for function '{}' while classifying a forwarded return",
+                    self.diagnostics.function_name(callee_id)
+                ),
+                self.diagnostics.function_error_location(function.id),
+            ));
         };
 
-        let alias_arg_indices = self.declared_success_alias_indices(callee_id)?;
-        if alias_arg_indices.is_empty() {
-            return Ok(FunctionReturnAliasSummary::Fresh);
-        }
+        self.project_alias_summary_through_arguments(
+            AliasProjectionContext {
+                function,
+                return_alias: &callee_summary.return_alias,
+                args,
+                param_index_by_local,
+                reachable_blocks,
+                callee_description: &format!(
+                    "user function '{}'",
+                    self.diagnostics.function_name(callee_id)
+                ),
+            },
+            visiting_locals,
+        )
+    }
+
+    fn project_external_return_alias(
+        &self,
+        function: &HirFunction,
+        return_alias: &ExternalReturnAlias,
+        args: &[HirExpression],
+        param_index_by_local: &FxHashMap<LocalId, usize>,
+        reachable_blocks: &[BlockId],
+        visiting_locals: &mut FxHashSet<LocalId>,
+    ) -> Result<FunctionReturnAliasSummary, BorrowCheckError> {
+        let alias_summary = match return_alias {
+            ExternalReturnAlias::Fresh => FunctionReturnAliasSummary::Fresh,
+            ExternalReturnAlias::AliasArgs(indices) => {
+                FunctionReturnAliasSummary::AliasParams(indices.clone())
+            }
+        };
+
+        self.project_alias_summary_through_arguments(
+            AliasProjectionContext {
+                function,
+                return_alias: &alias_summary,
+                args,
+                param_index_by_local,
+                reachable_blocks,
+                callee_description: "external function",
+            },
+            visiting_locals,
+        )
+    }
+
+    fn project_alias_summary_through_arguments(
+        &self,
+        context: AliasProjectionContext<'_>,
+        visiting_locals: &mut FxHashSet<LocalId>,
+    ) -> Result<FunctionReturnAliasSummary, BorrowCheckError> {
+        let AliasProjectionContext {
+            function,
+            return_alias,
+            args,
+            param_index_by_local,
+            reachable_blocks,
+            callee_description,
+        } = context;
+
+        let alias_arg_indices = match return_alias {
+            FunctionReturnAliasSummary::Fresh => return Ok(FunctionReturnAliasSummary::Fresh),
+            FunctionReturnAliasSummary::Unknown => return Ok(FunctionReturnAliasSummary::Unknown),
+            FunctionReturnAliasSummary::AliasParams(indices) => indices,
+        };
 
         let mut caller_param_indices = Vec::new();
         for arg_index in alias_arg_indices {
-            let Some(argument) = args.get(arg_index) else {
+            let Some(argument) = args.get(*arg_index) else {
                 return Err(self.diagnostics.internal_error(
                     format!(
                         "Return alias metadata for function '{}' references call argument index {} but the forwarded call only has {} argument(s)",
-                        self.diagnostics.function_name(callee_id),
+                        callee_description,
                         arg_index,
                         args.len()
                     ),
@@ -395,26 +1154,62 @@ impl<'a> BorrowChecker<'a> {
                 ));
             };
 
-            let Some(param_index) = self.argument_root_param_index(argument, param_index_by_local)
-            else {
-                return Ok(FunctionReturnAliasSummary::Unknown);
-            };
-
-            caller_param_indices.push(param_index);
+            match self.classify_return_expression_with_visiting(
+                function,
+                reachable_blocks,
+                argument,
+                param_index_by_local,
+                visiting_locals,
+            )? {
+                FunctionReturnAliasSummary::Fresh => {}
+                FunctionReturnAliasSummary::AliasParams(indices) => {
+                    caller_param_indices.extend(indices);
+                }
+                FunctionReturnAliasSummary::Unknown => {
+                    return Ok(FunctionReturnAliasSummary::Unknown);
+                }
+            }
         }
 
         caller_param_indices.sort_unstable();
         caller_param_indices.dedup();
 
-        Ok(FunctionReturnAliasSummary::AliasParams(
-            caller_param_indices,
-        ))
+        Ok(if caller_param_indices.is_empty() {
+            FunctionReturnAliasSummary::Fresh
+        } else {
+            FunctionReturnAliasSummary::AliasParams(caller_param_indices)
+        })
     }
 
-    fn declared_success_alias_indices(
+    fn classify_map_result(
+        &self,
+        op: crate::compiler_frontend::hir::expressions::HirMapOp,
+        receiver: &HirExpression,
+        function: &HirFunction,
+        reachable_blocks: &[BlockId],
+        param_index_by_local: &FxHashMap<LocalId, usize>,
+        visiting_locals: &mut FxHashSet<LocalId>,
+    ) -> Result<FunctionReturnAliasSummary, BorrowCheckError> {
+        if !matches!(
+            op,
+            crate::compiler_frontend::hir::expressions::HirMapOp::Get
+        ) {
+            return Ok(FunctionReturnAliasSummary::Fresh);
+        }
+
+        self.classify_return_expression_with_visiting(
+            function,
+            reachable_blocks,
+            receiver,
+            param_index_by_local,
+            visiting_locals,
+        )
+    }
+
+    fn function_returns_success_channel(
         &self,
         function_id: FunctionId,
-    ) -> Result<Vec<usize>, BorrowCheckError> {
+    ) -> Result<bool, BorrowCheckError> {
         let Some(function) = self
             .module
             .functions
@@ -423,37 +1218,22 @@ impl<'a> BorrowChecker<'a> {
         else {
             return Err(self.diagnostics.internal_error(
                 format!(
-                    "Borrow checker could not resolve return-alias metadata for function '{}'",
+                    "Borrow checker could not resolve local function '{}' while classifying a call result",
                     self.diagnostics.function_name(function_id)
                 ),
                 self.diagnostics.function_error_location(function_id),
             ));
         };
 
-        let mut alias_indices = function
-            .return_aliases
-            .iter()
-            .filter_map(|candidates| candidates.as_ref())
-            .flatten()
-            .copied()
-            .collect::<Vec<_>>();
-        alias_indices.sort_unstable();
-        alias_indices.dedup();
+        let reachable_blocks = self.collect_reachable_blocks(function)?;
+        for block_id in reachable_blocks {
+            let block = self.block_by_id_or_error(block_id, function.id)?;
+            if matches!(block.terminator, HirTerminator::ReturnSuccess(_)) {
+                return Ok(true);
+            }
+        }
 
-        Ok(alias_indices)
-    }
-
-    fn argument_root_param_index(
-        &self,
-        argument: &HirExpression,
-        param_index_by_local: &FxHashMap<LocalId, usize>,
-    ) -> Option<usize> {
-        let HirExpressionKind::Load(place) = &argument.kind else {
-            return None;
-        };
-        let root_local = root_local_for_place(place)?;
-
-        param_index_by_local.get(&root_local).copied()
+        Ok(false)
     }
 
     pub(super) fn build_function_layout(
@@ -667,6 +1447,41 @@ impl<'a> BorrowChecker<'a> {
             let block = self.block_by_id_or_error(block_id, function.id)?;
             Ok(terminator_targets(&block.terminator))
         })
+    }
+}
+
+fn declared_return_alias_summary(function: &HirFunction) -> FunctionReturnAliasSummary {
+    let mut alias_indices = function
+        .return_aliases
+        .iter()
+        .filter_map(|candidates| candidates.as_ref())
+        .flatten()
+        .copied()
+        .collect::<Vec<_>>();
+    alias_indices.sort_unstable();
+    alias_indices.dedup();
+
+    if alias_indices.is_empty() {
+        FunctionReturnAliasSummary::Fresh
+    } else {
+        FunctionReturnAliasSummary::AliasParams(alias_indices)
+    }
+}
+
+fn retained_return_alias(
+    declared: &FunctionReturnAliasSummary,
+    classified: FunctionReturnAliasSummary,
+    has_no_return_slots: bool,
+) -> FunctionReturnAliasSummary {
+    match declared {
+        FunctionReturnAliasSummary::AliasParams(indices) => {
+            FunctionReturnAliasSummary::AliasParams(indices.clone())
+        }
+        FunctionReturnAliasSummary::Fresh if has_no_return_slots => {
+            FunctionReturnAliasSummary::Fresh
+        }
+        FunctionReturnAliasSummary::Fresh => classified,
+        FunctionReturnAliasSummary::Unknown => FunctionReturnAliasSummary::Unknown,
     }
 }
 
