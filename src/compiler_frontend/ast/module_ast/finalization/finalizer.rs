@@ -265,6 +265,8 @@ impl<'context, 'services> AstFinalizer<'context, 'services> {
                 root_table: resolved_public_type_roots,
                 trait_roots: resolved_public_trait_roots,
                 receiver_catalog: resolved_receiver_catalog,
+                trait_environment: Some(Rc::clone(&lookups.trait_environment)),
+                trait_evidence_environment: Some(Rc::clone(&lookups.trait_evidence_environment)),
             },
         })
     }

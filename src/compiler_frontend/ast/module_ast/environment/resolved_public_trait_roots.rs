@@ -24,6 +24,7 @@ use crate::compiler_frontend::traits::definitions::{
     ResolvedTraitRequirement, TraitReceiverRequirement, TraitVisibility,
 };
 use crate::compiler_frontend::traits::environment::TraitEnvironment;
+use crate::compiler_frontend::traits::evidence::TraitEvidenceEnvironment;
 use crate::compiler_frontend::traits::ids::TraitId;
 use crate::compiler_frontend::value_mode::ValueMode;
 
@@ -114,12 +115,12 @@ pub(crate) struct ResolvedPublicTraitRoot {
 ///
 /// WHAT: bundles the transient type-root [`ResolvedPublicTypeRootTable`] (declaration roots,
 /// receiver methods and trait-source facts for generic bounds and public incompatibilities),
-/// the directly-defined active-root public [`ResolvedPublicTraitRoot`] vector and the
-/// validated [`ReceiverMethodCatalog`] into one closed input for the sole
-/// `PublicInterfaceDraftBuilder` consumer. It has a closed R1 purpose: feeding the
-/// public-interface draft projection immediately before HIR lowering. It is not an
-/// open-ended future-facts bag and never enters `CompiledModuleResult`, `Module` or a
-/// cross-module artefact.
+/// the directly-defined active-root public [`ResolvedPublicTraitRoot`] vector, the validated
+/// [`ReceiverMethodCatalog`] and the resolved trait and evidence environments into one closed
+/// input for the sole `PublicInterfaceDraftBuilder` consumer. It has a closed purpose: feeding
+/// the public-interface draft projection (declarations, trait surfaces and reusable evidence)
+/// immediately before HIR lowering. It is not an open-ended future-facts bag and never enters
+/// `CompiledModuleResult`, `Module` or a cross-module artefact.
 /// WHY: replacing the separate `Ast` fields with one named projection input keeps the
 /// public-surface projection input in one owned place and prevents later phases from
 /// widening the executable `Ast` with more transient public facts. The field on `Ast` is
@@ -129,6 +130,11 @@ pub(crate) struct AstPublicInterfaceProjectionInput {
     pub(crate) root_table: ResolvedPublicTypeRootTable,
     pub(crate) trait_roots: Vec<ResolvedPublicTraitRoot>,
     pub(crate) receiver_catalog: Option<Rc<ReceiverMethodCatalog>>,
+    /// The resolved trait environment, retained for direct reusable-evidence projection.
+    pub(crate) trait_environment: Option<Rc<TraitEnvironment>>,
+    /// The validated trait evidence environment, retained for direct reusable-evidence
+    /// projection.
+    pub(crate) trait_evidence_environment: Option<Rc<TraitEvidenceEnvironment>>,
 }
 
 /// Build the transient resolved public trait roots from completed AST environment facts.

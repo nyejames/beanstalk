@@ -947,10 +947,11 @@ impl FrontendModuleBuildContext<'_> {
             //    retained only on overall semantic success. No
             //    donor-local TypeId, NominalTypeId, GenericParameterId, TraitId, CoreTraitKind
             //    or InternedPath crosses the module result boundary. It is not the final
-            //    PublicSemanticInterface: generic template bodies, evidence,
-            //    access/effect summaries, provenance, re-export interfaces and cross-module call
-            //    lowering remain for later phases. Folded constant values are now owned by each
-            //    constant declaration record.
+            //    PublicSemanticInterface: reusable evidence is now an internal builder step
+            //    and draft collection, while generic template bodies, access/effect summaries,
+            //    provenance, re-export interfaces and cross-module call lowering remain for
+            //    later phases. Folded constant values are now owned by each constant
+            //    declaration record.
             let public_interface_draft =
                 PublicInterfaceDraftBuilder::new(PublicInterfaceDraftBuilderInput {
                     export_origin_draft,

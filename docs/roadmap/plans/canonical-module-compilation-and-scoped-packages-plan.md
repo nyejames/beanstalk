@@ -20,28 +20,28 @@ This document replaces the previous incremental phase sequence at the same path.
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/canonical-module-compilation-and-scoped-packages-plan.md
 STATUS: active
-CURRENT_SLICE: R2d complete — stable direct public trait-incompatibility metadata; checkpoint ready to commit
-LAST_ACCEPTED_COMMIT: 18262e3d3 (R2c)
-WORKTREE: main at 18262e3d3 with the reviewed R2d source, focused tests and this plan update; no unrelated changes are present
-REQUIRED_RELOADS: startup files, this plan, direct evidence/conformance owners and current source/diff
+CURRENT_SLICE: R2e complete — stable direct reusable-evidence identity and ordered requirement-to-method mappings; checkpoint ready to commit
+LAST_ACCEPTED_COMMIT: 3fbea8e90 (R2d)
+WORKTREE: main at 3fbea8e90 with the reviewed R2e source, focused tests and this plan update; no unrelated changes are present
+REQUIRED_RELOADS: startup files, this plan, direct evidence/conformance owners, public-interface draft owners and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: compiler-design-overview.md requires exported reusable evidence to use stable identities; conformance.bd defines reusable evidence visibility; provider re-exports remain later R4 work
-- code: PublicTraitSemantics now retains stable direct public incompatibilities; TraitEvidenceEnvironment and conformance validation own resolved evidence facts, while the draft still lacks target-plus-trait evidence records and stable requirement-to-method mappings
+- docs: compiler-design-overview.md requires exported reusable evidence to use stable identities; conformance.bd makes canonical evidence reusable wherever target and trait are visible; provider re-exports remain R4 work
+- code: PublicInterfaceDraft now retains direct source-canonical reusable evidence separately from declarations; joined public receiver surfaces remain the sole evidence mapping authority
 ACCEPTANCE_CRITERIA:
-- explicitly public relations alone feed direct public trait records; private relations remain confined to conformance validation
-- direct trait records retain symmetric, deterministic, duplicate-free source/core canonical incompatibility identities
-- one source/core projection owner serves generic bounds and incompatibilities, with no donor-local trait fact crossing the draft boundary
-- self, duplicate, missing-source and missing-public-origin transient facts fail through `CompilerError`; existing public/private diagnostics remain unchanged
+- direct reusable evidence is keyed only by canonical target type plus canonical trait identity and classified by semantic ownership
+- source evidence maps every stable trait requirement identity, in authored order, to the stable implementing receiver-function origin
+- private target or trait evidence does not enter the draft, and no TraitEvidenceId, TraitId, TraitRequirementId, TypeId, path, source location or declaration order becomes cross-module identity
+- duplicate, missing and inconsistent projection joins fail through `CompilerError`; existing conformance, bound and cast behavior and diagnostics remain unchanged
 VALIDATION_STATE:
-- focused: 8 resolved-public-trait-root, 56 public-interface-draft and 8 trait-incompatibility tests passed
+- focused: 67 public-interface-draft tests passed
 - cargo fmt --all: passed
-- just validate: passed; cross-target Clippy, 3676 Rust tests, 1793 integration contracts, docs check and 28 benchmark sanity cases
-DOCS_IMPACT: active plan only; progress matrix should remain unchanged because R2d retains an internal interface fact for already-supported incompatibility behavior
+- just validate: passed; cross-target Clippy, 3687 Rust tests, 1793 integration contracts, docs check and 28 benchmark sanity cases
+DOCS_IMPACT: active plan only; progress matrix remains unchanged because R2e retains internal stable facts for already-supported reusable evidence
 BLOCKERS_OR_OPEN_DECISIONS: none
 DELEGATION_DECISION: ollama - user requires Ollama for every worker slice
 NEXT_WORKER_ORDER: ollama only
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit the accepted R2d checkpoint, reload the plan and select the bounded direct reusable-evidence slice
+NEXT_RESUME_ACTION: commit the accepted R2e checkpoint, reload the plan and select the bounded generic-template descriptor and body-artefact slice
 ```
 
 Do not append worktree-specific notes, complete validation histories or worker transcripts to this plan. Keep this status block current and concise. Git history is the validation history.
@@ -547,6 +547,12 @@ R2a checkpoint: completed by the declaration-centric direct-record implementatio
 owns module identity, separate export bindings and exactly one closed semantic record per unique
 direct declaration origin. Transient `DefinedPublic*` aggregates are consumed before the boundary,
 and receiver methods attach to their nominal records through total deterministic joins.
+
+R2e checkpoint: direct source-canonical evidence now uses canonical target-plus-trait identity and
+maps authored-order stable trait requirements to the exact stable receiver origins already attached
+to declaration records. Private targets and traits remain excluded, builtin evidence remains
+compiler-global and no donor-local evidence, trait, requirement, type or path identity crosses the
+draft boundary.
 
 Goal: make one declaring module able to produce every direct semantic fact required by a future provider interface.
 

@@ -97,6 +97,21 @@ impl TraitEvidenceEnvironment {
             .filter(|definition| definition.kind == TraitEvidenceKind::Builtin)
     }
 
+    /// Iterates over all source-authored canonical evidence records.
+    ///
+    /// WHAT: exposes the canonical evidence slice so the public-interface draft projection
+    ///      can iterate source-owned conformance evidence. Direct module drafts intentionally
+    ///      omit builtin evidence.
+    /// WHY: the draft retains only evidence semantically owned by the declaring module.
+    ///      Builtin evidence is compiler-global. The ownership vocabulary reserves a builtin
+    ///      classification for a future compiler-owned handoff, so the projection iterates
+    ///      canonical evidence only.
+    pub(crate) fn canonical_evidence(&self) -> impl Iterator<Item = &TraitEvidenceDefinition> {
+        self.evidence
+            .iter()
+            .filter(|definition| definition.kind == TraitEvidenceKind::Canonical)
+    }
+
     pub(crate) fn insert_builtin(&mut self, mut definition: TraitEvidenceDefinition) {
         let id = TraitEvidenceId(self.evidence.len() as u32);
         definition.id = id;

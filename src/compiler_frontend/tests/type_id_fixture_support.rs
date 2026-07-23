@@ -39,6 +39,8 @@ use crate::compiler_frontend::hir::module::HirModule;
 use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
+use crate::compiler_frontend::traits::environment::TraitEnvironment;
+use crate::compiler_frontend::traits::evidence::TraitEvidenceEnvironment;
 use crate::compiler_frontend::value_mode::ValueMode;
 
 // ---------------------------------------------------------------------------
@@ -708,6 +710,8 @@ pub(crate) fn build_ast_with_choices(
             root_table: ResolvedPublicTypeRootTable::default(),
             trait_roots: vec![],
             receiver_catalog: None,
+            trait_environment: Some(std::rc::Rc::new(TraitEnvironment::new())),
+            trait_evidence_environment: Some(std::rc::Rc::new(TraitEvidenceEnvironment::new())),
         },
     }
 }

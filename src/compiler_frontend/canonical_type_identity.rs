@@ -416,6 +416,80 @@ pub(crate) enum CanonicalCoreTraitIdentity {
     },
 }
 
+/// Named target-plus-trait identity for one reusable conformance evidence record.
+///
+/// WHAT: combines exactly one [`CanonicalTypeIdentity`] (the conforming target) with one
+/// [`CanonicalTraitIdentity`] (the conformed trait). It is the single stable identity a
+/// reusable evidence record carries across the draft boundary. It never embeds local IDs,
+/// paths, locations or order.
+/// WHY: target-plus-trait is the stable key a cross-module consumer can compare without
+/// donor-local `TypeId` or `TraitId` handles. Keeping the pair in one owned hashable value
+/// makes duplicate detection and cross-module comparison operate on one identity rather than
+/// two adjacent pseudo-key fields.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct CanonicalEvidenceIdentity {
+    target_type_identity: CanonicalTypeIdentity,
+    trait_identity: CanonicalTraitIdentity,
+}
+
+impl CanonicalEvidenceIdentity {
+    /// Construct the canonical evidence identity from the target type and trait identities.
+    ///
+    /// Compiler-internal: only the public-interface draft evidence projection builds these,
+    /// from the already-projected canonical target type identity and canonical trait
+    /// identity.
+    pub(crate) fn new(
+        target_type_identity: CanonicalTypeIdentity,
+        trait_identity: CanonicalTraitIdentity,
+    ) -> Self {
+        Self {
+            target_type_identity,
+            trait_identity,
+        }
+    }
+
+    /// The canonical identity of the conformed trait.
+    pub(crate) fn trait_identity(&self) -> &CanonicalTraitIdentity {
+        &self.trait_identity
+    }
+}
+
+/// Stable cross-module identity for one trait requirement.
+///
+/// WHAT: combines the canonical trait identity with the owned defining requirement name as
+/// authored in the trait declaration. It never embeds `TraitRequirementId`, `TraitId`,
+/// `StringId`, `InternedPath`, source location or declaration order. Two builds that assign
+/// different dense `TraitRequirementId` values to the same authored requirement on the same
+/// canonical trait produce the same stable identity.
+/// WHY: reusable conformance evidence maps each requirement to the stable receiver-method
+/// origin that implements it. The mapping key must be stable across local allocation changes
+/// so a cross-module consumer can compare requirement identities without donor-local IDs.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct StableTraitRequirementIdentity {
+    trait_identity: CanonicalTraitIdentity,
+    requirement_name: String,
+}
+
+impl StableTraitRequirementIdentity {
+    /// Construct the stable requirement identity from the canonical trait identity and the
+    /// owned defining requirement name.
+    ///
+    /// Compiler-internal: only the public-interface draft evidence projection builds these,
+    /// from the canonical trait identity and the requirement name resolved through the
+    /// `TraitEnvironment`.
+    pub(crate) fn new(trait_identity: CanonicalTraitIdentity, requirement_name: String) -> Self {
+        Self {
+            trait_identity,
+            requirement_name,
+        }
+    }
+
+    /// The owned defining requirement name as authored in the trait declaration.
+    pub(crate) fn requirement_name(&self) -> &str {
+        &self.requirement_name
+    }
+}
+
 // ---------------------------------------------------------------------------
 //  Projection context
 // ---------------------------------------------------------------------------
