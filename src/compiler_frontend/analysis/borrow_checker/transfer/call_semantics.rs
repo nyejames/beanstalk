@@ -5,13 +5,13 @@
 //! here so statement transfer can stay focused on state transitions.
 
 use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckError;
-use crate::compiler_frontend::analysis::borrow_checker::types::{
-    FunctionReturnAliasSummary, PublicCallParameterAccess, PublicCallParameterSummary,
-    PublicCallTransferEffect, PublicCallTransferEligibility,
-};
 use crate::compiler_frontend::compiler_errors::SourceLocation;
 use crate::compiler_frontend::external_packages::{
     CallTarget, ExternalAccessKind, ExternalFunctionDef, ExternalFunctionId, ExternalReturnAlias,
+};
+use crate::compiler_frontend::public_call_summary::{
+    FunctionReturnAliasSummary, PublicCallParameterAccess, PublicCallParameterSummary,
+    PublicCallTransferEffect, PublicCallTransferEligibility,
 };
 
 use super::BorrowTransferContext;

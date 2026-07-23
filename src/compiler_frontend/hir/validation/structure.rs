@@ -114,6 +114,28 @@ impl<'a> HirValidator<'a> {
             ));
         }
 
+        for (origin, function_id) in &self.module.function_ids_by_origin {
+            if *function_id == self.module.start_function {
+                return Err(self.error_with_hir(
+                    format!(
+                        "HIR implicit start function {:?} must not carry a public function origin {:?}",
+                        function_id, origin
+                    ),
+                    Some(HirLocation::Function(*function_id)),
+                ));
+            }
+
+            if !self.function_ids.contains(function_id) {
+                return Err(self.error_with_hir(
+                    format!(
+                        "HIR public function origin {:?} references missing function {:?}",
+                        origin, function_id
+                    ),
+                    Some(HirLocation::Function(*function_id)),
+                ));
+            }
+        }
+
         Ok(())
     }
 

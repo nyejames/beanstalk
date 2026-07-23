@@ -59,6 +59,7 @@
 //! Boundary: the draft is private to compiler/build orchestration and never reaches backends.
 //! It is not the final `PublicSemanticInterface`.
 
+use crate::compiler_frontend::analysis::borrow_checker::BorrowAnalysis;
 use crate::compiler_frontend::ast::AstPublicInterfaceProjectionInput;
 use crate::compiler_frontend::ast::ResolvedTraitSourceFact;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
@@ -89,6 +90,9 @@ use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::folded_value::{
     FoldedValueGenericParameterResolver, PublicFoldedValue, convert_expression_to_folded_value,
 };
+use crate::compiler_frontend::hir::functions::FunctionOriginSeed;
+use crate::compiler_frontend::hir::module::HirModule;
+use crate::compiler_frontend::public_call_summary::PublicCallSummaryState;
 use crate::compiler_frontend::semantic_identity::{
     ExportBinding, OriginDeclarationId, OriginFunctionId, OriginTraitId, OriginTypeCategory,
     OriginTypeId, StableModuleOriginIdentity,
@@ -217,6 +221,9 @@ pub(crate) struct PublicFunctionSemantics {
     pub(crate) parameters: Vec<PublicParameterTypeSlot>,
     pub(crate) returns: Vec<PublicReturnTypeSlot>,
     pub(crate) error_return: Option<CanonicalTypeIdentity>,
+    /// Filled exactly once after borrow validation. Generic templates remain explicitly pending
+    /// until the R3 generated sidecar worklist produces their concrete summaries.
+    pub(crate) call_summary: PublicCallSummaryState,
 }
 
 /// The semantic facts for one exported receiver method, attached to its owning struct or choice
@@ -224,9 +231,15 @@ pub(crate) struct PublicFunctionSemantics {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct PublicReceiverMethodSemantics {
     pub(crate) method_origin: OriginFunctionId,
+    /// Generic receiver templates have no base local HIR function until the R3 sidecar
+    /// worklist. Their call summary is therefore intentionally `PendingGenerated`.
+    pub(crate) generic_template: bool,
     pub(crate) parameters: Vec<PublicParameterTypeSlot>,
     pub(crate) returns: Vec<PublicReturnTypeSlot>,
     pub(crate) error_return: Option<CanonicalTypeIdentity>,
+    /// Filled exactly once after borrow validation for local receiver methods. Generic receiver
+    /// templates remain explicitly pending until the R3 generated sidecar worklist.
+    pub(crate) call_summary: PublicCallSummaryState,
 }
 
 /// The semantic facts for one exported nominal struct: generic parameters/bounds, fields and
@@ -356,6 +369,18 @@ pub(crate) struct PublicInterfaceDraft {
     pub(crate) reusable_evidence: Vec<PublicEvidenceRecord>,
 }
 
+/// Typed pre-HIR result carrying the draft and its transient exact declaration-path metadata.
+///
+/// WHAT: keeps the stable public draft separate from the `InternedPath` values needed only to
+/// seed the HIR stable-origin/local-`FunctionId` relationship. The path side table is consumed
+/// by HIR lowering and never enters `PublicInterfaceDraft` or `CompiledModuleResult`.
+/// WHY: the origin join must be established while exact AST declaration identity is available;
+/// later stages must not reconstruct it from rendered names, paths or declaration order.
+pub(crate) struct PublicInterfaceDraftBuildResult {
+    pub(crate) draft: PublicInterfaceDraft,
+    pub(crate) function_origin_seeds: Vec<FunctionOriginSeed>,
+}
+
 // ===========================================================================
 //  Builder
 // ===========================================================================
@@ -375,6 +400,10 @@ pub(crate) struct PublicInterfaceDraftBuilderInput<'a> {
     pub type_environment: &'a TypeEnvironment,
     pub external_registry: &'a ExternalPackageRegistry,
     pub string_table: &'a StringTable,
+    /// Exact paths retained by AST generic-template validation. This is consumed while the
+    /// transient receiver-method surface still carries its defining path; no path enters the
+    /// declaration-centric draft.
+    pub generic_function_template_paths: &'a [InternedPath],
     /// The finalized and normalized module constant declarations from the AST.
     ///
     /// WHAT: the already-folded `Ast::module_constants` consumed before HIR lowering. Each
@@ -421,7 +450,7 @@ impl<'a> PublicInterfaceDraftBuilder<'a> {
     /// Each step is total: a missing, duplicate, unmatched or malformed fact is a
     /// `CompilerError` rather than a silent omission. The intermediates are consumed before the
     /// draft boundary: the draft never stores a `DefinedPublic*` component.
-    pub(crate) fn build(self) -> Result<PublicInterfaceDraft, CompilerError> {
+    pub(crate) fn build(self) -> Result<PublicInterfaceDraftBuildResult, CompilerError> {
         let PublicInterfaceDraftBuilderInput {
             export_origin_draft,
             public_interface_projection_input,
@@ -430,6 +459,7 @@ impl<'a> PublicInterfaceDraftBuilder<'a> {
             type_environment,
             external_registry,
             string_table,
+            generic_function_template_paths,
             module_constants,
         } = self.input;
 
@@ -466,7 +496,7 @@ impl<'a> PublicInterfaceDraftBuilder<'a> {
 
         let export_origins = export_origin_draft.finalize(&receiver_catalog, string_table)?;
 
-        let type_surface = build_defined_public_type_surface(
+        let mut type_surface = build_defined_public_type_surface(
             &root_table,
             &export_origins,
             public_source_nominal_type_origins,
@@ -475,6 +505,21 @@ impl<'a> PublicInterfaceDraftBuilder<'a> {
             external_registry,
             string_table,
         )?;
+        let mut generic_receiver_origins = FxHashSet::default();
+        for method in &mut type_surface.receiver_methods {
+            method.generic_template = generic_function_template_paths
+                .iter()
+                .any(|path| path == &method.function_path);
+            if method.generic_template {
+                generic_receiver_origins.insert(method.method_origin.clone());
+            }
+        }
+        let function_origin_seeds = type_surface
+            .function_origin_seeds
+            .iter()
+            .filter(|seed| !generic_receiver_origins.contains(&seed.origin))
+            .cloned()
+            .collect();
 
         let trait_surfaces = build_trait_surfaces(
             &trait_roots,
@@ -538,13 +583,235 @@ impl<'a> PublicInterfaceDraftBuilder<'a> {
         let reusable_evidence =
             project_reusable_evidence(&declarations, &evidence_projection_context)?;
 
-        Ok(PublicInterfaceDraft {
-            module_origin,
-            export_bindings,
-            declarations,
-            reusable_evidence,
+        Ok(PublicInterfaceDraftBuildResult {
+            draft: PublicInterfaceDraft {
+                module_origin,
+                export_bindings,
+                declarations,
+                reusable_evidence,
+            },
+            function_origin_seeds,
         })
     }
+}
+
+impl PublicInterfaceDraft {
+    /// Finalize direct callable declaration records after borrow validation.
+    ///
+    /// WHAT: joins each exported free function and receiver method to exactly one stable
+    /// origin/local `FunctionId` mapping and moves the matching complete local
+    /// [`PublicCallSummary`] into its declaration-centric record.
+    /// WHY: AST owns the public signature while borrow validation owns executable access,
+    /// mutation, transfer, reactive and return-alias effects. This is the sole production join
+    /// point, so private functions and implicit start remain ordinary local summaries and never
+    /// become consumer-visible public records.
+    pub(crate) fn finalize_after_borrow_validation(
+        mut self,
+        borrow_analysis: &BorrowAnalysis,
+        hir_module: &HirModule,
+    ) -> Result<Self, CompilerError> {
+        let mut expected_origins = FxHashSet::default();
+        for record in &mut self.declarations {
+            match &mut record.semantics {
+                PublicDeclarationSemantics::Function(semantics) => {
+                    let OriginDeclarationId::Function(origin) = &record.origin else {
+                        return Err(CompilerError::compiler_error(
+                            "public-interface finalization found function semantics under a non-function declaration origin",
+                        ));
+                    };
+                    if !matches!(
+                        origin.kind(),
+                        crate::compiler_frontend::semantic_identity::FunctionOriginKind::Free
+                    ) {
+                        return Err(CompilerError::compiler_error(format!(
+                            "public-interface finalization found receiver origin {:?} in a free-function record",
+                            origin
+                        )));
+                    }
+                    if semantics.generic_template.is_some() {
+                        validate_pending_generated_summary(
+                            origin,
+                            &semantics.call_summary,
+                            hir_module,
+                        )?;
+                    } else {
+                        finalize_callable_summary(
+                            origin,
+                            semantics.parameters.len(),
+                            &mut semantics.call_summary,
+                            &mut expected_origins,
+                            borrow_analysis,
+                            hir_module,
+                        )?;
+                    }
+                }
+                PublicDeclarationSemantics::Struct(semantics) => {
+                    let OriginDeclarationId::Type(receiver_origin) = &record.origin else {
+                        return Err(CompilerError::compiler_error(
+                            "public-interface finalization found struct semantics under a non-type declaration origin",
+                        ));
+                    };
+                    finalize_receiver_method_summaries(
+                        receiver_origin,
+                        &mut semantics.receiver_methods,
+                        &mut expected_origins,
+                        borrow_analysis,
+                        hir_module,
+                    )?;
+                }
+                PublicDeclarationSemantics::Choice(semantics) => {
+                    let OriginDeclarationId::Type(receiver_origin) = &record.origin else {
+                        return Err(CompilerError::compiler_error(
+                            "public-interface finalization found choice semantics under a non-type declaration origin",
+                        ));
+                    };
+                    finalize_receiver_method_summaries(
+                        receiver_origin,
+                        &mut semantics.receiver_methods,
+                        &mut expected_origins,
+                        borrow_analysis,
+                        hir_module,
+                    )?;
+                }
+                PublicDeclarationSemantics::TransparentAlias(_)
+                | PublicDeclarationSemantics::Constant(_)
+                | PublicDeclarationSemantics::Trait(_) => {}
+            }
+        }
+
+        for origin in hir_module.function_ids_by_origin.keys() {
+            if !expected_origins.contains(origin) {
+                return Err(CompilerError::compiler_error(format!(
+                    "public-interface finalization found extra stable function origin {:?} not present in the direct declaration draft",
+                    origin
+                )));
+            }
+        }
+
+        Ok(self)
+    }
+}
+
+fn finalize_receiver_method_summaries(
+    receiver_origin: &OriginTypeId,
+    methods: &mut [PublicReceiverMethodSemantics],
+    expected_origins: &mut FxHashSet<OriginFunctionId>,
+    borrow_analysis: &BorrowAnalysis,
+    hir_module: &HirModule,
+) -> Result<(), CompilerError> {
+    for method in methods {
+        let Some(method_receiver) = method.method_origin.receiver() else {
+            return Err(CompilerError::compiler_error(format!(
+                "public-interface finalization found free-function origin {:?} in receiver {:?}",
+                method.method_origin, receiver_origin
+            )));
+        };
+        if method_receiver != receiver_origin {
+            return Err(CompilerError::compiler_error(format!(
+                "public-interface finalization found receiver origin {:?} attached to {:?}",
+                method_receiver, receiver_origin
+            )));
+        }
+        if method.generic_template {
+            validate_pending_generated_summary(
+                &method.method_origin,
+                &method.call_summary,
+                hir_module,
+            )?;
+        } else {
+            finalize_callable_summary(
+                &method.method_origin,
+                method.parameters.len(),
+                &mut method.call_summary,
+                expected_origins,
+                borrow_analysis,
+                hir_module,
+            )?;
+        }
+    }
+    Ok(())
+}
+
+fn finalize_callable_summary(
+    origin: &OriginFunctionId,
+    signature_parameter_count: usize,
+    call_summary: &mut PublicCallSummaryState,
+    expected_origins: &mut FxHashSet<OriginFunctionId>,
+    borrow_analysis: &BorrowAnalysis,
+    hir_module: &HirModule,
+) -> Result<(), CompilerError> {
+    if !expected_origins.insert(origin.clone()) {
+        return Err(CompilerError::compiler_error(format!(
+            "public-interface finalization found duplicate callable origin {:?}",
+            origin
+        )));
+    }
+    if !matches!(call_summary, PublicCallSummaryState::PendingLocal) {
+        return Err(CompilerError::compiler_error(format!(
+            "public-interface finalization found non-local or already-finalized state for callable origin {:?}",
+            origin
+        )));
+    }
+
+    let local_function_id = hir_module
+        .function_ids_by_origin
+        .get(origin)
+        .copied()
+        .ok_or_else(|| {
+            CompilerError::compiler_error(format!(
+                "public-interface finalization is missing the local FunctionId for stable origin {:?}",
+                origin
+            ))
+        })?;
+    if local_function_id == hir_module.start_function {
+        return Err(CompilerError::compiler_error(format!(
+            "public-interface finalization mapped callable origin {:?} to the implicit start function",
+            origin
+        )));
+    }
+
+    let summary = borrow_analysis
+        .public_call_summaries
+        .get(&local_function_id)
+        .ok_or_else(|| {
+            CompilerError::compiler_error(format!(
+                "public-interface finalization is missing the borrow call summary for stable origin {:?} and local function {:?}",
+                origin, local_function_id
+            ))
+        })?;
+    if summary.parameters.len() != signature_parameter_count {
+        return Err(CompilerError::compiler_error(format!(
+            "public-interface finalization parameter-count mismatch for stable origin {:?}: public signature has {}, borrow summary has {}",
+            origin,
+            signature_parameter_count,
+            summary.parameters.len()
+        )));
+    }
+
+    *call_summary = PublicCallSummaryState::Finalized(summary.clone());
+    Ok(())
+}
+
+fn validate_pending_generated_summary(
+    origin: &OriginFunctionId,
+    call_summary: &PublicCallSummaryState,
+    hir_module: &HirModule,
+) -> Result<(), CompilerError> {
+    if !matches!(call_summary, PublicCallSummaryState::PendingGenerated) {
+        return Err(CompilerError::compiler_error(format!(
+            "public-interface finalization found a non-pending state for generic template origin {:?}",
+            origin
+        )));
+    }
+
+    if hir_module.function_ids_by_origin.contains_key(origin) {
+        return Err(CompilerError::compiler_error(format!(
+            "public-interface finalization found a local HIR FunctionId for pending generic template origin {:?}",
+            origin
+        )));
+    }
+
+    Ok(())
 }
 
 // ===========================================================================
@@ -599,6 +866,7 @@ fn join_declaration_records(
         transparent_aliases,
         constants,
         receiver_methods,
+        function_origin_seeds: _,
     } = type_surface;
 
     let mut functions_by_origin: FxHashMap<OriginDeclarationId, DefinedPublicFunctionTypeSurface> =
@@ -723,24 +991,27 @@ fn join_declaration_records(
                             "public-interface draft join: the function export binding '{}' has no matching free-function type-surface entry",
                             binding.public_name()
                         ))
-                    })?;
+                        })?;
+                let is_generic = !function.generic_parameters.is_empty();
+                let generic_template = if !is_generic {
+                    None
+                } else {
+                    Some(PublicGenericTemplateDescriptor {
+                        generic_parameters: function.generic_parameters,
+                    })
+                };
                 declarations.push(PublicDeclarationRecord {
                     origin: binding.origin().clone(),
                     semantics: PublicDeclarationSemantics::Function(PublicFunctionSemantics {
-                        // A non-generic free function carries no template descriptor. The
-                        // declaration-syntax parser rejects an empty generic parameter list
-                        // before projection, so an empty vec here means the function has no
-                        // generic parameter list and a non-empty vec means it is generic.
-                        generic_template: if function.generic_parameters.is_empty() {
-                            None
-                        } else {
-                            Some(PublicGenericTemplateDescriptor {
-                                generic_parameters: function.generic_parameters,
-                            })
-                        },
+                        generic_template,
                         parameters: function.parameters,
                         returns: function.returns,
                         error_return: function.error_return,
+                        call_summary: if is_generic {
+                            PublicCallSummaryState::PendingGenerated
+                        } else {
+                            PublicCallSummaryState::PendingLocal
+                        },
                     }),
                 });
             }
@@ -777,9 +1048,15 @@ fn join_declaration_records(
                                 .into_iter()
                                 .map(|method| PublicReceiverMethodSemantics {
                                     method_origin: method.method_origin,
+                                    generic_template: method.generic_template,
                                     parameters: method.parameters,
                                     returns: method.returns,
                                     error_return: method.error_return,
+                                    call_summary: if method.generic_template {
+                                        PublicCallSummaryState::PendingGenerated
+                                    } else {
+                                        PublicCallSummaryState::PendingLocal
+                                    },
                                 })
                                 .collect(),
                         }),
@@ -817,9 +1094,15 @@ fn join_declaration_records(
                                 .into_iter()
                                 .map(|method| PublicReceiverMethodSemantics {
                                     method_origin: method.method_origin,
+                                    generic_template: method.generic_template,
                                     parameters: method.parameters,
                                     returns: method.returns,
                                     error_return: method.error_return,
+                                    call_summary: if method.generic_template {
+                                        PublicCallSummaryState::PendingGenerated
+                                    } else {
+                                        PublicCallSummaryState::PendingLocal
+                                    },
                                 })
                                 .collect(),
                         }),

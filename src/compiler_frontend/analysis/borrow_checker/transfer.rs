@@ -14,13 +14,14 @@ use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckError;
 use crate::compiler_frontend::analysis::borrow_checker::diagnostics::BorrowDiagnostics;
 use crate::compiler_frontend::analysis::borrow_checker::state::{BorrowState, FunctionLayout};
 use crate::compiler_frontend::analysis::borrow_checker::types::{
-    BorrowStateSnapshot, PublicCallSummary, ReactiveInvalidationFact, StatementBorrowFact,
-    TerminatorBorrowFact, ValueBorrowFact,
+    BorrowStateSnapshot, ReactiveInvalidationFact, StatementBorrowFact, TerminatorBorrowFact,
+    ValueBorrowFact,
 };
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::hir::blocks::HirBlock;
 use crate::compiler_frontend::hir::ids::{BlockId, FunctionId, HirNodeId, HirValueId};
 use crate::compiler_frontend::hir::terminators::HirTerminator;
+use crate::compiler_frontend::public_call_summary::PublicCallSummary;
 use rustc_hash::FxHashMap;
 
 use access::transfer_aggregate_expression_ownership;

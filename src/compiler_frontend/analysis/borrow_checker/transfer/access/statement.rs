@@ -5,11 +5,11 @@
 //! entrypoint easier to inspect without changing the borrow-analysis model.
 
 use super::*;
-use crate::compiler_frontend::analysis::borrow_checker::types::FunctionReturnAliasSummary;
 use crate::compiler_frontend::external_packages::CallTarget;
 use crate::compiler_frontend::hir::expressions::HirMapOp;
 use crate::compiler_frontend::hir::ids::LocalId;
 use crate::compiler_frontend::hir::numeric::HirNumericOperands;
+use crate::compiler_frontend::public_call_summary::FunctionReturnAliasSummary;
 
 pub(crate) fn transfer_statement(
     context: &BorrowTransferContext<'_>,

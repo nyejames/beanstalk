@@ -16,6 +16,7 @@ use crate::compiler_frontend::canonical_type_identity::{
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::ids::GenericParameterListId;
 use crate::compiler_frontend::defined_public_type_surface::PublicGenericParameterSurface;
+use crate::compiler_frontend::public_call_summary::PublicCallSummaryState;
 use crate::compiler_frontend::public_interface_draft::{
     PublicDeclarationRecord, PublicDeclarationSemantics, PublicFunctionSemantics,
     PublicGenericTemplateDescriptor, PublicInterfaceDraft,
@@ -67,6 +68,11 @@ fn function_record(name: &str, is_generic: bool) -> PublicDeclarationRecord {
             parameters: vec![],
             returns: vec![],
             error_return: None,
+            call_summary: if is_generic {
+                PublicCallSummaryState::PendingGenerated
+            } else {
+                PublicCallSummaryState::PendingLocal
+            },
         }),
     }
 }

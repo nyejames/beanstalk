@@ -6,9 +6,8 @@
 //! rules remain the only mutation authority.
 
 use super::super::types::{
-    FunctionReturnAliasSummary, LocalMode, PublicCallParameterAccess, PublicCallReactiveEffect,
-    PublicCallTransferEffect, PublicCallTransferEligibility, ReactiveInvalidationFact,
-    ReactiveInvalidationKind, ReactivePlaceWriteKind, ValueAccessClassification,
+    LocalMode, ReactiveInvalidationFact, ReactiveInvalidationKind, ReactivePlaceWriteKind,
+    ValueAccessClassification,
 };
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::call_argument::{CallAccessMode, CallArgument};
@@ -27,6 +26,10 @@ use crate::compiler_frontend::hir::expressions::{
 use crate::compiler_frontend::hir::ids::{FieldId, HirNodeId, HirValueId};
 use crate::compiler_frontend::hir::places::HirPlace;
 use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
+use crate::compiler_frontend::public_call_summary::{
+    FunctionReturnAliasSummary, PublicCallParameterAccess, PublicCallReactiveEffect,
+    PublicCallTransferEffect, PublicCallTransferEligibility,
+};
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tests::ast_fixture_support::{

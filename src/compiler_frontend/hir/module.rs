@@ -22,6 +22,7 @@ use crate::compiler_frontend::hir::hir_side_table::HirSideTable;
 use crate::compiler_frontend::hir::ids::FunctionId;
 use crate::compiler_frontend::hir::regions::HirRegion;
 use crate::compiler_frontend::hir::structs::HirStruct;
+use crate::compiler_frontend::semantic_identity::OriginFunctionId;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap};
 use crate::compiler_frontend::synthetic_interface_provenance::SyntheticInterfaceProvenance;
 use rustc_hash::FxHashMap;
@@ -86,6 +87,15 @@ pub struct HirModule {
     /// entry/runtime-template behavior stable across lowering passes.
     pub function_origins: FxHashMap<FunctionId, HirFunctionOrigin>,
 
+    /// Stable origin-to-local-function lookup for directly exported non-generic functions and
+    /// receiver methods that lower to local HIR.
+    ///
+    /// WHAT: records the explicit stable-origin-to-local-function relationship produced while
+    /// lowering, excluding private functions and the implicit start.
+    /// WHY: public-interface finalization joins borrow summaries to declaration records through
+    /// this side table rather than rendered names, paths or declaration order.
+    pub function_ids_by_origin: FxHashMap<OriginFunctionId, FunctionId>,
+
     pub module_constants: Vec<HirModuleConst>,
 
     /// Region tree
@@ -121,6 +131,7 @@ impl HirModule {
             side_table: HirSideTable::default(),
             start_function: FunctionId(0),
             function_origins: FxHashMap::default(),
+            function_ids_by_origin: FxHashMap::default(),
             module_constants: vec![],
             regions: vec![],
             const_facts: HirConstFacts::default(),

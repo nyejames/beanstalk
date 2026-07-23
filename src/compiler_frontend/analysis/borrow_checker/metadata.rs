@@ -7,11 +7,6 @@
 
 use super::engine::BorrowChecker;
 use super::state::{FunctionLayout, FunctionLayoutInputs, RootSet};
-use super::types::{
-    FunctionReturnAliasSummary, PublicCallMutationEffect, PublicCallParameterAccess,
-    PublicCallParameterSummary, PublicCallReactiveEffect, PublicCallSummary,
-    PublicCallTransferEffect, PublicCallTransferEligibility,
-};
 use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckError;
 use crate::compiler_frontend::external_packages::{
     CallTarget, ExternalAccessKind, ExternalReturnAlias,
@@ -27,6 +22,11 @@ use crate::compiler_frontend::hir::reactivity::HirReactiveSourceKind;
 use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
 use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::hir::utils::terminator_targets;
+use crate::compiler_frontend::public_call_summary::{
+    FunctionReturnAliasSummary, PublicCallMutationEffect, PublicCallParameterAccess,
+    PublicCallParameterSummary, PublicCallReactiveEffect, PublicCallSummary,
+    PublicCallTransferEffect, PublicCallTransferEligibility,
+};
 use rustc_hash::{FxHashMap, FxHashSet};
 
 /// Immutable inputs for projecting one callee return-alias summary through a caller.

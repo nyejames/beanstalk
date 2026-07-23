@@ -54,7 +54,7 @@ use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::compiler_frontend::value_mode::ValueMode;
 use std::sync::Arc;
 
-use super::super::types::{
+use crate::compiler_frontend::public_call_summary::{
     FunctionReturnAliasSummary, PublicCallMutationEffect, PublicCallParameterAccess,
     PublicCallReactiveEffect, PublicCallTransferEffect, PublicCallTransferEligibility,
 };
@@ -258,7 +258,7 @@ fn public_call_summaries_cover_zero_parameter_and_parameter_effects() {
     assert!(start_summary.parameters.is_empty());
     assert_eq!(
         start_summary.return_alias,
-        super::super::types::FunctionReturnAliasSummary::Fresh
+        FunctionReturnAliasSummary::Fresh
     );
 
     let rendered = format!("{target_summary:?}");

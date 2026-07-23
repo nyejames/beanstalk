@@ -37,14 +37,46 @@ impl<'a> HirBuilder<'a> {
     }
 
     pub(super) fn assign_function_origins(&mut self) -> Result<(), CompilerError> {
-        // WHAT: classify every lowered function with a semantic origin tag.
-        // WHY: downstream lowering needs explicit role data to avoid heuristic drift.
+        // WHAT: classify every lowered function and retain stable origins for direct public
+        // functions and receiver methods.
+        // WHY: downstream public-interface finalization needs an explicit semantic join while
+        // backend-facing origin tags remain unchanged for private functions and entry start.
         self.module.function_origins.clear();
+        self.module.function_ids_by_origin.clear();
 
         for function in &self.module.functions {
             self.module
                 .function_origins
                 .insert(function.id, HirFunctionOrigin::Normal);
+
+            if function.id == self.module.start_function {
+                continue;
+            }
+
+            let function_path = self
+                .side_table
+                .function_name_path(function.id)
+                .ok_or_else(|| {
+                    CompilerError::compiler_error(format!(
+                        "HIR function-origin lowering is missing the declaration path for local function {:?}",
+                        function.id
+                    ))
+                })?;
+
+            let Some(origin) = self.function_origin_lookup.origin_for(function_path) else {
+                continue;
+            };
+
+            if self.module.function_ids_by_origin.contains_key(origin) {
+                return Err(CompilerError::compiler_error(format!(
+                    "HIR function-origin lowering received duplicate stable origin {:?}",
+                    origin
+                )));
+            }
+
+            self.module
+                .function_ids_by_origin
+                .insert(origin.clone(), function.id);
         }
 
         self.module

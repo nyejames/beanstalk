@@ -12,6 +12,7 @@ use crate::compiler_frontend::ast::templates::tir::{
     TemplateIrBuilder, TemplateIrStore, TemplateIrSummary, TemplateTirPhase, TemplateTirReference,
     TemplateViewContext,
 };
+use crate::compiler_frontend::hir::functions::HirFunctionOriginLookup;
 use crate::compiler_frontend::hir::hir_builder::lower_module;
 use crate::compiler_frontend::hir::module::HirModule;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
@@ -34,8 +35,13 @@ pub(crate) fn entry_and_start(string_table: &mut StringTable) -> (InternedPath, 
 }
 
 pub(crate) fn lower_hir(ast: Ast, string_table: &mut StringTable) -> HirModule {
-    let lowering = lower_module(ast, string_table, PathStringFormatConfig::default())
-        .expect("HIR lowering should succeed");
+    let lowering = lower_module(
+        ast,
+        string_table,
+        PathStringFormatConfig::default(),
+        HirFunctionOriginLookup::default(),
+    )
+    .expect("HIR lowering should succeed");
     lowering.hir_module
 }
 

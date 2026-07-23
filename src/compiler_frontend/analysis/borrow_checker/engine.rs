@@ -15,7 +15,7 @@ use crate::compiler_frontend::analysis::borrow_checker::transfer::{
 };
 use crate::compiler_frontend::analysis::borrow_checker::types::{
     BorrowCheckReport, BorrowCheckStats, BorrowDropSite, BorrowDropSiteKind, FunctionBorrowSummary,
-    LocalMode, PublicCallSummary,
+    LocalMode,
 };
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::hir::functions::HirFunction;
@@ -24,6 +24,7 @@ use crate::compiler_frontend::hir::ids::{BlockId, FunctionId, LocalId, RegionId}
 use crate::compiler_frontend::hir::module::HirModule;
 use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::hir::utils::try_for_each_terminator_target;
+use crate::compiler_frontend::public_call_summary::PublicCallSummary;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::VecDeque;
@@ -36,7 +37,7 @@ pub(super) struct BorrowChecker<'a> {
     // Fast ID lookups used throughout analysis.
     pub(super) block_index_by_id: FxHashMap<BlockId, usize>,
     pub(super) region_parent_by_id: FxHashMap<RegionId, Option<RegionId>>,
-    // One summary-owned local call contract used by transfer and retained for later consumers.
+    // One frontend-owned local call contract used by transfer and retained for semantic consumers.
     pub(super) public_call_summaries: FxHashMap<FunctionId, PublicCallSummary>,
 }
 

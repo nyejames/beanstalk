@@ -21,7 +21,7 @@ use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::hir::blocks::HirBlock;
 use crate::compiler_frontend::hir::const_facts::HirConstFacts;
-use crate::compiler_frontend::hir::functions::HirFunction;
+use crate::compiler_frontend::hir::functions::{HirFunction, HirFunctionOriginLookup};
 use crate::compiler_frontend::hir::hir_side_table::HirSideTable;
 use crate::compiler_frontend::hir::ids::{
     BlockId, ChoiceId, FieldId, FunctionId, HirConstId, HirNodeId, HirValueId, LocalId, RegionId,
@@ -49,9 +49,15 @@ pub fn lower_module(
     ast: Ast,
     string_table: &mut StringTable,
     path_format_config: PathStringFormatConfig,
+    function_origin_lookup: HirFunctionOriginLookup,
 ) -> Result<HirLoweringResult, CompilerMessages> {
     let type_environment = ast.type_environment.clone();
-    let ctx = HirBuilder::new(string_table, path_format_config, type_environment);
+    let ctx = HirBuilder::new(
+        string_table,
+        path_format_config,
+        type_environment,
+        function_origin_lookup,
+    );
     ctx.build_hir_module(ast)
 }
 
@@ -119,6 +125,12 @@ pub struct HirBuilder<'a> {
     /// WHAT: carries the AST-built type environment while lowering one module.
     /// WHY: HIR stores frontend `TypeId`s directly and queries this table for type facts.
     pub(super) type_environment: TypeEnvironment,
+
+    /// Transient exact-path lookup for public stable function origins.
+    ///
+    /// The lookup is consumed while lowering declarations. Only the resulting origin/local-ID
+    /// maps remain on `HirModule`; donor-local paths never enter completed HIR artefacts.
+    pub(super) function_origin_lookup: HirFunctionOriginLookup,
 
     // === Source / name side table ===
     pub(super) side_table: HirSideTable,
@@ -208,6 +220,7 @@ impl<'a> HirBuilder<'a> {
         string_table: &'a mut StringTable,
         path_format_config: PathStringFormatConfig,
         type_environment: TypeEnvironment,
+        function_origin_lookup: HirFunctionOriginLookup,
     ) -> HirBuilder<'a> {
         #[cfg(not(test))]
         let _ = path_format_config;
@@ -222,6 +235,7 @@ impl<'a> HirBuilder<'a> {
             #[cfg(test)]
             path_format_config,
             type_environment,
+            function_origin_lookup,
 
             next_block_id: 0,
             next_local_id: 0,

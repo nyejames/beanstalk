@@ -12,6 +12,7 @@ use crate::compiler_frontend::headers::parse_file_headers::{
     BoundModuleHeaders, HeaderParseOptions, bind_module_headers, prepare_file_from_tokens,
     prepare_header_syntax,
 };
+use crate::compiler_frontend::hir::functions::HirFunctionOriginLookup;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::style_directives::{
     StyleDirectiveEffects, StyleDirectiveHandlerSpec, StyleDirectiveRegistry, StyleDirectiveSpec,
@@ -219,7 +220,7 @@ impl FrontendProject {
     fn hir(&mut self) -> crate::compiler_frontend::hir::module::HirModule {
         let ast = self.ast();
         self.frontend
-            .generate_hir(ast)
+            .generate_hir(ast, HirFunctionOriginLookup::default())
             .expect("HIR lowering should succeed")
             .hir_module
     }

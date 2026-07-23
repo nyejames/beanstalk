@@ -270,10 +270,11 @@ impl Module {
 pub(crate) struct CompiledModuleResult {
     pub module: Module,
     pub string_table: StringTable,
-    /// The one aggregate public-interface draft for declarations defined directly in the
-    /// active module root, retained alongside the successful compile result so later
-    /// graph/interface slices can consume it. It internalizes the direct export-origin,
-    /// canonical type-surface and corrected trait-requirement projections behind one builder.
+    /// The one public-interface draft for declarations defined directly in the active module root,
+    /// retained alongside the successful compile result so later graph/interface slices can
+    /// consume it. It internalizes the direct export-origin, canonical type-surface and corrected
+    /// trait-requirement projections behind one builder, with joined local callable summaries and
+    /// explicit pending states for exported generic templates awaiting R3 sidecars.
     /// It carries only owned stable values: no `TypeId`, `NominalTypeId`,
     /// `GenericParameterId`, `TraitId`, `InternedPath` or `StringId` crosses this boundary. It
     /// is not part of the accepted three-lane `Module` and is not the final

@@ -27,6 +27,7 @@ use crate::compiler_frontend::headers::parse_file_headers::{
     BoundModuleHeaders, FileFrontendPrepareError, FileFrontendPrepareOutput, HeaderKind,
     HeaderParseOptions, PreparedHeaderSyntax, bind_module_headers, prepare_header_syntax,
 };
+use crate::compiler_frontend::hir::functions::HirFunctionOriginLookup;
 use crate::compiler_frontend::hir::module::HirModule;
 use crate::compiler_frontend::hir::reachability::collect_reachability_from_start;
 use crate::compiler_frontend::instrumentation::{FrontendCounter, add_frontend_counter};
@@ -938,6 +939,11 @@ impl FrontendModuleBuildContext<'_> {
             // and never enter a cross-module artefact.
             let public_interface_projection_input =
                 std::mem::take(&mut module_ast.public_interface_projection_input);
+            let generic_function_template_paths = module_ast
+                .generic_function_templates
+                .keys()
+                .cloned()
+                .collect::<Vec<_>>();
 
             // 4. Build the one aggregate public-interface draft before HIR consumes the AST. The
             //    draft is the sole pre-HIR public-semantic handoff: the export-origin
@@ -954,7 +960,7 @@ impl FrontendModuleBuildContext<'_> {
             //    provenance, re-export interfaces and cross-module call lowering remain for
             //    later phases. Folded constant values are now owned by each constant
             //    declaration record.
-            let public_interface_draft =
+            let public_interface_build =
                 PublicInterfaceDraftBuilder::new(PublicInterfaceDraftBuilderInput {
                     export_origin_draft,
                     public_interface_projection_input,
@@ -963,10 +969,12 @@ impl FrontendModuleBuildContext<'_> {
                     type_environment: &module_ast.type_environment,
                     external_registry: compiler.external_package_registry.as_ref(),
                     string_table: &compiler.string_table,
+                    generic_function_template_paths: &generic_function_template_paths,
                     module_constants: &module_ast.module_constants,
                 })
                 .build()
                 .map_err(|error| CompilerMessages::from_error_ref(error, &compiler.string_table))?;
+            let public_interface_draft = public_interface_build.draft;
 
             // 4b. Extract validated generic-template body artefacts before HIR consumes AST
             //     state. The draft is the authority for which exported free functions are
@@ -999,6 +1007,11 @@ impl FrontendModuleBuildContext<'_> {
             )
             .map_err(|error| CompilerMessages::from_error_ref(error, &compiler.string_table))?;
 
+            let function_origin_lookup = HirFunctionOriginLookup::from_seeds(
+                public_interface_build.function_origin_seeds,
+            )
+            .map_err(|error| CompilerMessages::from_error_ref(error, &compiler.string_table))?;
+
             // 5. Resolve const fragment StringIds to strings before AST is consumed by HIR.
             let const_top_level_fragments = module_ast
                 .const_top_level_fragments
@@ -1012,7 +1025,7 @@ impl FrontendModuleBuildContext<'_> {
             // 6. Lower AST to Higher-level Intermediate Representation (HIR).
             let hir_lowering =
                 timed_frontend_stage("frontend.hir", "HIR generated in: ", module_label, || {
-                    Self::lower_hir(&mut compiler, module_ast, &warnings)
+                    Self::lower_hir(&mut compiler, module_ast, &warnings, function_origin_lookup)
                 })?;
             let HirLoweringResult {
                 hir_module,
@@ -1037,6 +1050,15 @@ impl FrontendModuleBuildContext<'_> {
                 || Self::check_borrows(&compiler, &hir_module, &warnings),
             )?;
             record_borrow_counters(&borrow_analysis);
+
+            // Finalize direct non-generic callables exactly once after HIR and borrow validation
+            // produce the stable local-function relationship and complete call summaries. Exported
+            // generic templates remain explicitly pending for the R3 sidecar worklist. Private
+            // functions and implicit start retain local summaries but never enter declaration
+            // records.
+            let public_interface_draft = public_interface_draft
+                .finalize_after_borrow_validation(&borrow_analysis.analysis, &hir_module)
+                .map_err(|error| CompilerMessages::from_error_ref(error, &compiler.string_table))?;
 
             // Runtime import metadata is tied to calls that can execute from entry `start`.
             // The registry and provider table stay fully populated for type checking and
@@ -1241,9 +1263,10 @@ impl FrontendModuleBuildContext<'_> {
         compiler: &mut CompilerFrontend,
         module_ast: Ast,
         warnings: &[CompilerDiagnostic],
+        function_origin_lookup: HirFunctionOriginLookup,
     ) -> Result<HirLoweringResult, CompilerMessages> {
         compiler
-            .generate_hir(module_ast)
+            .generate_hir(module_ast, function_origin_lookup)
             .map_err(|messages| merge_stage_messages(messages, warnings, &compiler.string_table))
     }
 

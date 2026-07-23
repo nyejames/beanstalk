@@ -8,6 +8,7 @@ use crate::compiler_frontend::external_packages::CallTarget;
 use crate::compiler_frontend::hir::expressions::HirMapOp;
 use crate::compiler_frontend::hir::ids::{BlockId, FunctionId, HirNodeId, HirValueId, LocalId};
 use crate::compiler_frontend::hir::reactivity::ReactiveSourceId;
+use crate::compiler_frontend::public_call_summary::PublicCallSummary;
 use rustc_hash::FxHashMap;
 
 #[derive(Debug, Clone, Default)]
@@ -24,11 +25,11 @@ impl BorrowCheckReport {
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct BorrowAnalysis {
-    /// Complete local function call contracts retained for later semantic consumers.
+    /// Complete local function call contracts retained for semantic consumers.
     ///
     /// WHAT: stores parameter access, mutation, optional transfer, reactive effects, and
     /// return-alias facts in one local-function summary.
-    /// WHY: call transfer and the future public-interface draft must consume the same semantic
+    /// WHY: call transfer and the public-interface draft consume the same frontend-owned semantic
     /// contract instead of reconstructing it from separate HIR metadata caches.
     pub public_call_summaries: FxHashMap<FunctionId, PublicCallSummary>,
     pub function_summaries: FxHashMap<FunctionId, FunctionBorrowSummary>,
@@ -104,101 +105,6 @@ pub(crate) struct FunctionBorrowSummary {
     pub mutable_call_sites: usize,
     pub alias_heavy_blocks: Vec<BlockId>,
     pub worklist_iterations: usize,
-}
-
-/// The source-level access contract for one function parameter.
-///
-/// Parameter access remains separate from optional destruction responsibility. In particular,
-/// reactive parameters are read/subscription handles and never ordinary consuming parameters.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum PublicCallParameterAccess {
-    Shared,
-    Mutable,
-    Reactive,
-}
-
-/// The mutation effect observed for one parameter's root during borrow validation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum PublicCallMutationEffect {
-    NoWrite,
-    Writes,
-}
-
-/// Whether final-use analysis may grant optional transfer responsibility to one parameter.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum PublicCallTransferEligibility {
-    Ineligible,
-    Eligible,
-}
-
-/// The analysis/lowering transfer category for one parameter.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum PublicCallTransferEffect {
-    NeverConsumes,
-    MayConsume,
-    /// Reserved for a specialised already-proven path; local source calls remain optional.
-    #[allow(dead_code)]
-    AlwaysConsumes,
-}
-
-/// Reactive dependency and invalidation facts for one parameter.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum PublicCallReactiveEffect {
-    None,
-    Subscribes,
-    Invalidates,
-    SubscribesAndInvalidates,
-}
-
-impl PublicCallReactiveEffect {
-    pub(crate) fn with_subscription(self) -> Self {
-        match self {
-            Self::None | Self::Subscribes => Self::Subscribes,
-            Self::Invalidates => Self::SubscribesAndInvalidates,
-            Self::SubscribesAndInvalidates => Self::SubscribesAndInvalidates,
-        }
-    }
-
-    pub(crate) fn with_invalidation(self) -> Self {
-        match self {
-            Self::None | Self::Invalidates => Self::Invalidates,
-            Self::Subscribes => Self::SubscribesAndInvalidates,
-            Self::SubscribesAndInvalidates => Self::SubscribesAndInvalidates,
-        }
-    }
-}
-
-/// Owned semantic facts for one parameter, retained in source parameter order.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct PublicCallParameterSummary {
-    pub access: PublicCallParameterAccess,
-    pub mutation: PublicCallMutationEffect,
-    pub transfer_eligibility: PublicCallTransferEligibility,
-    pub transfer_effect: PublicCallTransferEffect,
-    pub reactive_effect: PublicCallReactiveEffect,
-}
-
-/// Complete semantic call contract for one local function.
-///
-/// Parameter positions are represented by vector order and by the indices in
-/// `FunctionReturnAliasSummary`; no donor-local HIR identity crosses this boundary.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct PublicCallSummary {
-    pub parameters: Vec<PublicCallParameterSummary>,
-    pub return_alias: FunctionReturnAliasSummary,
-}
-
-/// User-function return alias metadata consumed by call transfer.
-///
-/// WHAT: summarizes whether a function result is fresh, aliases specific
-/// parameters, or has an imprecise alias shape.
-/// WHY: borrow validation keeps this as side-table metadata so call-site
-/// transfer can enforce use-after-move rules without mutating HIR.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum FunctionReturnAliasSummary {
-    Fresh,
-    AliasParams(Vec<usize>),
-    Unknown,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]

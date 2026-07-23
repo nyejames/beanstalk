@@ -5,7 +5,6 @@
 //! before it reaches higher-level diagnostics.
 
 use crate::compiler_frontend::analysis::borrow_checker::LocalMode;
-use crate::compiler_frontend::analysis::borrow_checker::types::FunctionReturnAliasSummary;
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::call_argument::{CallAccessMode, CallArgument};
 use crate::compiler_frontend::ast::expressions::expression::{
@@ -26,6 +25,7 @@ use crate::compiler_frontend::hir::ids::{BlockId, HirNodeId, HirValueId, LocalId
 use crate::compiler_frontend::hir::places::HirPlace;
 use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
 use crate::compiler_frontend::hir::terminators::HirTerminator;
+use crate::compiler_frontend::public_call_summary::FunctionReturnAliasSummary;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tests::ast_fixture_support::{
     assignment_target, function_node, make_test_variable, node, param, reference_expr, symbol,

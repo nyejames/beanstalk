@@ -71,6 +71,7 @@ use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::folded_value::{
     PublicFoldedValue, convert_expression_to_folded_value,
 };
+use crate::compiler_frontend::hir::functions::FunctionOriginSeed;
 use crate::compiler_frontend::semantic_identity::{
     DefinedPublicExportOrigins, ExportBinding, OriginConstantId, OriginDeclarationId,
     OriginFunctionId, OriginTraitId, OriginTypeCategory, OriginTypeId, ReceiverSurfaceOrigins,
@@ -90,8 +91,11 @@ use rustc_hash::{FxHashMap, FxHashSet};
 /// intermediate consumed by the [`PublicInterfaceDraftBuilder`] before the draft boundary.
 ///
 /// WHAT: carries only owned, stable values: canonical type identities and owned authored names.
-/// It never embeds `TypeId`, `NominalTypeId`, `GenericParameterId`, `InternedPath`, `StringId`,
-/// source locations, absolute paths or donor-local external numeric IDs.
+/// Its `function_origin_seeds` are a separate transient lowering side table; they are consumed
+/// before the draft boundary and never enter declaration records or module artefacts.
+/// The stable type-surface entries themselves never embed `TypeId`, `NominalTypeId`,
+/// `GenericParameterId`, `InternedPath`, `StringId`, source locations, absolute paths or
+/// donor-local external numeric IDs.
 ///
 /// It is deliberately not `PublicSemanticInterface`. It carries type shapes only and does not
 /// cross the draft boundary as a stored component.
@@ -102,6 +106,7 @@ pub(crate) struct DefinedPublicTypeSurface {
     pub(super) transparent_aliases: Vec<DefinedPublicAliasTypeSurface>,
     pub(super) constants: Vec<DefinedPublicConstantTypeSurface>,
     pub(super) receiver_methods: Vec<DefinedPublicReceiverMethodTypeSurface>,
+    pub(super) function_origin_seeds: Vec<FunctionOriginSeed>,
 }
 
 /// One parameter slot in a public function or receiver-method semantic record.
@@ -234,6 +239,12 @@ pub(crate) struct DefinedPublicConstantTypeSurface {
 pub(crate) struct DefinedPublicReceiverMethodTypeSurface {
     pub(crate) receiver_origin: OriginTypeId,
     pub(crate) method_origin: OriginFunctionId,
+    /// Exact donor-local path used only to classify a retained generic template before the
+    /// surface is consumed by the declaration-centric draft join.
+    pub(crate) function_path: InternedPath,
+    /// Set by the draft builder from the authoritative retained generic-template path map.
+    /// Generic receiver methods have no base local HIR function until the R3 sidecar worklist.
+    pub(crate) generic_template: bool,
     pub(crate) parameters: Vec<PublicParameterTypeSlot>,
     pub(crate) returns: Vec<PublicReturnTypeSlot>,
     pub(crate) error_return: Option<CanonicalTypeIdentity>,
@@ -464,10 +475,10 @@ impl<'a> RootIndex<'a> {
 /// 5. projects receiver methods in deterministic receiver/method order, joining each by exact
 ///    stable receiver origin and method name.
 ///
-/// The output carries only owned stable values. No `TypeId`, `NominalTypeId`,
+/// The stable surface carries only owned stable values. No `TypeId`, `NominalTypeId`,
 /// `GenericParameterId`, `GenericParameterListId`, `TraitId`, `CoreTraitKind`, `InternedPath` or
-/// `StringId` crosses the boundary: these donor-local facts are consumed transiently and excluded
-/// from the stable surface.
+/// `StringId` enters its declaration-shaped entries. The separate exact function-origin path
+/// side table is consumed by HIR lowering before the module-result boundary.
 pub(crate) fn build_defined_public_type_surface(
     root_table: &ResolvedPublicTypeRootTable,
     export_origins: &DefinedPublicExportOrigins,
@@ -502,6 +513,7 @@ pub(crate) fn build_defined_public_type_surface(
     let mut nominal_types = Vec::new();
     let mut transparent_aliases = Vec::new();
     let mut constants = Vec::new();
+    let mut function_origin_seeds = Vec::new();
 
     // Iterate over export bindings in their deterministic order. A trait binding carries no
     // type root in this type-only slice, so it is skipped without consuming a root. Every
@@ -525,7 +537,7 @@ pub(crate) fn build_defined_public_type_surface(
                 let OriginDeclarationId::Function(function_origin) = binding.origin() else {
                     return Err(origin_category_mismatch_error("function", binding));
                 };
-                free_functions.push(project_free_function(
+                let function_surface = project_free_function(
                     function_origin.clone(),
                     *generic_parameter_list_id,
                     signature,
@@ -534,7 +546,15 @@ pub(crate) fn build_defined_public_type_surface(
                     &root_table.trait_source_facts,
                     public_source_trait_origins,
                     string_table,
-                )?);
+                )?;
+                if generic_parameter_list_id.is_none() {
+                    push_function_origin_seed(
+                        &mut function_origin_seeds,
+                        root.path.clone(),
+                        function_origin.clone(),
+                    )?;
+                }
+                free_functions.push(function_surface);
             }
             ResolvedPublicTypeRootKind::Struct { type_id, fields } => {
                 let OriginDeclarationId::Type(type_origin) = binding.origin() else {
@@ -619,13 +639,20 @@ pub(crate) fn build_defined_public_type_surface(
 
     // Receiver methods: project in the deterministic receiver-surface order from
     // DefinedPublicExportOrigins, matching each method to its resolved entry.
-    let receiver_methods = project_receiver_methods(
+    let (receiver_methods, receiver_function_origin_seeds) = project_receiver_methods(
         &root_table.receiver_methods,
         export_origins.receiver_surfaces(),
         type_environment,
         &projection_context,
         string_table,
     )?;
+    for function_origin_seed in receiver_function_origin_seeds {
+        push_function_origin_seed(
+            &mut function_origin_seeds,
+            function_origin_seed.path,
+            function_origin_seed.origin,
+        )?;
+    }
 
     Ok(DefinedPublicTypeSurface {
         free_functions,
@@ -633,7 +660,31 @@ pub(crate) fn build_defined_public_type_surface(
         transparent_aliases,
         constants,
         receiver_methods,
+        function_origin_seeds,
     })
+}
+
+/// Retain one exact declaration path-to-origin relationship for HIR lowering.
+///
+/// WHAT: rejects duplicate stable function origins while the AST-owned declaration path is still
+/// available. Exact path uniqueness is validated when the side table is converted to the HIR
+/// lookup, where paths are correctly interpreted within one lowered module. The resulting side
+/// table is consumed before HIR assigns local `FunctionId`s.
+/// WHY: the later join must not reconstruct identity from rendered names, paths or declaration
+/// order, and no donor-local path may enter a completed public declaration record.
+fn push_function_origin_seed(
+    seeds: &mut Vec<FunctionOriginSeed>,
+    path: InternedPath,
+    origin: OriginFunctionId,
+) -> Result<(), CompilerError> {
+    if seeds.iter().any(|existing| existing.origin == origin) {
+        return Err(CompilerError::compiler_error(format!(
+            "defined public type-surface projection: duplicate stable function origin {:?}",
+            origin
+        )));
+    }
+    seeds.push(FunctionOriginSeed { path, origin });
+    Ok(())
 }
 
 /// Register generic-parameter origins from function and nominal roots.
@@ -1347,7 +1398,13 @@ fn project_receiver_methods(
     type_environment: &TypeEnvironment,
     context: &CanonicalTypeProjectionContext,
     string_table: &StringTable,
-) -> Result<Vec<DefinedPublicReceiverMethodTypeSurface>, CompilerError> {
+) -> Result<
+    (
+        Vec<DefinedPublicReceiverMethodTypeSurface>,
+        Vec<FunctionOriginSeed>,
+    ),
+    CompilerError,
+> {
     // Index receiver method entries by their exact stable receiver origin plus owned method
     // name. The receiver origin is resolved through the same nominal origin resolver used for
     // canonical type projection, so the key carries full package/module identity rather than a
@@ -1367,6 +1424,7 @@ fn project_receiver_methods(
     }
 
     let mut surfaces = Vec::new();
+    let mut function_origin_seeds = Vec::new();
 
     for surface in receiver_surfaces {
         let receiver_origin = surface.receiver().clone();
@@ -1438,10 +1496,17 @@ fn project_receiver_methods(
             surfaces.push(DefinedPublicReceiverMethodTypeSurface {
                 receiver_origin: receiver_origin.clone(),
                 method_origin: method_origin.clone(),
+                function_path: entry.function_path.clone(),
+                generic_template: false,
                 parameters,
                 returns,
                 error_return,
             });
+            push_function_origin_seed(
+                &mut function_origin_seeds,
+                entry.function_path.clone(),
+                method_origin.clone(),
+            )?;
         }
     }
 
@@ -1465,7 +1530,7 @@ fn project_receiver_methods(
         )));
     }
 
-    Ok(surfaces)
+    Ok((surfaces, function_origin_seeds))
 }
 
 /// Build the exact stable join key for one resolved receiver-method entry.

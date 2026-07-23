@@ -20,29 +20,31 @@ This document replaces the previous incremental phase sequence at the same path.
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/canonical-module-compilation-and-scoped-packages-plan.md
 STATUS: active
-CURRENT_SLICE: R2h complete — deterministic local public-call summaries retained and consumed by call transfer; checkpoint ready to commit
-LAST_ACCEPTED_COMMIT: 6609ab164 (R2g1)
-WORKTREE: main at 911fa955a (unrelated documentation commit after R2g1) with reviewed R2h source, focused tests and this plan update; preserve and ignore unrelated documentation work if it appears
-REQUIRED_RELOADS: startup files, this plan, borrow-validation authorities, borrow checker metadata/types/engine/call-transfer owners, HIR function/reactivity metadata and current source/diff
+CURRENT_SLICE: R2i complete — direct local call summaries finalized; checkpoint ready to commit
+LAST_ACCEPTED_COMMIT: 0379bd195 (R2h)
+WORKTREE: main at 0379bd195 with reviewed R2i code, tests and this plan update; origin/main 911fa955a; preserve and ignore unrelated documentation work if it appears
+REQUIRED_RELOADS: startup files, this plan, current source/diff and the R2 item 11 fingerprint-encoder owners
 RELEVANT_CONTEXT_NOW:
-- docs: compiler-design-overview.md Stage 6 and R2 item 9 require parameter access, mutation, optional-transfer/effect, return-alias and relevant reactive summaries without mutating HIR or deciding lifetime topology
-- code: BorrowAnalysis now retains one FunctionId-keyed PublicCallSummary map; call transfer consumes the same access/transfer/return contract and metadata finalization derives deterministic mutation, return-alias and reactive effects without rewriting HIR
+- docs: compiler-design-overview.md requires stable semantic identities, declaration-centric public call effects and Stage 6 summary joins without foreign HIR inspection or HIR mutation
+- code: public_call_summary.rs owns shared summary vocabulary; the draft/HIR join retains exact stable origin-to-local FunctionId relationships for non-generic direct callables, while exported generic templates remain explicitly PendingGenerated for R3
 ACCEPTANCE_CRITERIA:
-- BorrowAnalysis retains exactly one deterministic semantic public-call summary per local FunctionId and rejects missing, extra or inconsistent metadata as CompilerError
-- each summary records ordered parameter access modes, mutation effects, optional transfer eligibility/effect categories, return aliasing and only the reactive parameter/effect facts already represented in HIR and borrow invalidations
-- retained summaries use parameter positions and owned enums rather than LocalId, BlockId, source locations, rendered names or backend policy
-- local call transfer reuses the same summary-owned access/transfer/return contract instead of retaining a parallel interpretation; borrow validation remains read-only over HIR
-- no public-interface draft join, stable-origin mapping, cross-module/generated/binding summary transport, lifetime facts, fingerprints, backend changes or user-visible semantic expansion enter this slice
+- every directly exported non-generic free function and receiver method with a local HIR function receives exactly one owned complete PublicCallSummary after borrow validation
+- an exported generic template with no base local FunctionId remains represented by an explicit pending-generated-summary state owned by the R3 worklist contract; it must not masquerade as finalized or make an existing valid facade fail
+- the one-time join uses an explicit stable OriginFunctionId-to-local FunctionId relationship retained during lowering, never rendered names, display paths, rendered types or declaration order
+- private functions and implicit start retain local summaries but receive no consumer-visible origin and do not enter direct declaration records
+- missing, extra, duplicate, category-mismatched or parameter-shape-inconsistent public joins fail through CompilerError
+- borrow analysis and the declaration draft share one semantic call-summary vocabulary without duplicated interpretation; borrow validation remains read-only over HIR
+- no source re-exports, provider/cross-module/generated/binding summary transport, lifetime facts, fingerprint encoders, backend changes or user-visible semantic expansion enter this slice
 VALIDATION_STATE:
-- focused borrow-checker tests: passed (66 tests); four prior HTML regression cases also passed individually
-- cargo fmt --all -- --check: passed
-- just validate: passed; native/Linux/Windows Clippy, 3738 Rust tests, 1793 integration runs, docs check and 28 benchmark sanity cases
-DOCS_IMPACT: active plan only; progress matrix should remain unchanged because this slice retains internal summary facts for already-supported behavior
-BLOCKERS_OR_OPEN_DECISIONS: none; reactive summary scope is limited to current HIR reactive-parameter identity and borrow-owned invalidation effects, while retention/outlives/lifecycle facts remain with deferred lifetime validation
-DELEGATION_DECISION: codex-cli - user replaced the Ollama-only instruction after the R2g1 Ollama run completed; use Codex CLI for every subsequent implementation/correction slice
+- parent cargo fmt --all -- --check passed
+- parent focused checks passed: 76 public-interface-draft tests, 3 HIR-origin tests, 27 borrow-summary tests and the generic/free/receiver facade HTML cases
+- parent just validate passed: native/Linux/Windows Clippy, 3746 Rust tests, 1793 integration runs, docs check and 28 benchmark sanity cases
+DOCS_IMPACT: active plan only; progress matrix should remain unchanged because this slice retains internal direct-interface facts for already-supported behavior
+BLOCKERS_OR_OPEN_DECISIONS: locked decision 11 assigns concrete generic call summaries to R3 sidecars, so R2i preserves explicit PendingGenerated state and does not claim a base FunctionId join for generic templates; no user decision is required
+DELEGATION_DECISION: codex-cli - use Codex CLI for every remaining implementation, correction and audit slice after the completed Ollama attempt
 NEXT_WORKER_ORDER: codex-cli only
 STOP_REASON: none
-NEXT_RESUME_ACTION: stage and commit R2h, then reload and launch R2 item 10 through Codex CLI
+NEXT_RESUME_ACTION: commit the accepted R2i checkpoint, then launch R2 item 11 deterministic canonical encoders through Codex CLI
 ```
 
 Do not append worktree-specific notes, complete validation histories or worker transcripts to this plan. Keep this status block current and concise. Git history is the validation history.
@@ -554,6 +556,11 @@ maps authored-order stable trait requirements to the exact stable receiver origi
 to declaration records. Private targets and traits remain excluded, builtin evidence remains
 compiler-global and no donor-local evidence, trait, requirement, type or path identity crosses the
 draft boundary.
+
+R2i checkpoint: borrow validation and the direct declaration draft now share one frontend-owned
+call-summary vocabulary. Non-generic exported free functions and receiver methods join exactly once
+through stable function origins and local HIR IDs after borrow validation. Exported generic
+templates carry an explicit pending-generated state until R3 sidecars produce concrete summaries.
 
 Goal: make one declaring module able to produce every direct semantic fact required by a future provider interface.
 

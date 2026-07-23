@@ -23,6 +23,7 @@ use crate::compiler_frontend::headers::parse_file_headers::{
 use crate::compiler_frontend::headers::plain_markdown_prepare::{
     PlainMarkdownPrepareInput, prepare_plain_markdown_file,
 };
+use crate::compiler_frontend::hir::functions::HirFunctionOriginLookup;
 use crate::compiler_frontend::hir::hir_builder::lower_module;
 use crate::compiler_frontend::hir::module::HirModule;
 use crate::compiler_frontend::module_dependencies::{SortedHeaders, resolve_module_dependencies};
@@ -378,8 +379,17 @@ impl CompilerFrontend {
     // -----------------------------
     //  HIR GENERATION
     // -----------------------------
-    pub fn generate_hir(&mut self, ast: Ast) -> Result<HirLoweringResult, CompilerMessages> {
-        lower_module(ast, &mut self.string_table, self.path_format_config.clone())
+    pub fn generate_hir(
+        &mut self,
+        ast: Ast,
+        function_origin_lookup: HirFunctionOriginLookup,
+    ) -> Result<HirLoweringResult, CompilerMessages> {
+        lower_module(
+            ast,
+            &mut self.string_table,
+            self.path_format_config.clone(),
+            function_origin_lookup,
+        )
     }
 
     // ------------------------------

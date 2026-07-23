@@ -284,7 +284,6 @@ pub(crate) enum OriginTypeCategory {
 /// distinct receiver types cannot collapse because the receiver type identity is embedded in the
 /// variant. This is the sole authoritative receiver state: a free function with a receiver or a
 /// receiver method without a receiver type is unrepresentable.
-#[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum FunctionOriginKind {
     Free,
@@ -410,13 +409,11 @@ impl OriginFunctionId {
     ///
     /// Returns the sole authoritative state: `Free` or `Receiver(OriginTypeId)`. The receiver
     /// type identity for a method is embedded in the variant, not stored in a parallel field.
-    #[allow(dead_code)]
     pub(crate) fn kind(&self) -> &FunctionOriginKind {
         &self.kind
     }
 
     /// The stable type origin of the receiver for a method, or `None` for a free function.
-    #[allow(dead_code)]
     pub(crate) fn receiver(&self) -> Option<&OriginTypeId> {
         match &self.kind {
             FunctionOriginKind::Free => None,

@@ -77,6 +77,7 @@ pub(crate) fn setup_builder(string_table: &'_ mut StringTable) -> HirBuilder<'_>
         string_table,
         PathStringFormatConfig::default(),
         crate::compiler_frontend::datatypes::environment::TypeEnvironment::new(),
+        crate::compiler_frontend::hir::functions::HirFunctionOriginLookup::default(),
     );
 
     let region = RegionId(0);

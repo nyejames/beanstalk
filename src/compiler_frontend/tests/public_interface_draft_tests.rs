@@ -13,6 +13,7 @@
 //! `compiler_frontend::public_interface_draft`, so they own a focused test beside the module
 //! rather than an end-to-end case.
 
+use crate::compiler_frontend::analysis::borrow_checker::BorrowAnalysis;
 use crate::compiler_frontend::ast::AstPublicInterfaceProjectionInput;
 use crate::compiler_frontend::ast::ReceiverMethodCatalog;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
@@ -46,19 +47,25 @@ use crate::compiler_frontend::defined_public_type_surface::{
     DefinedPublicAliasTypeSurface, DefinedPublicConstantTypeSurface,
     DefinedPublicFunctionTypeSurface, DefinedPublicNominalTypeSurface,
     DefinedPublicReceiverMethodTypeSurface, DefinedPublicTypeSurface, PublicChoiceVariantSurface,
-    PublicFieldTypeSlot, PublicGenericParameterSurface, TransientNominalOriginResolver,
+    PublicFieldTypeSlot, PublicGenericParameterSurface, PublicParameterTypeSlot,
+    TransientNominalOriginResolver,
 };
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::folded_value::{
     FoldedValueGenericParameterResolver, PublicFoldedValue,
 };
+use crate::compiler_frontend::hir::ids::FunctionId;
+use crate::compiler_frontend::hir::module::HirModule;
+use crate::compiler_frontend::public_call_summary::{
+    FunctionReturnAliasSummary, PublicCallSummary, PublicCallSummaryState,
+};
 use crate::compiler_frontend::public_interface_draft::{
     DefinedPublicTraitSurface, EvidenceProjectionContext, FoldedValueJoinContext,
     PublicDeclarationRecord, PublicDeclarationSemantics, PublicEvidenceOwnership,
-    PublicEvidenceRecord, PublicInterfaceDraftBuilder, PublicInterfaceDraftBuilderInput,
-    PublicReceiverMethodSemantics, PublicStructSemantics, PublicTraitReceiverAccess,
-    TraitSurfaceTypeIdentity, build_trait_surfaces, join_declaration_records,
-    project_reusable_evidence,
+    PublicEvidenceRecord, PublicGenericTemplateDescriptor, PublicInterfaceDraftBuilder,
+    PublicInterfaceDraftBuilderInput, PublicReceiverMethodSemantics, PublicStructSemantics,
+    PublicTraitReceiverAccess, TraitSurfaceTypeIdentity, build_trait_surfaces,
+    join_declaration_records, project_reusable_evidence,
 };
 use crate::compiler_frontend::semantic_identity::{
     ExportBinding, ModuleRootRole, OriginConstantId, OriginDeclarationId, OriginFunctionId,
@@ -393,6 +400,7 @@ fn type_surface(
         transparent_aliases,
         constants,
         receiver_methods,
+        function_origin_seeds: vec![],
     }
 }
 
@@ -991,10 +999,12 @@ fn builder_produces_declaration_centric_draft_covering_every_category() {
         type_environment: &env,
         external_registry: &registry,
         string_table: &string_table,
+        generic_function_template_paths: &[],
         module_constants: &module_constants,
     })
     .build()
-    .expect("declaration-centric draft builds for all categories");
+    .expect("declaration-centric draft builds for all categories")
+    .draft;
 
     // The draft owns its module origin.
     assert_eq!(draft.module_origin, module_origin());
@@ -1139,10 +1149,12 @@ fn builder_attaches_receiver_methods_to_struct_record() {
         type_environment: &env,
         external_registry: &registry,
         string_table: &string_table,
+        generic_function_template_paths: &[],
         module_constants: &[],
     })
     .build()
-    .expect("draft with receiver method builds");
+    .expect("draft with receiver method builds")
+    .draft;
 
     assert_eq!(draft.declarations.len(), 1);
     let record = &draft.declarations[0];
@@ -1154,6 +1166,103 @@ fn builder_attaches_receiver_methods_to_struct_record() {
         assert_eq!(semantics.receiver_methods.len(), 1);
         assert_eq!(semantics.receiver_methods[0].method_origin, method_origin);
     }
+}
+
+#[test]
+fn builder_classifies_generic_receiver_from_exact_template_path_and_excludes_origin_seed() {
+    let mut string_table = StringTable::new();
+    let mut env = TypeEnvironment::new();
+
+    let (_, struct_type_id) =
+        register_struct(&mut env, &mut string_table, "Counter", empty_fields(), None);
+
+    let receiver_path = path("Counter", &mut string_table);
+    let method_fn_path = path("render", &mut string_table);
+    let entry = receiver_entry(
+        method_fn_path.clone(),
+        ReceiverKey::Struct(receiver_path),
+        empty_signature(),
+    );
+
+    let root_table = ResolvedPublicTypeRootTable {
+        roots: vec![struct_root(
+            "Counter",
+            struct_type_id,
+            vec![],
+            &mut string_table,
+        )],
+        receiver_methods: vec![entry.clone()],
+        trait_source_facts: FxHashMap::default(),
+    };
+
+    let binding = ExportBinding::new(
+        module_origin(),
+        "Counter".to_owned(),
+        OriginDeclarationId::Type(struct_origin("Counter")),
+    );
+    let method_origin = OriginFunctionId::new_receiver(
+        module_origin(),
+        "render".to_owned(),
+        struct_origin("Counter"),
+    );
+    let nominal_origins = nominal_origins_map(
+        vec![("Counter", struct_origin("Counter"))],
+        &mut string_table,
+    );
+
+    let export_origin_draft = DefinedPublicExportOriginDraft::new(
+        module_origin(),
+        vec![binding],
+        nominal_origins.clone(),
+    );
+
+    let mut receiver_catalog = ReceiverMethodCatalog::default();
+    receiver_catalog
+        .by_function_path
+        .insert(method_fn_path.clone(), entry);
+    let projection_input = AstPublicInterfaceProjectionInput {
+        root_table,
+        trait_roots: vec![],
+        receiver_catalog: Some(std::rc::Rc::new(receiver_catalog)),
+        trait_environment: Some(std::rc::Rc::new(TraitEnvironment::new())),
+        trait_evidence_environment: Some(std::rc::Rc::new(TraitEvidenceEnvironment::new())),
+    };
+
+    let generic_template_paths = vec![method_fn_path];
+    let registry = ExternalPackageRegistry::new();
+    let build_result = PublicInterfaceDraftBuilder::new(PublicInterfaceDraftBuilderInput {
+        export_origin_draft,
+        public_interface_projection_input: projection_input,
+        public_source_nominal_type_origins: &nominal_origins,
+        public_source_trait_origins: &FxHashMap::default(),
+        type_environment: &env,
+        external_registry: &registry,
+        string_table: &string_table,
+        generic_function_template_paths: &generic_template_paths,
+        module_constants: &[],
+    })
+    .build()
+    .expect("generic receiver path should build");
+
+    assert!(
+        build_result.function_origin_seeds.is_empty(),
+        "a generic receiver template must not seed a local HIR FunctionId"
+    );
+
+    let draft = build_result
+        .draft
+        .finalize_after_borrow_validation(&BorrowAnalysis::default(), &HirModule::new())
+        .expect("pending generic receiver summary should survive direct-draft finalization");
+    let PublicDeclarationSemantics::Struct(receiver) = &draft.declarations[0].semantics else {
+        panic!("expected a struct declaration record");
+    };
+    let method = &receiver.receiver_methods[0];
+    assert!(method.generic_template);
+    assert_eq!(method.method_origin, method_origin);
+    assert!(matches!(
+        &method.call_summary,
+        PublicCallSummaryState::PendingGenerated
+    ));
 }
 
 #[test]
@@ -1181,10 +1290,12 @@ fn module_origin_survives_empty_public_surface() {
         type_environment: &env,
         external_registry: &registry,
         string_table: &string_table,
+        generic_function_template_paths: &[],
         module_constants: &[],
     })
     .build()
-    .expect("empty-surface draft builds");
+    .expect("empty-surface draft builds")
+    .draft;
 
     assert_eq!(draft.module_origin, module_origin());
     assert!(draft.export_bindings.is_empty());
@@ -1632,6 +1743,8 @@ fn join_rejects_duplicate_receiver_method_origin() {
     let method_a = DefinedPublicReceiverMethodTypeSurface {
         receiver_origin: origin.clone(),
         method_origin: method_origin.clone(),
+        function_path: InternedPath::new(),
+        generic_template: false,
         parameters: vec![],
         returns: vec![],
         error_return: None,
@@ -1639,6 +1752,8 @@ fn join_rejects_duplicate_receiver_method_origin() {
     let method_b = DefinedPublicReceiverMethodTypeSurface {
         receiver_origin: origin.clone(),
         method_origin,
+        function_path: InternedPath::new(),
+        generic_template: false,
         parameters: vec![],
         returns: vec![],
         error_return: None,
@@ -1770,10 +1885,12 @@ fn free_function_retains_folded_parameter_defaults_in_authored_order() {
         type_environment: &env,
         external_registry: &registry,
         string_table: &string_table,
+        generic_function_template_paths: &[],
         module_constants: &[],
     })
     .build()
-    .expect("draft with function defaults should build");
+    .expect("draft with function defaults should build")
+    .draft;
 
     assert_eq!(draft.declarations.len(), 1);
     let record = &draft.declarations[0];
@@ -1871,10 +1988,12 @@ fn struct_retains_folded_field_defaults_in_authored_order() {
         type_environment: &env,
         external_registry: &registry,
         string_table: &string_table,
+        generic_function_template_paths: &[],
         module_constants: &[],
     })
     .build()
-    .expect("draft with struct field defaults should build");
+    .expect("draft with struct field defaults should build")
+    .draft;
 
     assert_eq!(draft.declarations.len(), 1);
     let record = &draft.declarations[0];
@@ -1970,10 +2089,12 @@ fn choice_payload_fields_remain_default_free() {
         type_environment: &env,
         external_registry: &registry,
         string_table: &string_table,
+        generic_function_template_paths: &[],
         module_constants: &[],
     })
     .build()
-    .expect("draft with choice should build");
+    .expect("draft with choice should build")
+    .draft;
 
     let record = &draft.declarations[0];
     let PublicDeclarationSemantics::Choice(semantics) = &record.semantics else {
@@ -2070,10 +2191,12 @@ fn receiver_method_retains_folded_parameter_defaults() {
         type_environment: &env,
         external_registry: &registry,
         string_table: &string_table,
+        generic_function_template_paths: &[],
         module_constants: &[],
     })
     .build()
-    .expect("draft with receiver method defaults should build");
+    .expect("draft with receiver method defaults should build")
+    .draft;
 
     let record = &draft.declarations[0];
     let PublicDeclarationSemantics::Struct(semantics) = &record.semantics else {
@@ -2513,10 +2636,12 @@ fn builder_carries_incompatibilities_on_trait_record() {
         type_environment: &env,
         external_registry: &ExternalPackageRegistry::new(),
         string_table: &string_table,
+        generic_function_template_paths: &[],
         module_constants: &[],
     })
     .build()
-    .expect("a trait record with one public incompatibility builds a draft");
+    .expect("a trait record with one public incompatibility builds a draft")
+    .draft;
 
     let trait_record = draft
         .declarations
@@ -2676,9 +2801,11 @@ fn declarations_with_receiver_methods(
             .or_default()
             .push(PublicReceiverMethodSemantics {
                 method_origin,
+                generic_template: false,
                 parameters: vec![],
                 returns: vec![],
                 error_return: None,
+                call_summary: PublicCallSummaryState::PendingLocal,
             });
         by_receiver_name.insert(
             receiver_path,
@@ -2747,6 +2874,308 @@ fn project_evidence(
     };
 
     project_reusable_evidence(declarations, &context)
+}
+
+fn empty_public_call_summary() -> PublicCallSummary {
+    PublicCallSummary {
+        parameters: vec![],
+        return_alias: FunctionReturnAliasSummary::Fresh,
+    }
+}
+
+fn public_parameter() -> PublicParameterTypeSlot {
+    PublicParameterTypeSlot {
+        name: None,
+        type_identity: CanonicalTypeIdentity::Builtin(CanonicalBuiltinType::Int),
+        folded_default: None,
+    }
+}
+
+fn public_hir_for_origins(origins: &[(FunctionId, OriginFunctionId)]) -> HirModule {
+    let mut hir = HirModule::new();
+    for (function_id, origin) in origins {
+        hir.function_ids_by_origin
+            .insert(origin.clone(), *function_id);
+    }
+    hir
+}
+
+fn function_draft_record(
+    origin: OriginFunctionId,
+    parameters: Vec<PublicParameterTypeSlot>,
+    call_summary: PublicCallSummaryState,
+) -> PublicDeclarationRecord {
+    PublicDeclarationRecord {
+        origin: OriginDeclarationId::Function(origin),
+        semantics: PublicDeclarationSemantics::Function(
+            crate::compiler_frontend::public_interface_draft::PublicFunctionSemantics {
+                generic_template: None,
+                parameters,
+                returns: vec![],
+                error_return: None,
+                call_summary,
+            },
+        ),
+    }
+}
+
+fn receiver_draft_record(
+    receiver_origin: OriginTypeId,
+    method_origin: OriginFunctionId,
+) -> PublicDeclarationRecord {
+    receiver_draft_record_with_template(receiver_origin, method_origin, false)
+}
+
+fn receiver_draft_record_with_template(
+    receiver_origin: OriginTypeId,
+    method_origin: OriginFunctionId,
+    generic_template: bool,
+) -> PublicDeclarationRecord {
+    PublicDeclarationRecord {
+        origin: OriginDeclarationId::Type(receiver_origin),
+        semantics: PublicDeclarationSemantics::Struct(PublicStructSemantics {
+            generic_parameters: vec![],
+            fields: vec![],
+            receiver_methods: vec![PublicReceiverMethodSemantics {
+                method_origin,
+                generic_template,
+                parameters: vec![],
+                returns: vec![],
+                error_return: None,
+                call_summary: if generic_template {
+                    PublicCallSummaryState::PendingGenerated
+                } else {
+                    PublicCallSummaryState::PendingLocal
+                },
+            }],
+        }),
+    }
+}
+
+fn generic_function_draft_record(origin: OriginFunctionId) -> PublicDeclarationRecord {
+    PublicDeclarationRecord {
+        origin: OriginDeclarationId::Function(origin),
+        semantics: PublicDeclarationSemantics::Function(
+            crate::compiler_frontend::public_interface_draft::PublicFunctionSemantics {
+                generic_template: Some(PublicGenericTemplateDescriptor {
+                    generic_parameters: vec![],
+                }),
+                parameters: vec![],
+                returns: vec![],
+                error_return: None,
+                call_summary: PublicCallSummaryState::PendingGenerated,
+            },
+        ),
+    }
+}
+
+fn draft_with_records(records: Vec<PublicDeclarationRecord>) -> super::PublicInterfaceDraft {
+    super::PublicInterfaceDraft {
+        module_origin: module_origin(),
+        export_bindings: vec![],
+        declarations: records,
+        reusable_evidence: vec![],
+    }
+}
+
+#[test]
+fn finalizes_free_and_receiver_call_summaries_once() {
+    let free_origin = OriginFunctionId::new_free(module_origin(), "render".to_owned());
+    let receiver_origin = struct_origin("Counter");
+    let method_origin = OriginFunctionId::new_receiver(
+        module_origin(),
+        "reset".to_owned(),
+        receiver_origin.clone(),
+    );
+    let mut draft = draft_with_records(vec![
+        function_draft_record(
+            free_origin.clone(),
+            vec![],
+            PublicCallSummaryState::PendingLocal,
+        ),
+        receiver_draft_record(receiver_origin, method_origin.clone()),
+    ]);
+    let mut borrow_analysis = BorrowAnalysis::default();
+    borrow_analysis
+        .public_call_summaries
+        .insert(FunctionId(4), empty_public_call_summary());
+    borrow_analysis
+        .public_call_summaries
+        .insert(FunctionId(7), empty_public_call_summary());
+    let hir =
+        public_hir_for_origins(&[(FunctionId(4), free_origin), (FunctionId(7), method_origin)]);
+
+    draft = draft
+        .finalize_after_borrow_validation(&borrow_analysis, &hir)
+        .expect("free and receiver summaries should join");
+
+    let PublicDeclarationSemantics::Function(free) = &draft.declarations[0].semantics else {
+        panic!("expected free-function declaration record");
+    };
+    assert!(matches!(
+        &free.call_summary,
+        PublicCallSummaryState::Finalized(_)
+    ));
+    let PublicDeclarationSemantics::Struct(receiver) = &draft.declarations[1].semantics else {
+        panic!("expected receiver declaration record");
+    };
+    assert!(matches!(
+        &receiver.receiver_methods[0].call_summary,
+        PublicCallSummaryState::Finalized(_)
+    ));
+}
+
+#[test]
+fn keeps_exported_generic_template_pending_until_generated_sidecar() {
+    let generic_origin = OriginFunctionId::new_free(module_origin(), "identity".to_owned());
+    let draft = draft_with_records(vec![generic_function_draft_record(generic_origin)])
+        .finalize_after_borrow_validation(&BorrowAnalysis::default(), &HirModule::new())
+        .expect("generic templates remain pending until R3 sidecars exist");
+
+    let PublicDeclarationSemantics::Function(function) = &draft.declarations[0].semantics else {
+        panic!("expected generic free-function declaration record");
+    };
+    assert!(matches!(
+        &function.call_summary,
+        PublicCallSummaryState::PendingGenerated
+    ));
+}
+
+#[test]
+fn keeps_exported_generic_receiver_template_pending_until_generated_sidecar() {
+    let receiver_origin = struct_origin("Box");
+    let method_origin =
+        OriginFunctionId::new_receiver(module_origin(), "get".to_owned(), receiver_origin.clone());
+    let draft = draft_with_records(vec![receiver_draft_record_with_template(
+        receiver_origin,
+        method_origin,
+        true,
+    )])
+    .finalize_after_borrow_validation(&BorrowAnalysis::default(), &HirModule::new())
+    .expect("generic receiver templates remain pending until R3 sidecars exist");
+
+    let PublicDeclarationSemantics::Struct(receiver) = &draft.declarations[0].semantics else {
+        panic!("expected generic receiver declaration record");
+    };
+    assert!(matches!(
+        &receiver.receiver_methods[0].call_summary,
+        PublicCallSummaryState::PendingGenerated
+    ));
+}
+
+#[test]
+fn finalization_excludes_private_and_start_summaries() {
+    let free_origin = OriginFunctionId::new_free(module_origin(), "render".to_owned());
+    let mut borrow_analysis = BorrowAnalysis::default();
+    borrow_analysis
+        .public_call_summaries
+        .insert(FunctionId(0), empty_public_call_summary());
+    borrow_analysis
+        .public_call_summaries
+        .insert(FunctionId(1), empty_public_call_summary());
+    borrow_analysis
+        .public_call_summaries
+        .insert(FunctionId(2), empty_public_call_summary());
+    let hir = public_hir_for_origins(&[(FunctionId(1), free_origin.clone())]);
+
+    let draft = draft_with_records(vec![function_draft_record(
+        free_origin,
+        vec![],
+        PublicCallSummaryState::PendingLocal,
+    )])
+    .finalize_after_borrow_validation(&borrow_analysis, &hir)
+    .expect("private and start summaries should remain local-only");
+    assert_eq!(draft.declarations.len(), 1);
+}
+
+#[test]
+fn finalization_rejects_missing_extra_duplicate_category_and_shape_facts() {
+    let free_origin = OriginFunctionId::new_free(module_origin(), "render".to_owned());
+    let receiver_origin = struct_origin("Counter");
+    let missing = draft_with_records(vec![function_draft_record(
+        free_origin.clone(),
+        vec![],
+        PublicCallSummaryState::PendingLocal,
+    )])
+    .finalize_after_borrow_validation(&BorrowAnalysis::default(), &HirModule::new());
+    assert!(missing.is_err(), "missing local origin must fail");
+
+    let extra_origin = OriginFunctionId::new_free(module_origin(), "extra".to_owned());
+    let mut extra_borrow = BorrowAnalysis::default();
+    extra_borrow
+        .public_call_summaries
+        .insert(FunctionId(1), empty_public_call_summary());
+    extra_borrow
+        .public_call_summaries
+        .insert(FunctionId(2), empty_public_call_summary());
+    let extra_hir = public_hir_for_origins(&[
+        (FunctionId(1), free_origin.clone()),
+        (FunctionId(2), extra_origin),
+    ]);
+    let extra = draft_with_records(vec![function_draft_record(
+        free_origin.clone(),
+        vec![],
+        PublicCallSummaryState::PendingLocal,
+    )])
+    .finalize_after_borrow_validation(&extra_borrow, &extra_hir);
+    assert!(extra.is_err(), "extra public origin must fail");
+
+    let duplicate = draft_with_records(vec![function_draft_record(
+        free_origin.clone(),
+        vec![],
+        PublicCallSummaryState::Finalized(empty_public_call_summary()),
+    )])
+    .finalize_after_borrow_validation(
+        &BorrowAnalysis {
+            public_call_summaries: [(FunctionId(1), empty_public_call_summary())]
+                .into_iter()
+                .collect(),
+            ..BorrowAnalysis::default()
+        },
+        &public_hir_for_origins(&[(FunctionId(1), free_origin.clone())]),
+    );
+    assert!(duplicate.is_err(), "duplicate finalization must fail");
+
+    let category_mismatch_origin = OriginFunctionId::new_receiver(
+        module_origin(),
+        "render".to_owned(),
+        receiver_origin.clone(),
+    );
+    let mut mismatch_borrow = BorrowAnalysis::default();
+    mismatch_borrow
+        .public_call_summaries
+        .insert(FunctionId(1), empty_public_call_summary());
+    let category_mismatch = draft_with_records(vec![function_draft_record(
+        category_mismatch_origin.clone(),
+        vec![],
+        PublicCallSummaryState::PendingLocal,
+    )])
+    .finalize_after_borrow_validation(
+        &mismatch_borrow,
+        &public_hir_for_origins(&[(FunctionId(1), category_mismatch_origin)]),
+    );
+    assert!(
+        category_mismatch.is_err(),
+        "free/receiver category mismatch must fail"
+    );
+
+    let mut shape_borrow = BorrowAnalysis::default();
+    shape_borrow
+        .public_call_summaries
+        .insert(FunctionId(1), empty_public_call_summary());
+    let shape = draft_with_records(vec![function_draft_record(
+        free_origin.clone(),
+        vec![public_parameter()],
+        PublicCallSummaryState::PendingLocal,
+    )])
+    .finalize_after_borrow_validation(
+        &shape_borrow,
+        &public_hir_for_origins(&[(FunctionId(1), free_origin)]),
+    );
+    assert!(
+        shape.is_err(),
+        "signature/summary parameter mismatch must fail"
+    );
 }
 
 #[test]
