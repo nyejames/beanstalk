@@ -402,7 +402,6 @@ impl OriginFunctionId {
     }
 
     /// The exact defining declaration name.
-    #[allow(dead_code)]
     pub(crate) fn defining_name(&self) -> &str {
         &self.defining_name
     }

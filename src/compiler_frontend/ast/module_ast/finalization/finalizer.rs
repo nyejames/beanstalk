@@ -268,6 +268,12 @@ impl<'context, 'services> AstFinalizer<'context, 'services> {
                 trait_environment: Some(Rc::clone(&lookups.trait_environment)),
                 trait_evidence_environment: Some(Rc::clone(&lookups.trait_evidence_environment)),
             },
+            // Clone the donor-local generic template map before `lookups` is dropped so the
+            // extraction/join owner in semantic orchestration can move the relevant templates
+            // into `ModuleCompilerMetadata`. The inner `Rc<FxHashMap>` has no other clones after
+            // emission, so `Rc::try_unwrap` at the extraction site obtains sole ownership without
+            // copying body tokens.
+            generic_function_templates: Rc::clone(&lookups.generic_function_templates_by_path),
         })
     }
 

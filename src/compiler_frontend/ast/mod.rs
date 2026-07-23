@@ -150,6 +150,7 @@ use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::instrumentation::{log_ast_counters, reset_ast_counters};
 
 use crate::benchmark_timer_log;
+use crate::compiler_frontend::ast::generic_functions::GenericFunctionTemplate;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
@@ -163,6 +164,8 @@ use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::FileTokens;
+use rustc_hash::FxHashMap;
+use std::rc::Rc;
 use std::time::Instant;
 
 /// Resolved choice definition carried from AST to HIR for pre-registration.
@@ -229,6 +232,21 @@ pub struct Ast {
     ///      reconstructs it. This field is taken before HIR and may not gain unrelated
     ///      future facts.
     pub public_interface_projection_input: AstPublicInterfaceProjectionInput,
+
+    /// Validated generic free-function templates carried past finalization to the
+    /// extraction/join owner.
+    ///
+    /// WHAT: the donor-local `generic_function_templates_by_path` map cloned from the completed
+    ///       AST environment lookups before they are dropped. Production AST construction always
+    ///       populates this; synthetic AST fixtures use an empty map. Each entry is the one
+    ///       existing [`GenericFunctionTemplate`] body payload produced during signature
+    ///       resolution and body validation.
+    /// WHY: the semantic orchestration takes this through `std::mem::take` before HIR lowering
+    ///      and runs the validated-generic-template extraction/join owner against the completed
+    ///      public-interface draft, moving the relevant templates into `ModuleCompilerMetadata`.
+    ///      Donor-local `InternedPath` keys and `TypeId`s stay inside this transient field and
+    ///      never enter a cross-module artefact directly. HIR never receives or reconstructs it.
+    pub generic_function_templates: Rc<FxHashMap<InternedPath, GenericFunctionTemplate>>,
 }
 
 /// Complete header-stage output consumed by AST construction.

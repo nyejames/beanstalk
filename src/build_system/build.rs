@@ -25,6 +25,7 @@ use crate::compiler_frontend::public_interface_draft::PublicInterfaceDraft;
 use crate::compiler_frontend::style_directives::{StyleDirectiveRegistry, StyleDirectiveSpec};
 use crate::compiler_frontend::symbols::compiler_symbols::CompilerSymbolSet;
 use crate::compiler_frontend::symbols::string_interning::{StringIdRemap, StringTable};
+use crate::compiler_frontend::validated_generic_template_metadata::ValidatedGenericTemplateStore;
 
 use crate::builder_surface::BuilderSurface;
 use crate::builder_surface::external_import_providers::provider::{
@@ -161,6 +162,22 @@ pub(crate) struct ModuleCompilerMetadata {
     pub(crate) root_activity: ModuleRootActivity,
     pub(crate) doc_fragments: Vec<ModuleDocFragment>,
     pub(crate) rendered_path_usages: Vec<RenderedPathUsage>,
+    /// Validated generic free-function template body artefacts keyed by stable
+    /// [`crate::compiler_frontend::semantic_identity::OriginFunctionId`].
+    ///
+    /// WHAT: one deterministic artefact per directly exported generic free-function origin and
+    ///       none for non-generic, private or receiver-method functions. Each artefact moves the
+    ///       one existing validated `GenericFunctionTemplate` body payload out of the donor-local
+    ///       AST template map. The store is TIR-free and `Send`.
+    /// WHY: locked decision 10 retains the declaring module's template body as a compiler
+    ///      metadata checkpoint for the future build-owned generated sidecar worklist (R3). This
+    ///      is a body-artefact checkpoint only, not the complete materialisation context: complete
+    ///      materialisation also needs declaration, file-visibility, generic/type and related
+    ///      frontend context that this slice intentionally does not retain. The legacy flat-module
+    ///      handoff drops this store before string-table remap because the retained
+    ///      `FunctionSignature` carries donor-local `StringId`s whose remap owner is not in scope
+    ///      for the current slice.
+    pub(crate) validated_generic_templates: ValidatedGenericTemplateStore,
 }
 
 impl ModuleCompilerMetadata {
@@ -170,6 +187,7 @@ impl ModuleCompilerMetadata {
         lowering_metadata: HirLoweringMetadata,
         const_top_level_fragments: Vec<ResolvedConstFragment>,
         root_activity: ModuleRootActivity,
+        validated_generic_templates: ValidatedGenericTemplateStore,
     ) -> Self {
         Self {
             entry_point,
@@ -178,7 +196,19 @@ impl ModuleCompilerMetadata {
             rendered_path_usages: lowering_metadata.rendered_path_usages,
             const_top_level_fragments,
             root_activity,
+            validated_generic_templates,
         }
+    }
+
+    /// Drop the unconsumed validated generic-template body-artefact store.
+    ///
+    /// WHY: the retained `GenericFunctionTemplate` values carry `FunctionSignature` donor-local
+    ///      `StringId`s whose remap owner is not in scope for this slice. The store must never
+    ///      remain reachable by a backend after a legacy flat-module handoff, so each handoff
+    ///      path calls this before `remap_string_ids`. R3 will consume the store for the
+    ///      generated sidecar worklist before this discard.
+    pub(crate) fn discard_validated_generic_templates(&mut self) {
+        let _ = std::mem::take(&mut self.validated_generic_templates);
     }
 
     /// Remap interned string IDs after string-table merging.
@@ -186,6 +216,12 @@ impl ModuleCompilerMetadata {
     /// WHY: warnings, documentation locations, and rendered-path interned fields must all remap
     ///      exactly once. Const fragment rendered text is already a resolved `String`, root
     ///      activity carries no interned fields, and the entry path is a `PathBuf`.
+    ///
+    /// The `validated_generic_templates` store is intentionally not remapped here. Its retained
+    /// `GenericFunctionTemplate` values carry `FunctionSignature` donor-local `StringId`s whose
+    /// remap owner is not in scope for the current slice. The legacy flat-module handoff drops
+    /// the store before calling this method so no stale local `StringId` reaches backends. R3
+    /// will add a dedicated remap path when the generated sidecar worklist consumes the store.
     pub(crate) fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         for warning in &mut self.warnings {
             warning.remap_string_ids(remap);

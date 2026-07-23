@@ -24,6 +24,7 @@ pub(crate) mod public_interface_draft;
 pub(crate) mod semantic_identity;
 pub(crate) mod source_module_origin;
 pub(crate) mod traits;
+pub(crate) mod validated_generic_template_metadata;
 
 pub(crate) mod compiler_messages;
 

@@ -713,6 +713,7 @@ pub(crate) fn build_ast_with_choices(
             trait_environment: Some(std::rc::Rc::new(TraitEnvironment::new())),
             trait_evidence_environment: Some(std::rc::Rc::new(TraitEvidenceEnvironment::new())),
         },
+        generic_function_templates: std::rc::Rc::new(rustc_hash::FxHashMap::default()),
     }
 }
 

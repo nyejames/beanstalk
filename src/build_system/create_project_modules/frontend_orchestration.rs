@@ -41,6 +41,7 @@ use crate::compiler_frontend::source_module_origin::SourceModuleOriginTable;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::identity::{FileId, SourceFileTable};
 use crate::compiler_frontend::symbols::string_interning::{StringTable, StringTableForkSource};
+use crate::compiler_frontend::validated_generic_template_metadata::extract_validated_generic_template_artefacts;
 use crate::compiler_frontend::{
     CompilerFrontend, FrontendBuildProfile, FrontendFilePrepareContext, FrontendFilePrepareInput,
     FrontendFilePrepareSource,
@@ -59,6 +60,7 @@ use rustc_hash::FxHashMap;
 use rustc_hash::FxHashSet;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::sync::Arc;
 #[cfg(feature = "detailed_timers")]
 use std::time::Instant;
@@ -966,6 +968,37 @@ impl FrontendModuleBuildContext<'_> {
                 .build()
                 .map_err(|error| CompilerMessages::from_error_ref(error, &compiler.string_table))?;
 
+            // 4b. Extract validated generic-template body artefacts before HIR consumes AST
+            //     state. The draft is the authority for which exported free functions are
+            //     generic; the donor-local template map is the authority for the validated body
+            //     payload. The extraction/join owner moves the relevant templates out of the
+            //     donor-local map and keys them by the exact `OriginFunctionId` already retained
+            //     by the draft. Private and non-generic templates remain intentional exclusions.
+            //     This runs after generic body validation and before HIR so the templates never
+            //     re-enter donor AST state.
+            let generic_function_templates =
+                std::mem::take(&mut module_ast.generic_function_templates);
+            let owned_templates = match Rc::try_unwrap(generic_function_templates) {
+                Ok(templates) => templates,
+                Err(shared) => {
+                    return Err(CompilerMessages::from_error_ref(
+                        CompilerError::compiler_error(format!(
+                            "validated generic-template extraction: the donor-local template \
+                             map has {} remaining reference(s) after AST finalization; a \
+                             non-unique template map is an internal invariant violation",
+                            Rc::strong_count(&shared)
+                        )),
+                        &compiler.string_table,
+                    ));
+                }
+            };
+            let validated_generic_templates = extract_validated_generic_template_artefacts(
+                &public_interface_draft,
+                owned_templates,
+                &compiler.string_table,
+            )
+            .map_err(|error| CompilerMessages::from_error_ref(error, &compiler.string_table))?;
+
             // 5. Resolve const fragment StringIds to strings before AST is consumed by HIR.
             let const_top_level_fragments = module_ast
                 .const_top_level_fragments
@@ -1094,6 +1127,7 @@ impl FrontendModuleBuildContext<'_> {
                         lowering_metadata,
                         const_top_level_fragments,
                         root_activity,
+                        validated_generic_templates,
                     ),
                 },
                 public_interface_draft,

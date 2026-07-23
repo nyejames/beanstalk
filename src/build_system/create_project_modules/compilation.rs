@@ -389,6 +389,12 @@ pub(crate) fn compile_single_file_frontend(
     } = result;
     // Explicit drop keeps production ownership honest until the graph consumer lands.
     drop(public_interface_draft);
+    // The validated generic-template store is a body-artefact checkpoint for the future
+    // generated sidecar worklist (R3). The legacy flat `Vec<Module>` handoff discards it here
+    // before string-table remap because the retained `FunctionSignature` carries donor-local
+    // `StringId`s whose remap owner is not in scope for this slice. Discarding before remap
+    // keeps stale local `StringId`s from reaching backends.
+    module.metadata.discard_validated_generic_templates();
     if !remap.is_identity() {
         module.remap_string_ids(&remap);
     }
@@ -752,6 +758,12 @@ pub(crate) fn compile_directory_frontend(
         } = success.compiled;
         // Explicit drop keeps production ownership honest until the graph consumer lands.
         drop(public_interface_draft);
+        // The validated generic-template store is a body-artefact checkpoint for the future
+        // generated sidecar worklist (R3). The legacy flat `Vec<Module>` handoff discards it here
+        // before string-table remap because the retained `FunctionSignature` carries donor-local
+        // `StringId`s whose remap owner is not in scope for this slice. Discarding before remap
+        // keeps stale local `StringId`s from reaching backends.
+        module.metadata.discard_validated_generic_templates();
         if !remap.is_identity() {
             module.remap_string_ids(&remap);
         }
