@@ -24,10 +24,10 @@ use crate::compiler_frontend::ast::templates::template_control_flow::{
     const_collection_items,
 };
 use crate::compiler_frontend::ast::templates::template_folding::{
-    TemplateEmission, TemplateFoldContext, condition_location_or_loop_location,
-    fold_bool_condition, fold_conditional_loop_const_condition, loop_body_not_const_error,
-    resolve_fold_bindings_in_expression, selected_option_capture_payload,
-    template_emission_from_output_and_signal,
+    TemplateEmission, TemplateFoldContext, TemplateFoldResult, condition_location_or_loop_location,
+    fold_bool_condition_with_provenance, fold_conditional_loop_const_condition,
+    loop_body_not_const_error, resolve_fold_bindings_in_expression,
+    selected_option_capture_payload_with_provenance, template_emission_from_output_and_signal,
 };
 use crate::compiler_frontend::ast::templates::tir::fold_cache::TirFoldCacheKey;
 use crate::compiler_frontend::ast::templates::tir::ids::{
@@ -55,6 +55,7 @@ use crate::compiler_frontend::instrumentation::{
     AstCounter, add_ast_counter, increment_ast_counter,
 };
 use crate::compiler_frontend::symbols::string_interning::StringId;
+use crate::compiler_frontend::synthetic_interface_provenance::SyntheticInterfaceProvenance;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::compiler_frontend::type_coercion::string::{
     FoldedStringPiece, fold_expression_kind_to_string,
@@ -69,6 +70,19 @@ const FOLD_LOOP_RESERVE_BYTE_CAP: usize = 64 * 1024;
 
 /// Maximum iterations to use when estimating a streaming range loop.
 const FOLD_RANGE_LOOP_RESERVE_ITERATION_CAP: usize = 256;
+
+fn range_provenance_expressions(
+    range: &RangeLoopSpec,
+) -> impl Iterator<Item = &SyntheticInterfaceProvenance> {
+    std::iter::once(&range.start.synthetic_interface_provenance)
+        .chain(std::iter::once(&range.end.synthetic_interface_provenance))
+        .chain(
+            range
+                .step
+                .as_ref()
+                .map(|step| &step.synthetic_interface_provenance),
+        )
+}
 
 /// Creates a fold output buffer with a cheap, safe capacity hint and records
 /// the reservation for TIR counters.
@@ -151,11 +165,45 @@ impl<'view, 'store> FoldTraversalInput<'view, 'store> {
     }
 }
 
+/// Mutable output state shared by recursive TIR fold walkers.
+///
+/// WHAT: keeps rendered text, output presence and semantic provenance together
+///       while a fold descends through nodes, branches and wrapper subtrees.
+/// WHY: these values describe one fold result and must travel through the same
+///      recursive call chains without expanding each helper's parameter list.
+struct FoldOutputState {
+    output_buffer: String,
+    emitted_output: bool,
+    provenance: SyntheticInterfaceProvenance,
+}
+
+impl FoldOutputState {
+    fn new(output_buffer: String) -> Self {
+        Self {
+            output_buffer,
+            emitted_output: false,
+            provenance: SyntheticInterfaceProvenance::empty(),
+        }
+    }
+
+    fn with_capacity(estimated_bytes: usize) -> Self {
+        Self::new(reserve_tir_fold_output_buffer(estimated_bytes))
+    }
+
+    fn with_provenance(output_buffer: String, provenance: SyntheticInterfaceProvenance) -> Self {
+        Self {
+            output_buffer,
+            emitted_output: false,
+            provenance,
+        }
+    }
+}
+
 // -------------------------
 //  Public entry point
 // -------------------------
 
-/// Folds one prepared, exact TIR view into an owned emission.
+/// Folds one prepared, exact TIR view into its owned emission and provenance.
 ///
 /// WHAT: consumes the completed preparation proof and enters the fold cache and
 ///      reducer without reclassifying or re-walking the template for authority.
@@ -165,7 +213,7 @@ pub(crate) fn fold_prepared_template(
     prepared: &PreparedFold,
     view: TirView<'_>,
     fold_context: &mut TemplateFoldContext<'_>,
-) -> Result<TemplateEmission, TemplateError> {
+) -> Result<TemplateFoldResult, TemplateError> {
     // Keep the project-aware context fields part of the fold contract even
     // though the TIR reducer itself only consumes the string table, bindings,
     // loop limit, and cache.
@@ -206,7 +254,7 @@ pub(crate) fn fold_prepared_template(
 fn fold_exact_view(
     view: &TirView<'_>,
     fold_context: &mut TemplateFoldContext<'_>,
-) -> Result<TemplateEmission, TemplateError> {
+) -> Result<TemplateFoldResult, TemplateError> {
     if !view.phase().is_at_least(TemplateTirPhase::Composed) {
         return Err(CompilerError::compiler_error(format!(
             "fold_prepared_template: root {} at phase {} has not reached Composed",
@@ -251,7 +299,7 @@ fn fold_exact_view(
 
     if bindings_empty && let Some(cached) = fold_context.fold_cache.get(&cache_key) {
         increment_ast_counter(AstCounter::TirFoldCacheHits);
-        return Ok(*cached);
+        return Ok(cached.clone());
     }
 
     increment_ast_counter(AstCounter::TirFoldCacheMisses);
@@ -278,7 +326,7 @@ fn fold_exact_view(
     let result = fold_tir_template_with_view(store, root, fold_context, &fold_input)?;
 
     if bindings_empty {
-        fold_context.fold_cache.insert(cache_key, result);
+        fold_context.fold_cache.insert(cache_key, result.clone());
     }
 
     Ok(result)
@@ -296,7 +344,7 @@ fn fold_tir_template_with_view(
     template_id: TemplateIrId,
     fold_context: &mut TemplateFoldContext<'_>,
     fold_input: &FoldTraversalInput<'_, '_>,
-) -> Result<TemplateEmission, TemplateError> {
+) -> Result<TemplateFoldResult, TemplateError> {
     add_ast_counter(AstCounter::TirFoldTemplatesFolded, 1);
 
     let template = store
@@ -313,25 +361,17 @@ fn fold_tir_template_with_view(
     }
 
     let estimated_bytes = template.summary.estimated_output_bytes;
-    let mut output_buffer = reserve_tir_fold_output_buffer(estimated_bytes);
-    let mut emitted_output = false;
+    let mut output_state = FoldOutputState::with_capacity(estimated_bytes);
 
     let signal = fold_tir_node_into_buffer(
         store,
         template.root,
-        &mut output_buffer,
-        &mut emitted_output,
+        &mut output_state,
         fold_context,
         fold_input,
     )?;
 
-    let emission = build_emission_from_buffer(
-        output_buffer,
-        estimated_bytes,
-        signal,
-        emitted_output,
-        fold_context,
-    )?;
+    let emission = build_emission_from_buffer(output_state, estimated_bytes, signal, fold_context)?;
 
     // Wrapper sets store `TemplateWrapperReference` values; extract the
     // store-local `TemplateIrId` for module-local TIR folding lookups.
@@ -348,7 +388,8 @@ fn fold_tir_template_with_view(
     fold_conditional_child_wrappers_around_emission(
         store,
         &wrapper_references,
-        emission,
+        emission.emission,
+        emission.provenance,
         TirWrapperApplicationMode::IfChildEmits,
         fold_context,
         fold_input,
@@ -369,20 +410,13 @@ fn fold_tir_node(
     node_id: TemplateIrNodeId,
     fold_context: &mut TemplateFoldContext<'_>,
     fold_input: &FoldTraversalInput<'_, '_>,
-) -> Result<TemplateEmission, TemplateError> {
-    let mut buffer = String::new();
-    let mut emitted_output = false;
+) -> Result<TemplateFoldResult, TemplateError> {
+    let mut output_state = FoldOutputState::new(String::new());
 
-    let signal = fold_tir_node_into_buffer(
-        store,
-        node_id,
-        &mut buffer,
-        &mut emitted_output,
-        fold_context,
-        fold_input,
-    )?;
+    let signal =
+        fold_tir_node_into_buffer(store, node_id, &mut output_state, fold_context, fold_input)?;
 
-    build_emission_from_buffer(buffer, 0, signal, emitted_output, fold_context)
+    build_emission_from_buffer(output_state, 0, signal, fold_context)
 }
 
 /// Folds a single TIR node, appending any output to the caller's buffer.
@@ -392,8 +426,7 @@ fn fold_tir_node(
 fn fold_tir_node_into_buffer(
     store: &TemplateIrStore,
     node_id: TemplateIrNodeId,
-    output_buffer: &mut String,
-    emitted_output: &mut bool,
+    output_state: &mut FoldOutputState,
     fold_context: &mut TemplateFoldContext<'_>,
     fold_input: &FoldTraversalInput<'_, '_>,
 ) -> Result<Option<TemplateLoopControlKind>, TemplateError> {
@@ -409,16 +442,17 @@ fn fold_tir_node_into_buffer(
             fold_tir_sequence(
                 store,
                 children,
-                output_buffer,
-                emitted_output,
+                output_state,
                 fold_context,
                 fold_input,
             )
         }
 
         TemplateIrNodeKind::Text { text, .. } => {
-            output_buffer.push_str(fold_context.string_table.resolve(*text));
-            *emitted_output = true;
+            output_state
+                .output_buffer
+                .push_str(fold_context.string_table.resolve(*text));
+            output_state.emitted_output = true;
             Ok(None)
         }
 
@@ -432,8 +466,7 @@ fn fold_tir_node_into_buffer(
             fold_tir_dynamic_expression(
                 store,
                 expression_to_fold,
-                output_buffer,
-                emitted_output,
+                output_state,
                 fold_context,
                 &node.location,
                 fold_input,
@@ -455,6 +488,7 @@ fn fold_tir_node_into_buffer(
                 fold_context,
                 fold_input,
             )?;
+            output_state.provenance.merge(&emission.provenance);
             let wrapped_emission = apply_wrapper_context_overlay_to_child_emission(
                 store,
                 emission,
@@ -462,11 +496,11 @@ fn fold_tir_node_into_buffer(
                 fold_input,
                 occurrence_context.as_ref(),
             )?;
+            output_state.provenance.merge(&wrapped_emission.provenance);
 
             append_template_emission_to_buffer(
-                wrapped_emission,
-                output_buffer,
-                emitted_output,
+                wrapped_emission.emission,
+                output_state,
                 fold_context,
             )
         }
@@ -487,10 +521,10 @@ fn fold_tir_node_into_buffer(
                         fold_context,
                         fold_input,
                     )?;
+                    output_state.provenance.merge(&emission.provenance);
                     append_template_emission_to_buffer(
-                        emission,
-                        output_buffer,
-                        emitted_output,
+                        emission.emission,
+                        output_state,
                         fold_context,
                     )?;
                 }
@@ -510,8 +544,7 @@ fn fold_tir_node_into_buffer(
             store,
             branches,
             *fallback,
-            output_buffer,
-            emitted_output,
+            output_state,
             fold_context,
             fold_input,
         ),
@@ -527,8 +560,7 @@ fn fold_tir_node_into_buffer(
             *header_sites,
             *body,
             *aggregate_wrapper,
-            output_buffer,
-            emitted_output,
+            output_state,
             fold_context,
             fold_input,
             &node.location,
@@ -553,20 +585,13 @@ fn fold_tir_node_into_buffer(
 fn fold_tir_sequence(
     store: &TemplateIrStore,
     children: &[TemplateIrNodeId],
-    output_buffer: &mut String,
-    emitted_output: &mut bool,
+    output_state: &mut FoldOutputState,
     fold_context: &mut TemplateFoldContext<'_>,
     fold_input: &FoldTraversalInput<'_, '_>,
 ) -> Result<Option<TemplateLoopControlKind>, TemplateError> {
     for &child_id in children {
-        let signal = fold_tir_node_into_buffer(
-            store,
-            child_id,
-            output_buffer,
-            emitted_output,
-            fold_context,
-            fold_input,
-        )?;
+        let signal =
+            fold_tir_node_into_buffer(store, child_id, output_state, fold_context, fold_input)?;
 
         if signal.is_some() {
             return Ok(signal);
@@ -580,8 +605,7 @@ fn fold_tir_sequence(
 fn fold_tir_dynamic_expression(
     store: &TemplateIrStore,
     expression: &Expression,
-    output_buffer: &mut String,
-    emitted_output: &mut bool,
+    output_state: &mut FoldOutputState,
     fold_context: &mut TemplateFoldContext<'_>,
     location: &SourceLocation,
     fold_input: &FoldTraversalInput<'_, '_>,
@@ -595,6 +619,13 @@ fn fold_tir_dynamic_expression(
             expr,
         ) => expr,
     };
+
+    // This is the exact selected dynamic-expression payload. Binding
+    // substitution has already happened, so its metadata includes any
+    // resolved loop/branch binding provenance without a second AST walk.
+    output_state
+        .provenance
+        .merge(&expression_ref.synthetic_interface_provenance);
 
     if matches!(
         expression_ref.kind,
@@ -618,29 +649,30 @@ fn fold_tir_dynamic_expression(
         }
         reject_slot_insert_template(&template_kind)?;
 
+        let nested_result = fold_template_reference(
+            store,
+            FoldTemplateReference::Nested(&template.tir_reference),
+            fold_context,
+            fold_input,
+        )?;
+        output_state.provenance.merge(&nested_result.provenance);
         return append_template_emission_to_buffer(
-            fold_template_reference(
-                store,
-                FoldTemplateReference::Nested(&template.tir_reference),
-                fold_context,
-                fold_input,
-            )?,
-            output_buffer,
-            emitted_output,
+            nested_result.emission,
+            output_state,
             fold_context,
         );
     }
 
     match fold_expression_kind_to_string(&expression_ref.kind, fold_context.string_table) {
         Some(FoldedStringPiece::Text(text)) => {
-            output_buffer.push_str(&text);
-            *emitted_output = true;
+            output_state.output_buffer.push_str(&text);
+            output_state.emitted_output = true;
             Ok(None)
         }
 
         Some(FoldedStringPiece::Char(ch)) => {
-            output_buffer.push(ch);
-            *emitted_output = true;
+            output_state.output_buffer.push(ch);
+            output_state.emitted_output = true;
             Ok(None)
         }
 
@@ -693,7 +725,7 @@ fn fold_child_template_reference(
     reference: &TemplateTirChildReference,
     fold_context: &mut TemplateFoldContext<'_>,
     fold_input: &FoldTraversalInput<'_, '_>,
-) -> Result<TemplateEmission, TemplateError> {
+) -> Result<TemplateFoldResult, TemplateError> {
     fold_template_reference(
         store,
         FoldTemplateReference::Structural(reference),
@@ -719,7 +751,7 @@ fn fold_template_reference(
     reference: FoldTemplateReference<'_>,
     fold_context: &mut TemplateFoldContext<'_>,
     fold_input: &FoldTraversalInput<'_, '_>,
-) -> Result<TemplateEmission, TemplateError> {
+) -> Result<TemplateFoldResult, TemplateError> {
     let (child_view, child_root) = {
         let parent_view = fold_input.view;
 
@@ -756,7 +788,7 @@ fn fold_resolved_slot_source(
     source: TemplateIrId,
     fold_context: &mut TemplateFoldContext<'_>,
     fold_input: &FoldTraversalInput<'_, '_>,
-) -> Result<TemplateEmission, TemplateError> {
+) -> Result<TemplateFoldResult, TemplateError> {
     let parent_view = fold_input.view;
     let source_view = parent_view.resolved_slot_source(source)?;
     let source_fold_input = FoldTraversalInput { view: &source_view };
@@ -780,25 +812,27 @@ fn fold_resolved_slot_source(
 ///      wrapper contexts without store mutation.
 fn apply_wrapper_context_overlay_to_child_emission(
     store: &TemplateIrStore,
-    emission: TemplateEmission,
+    result: TemplateFoldResult,
     fold_context: &mut TemplateFoldContext<'_>,
     fold_input: &FoldTraversalInput<'_, '_>,
     context: Option<&TirWrapperContext>,
-) -> Result<TemplateEmission, TemplateError> {
+) -> Result<TemplateFoldResult, TemplateError> {
+    let emission = result.emission;
+    let provenance = result.provenance;
     let Some(context) = context else {
-        return Ok(emission);
+        return Ok(TemplateFoldResult::new(emission, provenance));
     };
 
     // `$fresh` suppresses parent-applied wrappers at this occurrence. The
     // inherited wrapper set is omitted from the overlay when suppressed, but
     // honor the flag explicitly in case it coexists with a wrapper set ref.
     if context.skip_parent_child_wrappers {
-        return Ok(emission);
+        return Ok(TemplateFoldResult::new(emission, provenance));
     }
 
     let wrapper_set_ref = match context.inherited_wrapper_set {
         Some(wrapper_set_ref) => wrapper_set_ref,
-        None => return Ok(emission),
+        None => return Ok(TemplateFoldResult::new(emission, provenance)),
     };
 
     let wrapper_set = store.get_wrapper_set(wrapper_set_ref).ok_or_else(|| {
@@ -813,6 +847,7 @@ fn apply_wrapper_context_overlay_to_child_emission(
         store,
         &wrapper_references,
         emission,
+        provenance,
         context.application_mode,
         fold_context,
         fold_input,
@@ -822,28 +857,33 @@ fn apply_wrapper_context_overlay_to_child_emission(
 /// Appends a child-template emission to the caller's output buffer.
 fn append_template_emission_to_buffer(
     emission: TemplateEmission,
-    output_buffer: &mut String,
-    emitted_output: &mut bool,
+    output_state: &mut FoldOutputState,
     fold_context: &mut TemplateFoldContext<'_>,
 ) -> Result<Option<TemplateLoopControlKind>, TemplateError> {
     match emission {
         TemplateEmission::NoOutput => Ok(None),
         TemplateEmission::Output(output) => {
-            output_buffer.push_str(fold_context.string_table.resolve(output));
-            *emitted_output = true;
+            output_state
+                .output_buffer
+                .push_str(fold_context.string_table.resolve(output));
+            output_state.emitted_output = true;
             Ok(None)
         }
         TemplateEmission::Break(output) => {
             if let Some(output) = output {
-                output_buffer.push_str(fold_context.string_table.resolve(output));
-                *emitted_output = true;
+                output_state
+                    .output_buffer
+                    .push_str(fold_context.string_table.resolve(output));
+                output_state.emitted_output = true;
             }
             Ok(Some(TemplateLoopControlKind::Break))
         }
         TemplateEmission::Continue(output) => {
             if let Some(output) = output {
-                output_buffer.push_str(fold_context.string_table.resolve(output));
-                *emitted_output = true;
+                output_state
+                    .output_buffer
+                    .push_str(fold_context.string_table.resolve(output));
+                output_state.emitted_output = true;
             }
             Ok(Some(TemplateLoopControlKind::Continue))
         }
@@ -868,16 +908,20 @@ fn fold_conditional_child_wrappers_around_emission(
     store: &TemplateIrStore,
     wrapper_references: &[TemplateWrapperReference],
     emission: TemplateEmission,
+    provenance: SyntheticInterfaceProvenance,
     application_mode: TirWrapperApplicationMode,
     fold_context: &mut TemplateFoldContext<'_>,
     fold_input: &FoldTraversalInput<'_, '_>,
-) -> Result<TemplateEmission, TemplateError> {
+) -> Result<TemplateFoldResult, TemplateError> {
     let (output, signal_kind) = match emission {
         TemplateEmission::NoOutput => {
             if matches!(application_mode, TirWrapperApplicationMode::IfChildEmits)
                 || wrapper_references.is_empty()
             {
-                return Ok(TemplateEmission::NoOutput);
+                return Ok(TemplateFoldResult::new(
+                    TemplateEmission::NoOutput,
+                    provenance,
+                ));
             }
 
             (fold_context.string_table.intern(""), None)
@@ -891,7 +935,10 @@ fn fold_conditional_child_wrappers_around_emission(
             if matches!(application_mode, TirWrapperApplicationMode::IfChildEmits)
                 || wrapper_references.is_empty()
             {
-                return Ok(TemplateEmission::Break(None));
+                return Ok(TemplateFoldResult::new(
+                    TemplateEmission::Break(None),
+                    provenance,
+                ));
             }
 
             (
@@ -903,7 +950,10 @@ fn fold_conditional_child_wrappers_around_emission(
             if matches!(application_mode, TirWrapperApplicationMode::IfChildEmits)
                 || wrapper_references.is_empty()
             {
-                return Ok(TemplateEmission::Continue(None));
+                return Ok(TemplateFoldResult::new(
+                    TemplateEmission::Continue(None),
+                    provenance,
+                ));
             }
 
             (
@@ -914,9 +964,9 @@ fn fold_conditional_child_wrappers_around_emission(
     };
 
     if wrapper_references.is_empty() {
-        return Ok(template_emission_from_output_and_signal(
-            output,
-            signal_kind,
+        return Ok(TemplateFoldResult::new(
+            template_emission_from_output_and_signal(output, signal_kind),
+            provenance,
         ));
     }
 
@@ -930,19 +980,32 @@ fn fold_conditional_child_wrappers_around_emission(
     // forward consumption of the innermost-to-outermost store order yields the
     // outermost wrapper as the final layer, matching the structural wrap path.
     let mut current_output = output;
+    let mut current_provenance = provenance;
     for wrapper_reference in wrapper_references.iter() {
-        current_output = fold_tir_wrapper_around_child_output(
+        let wrapper_result = fold_tir_wrapper_around_child_output(
             store,
             wrapper_reference,
             current_output,
+            current_provenance,
             fold_context,
             fold_input,
         )?;
+        current_output = match wrapper_result.emission {
+            TemplateEmission::Output(output)
+            | TemplateEmission::Break(Some(output))
+            | TemplateEmission::Continue(Some(output)) => output,
+            TemplateEmission::NoOutput
+            | TemplateEmission::Break(None)
+            | TemplateEmission::Continue(None) => {
+                return Ok(wrapper_result);
+            }
+        };
+        current_provenance = wrapper_result.provenance;
     }
 
-    Ok(template_emission_from_output_and_signal(
-        current_output,
-        signal_kind,
+    Ok(TemplateFoldResult::new(
+        template_emission_from_output_and_signal(current_output, signal_kind),
+        current_provenance,
     ))
 }
 
@@ -961,9 +1024,10 @@ fn fold_tir_wrapper_around_child_output(
     store: &TemplateIrStore,
     wrapper_reference: &TemplateWrapperReference,
     child_output: StringId,
+    child_provenance: SyntheticInterfaceProvenance,
     fold_context: &mut TemplateFoldContext<'_>,
     fold_input: &FoldTraversalInput<'_, '_>,
-) -> Result<StringId, TemplateError> {
+) -> Result<TemplateFoldResult, TemplateError> {
     let wrapper_store = store;
     let wrapper_template = wrapper_store
         .get_template(wrapper_reference.root)
@@ -986,6 +1050,7 @@ fn fold_tir_wrapper_around_child_output(
         wrapper_reference.root,
         &wrapper_template,
         child_output,
+        child_provenance,
         fold_context,
         &wrapper_fold_input,
     )
@@ -1002,9 +1067,10 @@ fn fold_tir_wrapper_with_input(
     wrapper_template_id: TemplateIrId,
     wrapper_template: &TemplateIr,
     child_output: StringId,
+    child_provenance: SyntheticInterfaceProvenance,
     fold_context: &mut TemplateFoldContext<'_>,
     wrapper_fold_input: &FoldTraversalInput<'_, '_>,
-) -> Result<StringId, TemplateError> {
+) -> Result<TemplateFoldResult, TemplateError> {
     reject_slot_insert_template(&wrapper_template.kind)?;
 
     if wrapper_template.runtime_slot_plan.is_some() {
@@ -1016,8 +1082,10 @@ fn fold_tir_wrapper_with_input(
 
     let child_output_len = fold_context.string_table.resolve(child_output).len();
     let estimated_bytes = wrapper_template.summary.estimated_output_bytes + child_output_len;
-    let mut output_buffer = reserve_tir_fold_output_buffer(estimated_bytes);
-    let mut emitted_output = false;
+    let mut output_state = FoldOutputState::with_provenance(
+        reserve_tir_fold_output_buffer(estimated_bytes),
+        child_provenance,
+    );
 
     let schema = collect_tir_slot_schema(wrapper_store, wrapper_template_id)?;
 
@@ -1028,13 +1096,14 @@ fn fold_tir_wrapper_with_input(
         fold_tir_node_into_buffer(
             wrapper_store,
             wrapper_template.root,
-            &mut output_buffer,
-            &mut emitted_output,
+            &mut output_state,
             fold_context,
             wrapper_fold_input,
         )?;
 
-        output_buffer.push_str(fold_context.string_table.resolve(child_output));
+        output_state
+            .output_buffer
+            .push_str(fold_context.string_table.resolve(child_output));
     } else {
         // Slot-bearing wrappers inject at the loose-fill target first. Named-
         // only wrappers have no target, so their resolved slots are folded and
@@ -1045,23 +1114,29 @@ fn fold_tir_wrapper_with_input(
             wrapper_template.root,
             child_output,
             fill_target_key.as_ref(),
-            &mut output_buffer,
-            &mut emitted_output,
+            &mut output_state,
             fold_context,
             wrapper_fold_input,
         )?;
 
         if fill_target_key.is_none() {
-            output_buffer.push_str(fold_context.string_table.resolve(child_output));
+            output_state
+                .output_buffer
+                .push_str(fold_context.string_table.resolve(child_output));
         }
     }
 
-    let actual_len = output_buffer.len();
+    let actual_len = output_state.output_buffer.len();
     record_tir_fold_output_estimate_miss(actual_len, estimated_bytes);
-    let output_id = fold_context.string_table.intern(&output_buffer);
+    let output_id = fold_context
+        .string_table
+        .intern(&output_state.output_buffer);
     record_tir_fold_output_intern(actual_len);
 
-    Ok(output_id)
+    Ok(TemplateFoldResult::new(
+        TemplateEmission::Output(output_id),
+        output_state.provenance,
+    ))
 }
 
 /// Recursively folds a wrapper template node, injecting the already-folded
@@ -1083,8 +1158,7 @@ fn fold_tir_wrapper_node_with_child_output(
     node_id: TemplateIrNodeId,
     child_output: StringId,
     fill_target_key: Option<&SlotKey>,
-    output_buffer: &mut String,
-    emitted_output: &mut bool,
+    output_state: &mut FoldOutputState,
     fold_context: &mut TemplateFoldContext<'_>,
     fold_input: &FoldTraversalInput<'_, '_>,
 ) -> Result<Option<TemplateLoopControlKind>, TemplateError> {
@@ -1101,8 +1175,7 @@ fn fold_tir_wrapper_node_with_child_output(
                     child_id,
                     child_output,
                     fill_target_key,
-                    output_buffer,
-                    emitted_output,
+                    output_state,
                     fold_context,
                     fold_input,
                 )?;
@@ -1114,8 +1187,10 @@ fn fold_tir_wrapper_node_with_child_output(
         }
 
         TemplateIrNodeKind::Text { text, .. } => {
-            output_buffer.push_str(fold_context.string_table.resolve(*text));
-            *emitted_output = true;
+            output_state
+                .output_buffer
+                .push_str(fold_context.string_table.resolve(*text));
+            output_state.emitted_output = true;
             Ok(None)
         }
 
@@ -1125,8 +1200,7 @@ fn fold_tir_wrapper_node_with_child_output(
             fold_tir_dynamic_expression(
                 store,
                 expression_to_fold,
-                output_buffer,
-                emitted_output,
+                output_state,
                 fold_context,
                 &node.location,
                 fold_input,
@@ -1172,6 +1246,7 @@ fn fold_tir_wrapper_node_with_child_output(
                 fold_context,
                 &child_fold_input,
             )?;
+            output_state.provenance.merge(&child_emission.provenance);
 
             let wrapped_emission = apply_wrapper_context_overlay_to_child_emission(
                 store,
@@ -1180,19 +1255,21 @@ fn fold_tir_wrapper_node_with_child_output(
                 fold_input,
                 occurrence_context.as_ref(),
             )?;
+            output_state.provenance.merge(&wrapped_emission.provenance);
 
             append_template_emission_to_buffer(
-                wrapped_emission,
-                output_buffer,
-                emitted_output,
+                wrapped_emission.emission,
+                output_state,
                 fold_context,
             )
         }
 
         TemplateIrNodeKind::Slot { placeholder } => {
             if fill_target_key.is_some_and(|key| placeholder.key == *key) {
-                output_buffer.push_str(fold_context.string_table.resolve(child_output));
-                *emitted_output = true;
+                output_state
+                    .output_buffer
+                    .push_str(fold_context.string_table.resolve(child_output));
+                output_state.emitted_output = true;
                 // Injection has precedence over any overlay-resolved sources
                 // for this slot, matching HIR handoff materialization.
                 return Ok(None);
@@ -1210,10 +1287,10 @@ fn fold_tir_wrapper_node_with_child_output(
                         fold_context,
                         fold_input,
                     )?;
+                    output_state.provenance.merge(&emission.provenance);
                     append_template_emission_to_buffer(
-                        emission,
-                        output_buffer,
-                        emitted_output,
+                        emission.emission,
+                        output_state,
                         fold_context,
                     )?;
                 }
@@ -1230,8 +1307,7 @@ fn fold_tir_wrapper_node_with_child_output(
                 *fallback,
                 child_output,
                 fill_target_key,
-                output_buffer,
-                emitted_output,
+                output_state,
                 fold_context,
                 fold_input,
             )
@@ -1248,8 +1324,7 @@ fn fold_tir_wrapper_node_with_child_output(
             *header_sites,
             *body,
             *aggregate_wrapper,
-            output_buffer,
-            emitted_output,
+            output_state,
             fold_context,
             fold_input,
             &node.location,
@@ -1298,29 +1373,21 @@ fn fold_tir_wrapper_node_to_emission(
     fill_target_key: Option<&SlotKey>,
     fold_context: &mut TemplateFoldContext<'_>,
     fold_input: &FoldTraversalInput<'_, '_>,
-) -> Result<TemplateEmission, TemplateError> {
+) -> Result<TemplateFoldResult, TemplateError> {
     let child_output_len = fold_context.string_table.resolve(child_output).len();
-    let mut buffer = reserve_tir_fold_output_buffer(child_output_len);
-    let mut emitted_output = false;
+    let mut output_state = FoldOutputState::with_capacity(child_output_len);
 
     let signal = fold_tir_wrapper_node_with_child_output(
         store,
         node_id,
         child_output,
         fill_target_key,
-        &mut buffer,
-        &mut emitted_output,
+        &mut output_state,
         fold_context,
         fold_input,
     )?;
 
-    build_emission_from_buffer(
-        buffer,
-        child_output_len,
-        signal,
-        emitted_output,
-        fold_context,
-    )
+    build_emission_from_buffer(output_state, child_output_len, signal, fold_context)
 }
 
 /// Evaluates a branch chain inside a wrapper template, folding the selected
@@ -1336,8 +1403,7 @@ fn fold_tir_wrapper_branch_chain(
     fallback: Option<TemplateIrNodeId>,
     child_output: StringId,
     fill_target_key: Option<&SlotKey>,
-    output_buffer: &mut String,
-    emitted_output: &mut bool,
+    output_state: &mut FoldOutputState,
     fold_context: &mut TemplateFoldContext<'_>,
     fold_input: &FoldTraversalInput<'_, '_>,
 ) -> Result<Option<TemplateLoopControlKind>, TemplateError> {
@@ -1347,26 +1413,34 @@ fn fold_tir_wrapper_branch_chain(
 
         let selected = match (&branch.selector, effective_expression) {
             (TemplateBranchSelector::Bool(condition), None) => {
-                fold_bool_condition(condition, &branch.location, fold_context)?
+                let (selected, condition_provenance) =
+                    fold_bool_condition_with_provenance(condition, &branch.location, fold_context)?;
+                output_state.provenance.merge(&condition_provenance);
+                selected
             }
             (TemplateBranchSelector::Bool(_), Some(effective)) => {
-                fold_bool_condition(effective, &branch.location, fold_context)?
+                let (selected, condition_provenance) =
+                    fold_bool_condition_with_provenance(effective, &branch.location, fold_context)?;
+                output_state.provenance.merge(&condition_provenance);
+                selected
             }
             (TemplateBranchSelector::OptionPresentCapture { scrutinee, pattern }, None) => {
-                if let Some(payload) = selected_option_capture_payload(
-                    scrutinee,
-                    pattern,
-                    fold_input.view.store(),
-                    fold_context,
-                )? {
+                let (payload, capture_provenance) =
+                    selected_option_capture_payload_with_provenance(
+                        scrutinee,
+                        pattern,
+                        fold_input.view.store(),
+                        fold_context,
+                    )?;
+                output_state.provenance.merge(&capture_provenance);
+                if let Some(payload) = payload {
                     return fold_tir_wrapper_branch_with_bindings(
                         store,
                         branch,
                         [payload],
                         child_output,
                         fill_target_key,
-                        output_buffer,
-                        emitted_output,
+                        output_state,
                         fold_context,
                         fold_input,
                     );
@@ -1375,20 +1449,22 @@ fn fold_tir_wrapper_branch_chain(
                 false
             }
             (TemplateBranchSelector::OptionPresentCapture { pattern, .. }, Some(effective)) => {
-                if let Some(payload) = selected_option_capture_payload(
-                    effective,
-                    pattern,
-                    fold_input.view.store(),
-                    fold_context,
-                )? {
+                let (payload, capture_provenance) =
+                    selected_option_capture_payload_with_provenance(
+                        effective,
+                        pattern,
+                        fold_input.view.store(),
+                        fold_context,
+                    )?;
+                output_state.provenance.merge(&capture_provenance);
+                if let Some(payload) = payload {
                     return fold_tir_wrapper_branch_with_bindings(
                         store,
                         branch,
                         [payload],
                         child_output,
                         fill_target_key,
-                        output_buffer,
-                        emitted_output,
+                        output_state,
                         fold_context,
                         fold_input,
                     );
@@ -1404,8 +1480,7 @@ fn fold_tir_wrapper_branch_chain(
                 branch.body,
                 child_output,
                 fill_target_key,
-                output_buffer,
-                emitted_output,
+                output_state,
                 fold_context,
                 fold_input,
             );
@@ -1421,8 +1496,7 @@ fn fold_tir_wrapper_branch_chain(
         fallback_id,
         child_output,
         fill_target_key,
-        output_buffer,
-        emitted_output,
+        output_state,
         fold_context,
         fold_input,
     )
@@ -1436,8 +1510,7 @@ fn fold_tir_wrapper_branch_with_bindings<const N: usize>(
     bindings: [TemplateFoldBinding; N],
     child_output: StringId,
     fill_target_key: Option<&SlotKey>,
-    output_buffer: &mut String,
-    emitted_output: &mut bool,
+    output_state: &mut FoldOutputState,
     fold_context: &mut TemplateFoldContext<'_>,
     fold_input: &FoldTraversalInput<'_, '_>,
 ) -> Result<Option<TemplateLoopControlKind>, TemplateError> {
@@ -1447,8 +1520,7 @@ fn fold_tir_wrapper_branch_with_bindings<const N: usize>(
         branch.body,
         child_output,
         fill_target_key,
-        output_buffer,
-        emitted_output,
+        output_state,
         fold_context,
         fold_input,
     );
@@ -1466,8 +1538,7 @@ fn fold_tir_branch_chain(
     store: &TemplateIrStore,
     branches: &[TemplateIrBranch],
     fallback: Option<TemplateIrNodeId>,
-    output_buffer: &mut String,
-    emitted_output: &mut bool,
+    output_state: &mut FoldOutputState,
     fold_context: &mut TemplateFoldContext<'_>,
     fold_input: &FoldTraversalInput<'_, '_>,
 ) -> Result<Option<TemplateLoopControlKind>, TemplateError> {
@@ -1481,24 +1552,32 @@ fn fold_tir_branch_chain(
 
         let selected = match (&branch.selector, effective_expression) {
             (TemplateBranchSelector::Bool(condition), None) => {
-                fold_bool_condition(condition, &branch.location, fold_context)?
+                let (selected, condition_provenance) =
+                    fold_bool_condition_with_provenance(condition, &branch.location, fold_context)?;
+                output_state.provenance.merge(&condition_provenance);
+                selected
             }
             (TemplateBranchSelector::Bool(_), Some(effective)) => {
-                fold_bool_condition(effective, &branch.location, fold_context)?
+                let (selected, condition_provenance) =
+                    fold_bool_condition_with_provenance(effective, &branch.location, fold_context)?;
+                output_state.provenance.merge(&condition_provenance);
+                selected
             }
             (TemplateBranchSelector::OptionPresentCapture { scrutinee, pattern }, None) => {
-                if let Some(payload) = selected_option_capture_payload(
-                    scrutinee,
-                    pattern,
-                    fold_input.view.store(),
-                    fold_context,
-                )? {
+                let (payload, capture_provenance) =
+                    selected_option_capture_payload_with_provenance(
+                        scrutinee,
+                        pattern,
+                        fold_input.view.store(),
+                        fold_context,
+                    )?;
+                output_state.provenance.merge(&capture_provenance);
+                if let Some(payload) = payload {
                     return fold_tir_branch_with_bindings(
                         store,
                         branch,
                         [payload],
-                        output_buffer,
-                        emitted_output,
+                        output_state,
                         fold_context,
                         fold_input,
                     );
@@ -1507,18 +1586,20 @@ fn fold_tir_branch_chain(
                 false
             }
             (TemplateBranchSelector::OptionPresentCapture { pattern, .. }, Some(effective)) => {
-                if let Some(payload) = selected_option_capture_payload(
-                    effective,
-                    pattern,
-                    fold_input.view.store(),
-                    fold_context,
-                )? {
+                let (payload, capture_provenance) =
+                    selected_option_capture_payload_with_provenance(
+                        effective,
+                        pattern,
+                        fold_input.view.store(),
+                        fold_context,
+                    )?;
+                output_state.provenance.merge(&capture_provenance);
+                if let Some(payload) = payload {
                     return fold_tir_branch_with_bindings(
                         store,
                         branch,
                         [payload],
-                        output_buffer,
-                        emitted_output,
+                        output_state,
                         fold_context,
                         fold_input,
                     );
@@ -1532,22 +1613,14 @@ fn fold_tir_branch_chain(
             return fold_tir_branch_body(
                 store,
                 branch.body,
-                output_buffer,
-                emitted_output,
+                output_state,
                 fold_context,
                 fold_input,
             );
         }
     }
 
-    fold_tir_fallback_branch(
-        store,
-        fallback,
-        output_buffer,
-        emitted_output,
-        fold_context,
-        fold_input,
-    )
+    fold_tir_fallback_branch(store, fallback, output_state, fold_context, fold_input)
 }
 
 /// Folds a selected branch body after pushing option-capture bindings.
@@ -1555,20 +1628,12 @@ fn fold_tir_branch_with_bindings<const N: usize>(
     store: &TemplateIrStore,
     branch: &TemplateIrBranch,
     bindings: [TemplateFoldBinding; N],
-    output_buffer: &mut String,
-    emitted_output: &mut bool,
+    output_state: &mut FoldOutputState,
     fold_context: &mut TemplateFoldContext<'_>,
     fold_input: &FoldTraversalInput<'_, '_>,
 ) -> Result<Option<TemplateLoopControlKind>, TemplateError> {
     let previous_bindings_len = fold_context.push_bindings(bindings);
-    let result = fold_tir_branch_body(
-        store,
-        branch.body,
-        output_buffer,
-        emitted_output,
-        fold_context,
-        fold_input,
-    );
+    let result = fold_tir_branch_body(store, branch.body, output_state, fold_context, fold_input);
     fold_context.restore_bindings(previous_bindings_len);
 
     result
@@ -1578,27 +1643,18 @@ fn fold_tir_branch_with_bindings<const N: usize>(
 fn fold_tir_branch_body(
     store: &TemplateIrStore,
     body_id: TemplateIrNodeId,
-    output_buffer: &mut String,
-    emitted_output: &mut bool,
+    output_state: &mut FoldOutputState,
     fold_context: &mut TemplateFoldContext<'_>,
     fold_input: &FoldTraversalInput<'_, '_>,
 ) -> Result<Option<TemplateLoopControlKind>, TemplateError> {
-    fold_tir_node_into_buffer(
-        store,
-        body_id,
-        output_buffer,
-        emitted_output,
-        fold_context,
-        fold_input,
-    )
+    fold_tir_node_into_buffer(store, body_id, output_state, fold_context, fold_input)
 }
 
 /// Folds the fallback branch, if any.
 fn fold_tir_fallback_branch(
     store: &TemplateIrStore,
     fallback: Option<TemplateIrNodeId>,
-    output_buffer: &mut String,
-    emitted_output: &mut bool,
+    output_state: &mut FoldOutputState,
     fold_context: &mut TemplateFoldContext<'_>,
     fold_input: &FoldTraversalInput<'_, '_>,
 ) -> Result<Option<TemplateLoopControlKind>, TemplateError> {
@@ -1606,14 +1662,7 @@ fn fold_tir_fallback_branch(
         return Ok(None);
     };
 
-    fold_tir_node_into_buffer(
-        store,
-        fallback_id,
-        output_buffer,
-        emitted_output,
-        fold_context,
-        fold_input,
-    )
+    fold_tir_node_into_buffer(store, fallback_id, output_state, fold_context, fold_input)
 }
 
 // -------------------------
@@ -1633,8 +1682,7 @@ fn fold_tir_loop<F>(
     header_sites: TemplateLoopHeaderExpressionSites,
     body_id: TemplateIrNodeId,
     aggregate_wrapper: Option<TemplateIrNodeId>,
-    output_buffer: &mut String,
-    emitted_output: &mut bool,
+    output_state: &mut FoldOutputState,
     fold_context: &mut TemplateFoldContext<'_>,
     fold_input: &FoldTraversalInput<'_, '_>,
     loop_location: &SourceLocation,
@@ -1646,12 +1694,12 @@ where
         TemplateIrNodeId,
         &mut TemplateFoldContext<'_>,
         &FoldTraversalInput<'_, '_>,
-    ) -> Result<TemplateEmission, TemplateError>,
+    ) -> Result<TemplateFoldResult, TemplateError>,
 {
     // The body estimate seeds the aggregate buffer reservation.
     let body_estimate = estimate_tir_node_output_bytes(store, body_id, fold_context.string_table)?;
 
-    let (aggregate, estimated_aggregate, did_emit_body) = match header {
+    let (aggregate_state, estimated_aggregate) = match header {
         TemplateLoopHeader::Conditional { condition } => {
             let site_id = match header_sites {
                 TemplateLoopHeaderExpressionSites::Conditional { condition } => condition,
@@ -1667,6 +1715,9 @@ where
             // covers the site, otherwise fall back to the structural condition.
             let effective_condition = fold_input.effective_expression_for_site(site_id)?;
             let condition_ref = effective_condition.unwrap_or(condition.as_ref());
+            output_state
+                .provenance
+                .merge(&condition_ref.synthetic_interface_provenance);
 
             let condition_value =
                 fold_conditional_loop_const_condition(condition_ref, loop_location)?;
@@ -1712,8 +1763,7 @@ where
             );
             let estimated_aggregate =
                 estimate_loop_aggregate_bytes(body_estimate, estimated_iterations);
-            let mut aggregate = reserve_tir_fold_output_buffer(estimated_aggregate);
-            let mut did_emit = false;
+            let mut aggregate_state = FoldOutputState::with_capacity(estimated_aggregate);
 
             // Build the cursor from either the effective range (when overrides
             // exist) or the structural range directly. The effective range
@@ -1736,29 +1786,33 @@ where
             } else {
                 range.as_ref()
             };
-
             let mut cursor = ConstRangeCursor::new(
                 range_ref,
                 fold_context.template_const_loop_iteration_limit,
                 loop_location.clone(),
             )?;
+            let range_provenance =
+                SyntheticInterfaceProvenance::union_all(range_provenance_expressions(range_ref));
+            output_state.provenance.merge(&range_provenance);
 
             while let Some(counter) = cursor.next_counter()? {
                 add_ast_counter(AstCounter::TemplateFoldLoopIterations, 1);
-                let iteration_bindings =
-                    build_range_iteration_bindings(bindings, counter, cursor.iteration_count() - 1);
-                let (iteration_did_emit, iteration_signal) = fold_tir_loop_iteration(
+                let iteration_bindings = build_range_iteration_bindings(
+                    bindings,
+                    counter,
+                    cursor.iteration_count() - 1,
+                    &range_provenance,
+                );
+                let iteration_signal = fold_tir_loop_iteration(
                     store,
                     body_id,
                     iteration_bindings,
                     fold_context,
                     loop_location,
-                    &mut aggregate,
+                    &mut aggregate_state,
                     fold_input,
                     &mut fold_body,
                 )?;
-
-                did_emit |= iteration_did_emit;
 
                 match iteration_signal {
                     Some(TemplateLoopControlKind::Break) => break,
@@ -1767,7 +1821,7 @@ where
                 }
             }
 
-            (aggregate, estimated_aggregate, did_emit)
+            (aggregate_state, estimated_aggregate)
         }
 
         TemplateLoopHeader::Collection { bindings, iterable } => {
@@ -1785,6 +1839,9 @@ where
             // the site, otherwise fall back to the structural iterable.
             let effective_iterable = fold_input.effective_expression_for_site(site_id)?;
             let iterable_ref = effective_iterable.unwrap_or(iterable.as_ref());
+            output_state
+                .provenance
+                .merge(&iterable_ref.synthetic_interface_provenance);
 
             let items = const_collection_items(iterable_ref)?;
             let estimated_iterations = std::cmp::min(
@@ -1793,8 +1850,7 @@ where
             );
             let estimated_aggregate =
                 estimate_loop_aggregate_bytes(body_estimate, estimated_iterations);
-            let mut aggregate = reserve_tir_fold_output_buffer(estimated_aggregate);
-            let mut did_emit = false;
+            let mut aggregate_state = FoldOutputState::with_capacity(estimated_aggregate);
 
             for (index, item) in items.iter().enumerate() {
                 add_ast_counter(AstCounter::TemplateFoldLoopIterations, 1);
@@ -1808,19 +1864,22 @@ where
                     .into());
                 }
 
-                let iteration_bindings = build_collection_iteration_bindings(bindings, item, index);
-                let (iteration_did_emit, iteration_signal) = fold_tir_loop_iteration(
+                let iteration_bindings = build_collection_iteration_bindings(
+                    bindings,
+                    item,
+                    index,
+                    &iterable_ref.synthetic_interface_provenance,
+                );
+                let iteration_signal = fold_tir_loop_iteration(
                     store,
                     body_id,
                     iteration_bindings,
                     fold_context,
                     loop_location,
-                    &mut aggregate,
+                    &mut aggregate_state,
                     fold_input,
                     &mut fold_body,
                 )?;
-
-                did_emit |= iteration_did_emit;
 
                 match iteration_signal {
                     Some(TemplateLoopControlKind::Break) => break,
@@ -1829,23 +1888,29 @@ where
                 }
             }
 
-            (aggregate, estimated_aggregate, did_emit)
+            (aggregate_state, estimated_aggregate)
         }
     };
 
-    if !did_emit_body {
+    output_state.provenance.merge(&aggregate_state.provenance);
+
+    if !aggregate_state.emitted_output {
         return Ok(None);
     }
 
-    let actual_aggregate_len = aggregate.len();
+    let actual_aggregate_len = aggregate_state.output_buffer.len();
     record_tir_fold_output_estimate_miss(actual_aggregate_len, estimated_aggregate);
-    let aggregate_id = fold_context.string_table.intern(&aggregate);
+    let aggregate_id = fold_context
+        .string_table
+        .intern(&aggregate_state.output_buffer);
     record_tir_fold_output_intern(actual_aggregate_len);
 
     let Some(wrapper_node_id) = aggregate_wrapper else {
         // No wrapper plan: the aggregate output is the loop's output.
-        output_buffer.push_str(fold_context.string_table.resolve(aggregate_id));
-        *emitted_output = true;
+        output_state
+            .output_buffer
+            .push_str(fold_context.string_table.resolve(aggregate_id));
+        output_state.emitted_output = true;
         return Ok(None);
     };
 
@@ -1853,8 +1918,7 @@ where
         store,
         wrapper_node_id,
         aggregate_id,
-        output_buffer,
-        emitted_output,
+        output_state,
         fold_context,
         fold_input,
     )
@@ -1876,17 +1940,17 @@ fn fold_tir_loop_iteration<F>(
     iteration_bindings: Vec<TemplateFoldBinding>,
     fold_context: &mut TemplateFoldContext<'_>,
     loop_location: &SourceLocation,
-    aggregate: &mut String,
+    aggregate_state: &mut FoldOutputState,
     fold_input: &FoldTraversalInput<'_, '_>,
     fold_body: F,
-) -> Result<(bool, Option<TemplateLoopControlKind>), TemplateError>
+) -> Result<Option<TemplateLoopControlKind>, TemplateError>
 where
     F: FnOnce(
         &TemplateIrStore,
         TemplateIrNodeId,
         &mut TemplateFoldContext<'_>,
         &FoldTraversalInput<'_, '_>,
-    ) -> Result<TemplateEmission, TemplateError>,
+    ) -> Result<TemplateFoldResult, TemplateError>,
 {
     let previous_bindings_len = fold_context.push_bindings(iteration_bindings);
     let folded_result = fold_body(store, body_id, fold_context, fold_input);
@@ -1895,25 +1959,33 @@ where
     let emission =
         folded_result.map_err(|error| loop_body_not_const_error(error, loop_location))?;
 
-    match emission {
-        TemplateEmission::NoOutput => Ok((false, None)),
+    aggregate_state.provenance.merge(&emission.provenance);
+    match emission.emission {
+        TemplateEmission::NoOutput => Ok(None),
         TemplateEmission::Output(output) => {
-            aggregate.push_str(fold_context.string_table.resolve(output));
-            Ok((true, None))
+            aggregate_state
+                .output_buffer
+                .push_str(fold_context.string_table.resolve(output));
+            aggregate_state.emitted_output = true;
+            Ok(None)
         }
         TemplateEmission::Break(output) => {
-            let did_emit = output.is_some();
             if let Some(output) = output {
-                aggregate.push_str(fold_context.string_table.resolve(output));
+                aggregate_state
+                    .output_buffer
+                    .push_str(fold_context.string_table.resolve(output));
+                aggregate_state.emitted_output = true;
             }
-            Ok((did_emit, Some(TemplateLoopControlKind::Break)))
+            Ok(Some(TemplateLoopControlKind::Break))
         }
         TemplateEmission::Continue(output) => {
-            let did_emit = output.is_some();
             if let Some(output) = output {
-                aggregate.push_str(fold_context.string_table.resolve(output));
+                aggregate_state
+                    .output_buffer
+                    .push_str(fold_context.string_table.resolve(output));
+                aggregate_state.emitted_output = true;
             }
-            Ok((did_emit, Some(TemplateLoopControlKind::Continue)))
+            Ok(Some(TemplateLoopControlKind::Continue))
         }
     }
 }
@@ -1929,8 +2001,7 @@ fn fold_tir_aggregate_wrapper(
     store: &TemplateIrStore,
     wrapper_node_id: TemplateIrNodeId,
     aggregate_output: StringId,
-    output_buffer: &mut String,
-    emitted_output: &mut bool,
+    output_state: &mut FoldOutputState,
     fold_context: &mut TemplateFoldContext<'_>,
     fold_input: &FoldTraversalInput<'_, '_>,
 ) -> Result<Option<TemplateLoopControlKind>, TemplateError> {
@@ -1941,15 +2012,13 @@ fn fold_tir_aggregate_wrapper(
         aggregate_output_len,
         fold_context.string_table,
     )?;
-    let mut wrapper_buffer = reserve_tir_fold_output_buffer(estimated_bytes);
-    let mut wrapper_emitted_output = false;
+    let mut wrapper_state = FoldOutputState::with_capacity(estimated_bytes);
 
     let signal = fold_tir_aggregate_wrapper_node(
         store,
         wrapper_node_id,
         aggregate_output,
-        &mut wrapper_buffer,
-        &mut wrapper_emitted_output,
+        &mut wrapper_state,
         fold_context,
         fold_input,
     )?;
@@ -1961,17 +2030,23 @@ fn fold_tir_aggregate_wrapper(
         .into());
     }
 
-    if !wrapper_emitted_output {
+    output_state.provenance.merge(&wrapper_state.provenance);
+
+    if !wrapper_state.emitted_output {
         return Ok(None);
     }
 
-    let actual_len = wrapper_buffer.len();
+    let actual_len = wrapper_state.output_buffer.len();
     record_tir_fold_output_estimate_miss(actual_len, estimated_bytes);
-    let wrapper_id = fold_context.string_table.intern(&wrapper_buffer);
+    let wrapper_id = fold_context
+        .string_table
+        .intern(&wrapper_state.output_buffer);
     record_tir_fold_output_intern(actual_len);
 
-    output_buffer.push_str(fold_context.string_table.resolve(wrapper_id));
-    *emitted_output = true;
+    output_state
+        .output_buffer
+        .push_str(fold_context.string_table.resolve(wrapper_id));
+    output_state.emitted_output = true;
 
     Ok(None)
 }
@@ -1992,8 +2067,7 @@ fn fold_tir_aggregate_wrapper_child_template(
     store: &TemplateIrStore,
     reference: &TemplateTirChildReference,
     aggregate_output: StringId,
-    wrapper_buffer: &mut String,
-    wrapper_emitted_output: &mut bool,
+    wrapper_state: &mut FoldOutputState,
     fold_context: &mut TemplateFoldContext<'_>,
     fold_input: &FoldTraversalInput<'_, '_>,
 ) -> Result<Option<TemplateLoopControlKind>, TemplateError> {
@@ -2018,8 +2092,7 @@ fn fold_tir_aggregate_wrapper_child_template(
         store,
         template.root,
         aggregate_output,
-        wrapper_buffer,
-        wrapper_emitted_output,
+        wrapper_state,
         fold_context,
         &child_fold_input,
     )
@@ -2030,8 +2103,7 @@ fn fold_tir_aggregate_wrapper_node(
     store: &TemplateIrStore,
     node_id: TemplateIrNodeId,
     aggregate_output: StringId,
-    wrapper_buffer: &mut String,
-    wrapper_emitted_output: &mut bool,
+    wrapper_state: &mut FoldOutputState,
     fold_context: &mut TemplateFoldContext<'_>,
     fold_input: &FoldTraversalInput<'_, '_>,
 ) -> Result<Option<TemplateLoopControlKind>, TemplateError> {
@@ -2047,8 +2119,7 @@ fn fold_tir_aggregate_wrapper_node(
                     store,
                     child_id,
                     aggregate_output,
-                    wrapper_buffer,
-                    wrapper_emitted_output,
+                    wrapper_state,
                     fold_context,
                     fold_input,
                 )?;
@@ -2062,8 +2133,10 @@ fn fold_tir_aggregate_wrapper_node(
         }
 
         TemplateIrNodeKind::Text { text, .. } => {
-            wrapper_buffer.push_str(fold_context.string_table.resolve(*text));
-            *wrapper_emitted_output = true;
+            wrapper_state
+                .output_buffer
+                .push_str(fold_context.string_table.resolve(*text));
+            wrapper_state.emitted_output = true;
             Ok(None)
         }
 
@@ -2076,8 +2149,7 @@ fn fold_tir_aggregate_wrapper_node(
             let signal = fold_tir_dynamic_expression(
                 store,
                 expression_to_fold,
-                wrapper_buffer,
-                wrapper_emitted_output,
+                wrapper_state,
                 fold_context,
                 &node.location,
                 fold_input,
@@ -2095,16 +2167,17 @@ fn fold_tir_aggregate_wrapper_node(
                 store,
                 reference,
                 aggregate_output,
-                wrapper_buffer,
-                wrapper_emitted_output,
+                wrapper_state,
                 fold_context,
                 fold_input,
             )
         }
 
         TemplateIrNodeKind::AggregateOutput => {
-            wrapper_buffer.push_str(fold_context.string_table.resolve(aggregate_output));
-            *wrapper_emitted_output = true;
+            wrapper_state
+                .output_buffer
+                .push_str(fold_context.string_table.resolve(aggregate_output));
+            wrapper_state.emitted_output = true;
             Ok(None)
         }
 
@@ -2160,34 +2233,44 @@ fn estimate_aggregate_wrapper_bytes(
 
 /// Builds a `TemplateEmission` from a filled output buffer.
 fn build_emission_from_buffer(
-    buffer: String,
+    output_state: FoldOutputState,
     estimated_bytes: usize,
     signal: Option<TemplateLoopControlKind>,
-    emitted_output: bool,
     fold_context: &mut TemplateFoldContext<'_>,
-) -> Result<TemplateEmission, TemplateError> {
-    if signal.is_some() && !emitted_output {
-        return Ok(match signal {
-            Some(TemplateLoopControlKind::Break) => TemplateEmission::Break(None),
-            Some(TemplateLoopControlKind::Continue) => TemplateEmission::Continue(None),
-            None => unreachable!(),
-        });
+) -> Result<TemplateFoldResult, TemplateError> {
+    if signal.is_some() && !output_state.emitted_output {
+        return Ok(TemplateFoldResult::new(
+            match signal {
+                Some(TemplateLoopControlKind::Break) => TemplateEmission::Break(None),
+                Some(TemplateLoopControlKind::Continue) => TemplateEmission::Continue(None),
+                None => unreachable!(),
+            },
+            output_state.provenance,
+        ));
     }
 
-    if !emitted_output {
-        return Ok(TemplateEmission::NoOutput);
+    if !output_state.emitted_output {
+        return Ok(TemplateFoldResult::new(
+            TemplateEmission::NoOutput,
+            output_state.provenance,
+        ));
     }
 
-    let actual_len = buffer.len();
+    let actual_len = output_state.output_buffer.len();
     record_tir_fold_output_estimate_miss(actual_len, estimated_bytes);
-    let output_id = fold_context.string_table.intern(&buffer);
+    let output_id = fold_context
+        .string_table
+        .intern(&output_state.output_buffer);
     record_tir_fold_output_intern(actual_len);
 
-    Ok(match signal {
-        None => TemplateEmission::Output(output_id),
-        Some(TemplateLoopControlKind::Break) => TemplateEmission::Break(Some(output_id)),
-        Some(TemplateLoopControlKind::Continue) => TemplateEmission::Continue(Some(output_id)),
-    })
+    Ok(TemplateFoldResult::new(
+        match signal {
+            None => TemplateEmission::Output(output_id),
+            Some(TemplateLoopControlKind::Break) => TemplateEmission::Break(Some(output_id)),
+            Some(TemplateLoopControlKind::Continue) => TemplateEmission::Continue(Some(output_id)),
+        },
+        output_state.provenance,
+    ))
 }
 
 /// Cheap estimate of how many bytes a TIR node will contribute if folded.

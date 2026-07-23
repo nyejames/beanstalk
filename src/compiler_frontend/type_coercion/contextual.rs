@@ -86,7 +86,8 @@ pub(crate) fn coerce_expression_to_declared_type(
                 *value as f64,
                 expr.location.clone(),
                 ValueMode::ImmutableOwned,
-            );
+            )
+            .with_synthetic_interface_provenance(expr.synthetic_interface_provenance.clone());
         }
 
         return Expression::coerced(expr, declared_type_id);

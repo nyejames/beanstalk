@@ -512,6 +512,7 @@ fn expression_with_inlined_kind(expression: &Expression, kind: ExpressionKind) -
     rewritten.reactive_template = expression.reactive_template.clone();
     rewritten.contains_regular_division = expression.contains_regular_division;
     rewritten.value_shape = expression.value_shape;
+    rewritten.synthetic_interface_provenance = expression.synthetic_interface_provenance.clone();
     rewritten
 }
 

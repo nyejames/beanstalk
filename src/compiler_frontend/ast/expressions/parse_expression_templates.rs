@@ -102,8 +102,8 @@ pub(super) fn parse_template_expression(
 
             let mut fold_context = template_context
                 .new_template_fold_context(string_table, "expression parsing template fold")?;
-            let folded_emission = fold_prepared_template(&prepared, view, &mut fold_context)?;
-            let folded_string = match folded_emission {
+            let fold_result = fold_prepared_template(&prepared, view, &mut fold_context)?;
+            let folded_string = match fold_result.emission {
                 crate::compiler_frontend::ast::templates::template_folding::TemplateEmission::Output(
                     value,
                 ) => value,
@@ -129,6 +129,7 @@ pub(super) fn parse_template_expression(
                 value_mode.as_owned(),
             );
             folded_expression.value_shape = ExpressionValueShape::TemplateString;
+            folded_expression.synthetic_interface_provenance = fold_result.provenance;
             Ok(Some(folded_expression))
         }
 

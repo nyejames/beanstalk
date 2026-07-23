@@ -5,7 +5,9 @@
 //!      type identity; mistakes here produce misleading errors or silent wrong-types.
 
 use crate::compiler_frontend::ast::ast_nodes::{Declaration, NodeKind};
-use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
+use crate::compiler_frontend::ast::expressions::expression::{
+    CollectionExpressionType, Expression, ExpressionKind,
+};
 use crate::compiler_frontend::ast::module_ast::scope_context::{ContextKind, ScopeContext};
 use crate::compiler_frontend::ast::templates::template::Template;
 use crate::compiler_frontend::ast::templates::template::{SlotKey, Style, TemplateType};
@@ -33,6 +35,9 @@ use crate::compiler_frontend::datatypes::parsed::{ParsedCollectionCapacity, Pars
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::synthetic_interface_provenance::{
+    SyntheticInterfaceClass, SyntheticInterfaceMemberIdentity, SyntheticInterfaceProvenance,
+};
 use crate::compiler_frontend::tests::parse_support::{
     parse_single_file_ast, parse_single_file_ast_result,
 };
@@ -423,6 +428,87 @@ fn struct_field_default_inlines_slot_template_through_module_store() {
         resolved_fields[0].value.kind,
         ExpressionKind::Template(_)
     ));
+}
+
+#[test]
+fn struct_field_constant_inlining_preserves_surrounding_provenance() {
+    let mut string_table = StringTable::new();
+    let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
+    let mut type_environment = TypeEnvironment::new();
+    let location = SourceLocation::default();
+    let constant_path = InternedPath::from_single_str("value", &mut string_table);
+    let project_member = SyntheticInterfaceMemberIdentity::new(
+        SyntheticInterfaceClass::ProjectContext,
+        "render",
+        "html",
+    );
+    let builder_member =
+        SyntheticInterfaceMemberIdentity::new(SyntheticInterfaceClass::Builder, "assets", "bundle");
+    let constant = Declaration {
+        id: constant_path.clone(),
+        value: Expression::int(7, location.clone(), ValueMode::ImmutableOwned)
+            .with_synthetic_interface_provenance(SyntheticInterfaceProvenance::single(
+                project_member.clone(),
+            )),
+    };
+    let declaration_table = Rc::new(TopLevelDeclarationTable::new(vec![constant]));
+    let collection_type_id = type_environment.intern_collection(builtin_type_ids::INT, None);
+    let collection = Expression::collection_with_type_id(
+        vec![Expression::reference_with_type_id(
+            constant_path,
+            DataType::Int,
+            builtin_type_ids::INT,
+            location.clone(),
+            ValueMode::ImmutableReference,
+            crate::compiler_frontend::ast::expressions::expression_types::ConstRecordState::RuntimeValue,
+        )
+        .with_synthetic_interface_provenance(SyntheticInterfaceProvenance::single(
+            project_member.clone(),
+        ))],
+        CollectionExpressionType {
+            element_type_id: builtin_type_ids::INT,
+            element_diagnostic_type: DataType::Int,
+            fixed_capacity: None,
+            collection_type_id: Some(collection_type_id),
+        },
+        &mut type_environment,
+        location.clone(),
+        ValueMode::ImmutableOwned,
+    )
+    .with_synthetic_interface_provenance(SyntheticInterfaceProvenance::single(
+        builder_member.clone(),
+    ));
+    let mut resolution_context =
+        TypeResolutionContext::from_declaration_table(&declaration_table, &mut type_environment);
+    let struct_path = InternedPath::from_single_str("Card", &mut string_table);
+    let field = Declaration {
+        id: struct_path.clone().append(string_table.intern("values")),
+        value: collection,
+    };
+
+    let resolved_fields = resolve_struct_field_types(
+        &struct_path,
+        &[field],
+        &mut resolution_context,
+        &template_ir_store,
+        &mut string_table,
+    )
+    .unwrap_or_else(|_| panic!("collection field default should resolve"));
+
+    assert_eq!(
+        resolved_fields[0]
+            .value
+            .synthetic_interface_provenance
+            .members(),
+        &[builder_member]
+    );
+    let ExpressionKind::Collection(elements) = &resolved_fields[0].value.kind else {
+        panic!("expected collection field default");
+    };
+    assert_eq!(
+        elements[0].synthetic_interface_provenance.members(),
+        &[project_member]
+    );
 }
 
 #[test]

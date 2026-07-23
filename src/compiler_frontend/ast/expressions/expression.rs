@@ -36,6 +36,7 @@ use crate::compiler_frontend::datatypes::{DataType, ReceiverKey, diagnostic_type
 use crate::compiler_frontend::external_packages::ExternalFunctionId;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringId;
+use crate::compiler_frontend::synthetic_interface_provenance::SyntheticInterfaceProvenance;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::compiler_frontend::value_mode::ValueMode;
 
@@ -132,6 +133,19 @@ pub struct Expression {
     /// WHY: operator policy for `+`, comparisons, and string coercions must be
     ///      decided on this AST-local fact rather than on `diagnostic_type` spelling.
     pub value_shape: ExpressionValueShape,
+
+    /// Direct synthetic compile-time interface provenance for this value.
+    ///
+    /// WHAT: records the member-granular synthetic-interface dependencies carried by this
+    /// value. Empty means portable (no project-context dependency). Non-empty provenance is a
+    /// sorted, duplicate-free set that must be preserved through every value transformation
+    /// that keeps or derives the value's semantic meaning, including constant folding and
+    /// direct coercion/copy/pass-through paths. Dependencies originate as AST value metadata and
+    /// are not inferred by reparsing source or walking display names.
+    /// WHY: the per-function link-fact lane needs stable, deterministic provenance that
+    /// survives AST value transformations and HIR lowering without leaking process-local IDs,
+    /// source locations or interned names.
+    pub synthetic_interface_provenance: SyntheticInterfaceProvenance,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -458,6 +472,7 @@ impl Expression {
             const_record_state: ConstRecordState::RuntimeValue,
             contains_regular_division: false,
             value_shape: ExpressionValueShape::Ordinary,
+            synthetic_interface_provenance: SyntheticInterfaceProvenance::empty(),
         }
     }
 
@@ -469,6 +484,19 @@ impl Expression {
     /// Marks whether this expression originates from a regular division operator.
     pub fn with_regular_division_provenance(mut self, contains: bool) -> Self {
         self.contains_regular_division = contains;
+        self
+    }
+
+    /// Attach direct synthetic compile-time interface provenance to this value.
+    ///
+    /// Compiler-internal: the future synthetic-interface producer (config/provider binding) and
+    /// tests use this to inject explicit member-granular dependencies. Production AST construction
+    /// leaves provenance empty because no real producer exists yet.
+    pub fn with_synthetic_interface_provenance(
+        mut self,
+        provenance: SyntheticInterfaceProvenance,
+    ) -> Self {
+        self.synthetic_interface_provenance = provenance;
         self
     }
 
@@ -850,6 +878,7 @@ impl Expression {
         let diagnostic_type = diagnostic_type_spelling(target_type_id, type_environment);
         let value_mode = cast.source.value_mode.to_owned();
         let value_shape = expression_value_shape_for_diagnostic_type(&diagnostic_type);
+        let synthetic_interface_provenance = cast.source.synthetic_interface_provenance.clone();
 
         let mut expression = Self::new(
             ExpressionKind::Cast(cast),
@@ -859,6 +888,7 @@ impl Expression {
             value_mode,
         );
         expression.value_shape = value_shape;
+        expression.synthetic_interface_provenance = synthetic_interface_provenance;
         expression
     }
 
@@ -877,6 +907,7 @@ impl Expression {
         let contains_regular_division = value.contains_regular_division;
         let const_record_state = value.const_record_state;
         let value_shape = value.value_shape;
+        let synthetic_interface_provenance = value.synthetic_interface_provenance.clone();
         let mut expression = Self::new(
             ExpressionKind::Coerced {
                 value: Box::new(value),
@@ -894,6 +925,7 @@ impl Expression {
         expression.reactive_source = reactive_source;
         expression.reactive_template = reactive_template;
         expression.value_shape = value_shape;
+        expression.synthetic_interface_provenance = synthetic_interface_provenance;
         expression
     }
 
@@ -908,6 +940,7 @@ impl Expression {
         value_mode: ValueMode,
     ) -> Self {
         let contains_regular_division = value.contains_regular_division;
+        let synthetic_interface_provenance = value.synthetic_interface_provenance.clone();
         Self::new(
             ExpressionKind::FallibleCarrierConstruct {
                 variant,
@@ -919,6 +952,7 @@ impl Expression {
             value_mode,
         )
         .with_regular_division_provenance(contains_regular_division)
+        .with_synthetic_interface_provenance(synthetic_interface_provenance)
     }
 
     /// Wraps a fallible expression with explicit handling.
@@ -930,6 +964,7 @@ impl Expression {
         location: SourceLocation,
     ) -> Self {
         let contains_regular_division = value.contains_regular_division;
+        let synthetic_interface_provenance = value.synthetic_interface_provenance.clone();
         Self::new(
             ExpressionKind::HandledFallibleExpression {
                 value: Box::new(value),
@@ -941,6 +976,7 @@ impl Expression {
             ValueMode::ImmutableOwned,
         )
         .with_regular_division_provenance(contains_regular_division)
+        .with_synthetic_interface_provenance(synthetic_interface_provenance)
     }
 
     /// Wraps an optional expression with postfix `?` propagation.
@@ -951,6 +987,7 @@ impl Expression {
         location: SourceLocation,
     ) -> Self {
         let contains_regular_division = value.contains_regular_division;
+        let synthetic_interface_provenance = value.synthetic_interface_provenance.clone();
         Self::new(
             ExpressionKind::OptionPropagation {
                 value: Box::new(value),
@@ -961,6 +998,7 @@ impl Expression {
             ValueMode::ImmutableOwned,
         )
         .with_regular_division_provenance(contains_regular_division)
+        .with_synthetic_interface_provenance(synthetic_interface_provenance)
     }
 
     /// Constructs a collection expression with a resolved element type.
@@ -978,6 +1016,11 @@ impl Expression {
             )
         });
         let contains_regular_division = items.iter().any(|item| item.contains_regular_division);
+        let synthetic_interface_provenance = SyntheticInterfaceProvenance::union_all(
+            items
+                .iter()
+                .map(|item| &item.synthetic_interface_provenance),
+        );
         // `diagnostic_type` is display-only; semantic identity comes from `collection_type_id`.
         let diagnostic_type = match collection_type.fixed_capacity {
             Some(capacity) => {
@@ -993,6 +1036,7 @@ impl Expression {
             value_mode,
         )
         .with_regular_division_provenance(contains_regular_division)
+        .with_synthetic_interface_provenance(synthetic_interface_provenance)
     }
 
     /// Constructs a map literal expression with resolved key and value types.
@@ -1009,6 +1053,13 @@ impl Expression {
         let contains_regular_division = entries.iter().any(|entry| {
             entry.key.contains_regular_division || entry.value.contains_regular_division
         });
+        let synthetic_interface_provenance =
+            SyntheticInterfaceProvenance::union_all(entries.iter().flat_map(|entry| {
+                [
+                    &entry.key.synthetic_interface_provenance,
+                    &entry.value.synthetic_interface_provenance,
+                ]
+            }));
         let diagnostic_type =
             DataType::map(map_type.key_diagnostic_type, map_type.value_diagnostic_type);
         Self::new(
@@ -1019,6 +1070,7 @@ impl Expression {
             value_mode,
         )
         .with_regular_division_provenance(contains_regular_division)
+        .with_synthetic_interface_provenance(synthetic_interface_provenance)
     }
 
     /// Constructs a struct instance expression.
@@ -1032,6 +1084,10 @@ impl Expression {
         type_id: TypeId,
     ) -> Self {
         let contains_regular_division = args.iter().any(|arg| arg.value.contains_regular_division);
+        let synthetic_interface_provenance = SyntheticInterfaceProvenance::union_all(
+            args.iter()
+                .map(|argument| &argument.value.synthetic_interface_provenance),
+        );
         let struct_type = if let Some(key) = generic_instance_key {
             DataType::Struct {
                 nominal_path: nominal_path.clone(),
@@ -1051,7 +1107,8 @@ impl Expression {
             struct_type,
             value_mode,
         )
-        .with_regular_division_provenance(contains_regular_division);
+        .with_regular_division_provenance(contains_regular_division)
+        .with_synthetic_interface_provenance(synthetic_interface_provenance);
         if const_record {
             expression.const_record_state = ConstRecordState::ConstRecord;
         }
@@ -1216,6 +1273,12 @@ impl Expression {
             .fields
             .iter()
             .any(|field| field.value.contains_regular_division);
+        let synthetic_interface_provenance = SyntheticInterfaceProvenance::union_all(
+            input
+                .fields
+                .iter()
+                .map(|field| &field.value.synthetic_interface_provenance),
+        );
         Self::new(
             ExpressionKind::ChoiceConstruct {
                 nominal_path: input.nominal_path,
@@ -1228,6 +1291,7 @@ impl Expression {
             input.value_mode,
         )
         .with_regular_division_provenance(contains_regular_division)
+        .with_synthetic_interface_provenance(synthetic_interface_provenance)
     }
 
     /// Returns true if this expression represents a function declaration that has

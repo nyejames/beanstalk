@@ -32,6 +32,7 @@ use crate::compiler_frontend::ast::templates::tir::node::TemplateIrBranch;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::synthetic_interface_provenance::SyntheticInterfaceProvenance;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::compiler_frontend::value_mode::ValueMode;
 
@@ -56,6 +57,7 @@ fn bool_expression() -> Expression {
         const_record_state: ConstRecordState::RuntimeValue,
         contains_regular_division: false,
         value_shape: ExpressionValueShape::Ordinary,
+        synthetic_interface_provenance: SyntheticInterfaceProvenance::empty(),
     }
 }
 

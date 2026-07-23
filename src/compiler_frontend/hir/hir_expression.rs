@@ -90,6 +90,7 @@ impl<'a> HirBuilder<'a> {
         expr: &Expression,
     ) -> Result<LoweredExpression, CompilerError> {
         self.log_expression_input(expr);
+        self.accumulate_function_provenance(expr);
 
         let lowered = match &expr.kind {
             ExpressionKind::ChoiceConstruct {

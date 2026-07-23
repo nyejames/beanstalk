@@ -21,6 +21,7 @@ mod hir_const_facts_tests;
 mod hir_display_tests;
 mod hir_expression_lowering_tests;
 mod hir_function_origin_tests;
+mod hir_function_provenance_tests;
 mod hir_local_lowering_tests;
 mod hir_loop_lowering_tests;
 mod hir_match_lowering_tests;

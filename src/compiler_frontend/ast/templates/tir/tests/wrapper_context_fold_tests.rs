@@ -15,7 +15,7 @@ use crate::compiler_frontend::ast::templates::template::{
 };
 use crate::compiler_frontend::ast::templates::template_control_flow::TemplateBranchSelector;
 use crate::compiler_frontend::ast::templates::template_folding::{
-    TemplateEmission, TemplateFoldContext,
+    TemplateEmission, TemplateFoldContext, TemplateFoldResult,
 };
 use crate::compiler_frontend::ast::templates::tir::TemplateSlotPlan;
 use crate::compiler_frontend::ast::templates::tir::builder::TemplateIrBuilder;
@@ -804,7 +804,12 @@ fn prepared_fold_fixture_result(
         }
     };
     let mut context = fold_context(string_table);
-    fold_prepared_template(&preparation, view, &mut context)
+    // Wrapper-context tests here assert rendered text; provenance is not owned by this helper.
+    let TemplateFoldResult {
+        emission,
+        provenance: _,
+    } = fold_prepared_template(&preparation, view, &mut context)?;
+    Ok(emission)
 }
 
 fn handoff_fixture_result(

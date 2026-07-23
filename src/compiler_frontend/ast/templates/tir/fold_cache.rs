@@ -31,7 +31,7 @@
 
 use std::collections::HashMap;
 
-use crate::compiler_frontend::ast::templates::template_folding::TemplateEmission;
+use crate::compiler_frontend::ast::templates::template_folding::TemplateFoldResult;
 use crate::compiler_frontend::ast::templates::tir::view::TirViewIdentity;
 
 // -------------------------
@@ -71,14 +71,14 @@ pub(crate) struct TirFoldCacheKey {
 /// AST-phase-local cache for TIR fold emissions.
 ///
 /// WHAT: maps a deterministic `TirFoldCacheKey` to the previously computed
-///       `TemplateEmission`.
+///       `TemplateFoldResult`.
 ///
 /// WHY: avoids re-folding the same effective TIR view within one fold context.
 ///      The key is precise enough that cached results remain valid for the exact
 ///      view they were computed from.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct TirFoldCache {
-    entries: HashMap<TirFoldCacheKey, TemplateEmission>,
+    entries: HashMap<TirFoldCacheKey, TemplateFoldResult>,
 }
 
 impl TirFoldCache {
@@ -88,7 +88,7 @@ impl TirFoldCache {
     }
 
     /// Returns the cached emission for `key`, if any.
-    pub(crate) fn get(&self, key: &TirFoldCacheKey) -> Option<&TemplateEmission> {
+    pub(crate) fn get(&self, key: &TirFoldCacheKey) -> Option<&TemplateFoldResult> {
         self.entries.get(key)
     }
 
@@ -96,8 +96,8 @@ impl TirFoldCache {
     pub(crate) fn insert(
         &mut self,
         key: TirFoldCacheKey,
-        emission: TemplateEmission,
-    ) -> Option<TemplateEmission> {
-        self.entries.insert(key, emission)
+        result: TemplateFoldResult,
+    ) -> Option<TemplateFoldResult> {
+        self.entries.insert(key, result)
     }
 }

@@ -14,7 +14,7 @@ use crate::compiler_frontend::ast::templates::template_control_flow::{
     TemplateBranchSelector, TemplateFoldBinding,
 };
 use crate::compiler_frontend::ast::templates::template_folding::{
-    TemplateEmission, TemplateFoldContext,
+    TemplateEmission, TemplateFoldContext, TemplateFoldResult,
 };
 use crate::compiler_frontend::ast::templates::tir::builder::TemplateIrBuilder;
 use crate::compiler_frontend::ast::templates::tir::fold::fold_prepared_template;
@@ -42,6 +42,9 @@ use crate::compiler_frontend::ast::templates::tir::{
 };
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::synthetic_interface_provenance::{
+    SyntheticInterfaceClass, SyntheticInterfaceMemberIdentity, SyntheticInterfaceProvenance,
+};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::compiler_frontend::value_mode::ValueMode;
 use crate::projects::settings::DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS;
@@ -105,10 +108,10 @@ fn cache_lookup_miss_then_hit_and_overwrite() {
     let key = sample_key();
 
     assert!(cache.get(&key).is_none());
-    let first = TemplateEmission::Output(first_id);
-    let second = TemplateEmission::Output(second_id);
-    assert_eq!(cache.insert(key, first), None);
-    assert_eq!(cache.insert(key, second), Some(first));
+    let first = TemplateFoldResult::new(TemplateEmission::Output(first_id), Default::default());
+    let second = TemplateFoldResult::new(TemplateEmission::Output(second_id), Default::default());
+    assert_eq!(cache.insert(key, first.clone()), None);
+    assert_eq!(cache.insert(key, second.clone()), Some(first));
     assert_eq!(cache.get(&key), Some(&second));
 }
 
@@ -179,7 +182,12 @@ fn fold_prepared_view(
             panic!("test view expected to be foldable")
         }
     };
-    fold_prepared_template(&prepared, view.clone(), context)
+    // This convenience helper exposes only text; the cache provenance invariant has its own test.
+    let TemplateFoldResult {
+        emission,
+        provenance: _,
+    } = fold_prepared_template(&prepared, view.clone(), context)?;
+    Ok(emission)
 }
 
 #[test]
@@ -754,6 +762,84 @@ fn prepared_fold_preserves_root_expression_overlay_through_nested_children() {
 
     assert_eq!(first, TemplateEmission::Output(first_text));
     assert_eq!(second, TemplateEmission::Output(second_text));
+}
+
+#[test]
+fn prepared_fold_cache_hit_reuses_effective_expression_provenance() {
+    let mut string_table = StringTable::new();
+    let mut store = TemplateIrStore::new();
+    let text = string_table.intern("effective");
+    let member = SyntheticInterfaceMemberIdentity::new(
+        SyntheticInterfaceClass::ProjectContext,
+        "render",
+        "effective",
+    );
+    let (template_id, site_id) = {
+        let mut builder = TemplateIrBuilder::new(&mut store);
+        let dynamic = builder.push_dynamic_expression_node(
+            Expression::string_slice(text, empty_location(), ValueMode::ImmutableOwned),
+            TemplateSegmentOrigin::Body,
+            None,
+            empty_location(),
+        );
+        let root = builder.push_sequence_node(vec![dynamic], empty_location());
+        let template_id = builder.finish_template(
+            root,
+            Style::default(),
+            TemplateType::String,
+            TemplateIrSummary::default(),
+            empty_location(),
+        );
+        let TemplateIrNodeKind::DynamicExpression { site_id, .. } = &store
+            .get_node(dynamic)
+            .expect("dynamic node should exist")
+            .kind
+        else {
+            panic!("expected dynamic expression node")
+        };
+        (template_id, *site_id)
+    };
+    let overlay_id = store.allocate_expression_overlay(TirExpressionOverlay {
+        overrides: vec![(
+            site_id,
+            Box::new(
+                Expression::string_slice(text, empty_location(), ValueMode::ImmutableOwned)
+                    .with_synthetic_interface_provenance(SyntheticInterfaceProvenance::single(
+                        member.clone(),
+                    )),
+            ),
+        )],
+    });
+    let view = TirView::new(
+        &store,
+        template_id,
+        TemplateTirPhase::Composed,
+        TemplateViewContext {
+            expression_overlay: Some(overlay_id),
+            ..TemplateViewContext::default()
+        },
+    )
+    .expect("effective view should construct");
+    let prepared = match prepare_tir_view(&view, TemplatePreparationMode::Value)
+        .expect("view should prepare")
+    {
+        PreparedTemplate::Foldable(prepared) => prepared,
+        PreparedTemplate::Runtime(_) | PreparedTemplate::Helper(_) => {
+            panic!("effective expression fixture should be foldable")
+        }
+    };
+    let mut context = fold_context(&mut string_table);
+    let first = fold_prepared_template(&prepared, view.clone(), &mut context)
+        .expect("first exact fold should succeed");
+    let second = fold_prepared_template(&prepared, view, &mut context)
+        .expect("cached exact fold should succeed");
+
+    assert_eq!(first, second, "cache hits must retain the exact provenance");
+    assert_eq!(
+        first.provenance.members(),
+        &[member],
+        "the cached result must retain effective dynamic-expression provenance"
+    );
 }
 
 #[test]

@@ -22,6 +22,7 @@ use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::synthetic_interface_provenance::SyntheticInterfaceProvenance;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -31,7 +32,7 @@ use std::rc::Rc;
 /// WHY: a folded value, runtime proof and helper artifact must never be represented
 ///      as independent optional/disposition fields that can contradict each other.
 pub(super) enum FinalizedTemplateValue {
-    Folded(StringId),
+    Folded(StringId, SyntheticInterfaceProvenance),
     Runtime(PreparedRuntime),
     Helper(TemplateHelperKind),
 }
@@ -87,10 +88,11 @@ pub(super) fn finalize_template_value(
         fold_inputs.template_const_loop_iteration_limit,
     );
     let result = fold_prepared_template(&fold_preparation, view, &mut fold_context)?;
-    let folded = template_emission_to_string_id(result, &mut fold_context)?;
+    let provenance = result.provenance;
+    let folded = template_emission_to_string_id(result.emission, &mut fold_context)?;
     increment_ast_counter(AstCounter::TemplatesFoldedDuringFinalization);
     increment_ast_counter(AstCounter::TirFinalizationFoldSuccesses);
-    Ok(FinalizedTemplateValue::Folded(folded))
+    Ok(FinalizedTemplateValue::Folded(folded, provenance))
 }
 
 fn template_emission_to_string_id(

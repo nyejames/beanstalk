@@ -228,6 +228,9 @@ fn fold_unary_operator(
         _ => return Ok(None),
     };
 
+    let folded_expression = folded_expression
+        .with_synthetic_interface_provenance(expression.synthetic_interface_provenance.clone());
+
     Ok(Some(ExpressionRpnItem::Operand(folded_expression)))
 }
 
@@ -383,6 +386,10 @@ fn fold_resolved_cast(
                             Expression::coerced(folded_expression, original_expression.type_id);
                     }
 
+                    folded_expression = folded_expression.with_synthetic_interface_provenance(
+                        folded_source.synthetic_interface_provenance.clone(),
+                    );
+
                     Ok(folded_expression)
                 }
                 Err(_) if !constant_context => Ok(original_expression.to_owned()),
@@ -403,7 +410,12 @@ fn fold_resolved_cast(
                             string_table,
                         )?
                     {
-                        return Ok(folded_handler);
+                        let recovery_provenance = folded_source
+                            .synthetic_interface_provenance
+                            .union(&folded_handler.synthetic_interface_provenance);
+                        let folded_recovery =
+                            folded_handler.with_synthetic_interface_provenance(recovery_provenance);
+                        return Ok(folded_recovery);
                     }
 
                     Err(CompilerDiagnostic::invalid_cast(
@@ -1007,6 +1019,10 @@ impl Expression {
             _ => ExpressionValueShape::Ordinary,
         };
 
+        let folded_provenance = self
+            .synthetic_interface_provenance
+            .union(&rhs.synthetic_interface_provenance);
+
         let mut result_expression = Expression::new(
             kind,
             self.location.to_owned(),
@@ -1016,6 +1032,7 @@ impl Expression {
         )
         .with_regular_division_provenance(contains_regular_division);
         result_expression.value_shape = result_value_shape;
+        result_expression.synthetic_interface_provenance = folded_provenance;
 
         Ok(Some(result_expression))
     }

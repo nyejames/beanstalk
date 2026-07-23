@@ -87,6 +87,7 @@ impl<'a> HirValidator<'a> {
         self.validate_region_graph()?;
         self.validate_start_function()?;
         self.validate_function_origins()?;
+        self.validate_function_provenance()?;
         self.validate_function_cfg_ownership()?;
 
         // 4. Validate module-level metadata.

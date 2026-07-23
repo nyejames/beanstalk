@@ -214,9 +214,12 @@ pub(super) fn normalize_module_constant_template_expression(
     let mut normalized = expression.to_owned();
 
     match finalization {
-        FinalizedTemplateValue::Folded(folded) => {
+        FinalizedTemplateValue::Folded(folded, fold_provenance) => {
             normalized.diagnostic_type = DataType::StringSlice;
             normalized.kind = ExpressionKind::StringSlice(folded);
+            normalized.synthetic_interface_provenance = normalized
+                .synthetic_interface_provenance
+                .union(&fold_provenance);
         }
 
         FinalizedTemplateValue::Helper(_) => {}

@@ -39,6 +39,9 @@ use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::synthetic_interface_provenance::{
+    SyntheticInterfaceClass, SyntheticInterfaceMemberIdentity, SyntheticInterfaceProvenance,
+};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::compiler_frontend::value_mode::ValueMode;
 use crate::projects::settings::DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS;
@@ -62,7 +65,8 @@ fn test_project_path_resolver() -> ProjectPathResolver {
 }
 
 fn finalized_folded(value: FinalizedTemplateValue) -> StringId {
-    let FinalizedTemplateValue::Folded(value) = value else {
+    // This helper owns text-only assertions; provenance is covered by the focused fold tests.
+    let FinalizedTemplateValue::Folded(value, _) = value else {
         panic!("test expected a folded finalization value");
     };
     value
@@ -2338,6 +2342,163 @@ fn ordinary_runtime_template_handoff_uses_module_tir_store() {
 }
 
 #[test]
+fn folded_template_preserves_selected_effective_dynamic_provenance() {
+    let mut string_table = StringTable::new();
+    let unselected_text = string_table.intern("unselected");
+    let selected_structural_text = string_table.intern("selected structural");
+    let selected_effective_text = string_table.intern("selected effective");
+    let location = SourceLocation::default();
+    let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
+
+    let unselected_member = SyntheticInterfaceMemberIdentity::new(
+        SyntheticInterfaceClass::ProjectContext,
+        "render",
+        "unselected",
+    );
+    let selected_member = SyntheticInterfaceMemberIdentity::new(
+        SyntheticInterfaceClass::ProjectContext,
+        "render",
+        "selected",
+    );
+
+    let (template_id, selected_site_id) = {
+        let mut store = template_ir_store.borrow_mut();
+        let mut builder = TemplateIrBuilder::new(&mut store);
+        let unselected_node = builder.push_dynamic_expression_node(
+            Expression::string_slice(unselected_text, location.clone(), ValueMode::ImmutableOwned)
+                .with_synthetic_interface_provenance(SyntheticInterfaceProvenance::single(
+                    unselected_member,
+                )),
+            TemplateSegmentOrigin::Body,
+            None,
+            location.clone(),
+        );
+        let selected_node = builder.push_dynamic_expression_node(
+            Expression::string_slice(
+                selected_structural_text,
+                location.clone(),
+                ValueMode::ImmutableOwned,
+            ),
+            TemplateSegmentOrigin::Body,
+            None,
+            location.clone(),
+        );
+        let branch = TemplateIrBranch::new(
+            TemplateBranchSelector::Bool(Expression::bool(
+                false,
+                location.clone(),
+                ValueMode::ImmutableOwned,
+            )),
+            unselected_node,
+            location.clone(),
+        );
+        let root = builder.push_branch_chain_node(vec![branch], Some(selected_node), location);
+        let template_id = builder.finish_template(
+            root,
+            Style::default(),
+            TemplateType::String,
+            TemplateIrSummary::default(),
+            SourceLocation::default(),
+        );
+        let selected_site_id = match store
+            .get_node(selected_node)
+            .expect("selected dynamic node should exist")
+            .kind
+        {
+            TemplateIrNodeKind::DynamicExpression { site_id, .. } => site_id,
+            _ => panic!("expected selected dynamic expression node"),
+        };
+        (template_id, selected_site_id)
+    };
+
+    let overlay_id =
+        template_ir_store
+            .borrow_mut()
+            .allocate_expression_overlay(TirExpressionOverlay {
+                overrides: vec![(
+                    selected_site_id,
+                    Box::new(
+                        Expression::string_slice(
+                            selected_effective_text,
+                            SourceLocation::default(),
+                            ValueMode::ImmutableOwned,
+                        )
+                        .with_synthetic_interface_provenance(
+                            SyntheticInterfaceProvenance::single(selected_member.clone()),
+                        ),
+                    ),
+                )],
+            });
+    let template = template_with_reference(
+        TemplateTirReference {
+            root: template_id,
+            phase: TemplateTirPhase::Composed,
+            context: TemplateViewContext {
+                expression_overlay: Some(overlay_id),
+                ..TemplateViewContext::default()
+            },
+        },
+        SourceLocation::default(),
+    );
+    let constant_expression = Expression::template(template.clone(), ValueMode::ImmutableOwned);
+    assert!(
+        constant_expression
+            .synthetic_interface_provenance
+            .is_empty(),
+        "the outer template must start without injected provenance"
+    );
+
+    let project_path_resolver = test_project_path_resolver();
+    let path_format_config = PathStringFormatConfig::default();
+    let source_file_scope = InternedPath::new();
+    let ExpressionKind::Template(constant_template) = &constant_expression.kind else {
+        panic!("module constant regression must start from a template expression");
+    };
+    let normalized_constant =
+        super::super::normalize_constants::normalize_module_constant_template_expression(
+            &constant_expression,
+            constant_template,
+            TemplateValueFinalizationInputs {
+                source_file_scope: &source_file_scope,
+                path_format_config: &path_format_config,
+                project_path_resolver: &project_path_resolver,
+                string_table: &mut string_table,
+                template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
+                template_ir_store: &template_ir_store,
+            },
+        )
+        .expect("selected exact TIR fold should normalize module constants");
+    assert_eq!(
+        normalized_constant.synthetic_interface_provenance.members(),
+        std::slice::from_ref(&selected_member),
+        "module constant normalization must retain selected folded provenance"
+    );
+
+    let mut expression = Expression::template(template, ValueMode::ImmutableOwned);
+    let mut context = TemplateNormalizationContext {
+        source_file_scope: &source_file_scope,
+        path_format_config: &path_format_config,
+        project_path_resolver: &project_path_resolver,
+        template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
+        string_table: &mut string_table,
+        template_ir_store: Rc::clone(&template_ir_store),
+    };
+
+    normalize_expression_templates(&mut expression, &mut context)
+        .expect("selected exact TIR fold should normalize");
+
+    assert!(matches!(
+        expression.kind,
+        ExpressionKind::StringSlice(value) if value == selected_effective_text
+    ));
+    assert_eq!(
+        expression.synthetic_interface_provenance.members(),
+        &[selected_member],
+        "only the selected effective dynamic payload may reach the folded value"
+    );
+}
+
+#[test]
 fn runtime_template_expression_normalization_replaces_template_with_owned_handoff() {
     let mut string_table = StringTable::new();
     let text = string_table.intern("hello ");
@@ -2351,7 +2512,17 @@ fn runtime_template_expression_normalization_replaces_template_with_owned_handof
     let template =
         registered_runtime_template(text, "name", context, &template_ir_store, &mut string_table);
 
-    let mut expression = Expression::template(template, ValueMode::ImmutableOwned);
+    // This test covers preservation of metadata already carried by the outer runtime template
+    // expression. Nested effective-fold provenance is covered by the folded-template test above.
+    let provenance_member = SyntheticInterfaceMemberIdentity::new(
+        SyntheticInterfaceClass::ProjectContext,
+        "render",
+        "html",
+    );
+    let mut expression = Expression::template(template, ValueMode::ImmutableOwned)
+        .with_synthetic_interface_provenance(SyntheticInterfaceProvenance::single(
+            provenance_member.clone(),
+        ));
 
     let mut context = TemplateNormalizationContext {
         source_file_scope: &source_file_scope,
@@ -2374,6 +2545,10 @@ fn runtime_template_expression_normalization_replaces_template_with_owned_handof
     );
     assert_eq!(expression.diagnostic_type, DataType::Template);
     assert_eq!(expression.value_mode, ValueMode::ImmutableOwned);
+    assert_eq!(
+        expression.synthetic_interface_provenance.members(),
+        &[provenance_member]
+    );
     assert!(
         expression
             .reactive_template

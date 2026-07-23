@@ -20,29 +20,29 @@ This document replaces the previous incremental phase sequence at the same path.
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/canonical-module-compilation-and-scoped-packages-plan.md
 STATUS: active
-CURRENT_SLICE: R2f2a complete — direct exported validated generic-function body artefacts retained in compiler metadata; checkpoint ready to commit
-LAST_ACCEPTED_COMMIT: c11eb2c71 (R2f1)
-WORKTREE: main at c11eb2c71 with reviewed R2f2a source, focused tests and this plan update; preserve and ignore unrelated documentation work if it appears
-REQUIRED_RELOADS: startup files, this plan, generic function template/signature owners, module metadata owners and current source/diff
+CURRENT_SLICE: R2g1 complete — direct synthetic-interface provenance retained through AST/TIR and per-function HIR facts; checkpoint ready to commit
+LAST_ACCEPTED_COMMIT: dde19b99a (R2f2a)
+WORKTREE: main at dde19b99a with reviewed R2g1 source, focused tests and this plan update; preserve and ignore unrelated documentation work if it appears
+REQUIRED_RELOADS: startup files, this plan, semantic-identity/provenance owners, AST expression metadata, HIR function metadata/validation and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: compiler-design-overview.md and locked decision 10 separate consumer-visible generic semantics from declaring-module body/materialisation metadata; R2 borrow/effect joins remain later work
-- code: ModuleCompilerMetadata now retains one deterministic ValidatedGenericTemplateArtefact per direct exported generic free-function origin; the legacy flat-module handoff discards the unconsumed donor-local payload before string-ID remap
+- docs: compiler-design-overview.md and locked decision 14 require stable member-granular synthetic-interface dependencies; empty means portable and project-global membership means project-context provenance
+- code: one canonical synthetic provenance vocabulary now flows through AST value derivation and exact cached TIR fold results into one explicit direct-provenance fact per local HIR FunctionId; production producers and downstream call-edge propagation remain later slices
 ACCEPTANCE_CRITERIA:
-- ModuleCompilerMetadata owns one deterministic validated template artefact per directly exported generic free-function origin and no artefact for non-generic or private functions
-- each artefact is keyed by the exact OriginFunctionId already retained by the draft and moves or reuses the one existing GenericFunctionTemplate body payload; this checkpoint must not claim that its donor-local template fields form the complete later materialisation context
-- no Ast, TIR store/ID/view/overlay, Rc, RefCell, duplicate TypeEnvironment, whole AstModuleLookups bundle or second body-token representation crosses into metadata
-- projection/extraction is total: missing, duplicate, private, non-generic and path/origin/template mismatches fail as CompilerError or remain intentional exclusions; legacy behavior and diagnostics remain unchanged
-- module-result/metadata tests prove retention, exclusion and the actual pre-remap legacy drop boundary without ever remapping a non-empty unremappable store or making the backend a template consumer
+- one owned, stable, deterministic synthetic-interface member identity and semantic-provenance vocabulary carries no StringId, InternedPath, local IDs, source locations or rendered names
+- AST value metadata can carry explicit synthetic-member dependencies and preserves their sorted, duplicate-free union through value transformations that retain or derive semantic meaning
+- HIR retains exactly one direct provenance fact per local FunctionId, including explicit empty facts, and validation rejects missing, extra or inconsistent coverage as CompilerError
+- production behavior remains unchanged while focused tests prove empty portability, non-empty synthetic dependency retention, deduplication and AST-to-HIR function association
+- no @project namespace/import implementation, public-draft final join, link propagation, package-facade validation, fingerprints, backend changes or generic materialisation changes enter this slice
 VALIDATION_STATE:
-- focused: passed; 11 validated-template metadata tests, 2 module-lane tests and 22 generic-function tests
-- cargo fmt --all -- --check: passed
-- just validate: passed; 3 cross-target Clippy checks, 3701 Rust tests, 1793 integration contracts, docs check and 28 benchmark sanity cases
-DOCS_IMPACT: active plan only; progress matrix should remain unchanged because R2f2 retains compiler metadata for already-supported generic functions
-BLOCKERS_OR_OPEN_DECISIONS: complete materialisation context remains intentionally unresolved for a later bounded R2/R3 slice because the current materializer also depends on declaration, visibility and type context forbidden from this body-artefact checkpoint
-DELEGATION_DECISION: ollama - user requires Ollama for every worker slice
-NEXT_WORKER_ORDER: ollama only
+- focused provenance/cast/prepared-fold/final-view tests: passed (21/5/14/11 tests)
+- parent `cargo fmt --all -- --check`: passed
+- parent `just validate`: passed; native/Linux/Windows Clippy, 3722 Rust tests, 1793 integration contracts, docs check and 28 benchmark sanity cases
+DOCS_IMPACT: active plan only; progress matrix should remain unchanged because this slice adds internal provenance plumbing without implementing @project behavior
+BLOCKERS_OR_OPEN_DECISIONS: immutable generic materialisation context will be extracted with the R3 sidecar materialiser, whose generated-local type environment and declaring-module helper boundary define the real consumer; retaining the current mutable AstModuleLookups/TypeEnvironment/TIR context in R2 would violate the canonical artefact boundary
+DELEGATION_DECISION: codex-cli - user replaced the Ollama-only instruction after the R2g1 Ollama run completed; use Codex CLI for every subsequent implementation/correction slice
+NEXT_WORKER_ORDER: codex-cli only
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit the accepted R2f2a checkpoint, then define the bounded R2f2b immutable generic materialisation-context slice through Ollama
+NEXT_RESUME_ACTION: stage and commit R2g1, then reload and launch R2 item 9 through Codex CLI
 ```
 
 Do not append worktree-specific notes, complete validation histories or worker transcripts to this plan. Keep this status block current and concise. Git history is the validation history.

@@ -29,6 +29,7 @@ use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::synthetic_interface_provenance::SyntheticInterfaceProvenance;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
 // -------------------------
@@ -67,6 +68,30 @@ pub(crate) enum TemplateEmission {
     Output(StringId),
     Break(Option<StringId>),
     Continue(Option<StringId>),
+}
+
+/// Exact fold output paired with the semantic provenance consumed to produce it.
+///
+/// WHAT: keeps text emission and the canonical synthetic-interface dependency set together for
+///      every exact TIR fold, including recursive child and wrapper folds.
+/// WHY: provenance must follow the selected fold path and must remain part of the cached result;
+///      an ambient accumulator would lose cache identity and could leak unselected branches.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct TemplateFoldResult {
+    pub(crate) emission: TemplateEmission,
+    pub(crate) provenance: SyntheticInterfaceProvenance,
+}
+
+impl TemplateFoldResult {
+    pub(crate) fn new(
+        emission: TemplateEmission,
+        provenance: SyntheticInterfaceProvenance,
+    ) -> Self {
+        Self {
+            emission,
+            provenance,
+        }
+    }
 }
 
 /// Borrow-first expression resolution result for template folding.
@@ -128,25 +153,35 @@ impl TemplateFoldContext<'_> {
 //  Folding Implementation
 // -------------------------
 
-pub(crate) fn selected_option_capture_payload(
+/// Resolves one option-capture scrutinee and returns both its binding and the provenance consumed
+/// while deciding whether the capture is present.
+pub(crate) fn selected_option_capture_payload_with_provenance(
     scrutinee: &Expression,
     pattern: &MatchPattern,
     store: &TemplateIrStore,
     fold_context: &mut TemplateFoldContext<'_>,
-) -> Result<Option<TemplateFoldBinding>, TemplateError> {
+) -> Result<(Option<TemplateFoldBinding>, SyntheticInterfaceProvenance), TemplateError> {
     match const_option_presence(scrutinee, store, fold_context)? {
-        ConstOptionPresence::Present(value) => Ok(Some(TemplateFoldBinding {
-            path: option_capture_binding_path(pattern)?,
-            value: *value,
-        })),
+        ConstOptionPresence::Present { value, provenance } => Ok((
+            Some(TemplateFoldBinding {
+                path: option_capture_binding_path(pattern)?,
+                value: *value,
+            }),
+            provenance,
+        )),
 
-        ConstOptionPresence::Absent => Ok(None),
+        ConstOptionPresence::Absent { provenance } => Ok((None, provenance)),
     }
 }
 
 enum ConstOptionPresence {
-    Present(Box<Expression>),
-    Absent,
+    Present {
+        value: Box<Expression>,
+        provenance: SyntheticInterfaceProvenance,
+    },
+    Absent {
+        provenance: SyntheticInterfaceProvenance,
+    },
 }
 
 fn const_option_presence(
@@ -164,7 +199,9 @@ fn const_option_presence(
     };
 
     match &resolved_ref.kind {
-        ExpressionKind::OptionNone => Ok(ConstOptionPresence::Absent),
+        ExpressionKind::OptionNone => Ok(ConstOptionPresence::Absent {
+            provenance: resolved_ref.synthetic_interface_provenance.clone(),
+        }),
 
         ExpressionKind::Coerced { value, .. } => {
             let payload = (**value).clone();
@@ -187,7 +224,12 @@ fn const_option_presence(
                 .is_compile_time_value();
 
             if payload_is_compile_time_constant {
-                Ok(ConstOptionPresence::Present(Box::new(payload)))
+                Ok(ConstOptionPresence::Present {
+                    provenance: resolved_ref
+                        .synthetic_interface_provenance
+                        .union(&payload.synthetic_interface_provenance),
+                    value: Box::new(payload),
+                })
             } else {
                 Err(option_capture_const_deferred_error(resolved_ref).into())
             }
@@ -259,11 +301,12 @@ pub(crate) fn loop_body_not_const_error(
     }
 }
 
-pub(crate) fn fold_bool_condition(
+/// Evaluates a const template condition and returns the exact value provenance consumed by it.
+pub(crate) fn fold_bool_condition_with_provenance(
     condition: &Expression,
     fallback_location: &SourceLocation,
     fold_context: &mut TemplateFoldContext<'_>,
-) -> Result<bool, TemplateError> {
+) -> Result<(bool, SyntheticInterfaceProvenance), TemplateError> {
     let resolved = resolve_fold_bindings_in_expression(condition, fold_context)?;
 
     // Borrow the resolved expression by reference to avoid cloning when no
@@ -273,7 +316,8 @@ pub(crate) fn fold_bool_condition(
         FoldResolvedExpression::Owned(expr) => expr,
     };
 
-    fold_resolved_bool_condition(resolved_ref, fallback_location)
+    let value = fold_resolved_bool_condition(resolved_ref, fallback_location)?;
+    Ok((value, resolved_ref.synthetic_interface_provenance.clone()))
 }
 
 fn fold_resolved_bool_condition(

@@ -21,6 +21,9 @@ use crate::compiler_frontend::datatypes::TypeEnvironment;
 use crate::compiler_frontend::datatypes::ids::{GenericParameterId, TypeId};
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::synthetic_interface_provenance::{
+    SyntheticInterfaceClass, SyntheticInterfaceMemberIdentity, SyntheticInterfaceProvenance,
+};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::compiler_frontend::traits::ids::{TraitEvidenceId, TraitId};
 
@@ -980,10 +983,27 @@ fn fold_cast_fallible_builtin_failure_with_catch_folds_to_handler_value() {
     let template_ir_store = test_template_ir_store();
     let mut type_environment = TypeEnvironment::new();
     let text = string_table.get_or_intern("nope".to_string());
+    let source_member = SyntheticInterfaceMemberIdentity::new(
+        SyntheticInterfaceClass::ProjectContext,
+        "render",
+        "source",
+    );
+    let handler_member = SyntheticInterfaceMemberIdentity::new(
+        SyntheticInterfaceClass::Builder,
+        "render",
+        "fallback",
+    );
     let source =
-        Expression::string_slice(text, SourceLocation::default(), ValueMode::ImmutableOwned);
+        Expression::string_slice(text, SourceLocation::default(), ValueMode::ImmutableOwned)
+            .with_synthetic_interface_provenance(SyntheticInterfaceProvenance::single(
+                source_member.clone(),
+            ));
     let target_type_id = type_environment.builtins().int;
-    let handler_value = Expression::int(0, SourceLocation::default(), ValueMode::ImmutableOwned);
+    let handler_value = Expression::int(0, SourceLocation::default(), ValueMode::ImmutableOwned)
+        .with_synthetic_interface_provenance(SyntheticInterfaceProvenance::from_members(vec![
+            handler_member.clone(),
+            handler_member.clone(),
+        ]));
 
     let cast = fallible_builtin_cast_with_catch(
         source,
@@ -999,6 +1019,10 @@ fn fold_cast_fallible_builtin_failure_with_catch_folds_to_handler_value() {
 
     assert_eq!(folded.type_id, target_type_id);
     assert!(matches!(folded.kind, ExpressionKind::Int(0)));
+    assert_eq!(
+        folded.synthetic_interface_provenance.members(),
+        &[source_member, handler_member]
+    );
 }
 
 #[test]
@@ -1007,10 +1031,24 @@ fn fold_cast_fallible_builtin_success_with_catch_ignores_handler() {
     let template_ir_store = test_template_ir_store();
     let mut type_environment = TypeEnvironment::new();
     let text = string_table.get_or_intern("123".to_string());
+    let source_member = SyntheticInterfaceMemberIdentity::new(
+        SyntheticInterfaceClass::ProjectContext,
+        "render",
+        "source",
+    );
+    let handler_member = SyntheticInterfaceMemberIdentity::new(
+        SyntheticInterfaceClass::Builder,
+        "render",
+        "fallback",
+    );
     let source =
-        Expression::string_slice(text, SourceLocation::default(), ValueMode::ImmutableOwned);
+        Expression::string_slice(text, SourceLocation::default(), ValueMode::ImmutableOwned)
+            .with_synthetic_interface_provenance(SyntheticInterfaceProvenance::single(
+                source_member.clone(),
+            ));
     let target_type_id = type_environment.builtins().int;
-    let handler_value = Expression::int(999, SourceLocation::default(), ValueMode::ImmutableOwned);
+    let handler_value = Expression::int(999, SourceLocation::default(), ValueMode::ImmutableOwned)
+        .with_synthetic_interface_provenance(SyntheticInterfaceProvenance::single(handler_member));
 
     let cast = fallible_builtin_cast_with_catch(
         source,
@@ -1026,6 +1064,10 @@ fn fold_cast_fallible_builtin_success_with_catch_ignores_handler() {
 
     assert_eq!(folded.type_id, target_type_id);
     assert!(matches!(folded.kind, ExpressionKind::Int(123)));
+    assert_eq!(
+        folded.synthetic_interface_provenance.members(),
+        &[source_member]
+    );
 }
 
 #[test]

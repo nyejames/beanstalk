@@ -27,6 +27,7 @@ use crate::compiler_frontend::hir::regions::HirRegion;
 use crate::compiler_frontend::hir::structs::{HirField, HirStruct};
 use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
+use crate::compiler_frontend::synthetic_interface_provenance::SyntheticInterfaceProvenance;
 use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
 use crate::return_hir_transformation_error;
 
@@ -429,6 +430,10 @@ impl<'a> HirBuilder<'a> {
             .bind_function_name(function_id, name.to_owned());
         self.side_table.map_function(location, &function);
         self.push_function(function);
+
+        self.module
+            .function_provenance
+            .insert(function_id, SyntheticInterfaceProvenance::empty());
 
         Ok(())
     }

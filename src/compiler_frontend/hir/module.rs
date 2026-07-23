@@ -23,6 +23,7 @@ use crate::compiler_frontend::hir::ids::FunctionId;
 use crate::compiler_frontend::hir::regions::HirRegion;
 use crate::compiler_frontend::hir::structs::HirStruct;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap};
+use crate::compiler_frontend::synthetic_interface_provenance::SyntheticInterfaceProvenance;
 use rustc_hash::FxHashMap;
 
 // -------------------------
@@ -97,6 +98,17 @@ pub struct HirModule {
     /// WHY: provides metadata for later borrow-checker and lowering optimizations
     ///      without changing HIR semantics today.
     pub const_facts: HirConstFacts,
+
+    /// Direct synthetic compile-time interface provenance for every local function.
+    ///
+    /// WHAT: one immutable read-only provenance fact per local `FunctionId`, including an explicit
+    /// empty fact for functions with no synthetic-interface dependencies. The fact is the sorted,
+    /// duplicate-free union of all expression provenance lowered from the function body. It is a
+    /// read-only fact and does not alter HIR control flow.
+    /// WHY: the per-function link-fact lane described in the compiler design overview needs stable,
+    /// deterministic direct provenance. HIR validation rejects missing, extra or out-of-range
+    /// coverage as `CompilerError`.
+    pub function_provenance: FxHashMap<FunctionId, SyntheticInterfaceProvenance>,
 }
 
 impl HirModule {
@@ -112,6 +124,7 @@ impl HirModule {
             module_constants: vec![],
             regions: vec![],
             const_facts: HirConstFacts::default(),
+            function_provenance: FxHashMap::default(),
         }
     }
 

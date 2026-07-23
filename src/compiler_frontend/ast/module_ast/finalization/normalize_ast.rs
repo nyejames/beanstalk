@@ -81,6 +81,7 @@ use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::synthetic_interface_provenance::SyntheticInterfaceProvenance;
 use crate::compiler_frontend::value_mode::ValueMode;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::cell::RefCell;
@@ -1135,8 +1136,8 @@ fn normalize_expression_templates_with_context(
             )?;
 
             match finalization {
-                FinalizedTemplateValue::Folded(folded) => {
-                    Some(NormalizedTemplateExpression::Folded(folded))
+                FinalizedTemplateValue::Folded(folded, provenance) => {
+                    Some(NormalizedTemplateExpression::Folded(folded, provenance))
                 }
 
                 FinalizedTemplateValue::Runtime(prepared) => {
@@ -1280,23 +1281,29 @@ fn normalize_expression_templates_with_context(
     };
 
     match template_replacement {
-        Some(NormalizedTemplateExpression::Folded(folded_template)) => {
+        Some(NormalizedTemplateExpression::Folded(folded_template, fold_provenance)) => {
+            let outer_provenance = expression.synthetic_interface_provenance.clone();
             expression.kind = ExpressionKind::StringSlice(folded_template);
             expression.diagnostic_type = DataType::StringSlice;
             expression.value_mode = ValueMode::ImmutableOwned;
             expression.reactive_template = None;
+            expression.synthetic_interface_provenance = outer_provenance.union(&fold_provenance);
         }
 
         Some(NormalizedTemplateExpression::RuntimeSlotApplication(handoff, reactive_template)) => {
             let value_mode = expression.value_mode.clone();
+            let synthetic_interface_provenance = expression.synthetic_interface_provenance.clone();
             *expression = Expression::runtime_slot_application_handoff(handoff, value_mode);
             expression.reactive_template = reactive_template;
+            expression.synthetic_interface_provenance = synthetic_interface_provenance;
         }
 
         Some(NormalizedTemplateExpression::RuntimeTemplate(handoff, reactive_template)) => {
             let value_mode = expression.value_mode.clone();
+            let synthetic_interface_provenance = expression.synthetic_interface_provenance.clone();
             *expression = Expression::runtime_template_handoff(handoff, value_mode);
             expression.reactive_template = reactive_template;
+            expression.synthetic_interface_provenance = synthetic_interface_provenance;
         }
 
         None => {
@@ -1311,7 +1318,7 @@ fn normalize_expression_templates_with_context(
 }
 
 enum NormalizedTemplateExpression {
-    Folded(StringId),
+    Folded(StringId, SyntheticInterfaceProvenance),
     RuntimeTemplate(
         OwnedRuntimeTemplateHandoff,
         Option<ReactiveTemplateMetadata>,

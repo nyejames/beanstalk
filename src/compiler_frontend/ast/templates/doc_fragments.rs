@@ -11,8 +11,9 @@ use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::ast::templates::error::TemplateError;
 use crate::compiler_frontend::ast::templates::template::Template;
 use crate::compiler_frontend::ast::templates::template::{CommentDirectiveKind, TemplateType};
-use crate::compiler_frontend::ast::templates::template_folding::TemplateEmission;
-use crate::compiler_frontend::ast::templates::template_folding::TemplateFoldContext;
+use crate::compiler_frontend::ast::templates::template_folding::{
+    TemplateEmission, TemplateFoldContext, TemplateFoldResult,
+};
 use crate::compiler_frontend::ast::templates::tir::{
     PreparedTemplate, TemplateIrStore, TemplatePreparationMode, TemplateTirPhase, TirFoldCache,
     TirView, fold_prepared_template, prepare_tir_view,
@@ -165,7 +166,12 @@ fn collect_doc_fragments(
                 .into());
             }
         };
-        let emission = fold_prepared_template(&prepared, view, &mut fold_context)?;
+        // Documentation fragments are rendered text metadata; their provenance has no semantic
+        // consumer at this boundary.
+        let TemplateFoldResult {
+            emission,
+            provenance: _,
+        } = fold_prepared_template(&prepared, view, &mut fold_context)?;
         let rendered = match emission {
             TemplateEmission::Output(value) => value,
             TemplateEmission::NoOutput => fold_context.string_table.intern(""),

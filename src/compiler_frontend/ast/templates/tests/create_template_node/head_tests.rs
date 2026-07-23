@@ -15,6 +15,8 @@ use crate::compiler_frontend::ast::templates::template_control_flow::{
     validate_const_required_template_control_flow,
     validate_runtime_template_control_flow_slot_artifacts,
 };
+#[cfg(feature = "benchmark_counters")]
+use crate::compiler_frontend::ast::templates::template_folding::TemplateFoldResult;
 use crate::compiler_frontend::ast::templates::template_head_parser::{
     TemplateHeadParseRequest, parse_template_head,
 };
@@ -1968,7 +1970,11 @@ fn const_required_construction_preparation_is_reused_by_folding() {
         reference.context,
     )
     .expect("const-required construction view should remain valid for folding");
-    let emission = fold_prepared_template(&prepared, view, &mut fold_context)
+    // This counter test asserts only the folded text shape.
+    let TemplateFoldResult {
+        emission,
+        provenance: _,
+    } = fold_prepared_template(&prepared, view, &mut fold_context)
         .expect("returned const-required preparation should fold");
 
     assert!(matches!(emission, TemplateEmission::Output(_)));

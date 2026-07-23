@@ -23,6 +23,7 @@ pub(crate) mod keywords;
 pub(crate) mod public_interface_draft;
 pub(crate) mod semantic_identity;
 pub(crate) mod source_module_origin;
+pub(crate) mod synthetic_interface_provenance;
 pub(crate) mod traits;
 pub(crate) mod validated_generic_template_metadata;
 
@@ -88,5 +89,6 @@ pub(crate) mod tests {
     pub(crate) mod parse_support;
     mod plain_markdown_tests;
     mod semantic_identity_tests;
+    mod synthetic_interface_provenance_tests;
     pub(crate) mod type_id_fixture_support;
 }

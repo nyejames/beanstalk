@@ -2,7 +2,9 @@ use super::*;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::templates::template::{TemplateSegmentOrigin, TemplateType};
-use crate::compiler_frontend::ast::templates::template_folding::TemplateEmission;
+use crate::compiler_frontend::ast::templates::template_folding::{
+    TemplateEmission, TemplateFoldResult,
+};
 use crate::compiler_frontend::ast::templates::tir::{
     PreparedTemplate, TemplateIrNodeId, TemplateIrNodeKind, TemplateIrStore,
     TemplatePreparationMode, TemplateTirPhase, TirView, fold_prepared_template, prepare_tir_view,
@@ -195,7 +197,12 @@ fn fold_template_with_fold_context(
             panic!("test template expected to be foldable")
         }
     };
-    match fold_prepared_template(&prepared, view, fold_context)? {
+    // This test helper returns only rendered text for parser assertions.
+    let TemplateFoldResult {
+        emission,
+        provenance: _,
+    } = fold_prepared_template(&prepared, view, fold_context)?;
+    match emission {
         TemplateEmission::Output(output) => Ok(output),
         TemplateEmission::NoOutput => Ok(fold_context.string_table.intern("")),
         TemplateEmission::Break(_) | TemplateEmission::Continue(_) => {

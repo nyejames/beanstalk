@@ -11,6 +11,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::compiler_frontend::ast::ast_nodes::{Declaration, LoopBindings};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::expressions::expression_kind::Operator;
 use crate::compiler_frontend::ast::expressions::expression_rpn::{
@@ -21,10 +22,13 @@ use crate::compiler_frontend::ast::templates::template::Template;
 use crate::compiler_frontend::ast::templates::template::{
     SlotKey, Style, TemplateSegmentOrigin, TemplateType,
 };
-use crate::compiler_frontend::ast::templates::template_control_flow::TemplateFoldBinding;
+use crate::compiler_frontend::ast::templates::template_control_flow::{
+    ConstRangeIterationValue, TemplateFoldBinding, build_collection_iteration_bindings,
+    build_range_iteration_bindings,
+};
 use crate::compiler_frontend::ast::templates::template_folding::{
     FoldResolvedExpression, TemplateFoldContext, resolve_fold_bindings_in_expression,
-    selected_option_capture_payload,
+    selected_option_capture_payload_with_provenance,
 };
 use crate::compiler_frontend::ast::templates::tir::{
     TemplateIrBuilder, TemplateIrStore, TemplateIrSummary, TemplateTirPhase, TemplateTirReference,
@@ -36,6 +40,9 @@ use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::synthetic_interface_provenance::{
+    SyntheticInterfaceClass, SyntheticInterfaceMemberIdentity, SyntheticInterfaceProvenance,
+};
 use crate::compiler_frontend::tokenizer::tokens::{CharPosition, SourceLocation};
 use crate::compiler_frontend::value_mode::ValueMode;
 use crate::projects::settings::DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS;
@@ -63,6 +70,47 @@ fn test_project_path_resolver() -> ProjectPathResolver {
         &crate::builder_surface::SourceFileKindRegistry::default(),
     )
     .expect("test path resolver should be valid")
+}
+
+#[test]
+fn const_loop_iteration_bindings_preserve_source_provenance() {
+    let mut string_table = StringTable::new();
+    let item_path = InternedPath::from_single_str("item", &mut string_table);
+    let index_path = InternedPath::from_single_str("index", &mut string_table);
+    let location = test_location(1);
+    let member = SyntheticInterfaceMemberIdentity::new(
+        SyntheticInterfaceClass::ProjectContext,
+        "render",
+        "html",
+    );
+    let provenance = SyntheticInterfaceProvenance::single(member.clone());
+    let bindings = LoopBindings {
+        item: Some(Declaration {
+            id: item_path,
+            value: Expression::int(0, location.clone(), ValueMode::ImmutableOwned),
+        }),
+        index: Some(Declaration {
+            id: index_path,
+            value: Expression::int(0, location.clone(), ValueMode::ImmutableOwned),
+        }),
+    };
+
+    let collection_bindings = build_collection_iteration_bindings(
+        &bindings,
+        &Expression::int(1, location.clone(), ValueMode::ImmutableOwned)
+            .with_synthetic_interface_provenance(provenance.clone()),
+        0,
+        &provenance,
+    );
+    assert!(collection_bindings.iter().all(|binding| {
+        binding.value.synthetic_interface_provenance.members() == [member.clone()]
+    }));
+
+    let range_bindings =
+        build_range_iteration_bindings(&bindings, ConstRangeIterationValue::Int(1), 0, &provenance);
+    assert!(range_bindings.iter().all(|binding| {
+        binding.value.synthetic_interface_provenance.members() == [member.clone()]
+    }));
 }
 
 // -------------------------------------------------------
@@ -298,9 +346,15 @@ fn option_capture_scalar_payload_uses_ordinary_const_rules() {
         fold_cache: TirFoldCache::new(),
     };
 
-    let capture = selected_option_capture_payload(&scrutinee, &pattern, &store, &mut fold_context)
-        .expect("a scalar const option payload should remain compile-time constant")
-        .expect("the present option should produce a capture binding");
+    let capture = selected_option_capture_payload_with_provenance(
+        &scrutinee,
+        &pattern,
+        &store,
+        &mut fold_context,
+    )
+    .expect("a scalar const option payload should remain compile-time constant")
+    .0
+    .expect("the present option should produce a capture binding");
 
     assert_eq!(capture.path, capture_path);
     assert!(matches!(capture.value.kind, ExpressionKind::StringSlice(_)));
@@ -358,13 +412,14 @@ fn assert_store_backed_option_capture(
     // The TIR folder retains this borrow while option-capture resolution classifies
     // nested template payloads. Store classification must therefore remain read-only.
     let active_fold_borrow = store.borrow();
-    let capture = selected_option_capture_payload(
+    let capture = selected_option_capture_payload_with_provenance(
         &scrutinee,
         &pattern,
         &active_fold_borrow,
         &mut fold_context,
     )
     .expect("the composed slot wrapper is a compile-time option payload")
+    .0
     .expect("the present option should produce a capture binding");
 
     assert_eq!(capture.path, capture_path);

@@ -8,8 +8,11 @@
 //! WHY: production finalization folds through stable store-backed `TirView`s,
 //!      so the final-view entry point needs focused coverage for those surfaces.
 
-use crate::compiler_frontend::ast::ast_nodes::{LoopBindings, RangeEndKind, RangeLoopSpec};
+use crate::compiler_frontend::ast::ast_nodes::{
+    Declaration, LoopBindings, RangeEndKind, RangeLoopSpec,
+};
 use crate::compiler_frontend::ast::expressions::expression::Expression;
+use crate::compiler_frontend::ast::expressions::expression_types::ConstRecordState;
 use crate::compiler_frontend::ast::templates::error::TemplateError;
 use crate::compiler_frontend::ast::templates::styles::markdown::markdown_formatter;
 use crate::compiler_frontend::ast::templates::template::{
@@ -19,7 +22,7 @@ use crate::compiler_frontend::ast::templates::template_control_flow::{
     TemplateBranchSelector, TemplateLoopControlKind, TemplateLoopHeader,
 };
 use crate::compiler_frontend::ast::templates::template_folding::{
-    TemplateEmission, TemplateFoldContext,
+    TemplateEmission, TemplateFoldContext, TemplateFoldResult,
 };
 use crate::compiler_frontend::ast::templates::tir::builder::TemplateIrBuilder;
 use crate::compiler_frontend::ast::templates::tir::fold::fold_prepared_template;
@@ -38,10 +41,15 @@ use crate::compiler_frontend::ast::templates::{
     OwnedRuntimeSlotApplicationHandoff, OwnedRuntimeTemplateNode,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::datatypes::DataType;
+use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::synthetic_interface_provenance::{
+    SyntheticInterfaceClass, SyntheticInterfaceMemberIdentity, SyntheticInterfaceProvenance,
+};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::compiler_frontend::value_mode::ValueMode;
 use crate::projects::settings::DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS;
@@ -157,7 +165,12 @@ fn fold_final_view_fixture(
             )));
         }
     };
-    fold_prepared_template(&prepared, view, &mut fold_context)
+    // Existing final-view text assertions do not own semantic provenance.
+    let TemplateFoldResult {
+        emission,
+        provenance: _,
+    } = fold_prepared_template(&prepared, view, &mut fold_context)?;
+    Ok(emission)
 }
 
 // -------------------------
@@ -324,6 +337,94 @@ fn final_view_fold_loop_body_concatenates_iterations() {
         emission_to_string(emission, &string_table),
         "...",
         "range loop body should be repeated through the final view"
+    );
+}
+
+#[test]
+fn final_view_fold_loop_binding_provenance_reaches_exact_result() {
+    let mut string_table = StringTable::new();
+    let member = SyntheticInterfaceMemberIdentity::new(
+        SyntheticInterfaceClass::ProjectContext,
+        "render",
+        "range",
+    );
+    let fixture = build_final_view_fixture(&mut string_table, |string_table, store| {
+        let item_path = InternedPath::from_single_str("item", string_table);
+        let mut builder = TemplateIrBuilder::new(store);
+        let body = builder.push_dynamic_expression_node(
+            Expression::reference_with_type_id(
+                item_path.clone(),
+                DataType::Int,
+                builtin_type_ids::INT,
+                empty_location(),
+                ValueMode::ImmutableReference,
+                ConstRecordState::RuntimeValue,
+            ),
+            TemplateSegmentOrigin::Body,
+            None,
+            empty_location(),
+        );
+        let range_provenance = SyntheticInterfaceProvenance::single(member.clone());
+        let header = TemplateLoopHeader::Range {
+            bindings: Box::new(LoopBindings {
+                item: Some(Declaration {
+                    id: item_path,
+                    value: Expression::int(0, empty_location(), ValueMode::ImmutableOwned),
+                }),
+                index: None,
+            }),
+            range: Box::new(RangeLoopSpec {
+                start: Expression::int(0, empty_location(), ValueMode::ImmutableOwned)
+                    .with_synthetic_interface_provenance(range_provenance.clone()),
+                end: Expression::int(2, empty_location(), ValueMode::ImmutableOwned)
+                    .with_synthetic_interface_provenance(range_provenance),
+                step: None,
+                end_kind: RangeEndKind::Exclusive,
+            }),
+        };
+        let root = builder.push_loop_node(header, body, None, empty_location());
+        builder.finish_template(
+            root,
+            Style::default(),
+            TemplateType::String,
+            TemplateIrSummary::empty(),
+            empty_location(),
+        )
+    });
+
+    let resolver = test_project_path_resolver();
+    let path_format = PathStringFormatConfig::default();
+    let source_scope = InternedPath::new();
+    let store = fixture.store.borrow();
+    let view = TirView::new(
+        &store,
+        fixture.template_id,
+        TemplateTirPhase::Composed,
+        fixture.context,
+    )
+    .expect("range loop view should construct");
+    let prepared = match prepare_tir_view(&view, TemplatePreparationMode::Value)
+        .expect("range loop view should prepare")
+    {
+        PreparedTemplate::Foldable(prepared) => prepared,
+        PreparedTemplate::Runtime(_) | PreparedTemplate::Helper(_) => {
+            panic!("range loop fixture should be foldable")
+        }
+    };
+    let mut fold_context =
+        build_test_fold_context(&mut string_table, &resolver, &path_format, &source_scope);
+    let result = fold_prepared_template(&prepared, view, &mut fold_context)
+        .expect("range loop exact fold should succeed");
+
+    assert_eq!(
+        emission_to_string(result.emission, &string_table),
+        "01",
+        "the selected range loop should render its bound values"
+    );
+    assert_eq!(
+        result.provenance.members(),
+        &[member],
+        "range provenance must reach the exact folded result through the resolved binding"
     );
 }
 

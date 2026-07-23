@@ -171,4 +171,35 @@ impl<'a> HirValidator<'a> {
 
         Ok(())
     }
+
+    pub(super) fn validate_function_provenance(&self) -> Result<(), CompilerError> {
+        // WHAT: enforce exactly one direct synthetic-interface provenance fact per local function.
+        // WHY: the per-function link-fact lane requires complete, in-range coverage. Missing,
+        // extra or out-of-range provenance is an internal `CompilerError` because the fact is
+        // compiler-owned metadata, not user-facing source state.
+        if self.module.function_provenance.len() != self.module.functions.len() {
+            return Err(self.error_with_hir(
+                format!(
+                    "HIR function_provenance contains {} entries, but module has {} functions",
+                    self.module.function_provenance.len(),
+                    self.module.functions.len()
+                ),
+                None,
+            ));
+        }
+
+        for function in &self.module.functions {
+            if !self.module.function_provenance.contains_key(&function.id) {
+                return Err(self.error_with_hir(
+                    format!(
+                        "HIR function {:?} is missing a function_provenance synthetic-interface fact",
+                        function.id
+                    ),
+                    Some(HirLocation::Function(function.id)),
+                ));
+            }
+        }
+
+        Ok(())
+    }
 }

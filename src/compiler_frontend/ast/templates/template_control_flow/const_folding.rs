@@ -17,6 +17,7 @@ use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, InvalidTemplateStructureReason,
 };
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
+use crate::compiler_frontend::synthetic_interface_provenance::SyntheticInterfaceProvenance;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::compiler_frontend::value_mode::ValueMode;
 
@@ -362,6 +363,7 @@ pub(crate) fn build_range_iteration_bindings(
     bindings: &LoopBindings,
     counter: ConstRangeIterationValue,
     zero_based_index: usize,
+    range_provenance: &SyntheticInterfaceProvenance,
 ) -> Vec<TemplateFoldBinding> {
     let mut fold_bindings = Vec::new();
 
@@ -377,7 +379,8 @@ pub(crate) fn build_range_iteration_bindings(
                 item.value.location.clone(),
                 ValueMode::ImmutableOwned,
             ),
-        };
+        }
+        .with_synthetic_interface_provenance(range_provenance.clone());
         fold_bindings.push(TemplateFoldBinding {
             path: item.id.clone(),
             value,
@@ -391,7 +394,8 @@ pub(crate) fn build_range_iteration_bindings(
                 zero_based_index as i32,
                 index.value.location.clone(),
                 ValueMode::ImmutableOwned,
-            ),
+            )
+            .with_synthetic_interface_provenance(range_provenance.clone()),
         });
     }
 
@@ -402,12 +406,16 @@ pub(crate) fn build_collection_iteration_bindings(
     bindings: &LoopBindings,
     item_value: &Expression,
     zero_based_index: usize,
+    iterable_provenance: &SyntheticInterfaceProvenance,
 ) -> Vec<TemplateFoldBinding> {
     let mut fold_bindings = Vec::new();
 
     if let Some(item) = &bindings.item {
         let mut value = item_value.to_owned();
         value.location = item.value.location.clone();
+        value.synthetic_interface_provenance = value
+            .synthetic_interface_provenance
+            .union(iterable_provenance);
         fold_bindings.push(TemplateFoldBinding {
             path: item.id.clone(),
             value,
@@ -421,7 +429,8 @@ pub(crate) fn build_collection_iteration_bindings(
                 zero_based_index as i32,
                 index.value.location.clone(),
                 ValueMode::ImmutableOwned,
-            ),
+            )
+            .with_synthetic_interface_provenance(iterable_provenance.clone()),
         });
     }
 

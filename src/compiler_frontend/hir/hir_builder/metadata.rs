@@ -8,12 +8,34 @@
 
 use crate::compiler_frontend::ast::Ast;
 use crate::compiler_frontend::ast::AstDocFragmentKind;
+use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::functions::HirFunctionOrigin;
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::module_metadata::{ModuleDocFragment, ModuleDocFragmentKind};
 
 impl<'a> HirBuilder<'a> {
+    /// Accumulate this expression's synthetic-interface provenance into the current function's
+    /// direct provenance fact.
+    ///
+    /// WHAT: merges the expression's `synthetic_interface_provenance` into the current function's
+    /// entry in `module.function_provenance`. This reuses the existing expression-lowering
+    /// traversal so no separate AST walker is needed.
+    /// WHY: the per-function link-fact lane needs the sorted, duplicate-free union of all
+    /// expression provenance lowered from the function body. The fact is pre-populated as empty
+    /// during declaration registration and accumulates during body lowering.
+    pub(crate) fn accumulate_function_provenance(&mut self, expression: &Expression) {
+        if expression.synthetic_interface_provenance.is_empty() {
+            return;
+        }
+        let Some(function_id) = self.current_function else {
+            return;
+        };
+        if let Some(provenance) = self.module.function_provenance.get_mut(&function_id) {
+            provenance.merge(&expression.synthetic_interface_provenance);
+        }
+    }
+
     pub(super) fn assign_function_origins(&mut self) -> Result<(), CompilerError> {
         // WHAT: classify every lowered function with a semantic origin tag.
         // WHY: downstream lowering needs explicit role data to avoid heuristic drift.

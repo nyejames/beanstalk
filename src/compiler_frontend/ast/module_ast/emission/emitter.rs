@@ -33,7 +33,9 @@ use crate::compiler_frontend::ast::statements::terminality::{
 use crate::compiler_frontend::ast::templates::create_template_node::ConstRequiredTemplateConstruction;
 use crate::compiler_frontend::ast::templates::error::TemplateError;
 use crate::compiler_frontend::ast::templates::template::Template;
-use crate::compiler_frontend::ast::templates::template_folding::TemplateEmission;
+use crate::compiler_frontend::ast::templates::template_folding::{
+    TemplateEmission, TemplateFoldResult,
+};
 use crate::compiler_frontend::ast::templates::tir::{
     PreparedTemplate, TemplateTirPhase, TirView, fold_prepared_template,
 };
@@ -1158,8 +1160,13 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
                 return Err(self.error_messages(error, string_table));
             }
         };
-        let emission = match fold_prepared_template(&prepared, view, &mut fold_context) {
-            Ok(emission) => emission,
+        // Top-level const fragments are builder-facing rendered text metadata; no semantic or
+        // fingerprint consumer owns provenance at this boundary in the current milestone.
+        let TemplateFoldResult {
+            emission,
+            provenance: _,
+        } = match fold_prepared_template(&prepared, view, &mut fold_context) {
+            Ok(result) => result,
             Err(error) => {
                 drop(fold_context);
                 return Err(self.template_error_messages(error, string_table));
