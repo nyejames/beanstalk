@@ -21,10 +21,14 @@ use crate::compiler_frontend::ast::{
     ReceiverMethodEntry, ResolvedPublicTraitRoot, ResolvedPublicTypeRoot,
     ResolvedPublicTypeRootKind, ResolvedPublicTypeRootTable, ResolvedTraitParameterFact,
     ResolvedTraitReceiverFact, ResolvedTraitRequirementFact, ResolvedTraitReturnFact,
-    TraitReceiverAccessKind,
+    ResolvedTraitSourceFact, TraitReceiverAccessKind,
+};
+use crate::compiler_frontend::builtins::casts::targets::{
+    BuiltinCastFallibility, BuiltinCastTarget,
 };
 use crate::compiler_frontend::canonical_type_identity::{
-    CanonicalBuiltinType, CanonicalTypeIdentity, CanonicalTypeProjectionContext,
+    CanonicalBuiltinType, CanonicalCoreTraitIdentity, CanonicalTraitIdentity,
+    CanonicalTypeIdentity, CanonicalTypeProjectionContext,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::ReceiverKey;
@@ -60,6 +64,8 @@ use crate::compiler_frontend::semantic_identity::{
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
+use crate::compiler_frontend::traits::environment::CoreTraitKind;
+use crate::compiler_frontend::traits::ids::TraitId;
 use crate::compiler_frontend::value_mode::ValueMode;
 
 use rustc_hash::FxHashMap;
@@ -156,6 +162,7 @@ fn trait_root(
         canonical_path: path(name, string_table),
         this_type,
         requirements,
+        incompatible_trait_ids: Vec::new(),
     }
 }
 
@@ -188,10 +195,31 @@ fn build_traits(
     env: &TypeEnvironment,
     string_table: &StringTable,
 ) -> Result<Vec<DefinedPublicTraitSurface>, CompilerError> {
+    build_traits_with_facts(
+        trait_roots,
+        bindings,
+        &FxHashMap::default(),
+        nominal_origins,
+        trait_origins,
+        env,
+        string_table,
+    )
+}
+
+fn build_traits_with_facts(
+    trait_roots: &[ResolvedPublicTraitRoot],
+    bindings: Vec<ExportBinding>,
+    trait_source_facts: &FxHashMap<TraitId, ResolvedTraitSourceFact>,
+    nominal_origins: &FxHashMap<InternedPath, OriginTypeId>,
+    trait_origins: &FxHashMap<InternedPath, OriginTraitId>,
+    env: &TypeEnvironment,
+    string_table: &StringTable,
+) -> Result<Vec<DefinedPublicTraitSurface>, CompilerError> {
     let registry = ExternalPackageRegistry::new();
     build_trait_surfaces(
         trait_roots,
         &bindings,
+        trait_source_facts,
         nominal_origins,
         trait_origins,
         env,
@@ -1866,6 +1894,441 @@ fn receiver_method_retains_folded_parameter_defaults() {
     assert_eq!(
         &method.parameters[1].folded_default,
         &Some(PublicFoldedValue::String("fallback".to_owned()))
+    );
+}
+
+// ---------------------------------------------------------------------------
+//  Trait incompatibility projection
+// ---------------------------------------------------------------------------
+
+/// Build a trait root carrying explicit incompatible trait ids, for incompatibility
+/// projection tests that bypass the trait environment.
+fn trait_root_with_incompatibilities(
+    name: &str,
+    this_type: TypeId,
+    incompatible_trait_ids: Vec<TraitId>,
+    string_table: &mut StringTable,
+) -> ResolvedPublicTraitRoot {
+    ResolvedPublicTraitRoot {
+        canonical_path: path(name, string_table),
+        this_type,
+        requirements: Vec::new(),
+        incompatible_trait_ids,
+    }
+}
+
+fn core_cast_fact(
+    trait_id: u32,
+    target: BuiltinCastTarget,
+    fallibility: BuiltinCastFallibility,
+) -> (TraitId, ResolvedTraitSourceFact) {
+    (
+        TraitId(trait_id),
+        ResolvedTraitSourceFact::Core(CoreTraitKind::Castable {
+            target,
+            fallibility,
+        }),
+    )
+}
+
+#[test]
+fn projects_source_to_source_incompatibility_identity() {
+    let mut string_table = StringTable::new();
+    let mut env = TypeEnvironment::new();
+    let this_id = this_type(&mut env, &mut string_table);
+
+    // Alpha (the direct public trait) is incompatible with Beta (another source trait). Both
+    // resolve to Source(OriginTraitId) through the public source-trait origin index.
+    let alpha_path = path("Alpha", &mut string_table);
+    let beta_path = path("Beta", &mut string_table);
+    let mut trait_source_facts = FxHashMap::default();
+    trait_source_facts.insert(TraitId(0), ResolvedTraitSourceFact::Source(alpha_path));
+    trait_source_facts.insert(TraitId(1), ResolvedTraitSourceFact::Source(beta_path));
+
+    let root =
+        trait_root_with_incompatibilities("Alpha", this_id, vec![TraitId(1)], &mut string_table);
+    let binding = trait_binding("Alpha");
+    let mut trait_origins = FxHashMap::default();
+    trait_origins.insert(path("Alpha", &mut string_table), trait_origin("Alpha"));
+    trait_origins.insert(path("Beta", &mut string_table), trait_origin("Beta"));
+
+    let surfaces = build_traits_with_facts(
+        &[root],
+        vec![binding],
+        &trait_source_facts,
+        &FxHashMap::default(),
+        &trait_origins,
+        &env,
+        &string_table,
+    )
+    .expect("a source-to-source public incompatibility projects to a canonical Source identity");
+
+    assert_eq!(surfaces.len(), 1);
+    assert_eq!(
+        surfaces[0].incompatibilities,
+        vec![CanonicalTraitIdentity::Source(trait_origin("Beta"))]
+    );
+}
+
+#[test]
+fn projects_source_to_core_incompatibility_identity() {
+    let mut string_table = StringTable::new();
+    let mut env = TypeEnvironment::new();
+    let this_id = this_type(&mut env, &mut string_table);
+
+    // Alpha (a direct public source trait) is incompatible with a compiler-owned core cast
+    // trait. The core trait side resolves to a stable CanonicalCoreTraitIdentity.
+    let alpha_path = path("Alpha", &mut string_table);
+    let (core_id, core_fact) = core_cast_fact(
+        7,
+        BuiltinCastTarget::String,
+        BuiltinCastFallibility::Infallible,
+    );
+    let mut trait_source_facts = FxHashMap::default();
+    trait_source_facts.insert(TraitId(0), ResolvedTraitSourceFact::Source(alpha_path));
+    trait_source_facts.insert(core_id, core_fact);
+
+    let root =
+        trait_root_with_incompatibilities("Alpha", this_id, vec![core_id], &mut string_table);
+    let binding = trait_binding("Alpha");
+    let mut trait_origins = FxHashMap::default();
+    trait_origins.insert(path("Alpha", &mut string_table), trait_origin("Alpha"));
+
+    let surfaces = build_traits_with_facts(
+        &[root],
+        vec![binding],
+        &trait_source_facts,
+        &FxHashMap::default(),
+        &trait_origins,
+        &env,
+        &string_table,
+    )
+    .expect("a source-to-core public incompatibility projects to a canonical Core identity");
+
+    assert_eq!(surfaces.len(), 1);
+    assert_eq!(
+        surfaces[0].incompatibilities,
+        vec![CanonicalTraitIdentity::Core(
+            CanonicalCoreTraitIdentity::Castable {
+                target: BuiltinCastTarget::String,
+                fallibility: BuiltinCastFallibility::Infallible,
+            }
+        )]
+    );
+}
+
+#[test]
+fn incompatibility_identity_is_stable_across_local_trait_id_allocation() {
+    let mut string_table = StringTable::new();
+    let mut env = TypeEnvironment::new();
+    let this_id = this_type(&mut env, &mut string_table);
+
+    // Two independent local TraitId allocations (10 and 99) for the same source trait path
+    // produce the same canonical incompatibility fact, because identity derives from the
+    // stable OriginTraitId, not from the donor-local TraitId.
+    let beta_path = path("Beta", &mut string_table);
+    let alpha_path = path("Alpha", &mut string_table);
+
+    let mut facts_a = FxHashMap::default();
+    facts_a.insert(
+        TraitId(0),
+        ResolvedTraitSourceFact::Source(alpha_path.clone()),
+    );
+    facts_a.insert(
+        TraitId(10),
+        ResolvedTraitSourceFact::Source(beta_path.clone()),
+    );
+
+    let mut facts_b = FxHashMap::default();
+    facts_b.insert(
+        TraitId(0),
+        ResolvedTraitSourceFact::Source(alpha_path.clone()),
+    );
+    facts_b.insert(
+        TraitId(99),
+        ResolvedTraitSourceFact::Source(beta_path.clone()),
+    );
+
+    let root_a =
+        trait_root_with_incompatibilities("Alpha", this_id, vec![TraitId(10)], &mut string_table);
+    let root_b =
+        trait_root_with_incompatibilities("Alpha", this_id, vec![TraitId(99)], &mut string_table);
+    let mut trait_origins = FxHashMap::default();
+    trait_origins.insert(path("Alpha", &mut string_table), trait_origin("Alpha"));
+    trait_origins.insert(path("Beta", &mut string_table), trait_origin("Beta"));
+
+    let surfaces_a = build_traits_with_facts(
+        &[root_a],
+        vec![trait_binding("Alpha")],
+        &facts_a,
+        &FxHashMap::default(),
+        &trait_origins,
+        &env,
+        &string_table,
+    )
+    .expect("first allocation projects");
+    let surfaces_b = build_traits_with_facts(
+        &[root_b],
+        vec![trait_binding("Alpha")],
+        &facts_b,
+        &FxHashMap::default(),
+        &trait_origins,
+        &env,
+        &string_table,
+    )
+    .expect("second allocation projects");
+
+    assert_eq!(
+        surfaces_a[0].incompatibilities,
+        surfaces_b[0].incompatibilities
+    );
+    assert_eq!(
+        surfaces_a[0].incompatibilities,
+        vec![CanonicalTraitIdentity::Source(trait_origin("Beta"))]
+    );
+}
+
+#[test]
+fn rejects_duplicate_canonical_incompatibility_identity() {
+    let mut string_table = StringTable::new();
+    let mut env = TypeEnvironment::new();
+    let this_id = this_type(&mut env, &mut string_table);
+
+    // Two distinct local TraitIds resolve to the same source trait path, so both
+    // incompatibilities canonicalize to the same CanonicalTraitIdentity and the projection
+    // rejects the duplicate.
+    let beta_path = path("Beta", &mut string_table);
+    let alpha_path = path("Alpha", &mut string_table);
+    let mut trait_source_facts = FxHashMap::default();
+    trait_source_facts.insert(TraitId(0), ResolvedTraitSourceFact::Source(alpha_path));
+    trait_source_facts.insert(
+        TraitId(1),
+        ResolvedTraitSourceFact::Source(beta_path.clone()),
+    );
+    trait_source_facts.insert(TraitId(2), ResolvedTraitSourceFact::Source(beta_path));
+
+    let root = trait_root_with_incompatibilities(
+        "Alpha",
+        this_id,
+        vec![TraitId(1), TraitId(2)],
+        &mut string_table,
+    );
+    let binding = trait_binding("Alpha");
+    let mut trait_origins = FxHashMap::default();
+    trait_origins.insert(path("Alpha", &mut string_table), trait_origin("Alpha"));
+    trait_origins.insert(path("Beta", &mut string_table), trait_origin("Beta"));
+
+    let result = build_traits_with_facts(
+        &[root],
+        vec![binding],
+        &trait_source_facts,
+        &FxHashMap::default(),
+        &trait_origins,
+        &env,
+        &string_table,
+    );
+
+    let message = result
+        .expect_err("a duplicate canonical incompatibility identity must be rejected")
+        .msg;
+    assert!(
+        message.contains("a duplicate must not enter the public trait surface"),
+        "expected a duplicate-identity rejection, got: {message}"
+    );
+}
+
+#[test]
+fn rejects_incompatibility_without_retained_source_fact() {
+    let mut string_table = StringTable::new();
+    let mut env = TypeEnvironment::new();
+    let this_id = this_type(&mut env, &mut string_table);
+
+    // The incompatible TraitId has no entry in the trait-source-fact table, so the projection
+    // cannot classify it and fails through a CompilerError.
+    let root =
+        trait_root_with_incompatibilities("Alpha", this_id, vec![TraitId(5)], &mut string_table);
+    let binding = trait_binding("Alpha");
+    let mut trait_origins = FxHashMap::default();
+    trait_origins.insert(path("Alpha", &mut string_table), trait_origin("Alpha"));
+
+    let result = build_traits_with_facts(
+        &[root],
+        vec![binding],
+        &FxHashMap::default(),
+        &FxHashMap::default(),
+        &trait_origins,
+        &env,
+        &string_table,
+    );
+
+    let message = result
+        .expect_err("a missing trait source fact must be rejected")
+        .msg;
+    assert!(
+        message.contains("has no retained trait source fact"),
+        "expected a missing-source-fact rejection, got: {message}"
+    );
+}
+
+#[test]
+fn rejects_incompatibility_source_without_public_source_trait_origin() {
+    let mut string_table = StringTable::new();
+    let mut env = TypeEnvironment::new();
+    let this_id = this_type(&mut env, &mut string_table);
+
+    // The incompatible trait is a source trait, but its canonical path has no entry in the
+    // public source-trait origin index, so it is private/unexported and must not enter the
+    // public trait surface.
+    let beta_path = path("Beta", &mut string_table);
+    let alpha_path = path("Alpha", &mut string_table);
+    let mut trait_source_facts = FxHashMap::default();
+    trait_source_facts.insert(TraitId(0), ResolvedTraitSourceFact::Source(alpha_path));
+    trait_source_facts.insert(TraitId(1), ResolvedTraitSourceFact::Source(beta_path));
+
+    let root =
+        trait_root_with_incompatibilities("Alpha", this_id, vec![TraitId(1)], &mut string_table);
+    let binding = trait_binding("Alpha");
+    let mut trait_origins = FxHashMap::default();
+    trait_origins.insert(path("Alpha", &mut string_table), trait_origin("Alpha"));
+
+    let result = build_traits_with_facts(
+        &[root],
+        vec![binding],
+        &trait_source_facts,
+        &FxHashMap::default(),
+        &trait_origins,
+        &env,
+        &string_table,
+    );
+
+    let message = result
+        .expect_err("a missing public source-trait origin must be rejected")
+        .msg;
+    assert!(
+        message.contains("no retained public source-trait origin"),
+        "expected a missing-origin rejection, got: {message}"
+    );
+}
+
+#[test]
+fn rejects_internal_self_incompatibility_relation() {
+    let mut string_table = StringTable::new();
+    let mut env = TypeEnvironment::new();
+    let this_id = this_type(&mut env, &mut string_table);
+
+    // The direct public trait Alpha carries an incompatibility that resolves to itself. An
+    // authored self-relation is rejected earlier by a user-facing diagnostic, so reaching
+    // this point means inconsistent resolved metadata and must fail through a CompilerError.
+    let alpha_path = path("Alpha", &mut string_table);
+    let mut trait_source_facts = FxHashMap::default();
+    trait_source_facts.insert(TraitId(0), ResolvedTraitSourceFact::Source(alpha_path));
+
+    let root =
+        trait_root_with_incompatibilities("Alpha", this_id, vec![TraitId(0)], &mut string_table);
+    let binding = trait_binding("Alpha");
+    let mut trait_origins = FxHashMap::default();
+    trait_origins.insert(path("Alpha", &mut string_table), trait_origin("Alpha"));
+
+    let result = build_traits_with_facts(
+        &[root],
+        vec![binding],
+        &trait_source_facts,
+        &FxHashMap::default(),
+        &trait_origins,
+        &env,
+        &string_table,
+    );
+
+    let message = result
+        .expect_err("an internal self-relation must be rejected")
+        .msg;
+    assert!(
+        message.contains("resolves to itself"),
+        "expected a self-relation rejection, got: {message}"
+    );
+}
+
+#[test]
+fn builder_carries_incompatibilities_on_trait_record() {
+    let mut string_table = StringTable::new();
+    let mut env = TypeEnvironment::new();
+    let this_id = this_type(&mut env, &mut string_table);
+    let int_id = env.builtins().int;
+
+    // Build a minimal draft where the only trait (Shape) carries one public incompatibility
+    // with another source trait (Mark). The builder must surface the canonical incompatibility
+    // on the trait declaration record.
+    let shape_path = path("Shape", &mut string_table);
+    let mark_path = path("Mark", &mut string_table);
+    let mut trait_source_facts = FxHashMap::default();
+    trait_source_facts.insert(TraitId(0), ResolvedTraitSourceFact::Source(shape_path));
+    trait_source_facts.insert(TraitId(1), ResolvedTraitSourceFact::Source(mark_path));
+
+    let requirement_fact = requirement(
+        "read",
+        receiver_immutable(this_id),
+        vec![param(
+            "value",
+            ValueMode::MutableOwned,
+            int_id,
+            &mut string_table,
+        )],
+        vec![ret(env.builtins().bool, ReturnChannel::Success)],
+        &mut string_table,
+    );
+    let trait_root = ResolvedPublicTraitRoot {
+        canonical_path: path("Shape", &mut string_table),
+        this_type: this_id,
+        requirements: vec![requirement_fact],
+        incompatible_trait_ids: vec![TraitId(1)],
+    };
+
+    let root_table = ResolvedPublicTypeRootTable {
+        roots: vec![],
+        receiver_methods: vec![],
+        trait_source_facts,
+    };
+
+    let nominal_origins: FxHashMap<InternedPath, OriginTypeId> = FxHashMap::default();
+    let mut trait_origins = FxHashMap::default();
+    trait_origins.insert(path("Shape", &mut string_table), trait_origin("Shape"));
+    trait_origins.insert(path("Mark", &mut string_table), trait_origin("Mark"));
+
+    let export_origin_draft = DefinedPublicExportOriginDraft::new(
+        module_origin(),
+        vec![trait_binding("Shape")],
+        FxHashMap::default(),
+    );
+
+    let draft = PublicInterfaceDraftBuilder::new(PublicInterfaceDraftBuilderInput {
+        export_origin_draft,
+        public_interface_projection_input: AstPublicInterfaceProjectionInput {
+            root_table,
+            trait_roots: vec![trait_root],
+            receiver_catalog: Some(std::rc::Rc::new(ReceiverMethodCatalog::default())),
+        },
+        public_source_nominal_type_origins: &nominal_origins,
+        public_source_trait_origins: &trait_origins,
+        type_environment: &env,
+        external_registry: &ExternalPackageRegistry::new(),
+        string_table: &string_table,
+        module_constants: &[],
+    })
+    .build()
+    .expect("a trait record with one public incompatibility builds a draft");
+
+    let trait_record = draft
+        .declarations
+        .iter()
+        .find_map(|record| match &record.semantics {
+            PublicDeclarationSemantics::Trait(semantics) => Some(semantics),
+            _ => None,
+        })
+        .expect("the draft contains a trait record");
+
+    assert_eq!(
+        trait_record.incompatibilities,
+        vec![CanonicalTraitIdentity::Source(trait_origin("Mark"))]
     );
 }
 

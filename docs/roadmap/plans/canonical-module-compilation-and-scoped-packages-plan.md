@@ -20,31 +20,28 @@ This document replaces the previous incremental phase sequence at the same path.
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/canonical-module-compilation-and-scoped-packages-plan.md
 STATUS: active
-CURRENT_SLICE: R2c complete — accepted checkpoint ready to commit
-LAST_ACCEPTED_COMMIT: 8399a0a2e (R2b)
-WORKTREE: main at d707782fc after unrelated docs commits; accepted R2c source/tests plus plan and index updates
-REQUIRED_RELOADS: startup files, this plan, public-interface draft/default projection owners and current source/diff
+CURRENT_SLICE: R2d complete — stable direct public trait-incompatibility metadata; checkpoint ready to commit
+LAST_ACCEPTED_COMMIT: 18262e3d3 (R2c)
+WORKTREE: main at 18262e3d3 with the reviewed R2d source, focused tests and this plan update; no unrelated changes are present
+REQUIRED_RELOADS: startup files, this plan, direct evidence/conformance owners and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: compiler-design-overview.md owns AST default coercion/folding and owned provider values; function and struct authorities require compile-time defaults; choice payload defaults remain deferred
-- code: finalized function signatures and struct definition fields are the default-value owners; folded_value.rs owns the one recursive folded-value vocabulary and defined_public_type_surface.rs owns callable/constructor slot projection
+- docs: compiler-design-overview.md requires exported reusable evidence to use stable identities; conformance.bd defines reusable evidence visibility; provider re-exports remain later R4 work
+- code: PublicTraitSemantics now retains stable direct public incompatibilities; TraitEvidenceEnvironment and conformance validation own resolved evidence facts, while the draft still lacks target-plus-trait evidence records and stable requirement-to-method mappings
 ACCEPTANCE_CRITERIA:
-- directly exported free functions, receiver methods and struct fields retain `None` or one owned folded default in authored slot order
-- emitted declaration defaults normalize once through the existing AST path and feed retained public facts; only generic declarations without emitted nodes use the retained normalization path
-- total exact joins reject missing, duplicate, mismatched or unsupported default facts with `CompilerError`, including every receiver-catalog index; completed AST and draft facts contain no live TIR identity
-- remove the compatibility re-export and second recursive default/reference resolver; keep one folded-value vocabulary and converter
-- trait requirements and choice payload fields remain default-free; evidence, provenance, borrow summaries, provider re-exports, generated functions and fingerprints remain outside R2c
+- explicitly public relations alone feed direct public trait records; private relations remain confined to conformance validation
+- direct trait records retain symmetric, deterministic, duplicate-free source/core canonical incompatibility identities
+- one source/core projection owner serves generic bounds and incompatibilities, with no donor-local trait fact crossing the draft boundary
+- self, duplicate, missing-source and missing-public-origin transient facts fail through `CompilerError`; existing public/private diagnostics remain unchanged
 VALIDATION_STATE:
-- worker validation: final Ollama correction passed focused tests, cargo check, cargo clippy and 3665 library tests
-- parent focused validation: passed 13 root-table, 36 normalization, 48 type-surface, 48 draft and 20 folded-value tests plus cargo check
+- focused: 8 resolved-public-trait-root, 56 public-interface-draft and 8 trait-incompatibility tests passed
 - cargo fmt --all: passed
-- just validate: passed cross-target Clippy, 3666 Rust tests, 1793 integration contracts, docs check and 28 benchmark cases
-- cargo run --quiet -- check docs: passed after the index locator update
-DOCS_IMPACT: active plan and index locator updated; progress matrix unchanged because defaults were already supported and R2c changes the internal interface draft
+- just validate: passed; cross-target Clippy, 3676 Rust tests, 1793 integration contracts, docs check and 28 benchmark sanity cases
+DOCS_IMPACT: active plan only; progress matrix should remain unchanged because R2d retains an internal interface fact for already-supported incompatibility behavior
 BLOCKERS_OR_OPEN_DECISIONS: none
 DELEGATION_DECISION: ollama - user requires Ollama for every worker slice
 NEXT_WORKER_ORDER: ollama only
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit the accepted R2c checkpoint, reload the plan and select the next bounded R2 slice
+NEXT_RESUME_ACTION: commit the accepted R2d checkpoint, reload the plan and select the bounded direct reusable-evidence slice
 ```
 
 Do not append worktree-specific notes, complete validation histories or worker transcripts to this plan. Keep this status block current and concise. Git history is the validation history.

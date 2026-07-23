@@ -669,6 +669,17 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 }
 
                 trait_environment.record_incompatible_traits(subject_id, incompatible_id);
+
+                // Retain the resolved public visibility once, at the same time the
+                // symmetric relation is resolved, so the public-interface draft can later
+                // attach incompatibilities to direct public trait records without reparsing
+                // headers. Only an explicitly public `TRAIT must not TRAIT` header in an
+                // export-capable root contributes public-interface metadata; a private
+                // relation never enters the draft even when both traits are public.
+                if header.file_role.is_export_capable() && header.export_mode.is_public() {
+                    trait_environment
+                        .record_public_incompatible_traits(subject_id, incompatible_id);
+                }
             }
         }
 

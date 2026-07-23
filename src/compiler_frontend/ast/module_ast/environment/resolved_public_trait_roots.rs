@@ -1,8 +1,9 @@
 //! Transient AST-owned resolved public trait-root facts.
 //!
 //! WHAT: builds one deterministic vector of directly-defined active-root public trait
-//! declarations with their owning `this_type` and ordered location-free requirement facts,
-//! from the same already-resolved `TraitEnvironment` consumed by public-surface validation.
+//! declarations with their owning `this_type`, ordered location-free requirement facts and
+//! publicly-authored incompatible trait ids, from the same already-resolved
+//! `TraitEnvironment` consumed by public-surface validation.
 //! Also owns [`AstPublicInterfaceProjectionInput`], the one closed aggregate that bundles the
 //! type-root table, the direct trait-root vector and the validated receiver catalog for the
 //! sole `PublicInterfaceDraftBuilder` consumer.
@@ -23,6 +24,7 @@ use crate::compiler_frontend::traits::definitions::{
     ResolvedTraitRequirement, TraitReceiverRequirement, TraitVisibility,
 };
 use crate::compiler_frontend::traits::environment::TraitEnvironment;
+use crate::compiler_frontend::traits::ids::TraitId;
 use crate::compiler_frontend::value_mode::ValueMode;
 
 use std::rc::Rc;
@@ -78,11 +80,12 @@ pub(crate) struct ResolvedTraitRequirementFact {
 
 /// One directly-defined active-root public trait root, transient and donor-local.
 ///
-/// WHAT: carries the trait canonical declaration path, its owning `this_type` `TypeId` and
-/// its ordered requirement facts. The `this_type` is the trait-local synthetic generic
-/// parameter owned by the resolved trait definition; the projection validates every
-/// requirement receiver embedded `this_type` against this value before mapping self access.
-/// Only traits authored directly in the active module root under `export:` are admitted.
+/// WHAT: carries the trait canonical declaration path, its owning `this_type` `TypeId`, its
+/// ordered requirement facts and its publicly-authored incompatibility `TraitId`s. The
+/// `this_type` is the trait-local synthetic generic parameter owned by the resolved trait
+/// definition; the projection validates every requirement receiver embedded `this_type`
+/// against this value before mapping self access. Only traits authored directly in the active
+/// module root under `export:` are admitted.
 /// WHY: the public-interface draft projection needs resolved trait facts available
 /// immediately before HIR lowering without reconstructing trait semantics from HIR or
 /// source. Donor-local `TypeId`s and `StringId`s stay inside this transient fact and
@@ -92,17 +95,31 @@ pub(crate) struct ResolvedPublicTraitRoot {
     pub(crate) canonical_path: InternedPath,
     pub(crate) this_type: TypeId,
     pub(crate) requirements: Vec<ResolvedTraitRequirementFact>,
+    /// The publicly-authored incompatible trait ids for this direct public trait, in
+    /// authored source order.
+    ///
+    /// WHAT: donor-local `TraitId`s resolved once from the `TraitEnvironment` public
+    ///      incompatibility store. They are transient and consumed by the
+    ///      public-interface draft projection, which canonicalizes them to stable
+    ///      `CanonicalTraitIdentity` values before they cross the draft boundary.
+    /// WHY: retaining the resolved `TraitId`s here lets the draft project
+    ///      incompatibilities for each direct public trait without the
+    ///      `TraitEnvironment`, which is dropped before the projection runs. The
+    ///      order is the deterministic authored source order recorded by the
+    ///      trait environment.
+    pub(crate) incompatible_trait_ids: Vec<TraitId>,
 }
 
 /// The one closed aggregate AST-owned public-interface projection input.
 ///
 /// WHAT: bundles the transient type-root [`ResolvedPublicTypeRootTable`] (declaration roots,
-/// receiver methods and trait-source facts for generic bounds), the directly-defined
-/// active-root public [`ResolvedPublicTraitRoot`] vector and the validated
-/// [`ReceiverMethodCatalog`] into one closed input for the sole `PublicInterfaceDraftBuilder`
-/// consumer. It has a closed R1 purpose: feeding the public-interface draft projection
-/// immediately before HIR lowering. It is not an open-ended future-facts bag and never enters
-/// `CompiledModuleResult`, `Module` or a cross-module artefact.
+/// receiver methods and trait-source facts for generic bounds and public incompatibilities),
+/// the directly-defined active-root public [`ResolvedPublicTraitRoot`] vector and the
+/// validated [`ReceiverMethodCatalog`] into one closed input for the sole
+/// `PublicInterfaceDraftBuilder` consumer. It has a closed R1 purpose: feeding the
+/// public-interface draft projection immediately before HIR lowering. It is not an
+/// open-ended future-facts bag and never enters `CompiledModuleResult`, `Module` or a
+/// cross-module artefact.
 /// WHY: replacing the separate `Ast` fields with one named projection input keeps the
 /// public-surface projection input in one owned place and prevents later phases from
 /// widening the executable `Ast` with more transient public facts. The field on `Ast` is
@@ -118,12 +135,15 @@ pub(crate) struct AstPublicInterfaceProjectionInput {
 ///
 /// WHAT: iterates sorted headers once to admit only directly-defined active-root public trait
 /// declarations, then resolves each through the `TraitEnvironment` into a location-free
-/// [`ResolvedPublicTraitRoot`] with its owning `this_type` and ordered requirement facts. A
-/// trait header that passes the active-root public declaration gate must resolve to exactly
-/// one definition; a missing definition or a missing `this_type` is a `CompilerError` rather
-/// than a silent omission. The requirement order is preserved exactly as the trait definition
-/// records it. Private traits, non-active-root/imported traits and compiler-owned core traits
-/// are excluded because they do not pass the active-root public declaration gate.
+/// [`ResolvedPublicTraitRoot`] with its owning `this_type`, ordered requirement facts and the
+/// publicly-authored incompatible trait ids for that trait. A trait header that passes the
+/// active-root public declaration gate must resolve to exactly one definition; a missing
+/// definition or a missing `this_type` is a `CompilerError` rather than a silent omission. The
+/// requirement order is preserved exactly as the trait definition records it. Private traits,
+/// non-active-root/imported traits and compiler-owned core traits are excluded because they do
+/// not pass the active-root public declaration gate. The incompatible trait ids come from the
+/// trait environment public incompatibility store, so a private `must not` relation never
+/// reaches a direct public trait record.
 /// WHY: one pass over the same sorted headers keeps a single deterministic owner. The
 /// `TraitEnvironment` is dropped after this vector is built; the projection consumes these
 /// facts to build trait surfaces without the `TraitEnvironment`.
@@ -207,10 +227,19 @@ fn build_trait_root(
         .map(build_trait_requirement_fact)
         .collect();
 
+    // Carry the publicly-authored incompatible trait ids for this direct public trait. They
+    // are donor-local and transient; the public-interface draft projection canonicalizes them
+    // to stable `CanonicalTraitIdentity` values before they cross the draft boundary. The
+    // order is the deterministic authored source order recorded by the trait environment.
+    let incompatible_trait_ids = trait_environment
+        .public_incompatibilities_for(trait_id)
+        .to_vec();
+
     Ok(ResolvedPublicTraitRoot {
         canonical_path: canonical_path.to_owned(),
         this_type: definition.this_type,
         requirements,
+        incompatible_trait_ids,
     })
 }
 

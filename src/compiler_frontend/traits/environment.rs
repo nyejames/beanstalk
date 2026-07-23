@@ -52,15 +52,22 @@ pub(crate) enum CoreTraitKind {
 ///      names (such as `DISPLAYABLE`, `CASTABLE_TO_INT`, ...) without
 ///      touching the user-visible `visible_trait_names` import map, a
 ///      `core_trait_kinds` side table that classifies core traits so the
-///      AST environment builder can wire builtin cast evidence rows, and
-///      an `incompatible_traits` symmetric store for trait-pair metadata.
+///      AST environment builder can wire builtin cast evidence rows, an
+///      `incompatible_traits` symmetric store for trait-pair metadata, and a
+///      `public_incompatible_traits` symmetric store that retains only the
+///      relations authored by an explicitly public `TRAIT must not TRAIT`
+///      header in an export-capable root.
 /// WHY: AST traits and core cast traits must both be reachable from source
 ///      spellings, but core traits must resolve without imports and must
 ///      not share a code path with user declarations. Sharing one registry
 ///      also keeps the trait environment from growing a parallel field
 ///      for every new core trait. Mutual-incompatibility metadata is owned
 ///      by the trait subsystem so conformance validation can reject types
-///      that claim both sides of a `must not` relation.
+///      that claim both sides of a `must not` relation. The public-only store
+///      lets the public-interface draft retain explicitly public
+///      incompatibility facts for direct public traits without reparsing
+///      headers or reconstructing visibility later: a private `must not`
+///      relation never enters the draft even when both traits are public.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct TraitEnvironment {
     definitions: Vec<ResolvedTraitDefinition>,
@@ -68,6 +75,20 @@ pub(crate) struct TraitEnvironment {
     core_traits_by_name: FxHashMap<&'static str, TraitId>,
     core_trait_kinds: FxHashMap<TraitId, CoreTraitKind>,
     incompatible_traits: FxHashMap<TraitId, Vec<TraitId>>,
+    /// Symmetric store of incompatibility relations authored by an explicitly
+    /// public `TRAIT must not TRAIT` header in an export-capable root.
+    ///
+    /// WHAT: only relations whose header has an export-capable file role and a
+    ///      public export mode are recorded here. Private relations and
+    ///      compiler-owned core cast trait pairs stay out, so this store is the
+    ///      single source a direct public trait record consults for the
+    ///      incompatibilities it carries into the public-interface draft.
+    /// WHY: retaining the resolved public visibility once, at the same time
+    ///      the symmetric relation is resolved, avoids reparsing headers or
+    ///      reconstructing public/private visibility later. The order of each
+    ///      vector is the deterministic authored source order in which the
+    ///      relations were registered.
+    public_incompatible_traits: FxHashMap<TraitId, Vec<TraitId>>,
 }
 
 impl TraitEnvironment {
@@ -211,6 +232,62 @@ impl TraitEnvironment {
         if !incompatible.contains(&target) {
             incompatible.push(target);
         }
+    }
+
+    /// Records a symmetric public incompatibility relation between two traits.
+    ///
+    /// WHAT: adds `right` to the public incompatibility list for `left` and vice
+    ///      versa, preserving the authored source order. Self-pairs are ignored
+    ///      because a trait is never recorded as incompatible with itself. Only
+    ///      call this for relations authored by an explicitly public
+    ///      `TRAIT must not TRAIT` header in an export-capable root.
+    /// WHY: the public-interface draft consults only this store when attaching
+    ///      incompatibilities to a direct public trait record, so a private
+    ///      relation never leaks even when both traits are public. Reusing the
+    ///      shared direction helper keeps one symmetric-insertion owner.
+    pub(crate) fn record_public_incompatible_traits(&mut self, left: TraitId, right: TraitId) {
+        if left == right {
+            return;
+        }
+
+        Self::record_incompatible_trait_direction(
+            &mut self.public_incompatible_traits,
+            left,
+            right,
+        );
+        Self::record_incompatible_trait_direction(
+            &mut self.public_incompatible_traits,
+            right,
+            left,
+        );
+    }
+
+    /// Returns the publicly-authored incompatible trait ids for `trait_id`, in
+    /// authored source order, or an empty slice when no public relation
+    /// involves it.
+    ///
+    /// WHAT: a direct public trait record consults this to carry symmetric
+    ///      incompatibilities into the public-interface draft. The returned
+    ///      order is the deterministic authored source order, independent of
+    ///      hash-map iteration, so the draft never sorts by rendered text.
+    pub(crate) fn public_incompatibilities_for(&self, trait_id: TraitId) -> &[TraitId] {
+        self.public_incompatible_traits
+            .get(&trait_id)
+            .map(Vec::as_slice)
+            .unwrap_or(&[])
+    }
+
+    /// Returns every trait id appearing in any public incompatibility relation.
+    ///
+    /// WHAT: iterates both sides of the public store so the resolved
+    ///      trait-source-fact table can retain the source/core classification
+    ///      for every incompatibility trait id before the `TraitEnvironment`
+    ///      is dropped.
+    pub(crate) fn public_incompatible_trait_ids(&self) -> impl Iterator<Item = TraitId> + '_ {
+        self.public_incompatible_traits
+            .keys()
+            .copied()
+            .chain(self.public_incompatible_traits.values().flatten().copied())
     }
 
     /// Registers the compiler-owned `DISPLAYABLE` scaffold.

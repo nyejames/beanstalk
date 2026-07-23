@@ -306,3 +306,117 @@ fn missing_trait_definition_is_compiler_error() {
         "a public trait header with no registered definition must be a CompilerError"
     );
 }
+
+/// Register two public source traits and record a public incompatibility relation between
+/// them, returning the two trait ids.
+fn register_two_public_traits(
+    trait_environment: &mut TraitEnvironment,
+    string_table: &mut StringTable,
+    this_type: TypeId,
+) -> (
+    crate::compiler_frontend::traits::ids::TraitId,
+    crate::compiler_frontend::traits::ids::TraitId,
+) {
+    let alpha_id = register_source_trait(trait_environment, string_table, "Alpha", this_type);
+    let beta_id = register_source_trait(trait_environment, string_table, "Beta", this_type);
+    trait_environment.record_public_incompatible_traits(alpha_id, beta_id);
+    (alpha_id, beta_id)
+}
+
+#[test]
+fn retains_public_incompatibilities_symmetrically_for_direct_public_traits() {
+    let mut string_table = StringTable::new();
+    let mut type_environment = TypeEnvironment::new();
+    let mut trait_environment = TraitEnvironment::new();
+
+    let this_id = this_type(&mut type_environment, &mut string_table);
+    let (alpha_id, beta_id) =
+        register_two_public_traits(&mut trait_environment, &mut string_table, this_id);
+
+    let headers = vec![
+        trait_header(
+            "Alpha",
+            FileRole::ActiveModuleRoot,
+            HeaderExportMode::Public,
+            &mut string_table,
+        ),
+        trait_header(
+            "Beta",
+            FileRole::ActiveModuleRoot,
+            HeaderExportMode::Public,
+            &mut string_table,
+        ),
+    ];
+
+    let trait_roots =
+        build_resolved_public_trait_roots(&headers, &trait_environment, &string_table)
+            .expect("two public traits with a public incompatibility produce two roots");
+
+    assert_eq!(trait_roots.len(), 2);
+
+    // The relation is symmetric: each direct public trait carries the other side, regardless
+    // of which side authored the public relation. The order is the deterministic authored
+    // source order recorded by the trait environment.
+    assert_eq!(
+        trait_roots[0].canonical_path.to_string(&string_table),
+        "Alpha"
+    );
+    assert_eq!(trait_roots[0].incompatible_trait_ids, vec![beta_id]);
+
+    assert_eq!(
+        trait_roots[1].canonical_path.to_string(&string_table),
+        "Beta"
+    );
+    assert_eq!(trait_roots[1].incompatible_trait_ids, vec![alpha_id]);
+}
+
+#[test]
+fn private_incompatibility_relation_is_absent_from_trait_roots() {
+    let mut string_table = StringTable::new();
+    let mut type_environment = TypeEnvironment::new();
+    let mut trait_environment = TraitEnvironment::new();
+
+    let this_id = this_type(&mut type_environment, &mut string_table);
+    let alpha_id =
+        register_source_trait(&mut trait_environment, &mut string_table, "Alpha", this_id);
+    let beta_id = register_source_trait(&mut trait_environment, &mut string_table, "Beta", this_id);
+
+    // A private relation is recorded in the conformance-validation store only, never in the
+    // public store, so it must not enter the direct public trait records.
+    trait_environment.record_incompatible_traits(alpha_id, beta_id);
+
+    let headers = vec![
+        trait_header(
+            "Alpha",
+            FileRole::ActiveModuleRoot,
+            HeaderExportMode::Public,
+            &mut string_table,
+        ),
+        trait_header(
+            "Beta",
+            FileRole::ActiveModuleRoot,
+            HeaderExportMode::Public,
+            &mut string_table,
+        ),
+    ];
+
+    let trait_roots =
+        build_resolved_public_trait_roots(&headers, &trait_environment, &string_table)
+            .expect("private relations are excluded from trait roots, not errors");
+
+    assert_eq!(trait_roots.len(), 2);
+    assert!(
+        trait_roots[0].incompatible_trait_ids.is_empty(),
+        "Alpha must not carry a private incompatibility"
+    );
+    assert!(
+        trait_roots[1].incompatible_trait_ids.is_empty(),
+        "Beta must not carry a private incompatibility"
+    );
+
+    // The private relation is still present for conformance validation.
+    assert!(
+        trait_environment.traits_are_incompatible(alpha_id, beta_id),
+        "the private relation must remain in the conformance-validation store"
+    );
+}

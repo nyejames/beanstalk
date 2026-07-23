@@ -105,9 +105,10 @@ pub(crate) enum ResolvedTraitSourceFact {
 /// `receiver_methods` holds the receiver methods attached to directly-defined public
 /// nominal receivers, selected in a separate pass so private method headers outside
 /// `export:` are admitted by receiver ownership rather than their own export binding.
-/// `trait_source_facts` retains only the resolved trait identity source facts needed by
-/// generic bounds on the exported free-function and struct/choice roots, so bound
-/// projection can resolve each local bound `TraitId` without the `TraitEnvironment`.
+/// `trait_source_facts` retains the resolved trait identity source facts needed by
+/// generic bounds on the exported free-function and struct/choice roots and by public
+/// trait incompatibility relations, so bound and incompatibility projection can resolve
+/// each local `TraitId` without the `TraitEnvironment`.
 /// WHY: the semantic orchestration consumes this immediately before HIR lowering. This
 /// table is type-only: direct trait-root facts and their requirement construction live in
 /// [`super::resolved_public_trait_roots`]. Donor-local `TypeId`s and `TraitId`s must not
@@ -313,10 +314,10 @@ pub(crate) fn build_resolved_public_type_roots(
         receiver_method_entries.push(entry.clone());
     }
 
-    // Retain only the resolved trait identity source facts needed by generic bounds on the
-    // exported free-function and struct/choice roots. The `TraitEnvironment` is dropped after
-    // this table is built; the projection consumes these facts to resolve each local bound
-    // `TraitId` to a stable canonical trait identity without the `TraitEnvironment`.
+    // Retain the resolved trait identity source facts needed by exported generic bounds and
+    // public trait incompatibilities. The `TraitEnvironment` is dropped after this table is
+    // built; the projection consumes these facts to resolve each local `TraitId` to a stable
+    // canonical trait identity without reconstructing the trait source.
     let trait_source_facts = build_trait_source_facts(&roots, type_environment, trait_environment)?;
 
     Ok(ResolvedPublicTypeRootTable {
@@ -334,17 +335,27 @@ pub(crate) fn build_resolved_public_type_roots(
 /// trait maps to `Source(canonical_path)`. A `TraitId` that is neither core nor source is
 /// a `CompilerError`, never a silent omission.
 /// WHY: the transient facts let bound projection resolve each local `TraitId` after the
-/// `TraitEnvironment` is dropped. Only the facts needed by exported generic bounds are
-/// retained, keeping the table minimal.
+/// `TraitEnvironment` is dropped. The facts needed by exported generic bounds and by public
+/// trait incompatibility relations are retained, keeping the table minimal while giving the
+/// public-interface draft one source/core mapping owner for both paths.
 fn build_trait_source_facts(
     roots: &[ResolvedPublicTypeRoot],
     type_environment: &TypeEnvironment,
     trait_environment: &TraitEnvironment,
 ) -> Result<FxHashMap<TraitId, ResolvedTraitSourceFact>, CompilerError> {
-    let bound_trait_ids = collect_bound_trait_ids_from_roots(roots, type_environment)?;
+    let mut trait_ids = collect_bound_trait_ids_from_roots(roots, type_environment)?;
+
+    // Also retain source/core classification for every trait id appearing in a public
+    // incompatibility relation, so the public-interface draft can canonicalize direct
+    // public trait incompatibilities after the `TraitEnvironment` is dropped. The ids are
+    // already resolved by `resolve_trait_incompatibilities`, so each is a registered source
+    // or core trait in this compilation boundary.
+    for trait_id in trait_environment.public_incompatible_trait_ids() {
+        trait_ids.insert(trait_id);
+    }
 
     let mut facts = FxHashMap::default();
-    for trait_id in bound_trait_ids {
+    for trait_id in trait_ids {
         if let Some(kind) = trait_environment.core_trait_kind(trait_id) {
             if facts
                 .insert(trait_id, ResolvedTraitSourceFact::Core(kind))
@@ -360,7 +371,7 @@ fn build_trait_source_facts(
 
         let Some(definition) = trait_environment.get(trait_id) else {
             return Err(CompilerError::compiler_error(format!(
-                "resolved public type-root construction: bound TraitId({}) has no resolved trait definition and is not a core trait; a missing definition is an internal invariant violation",
+                "resolved public type-root construction: retained TraitId({}) has no resolved trait definition and is not a core trait; a missing definition is an internal invariant violation",
                 trait_id.0
             )));
         };

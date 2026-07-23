@@ -12,7 +12,7 @@
 //! The builder internalizes three projection components as private builder steps:
 //! - the accepted direct export-origin projection ([`DefinedPublicExportOrigins`]),
 //! - the accepted canonical type-surface projection ([`DefinedPublicTypeSurface`]),
-//! - the corrected direct trait-requirement projection ([`DefinedPublicTraitSurface`]).
+//! - the corrected direct trait-contract projection ([`DefinedPublicTraitSurface`]).
 //!
 //! These intermediates are consumed before the draft boundary: the draft stores only `Public*`
 //! semantic leaf types. `DefinedPublic*` aggregate projection containers are transient and are
@@ -25,7 +25,7 @@
 //! preserves their proven, total projection logic while ensuring only one draft crosses
 //! orchestration.
 //!
-//! ## Trait-requirement projection
+//! ## Trait-contract projection
 //!
 //! Direct trait surfaces are keyed by the exact matching direct [`OriginTraitId`] export
 //! binding, preserve authored requirement order, and reuse existing [`ValueMode`] and
@@ -33,21 +33,24 @@
 //! trait `this_type` before mapping immutable or mutable receiver access; a mismatch is a
 //! `CompilerError`. Direct parameter or return occurrences of that exact `this_type` become a
 //! trait-local [`TraitSurfaceTypeIdentity::SelfType`]; every other `TypeId` projects through
-//! the existing canonical type projection as a [`TraitSurfaceTypeIdentity::Concrete`]. No
-//! unscoped self type is added to [`CanonicalTypeIdentity`].
+//! the existing canonical type projection as a [`TraitSurfaceTypeIdentity::Concrete`]. Publicly
+//! authored incompatibilities project through the same source/core trait-identity owner used by
+//! generic bounds. No unscoped self type is added to [`CanonicalTypeIdentity`].
 //!
 //! Boundary: the draft is private to compiler/build orchestration and never reaches backends.
 //! It is not the final `PublicSemanticInterface`.
 
 use crate::compiler_frontend::ast::AstPublicInterfaceProjectionInput;
+use crate::compiler_frontend::ast::ResolvedTraitSourceFact;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::statements::functions::ReturnChannel;
 use crate::compiler_frontend::ast::{
     ResolvedPublicTraitRoot, ResolvedTraitRequirementFact, TraitReceiverAccessKind,
 };
 use crate::compiler_frontend::canonical_type_identity::{
-    CanonicalTypeIdentity, CanonicalTypeProjectionContext, ExportedGenericParameterIdentity,
-    GenericParameterOriginResolver, project_type_id_to_canonical_identity,
+    CanonicalTraitIdentity, CanonicalTypeIdentity, CanonicalTypeProjectionContext,
+    ExportedGenericParameterIdentity, GenericParameterOriginResolver,
+    project_type_id_to_canonical_identity,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::definitions::TypeDefinition;
@@ -60,6 +63,7 @@ use crate::compiler_frontend::defined_public_type_surface::{
     DefinedPublicReceiverMethodTypeSurface, DefinedPublicTypeSurface, PublicChoiceVariantSurface,
     PublicFieldTypeSlot, PublicGenericParameterSurface, PublicParameterTypeSlot,
     PublicReturnTypeSlot, TransientNominalOriginResolver, build_defined_public_type_surface,
+    project_trait_source_fact_to_canonical_identity,
 };
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::folded_value::{
@@ -71,6 +75,7 @@ use crate::compiler_frontend::semantic_identity::{
 };
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::traits::ids::TraitId;
 use crate::compiler_frontend::value_mode::ValueMode;
 use rustc_hash::{FxHashMap, FxHashSet};
 
@@ -126,11 +131,13 @@ pub(crate) struct PublicTraitRequirementSurface {
 /// The trait surface for one exported trait authored directly in the active module root.
 ///
 /// Keyed by the exact matching direct [`OriginTraitId`] export binding. Requirements preserve
-/// authored order.
+/// authored order, and `incompatibilities` carries the publicly-authored `must not` relations
+/// involving this trait as stable, ordered, duplicate-free [`CanonicalTraitIdentity`] values.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct DefinedPublicTraitSurface {
     origin: OriginTraitId,
     requirements: Vec<PublicTraitRequirementSurface>,
+    incompatibilities: Vec<CanonicalTraitIdentity>,
 }
 
 // ===========================================================================
@@ -207,10 +214,13 @@ pub(crate) struct PublicConstantSemantics {
 }
 
 /// The semantic facts for one exported trait: its ordered requirements with receiver access,
-/// parameter modes/types and return channels/types.
+/// parameter modes/types and return channels/types, plus the ordered, duplicate-free
+/// canonical identities of the publicly-authored traits this trait must not be claimed
+/// alongside.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct PublicTraitSemantics {
     pub(crate) requirements: Vec<PublicTraitRequirementSurface>,
+    pub(crate) incompatibilities: Vec<CanonicalTraitIdentity>,
 }
 
 /// One declaration-centric record in the public interface draft.
@@ -350,6 +360,7 @@ impl<'a> PublicInterfaceDraftBuilder<'a> {
         let trait_surfaces = build_trait_surfaces(
             &trait_roots,
             export_origins.export_bindings(),
+            &root_table.trait_source_facts,
             public_source_nominal_type_origins,
             public_source_trait_origins,
             type_environment,
@@ -723,6 +734,7 @@ fn join_declaration_records(
                     origin: binding.origin().clone(),
                     semantics: PublicDeclarationSemantics::Trait(PublicTraitSemantics {
                         requirements: surface.requirements,
+                        incompatibilities: surface.incompatibilities,
                     }),
                 });
             }
@@ -820,11 +832,21 @@ impl GenericParameterOriginResolver for TraitRequirementGenericParameterResolver
 /// `this_type` against the owning trait `this_type`. Direct parameter or return occurrences
 /// of the owning `this_type` become [`TraitSurfaceTypeIdentity::SelfType`]; every other
 /// `TypeId` projects through the existing canonical type projection as
-/// [`TraitSurfaceTypeIdentity::Concrete`]. A missing, duplicate, unmatched, wrong-origin or
-/// malformed-self fact is a `CompilerError`.
+/// [`TraitSurfaceTypeIdentity::Concrete`]. Each surface also carries the
+/// publicly-authored `must not` incompatibilities for the trait, canonicalized through the
+/// shared `trait_source_facts` source/core mapping owner, preserving authored source order.
+/// A missing, duplicate, self, unmatched, wrong-origin or malformed-self fact is a
+/// `CompilerError`.
+// The projection genuinely needs every resolved side table (roots, bindings, the
+// shared trait-source-fact mapping and both public source origin indexes) plus the type
+// environment, external registry and string table. Grouping them into one more struct would
+// not improve readability, so the argument count is allowed here as in the sibling
+// type-surface projection.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn build_trait_surfaces(
     trait_roots: &[ResolvedPublicTraitRoot],
     export_bindings: &[ExportBinding],
+    trait_source_facts: &FxHashMap<TraitId, ResolvedTraitSourceFact>,
     public_source_nominal_type_origins: &FxHashMap<InternedPath, OriginTypeId>,
     public_source_trait_origins: &FxHashMap<InternedPath, OriginTraitId>,
     type_environment: &TypeEnvironment,
@@ -926,9 +948,17 @@ pub(crate) fn build_trait_surfaces(
             })
             .collect::<Result<Vec<_>, CompilerError>>()?;
 
+        let incompatibilities = project_trait_incompatibilities(
+            &root.incompatible_trait_ids,
+            trait_origin,
+            trait_source_facts,
+            public_source_trait_origins,
+        )?;
+
         surfaces.push(DefinedPublicTraitSurface {
             origin: trait_origin.clone(),
             requirements,
+            incompatibilities,
         });
     }
 
@@ -1095,6 +1125,64 @@ fn project_trait_surface_type_identity(
 
     let canonical = project_type_id_to_canonical_identity(type_id, type_environment, context)?;
     Ok(TraitSurfaceTypeIdentity::Concrete(Box::new(canonical)))
+}
+
+/// Project the publicly-authored incompatibilities for one direct public trait into ordered,
+/// duplicate-free [`CanonicalTraitIdentity`] values.
+///
+/// WHAT: resolves each retained incompatible `TraitId` through the shared
+/// `trait_source_facts` source/core mapping owner (the same owner used by generic-bound
+/// projection), so a source trait becomes `CanonicalTraitIdentity::Source` through the public
+/// source-trait origin index and a core trait becomes `CanonicalTraitIdentity::Core`. The
+/// owning trait is always a source trait (core traits are never direct public trait roots), so
+/// its canonical identity is `CanonicalTraitIdentity::Source(owning_trait_origin)`. An
+/// incompatibility that resolves to the owning trait itself is an internal self-relation and is
+/// a `CompilerError`. A missing source fact, a missing public source origin or a duplicate
+/// canonical identity is a `CompilerError`.
+/// WHY: the public-interface draft carries only stable canonical identities: no `TraitId`,
+/// `InternedPath`, `StringId`, source location or rendered trait name crosses the boundary.
+/// The output order is the deterministic authored source order recorded by the trait
+/// environment, independent of hash-map iteration.
+fn project_trait_incompatibilities(
+    incompatible_trait_ids: &[TraitId],
+    owning_trait_origin: &OriginTraitId,
+    trait_source_facts: &FxHashMap<TraitId, ResolvedTraitSourceFact>,
+    public_source_trait_origins: &FxHashMap<InternedPath, OriginTraitId>,
+) -> Result<Vec<CanonicalTraitIdentity>, CompilerError> {
+    let owning_canonical = CanonicalTraitIdentity::Source(owning_trait_origin.clone());
+
+    let mut incompatibilities = Vec::with_capacity(incompatible_trait_ids.len());
+    for trait_id in incompatible_trait_ids {
+        let Some(source_fact) = trait_source_facts.get(trait_id) else {
+            return Err(CompilerError::compiler_error(format!(
+                "public-interface draft trait projection: an incompatibility TraitId({}) for trait origin {:?} has no retained trait source fact; a missing local mapping is an internal invariant violation",
+                trait_id.0, owning_trait_origin
+            )));
+        };
+
+        let canonical_identity = project_trait_source_fact_to_canonical_identity(
+            source_fact,
+            public_source_trait_origins,
+        )?;
+
+        if canonical_identity == owning_canonical {
+            return Err(CompilerError::compiler_error(format!(
+                "public-interface draft trait projection: the trait origin {:?} carries an incompatibility that resolves to itself; an internal self-relation must not enter the public trait surface",
+                owning_trait_origin
+            )));
+        }
+
+        if incompatibilities.contains(&canonical_identity) {
+            return Err(CompilerError::compiler_error(format!(
+                "public-interface draft trait projection: two incompatibility trait ids for trait origin {:?} resolved to the same canonical trait identity {:?}; a duplicate must not enter the public trait surface",
+                owning_trait_origin, canonical_identity
+            )));
+        }
+
+        incompatibilities.push(canonical_identity);
+    }
+
+    Ok(incompatibilities)
 }
 /// Join one public constant surface to its matching module constant declaration by exact
 /// defining path and convert the folded expression to an owned [`PublicFoldedValue`].

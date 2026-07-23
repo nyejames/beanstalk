@@ -831,6 +831,48 @@ fn project_exported_generic_parameter_surfaces(
     Ok(surfaces)
 }
 
+/// Project one resolved trait source fact to its stable canonical trait identity.
+///
+/// WHAT: a source trait ([`ResolvedTraitSourceFact::Source`]) resolves to
+/// `CanonicalTraitIdentity::Source` through the public source-trait origin index; a core
+/// trait ([`ResolvedTraitSourceFact::Core`]) resolves to its stable
+/// [`CanonicalCoreTraitIdentity`]. A source trait whose canonical path has no retained
+/// public source-trait origin is a `CompilerError`.
+/// WHY: this is the single source/core mapping owner shared by generic-bound projection and
+/// direct public trait incompatibility projection, so both paths resolve a retained trait
+/// source fact to the same canonical identity through one implementation. Extracting it
+/// keeps the source/core classification logic in the type-surface projection owner rather
+/// than duplicating it in the draft builder.
+pub(crate) fn project_trait_source_fact_to_canonical_identity(
+    source_fact: &ResolvedTraitSourceFact,
+    public_source_trait_origins: &FxHashMap<InternedPath, OriginTraitId>,
+) -> Result<CanonicalTraitIdentity, CompilerError> {
+    match source_fact {
+        ResolvedTraitSourceFact::Source(path) => {
+            let Some(origin) = public_source_trait_origins.get(path) else {
+                return Err(CompilerError::compiler_error(format!(
+                    "defined public type-surface projection: a trait source path {:?} has no retained public source-trait origin; a private, unexported or unowned trait must not enter the public type surface",
+                    path
+                )));
+            };
+            Ok(CanonicalTraitIdentity::Source(origin.clone()))
+        }
+        ResolvedTraitSourceFact::Core(kind) => {
+            let core_identity = match kind {
+                CoreTraitKind::Displayable => CanonicalCoreTraitIdentity::Displayable,
+                CoreTraitKind::Castable {
+                    target,
+                    fallibility,
+                } => CanonicalCoreTraitIdentity::Castable {
+                    target: *target,
+                    fallibility: *fallibility,
+                },
+            };
+            Ok(CanonicalTraitIdentity::Core(core_identity))
+        }
+    }
+}
+
 /// Project ordered canonical trait bound identities for one generic parameter.
 ///
 /// WHAT: reads the declaration-site `TraitId` bounds from the `TypeEnvironment` in their
@@ -862,30 +904,10 @@ fn project_generic_parameter_bounds(
             )));
         };
 
-        let canonical_identity = match source_fact {
-            ResolvedTraitSourceFact::Source(path) => {
-                let Some(origin) = public_source_trait_origins.get(path) else {
-                    return Err(CompilerError::compiler_error(format!(
-                        "defined public type-surface projection: a generic parameter bound trait source path {:?} has no retained public source-trait origin; a private, unexported or unowned trait must not enter the public type surface",
-                        path
-                    )));
-                };
-                CanonicalTraitIdentity::Source(origin.clone())
-            }
-            ResolvedTraitSourceFact::Core(kind) => {
-                let core_identity = match kind {
-                    CoreTraitKind::Displayable => CanonicalCoreTraitIdentity::Displayable,
-                    CoreTraitKind::Castable {
-                        target,
-                        fallibility,
-                    } => CanonicalCoreTraitIdentity::Castable {
-                        target: *target,
-                        fallibility: *fallibility,
-                    },
-                };
-                CanonicalTraitIdentity::Core(core_identity)
-            }
-        };
+        let canonical_identity = project_trait_source_fact_to_canonical_identity(
+            source_fact,
+            public_source_trait_origins,
+        )?;
 
         // Reject a duplicate canonical bound identity. Two distinct `TraitId`s that resolve to
         // the same canonical trait identity signal inconsistent internal metadata rather than a
