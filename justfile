@@ -11,7 +11,7 @@ validate:
     cargo run --quiet -- tests
 
     @echo "docs build"
-    cargo run --quiet -- check docs
+    cargo run --quiet -- check docs --terse
 
     @echo "benchmark check"
     cargo run --package xtask --bin xtask -- bench-check

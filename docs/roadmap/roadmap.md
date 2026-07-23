@@ -15,6 +15,7 @@ Use the [Progress Matrix](docs/src/docs/progress/#page.bst) as a reference for w
 
 ## Queued implementation chain
 
+- Add `--terse` flag to `tests` command for a very compact summary and terse error messages / warnings when running the tests suite.
 - [TIR follow up cleanup](docs/roadmap/plans/tir-corrections-and-simplification-plan.md)
 - [Project config, imported build values and anonymous records](./plans/import_values_anonymous_records_plan.md)
 - [Diagnostics and tokens optimised memory layout plan](docs/roadmap/plans/compiler-source-token-and-diagnostic-data-layout-plan.md)
@@ -23,6 +24,7 @@ Use the [Progress Matrix](docs/src/docs/progress/#page.bst) as a reference for w
 - [Entry-local config blocks and runtime title](./plans/entry-config-blocks-runtime-title-plan.md)
 - [Number and numeric semantics](./plans/number_type_numeric_plan.md)
 - [HTML mixed JavaScript and Wasm backend](./plans/html_project_backend_wasm_final_implementation_plan.md)
+- [FULL PROJECT RENAME](tmp/beanleaf-migration-kit)
 
 Diagnostics may continue independently. The queued implementation chain remains ordered by hard dependency.
 

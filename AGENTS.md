@@ -119,7 +119,9 @@ Key routing:
 
 ## Validation
 
-Always follow `docs/src/docs/codebase/style-guide/validation.bd`
+Always follow `docs/src/docs/codebase/style-guide/validation.bd`.
+
+If using the beanstalk compiler `check` command, prefer `--terse` for compact Beanstalk error messages.
 
 ## Documentation policy
 
