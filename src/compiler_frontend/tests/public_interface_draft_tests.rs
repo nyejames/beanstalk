@@ -30,6 +30,7 @@ use crate::compiler_frontend::builtins::casts::targets::{
 use crate::compiler_frontend::canonical_type_identity::{
     CanonicalBuiltinType, CanonicalCoreTraitIdentity, CanonicalEvidenceIdentity,
     CanonicalTraitIdentity, CanonicalTypeIdentity, CanonicalTypeProjectionContext,
+    ExportedGenericParameterIdentity, GenericDeclarationOrigin,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::ReceiverKey;
@@ -45,7 +46,7 @@ use crate::compiler_frontend::defined_public_type_surface::{
     DefinedPublicAliasTypeSurface, DefinedPublicConstantTypeSurface,
     DefinedPublicFunctionTypeSurface, DefinedPublicNominalTypeSurface,
     DefinedPublicReceiverMethodTypeSurface, DefinedPublicTypeSurface, PublicChoiceVariantSurface,
-    PublicFieldTypeSlot, TransientNominalOriginResolver,
+    PublicFieldTypeSlot, PublicGenericParameterSurface, TransientNominalOriginResolver,
 };
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::folded_value::{
@@ -1253,6 +1254,179 @@ fn join_produces_one_record_per_origin() {
         records[0].semantics,
         PublicDeclarationSemantics::Function(_)
     ));
+}
+
+// ---------------------------------------------------------------------------
+//  Generic-template descriptor classification
+// ---------------------------------------------------------------------------
+
+/// Build one `DefinedPublicFunctionTypeSurface` carrying only the given generic parameters so
+/// a draft-join test can exercise generic versus non-generic descriptor classification without
+/// reconstructing the full AST projection.
+fn function_type_surface(
+    origin: OriginFunctionId,
+    generic_parameters: Vec<PublicGenericParameterSurface>,
+) -> DefinedPublicFunctionTypeSurface {
+    DefinedPublicFunctionTypeSurface {
+        origin,
+        generic_parameters,
+        parameters: vec![],
+        returns: vec![],
+        error_return: None,
+    }
+}
+
+/// Construct one stable exported generic parameter identity for position `position` named
+/// `name` on the given free-function origin.
+fn exported_generic_parameter(
+    origin: &OriginFunctionId,
+    position: u32,
+    name: &str,
+) -> ExportedGenericParameterIdentity {
+    let declaration_origin = GenericDeclarationOrigin::free_function(origin.clone())
+        .expect("a free function is a valid generic declaration owner");
+    ExportedGenericParameterIdentity::new(declaration_origin, position, name.to_owned())
+}
+
+#[test]
+fn generic_free_function_carries_explicit_template_descriptor() {
+    let function_origin = free_function_origin("identity");
+    let binding = ExportBinding::new(
+        module_origin(),
+        "identity".to_owned(),
+        OriginDeclarationId::Function(function_origin.clone()),
+    );
+
+    let parameter_identity = exported_generic_parameter(&function_origin, 0, "T");
+    let generic_parameters = vec![PublicGenericParameterSurface {
+        identity: parameter_identity.clone(),
+        bounds: vec![CanonicalTraitIdentity::Core(
+            CanonicalCoreTraitIdentity::Displayable,
+        )],
+    }];
+
+    let function = function_type_surface(function_origin, generic_parameters);
+    let type_surface = type_surface(vec![function], vec![], vec![], vec![], vec![]);
+
+    let records = join_with_empty_constants(std::slice::from_ref(&binding), type_surface, vec![])
+        .expect("join succeeds for one generic function");
+
+    assert_eq!(records.len(), 1);
+    let PublicDeclarationSemantics::Function(semantics) = &records[0].semantics else {
+        panic!("expected a function record");
+    };
+
+    let descriptor = semantics
+        .generic_template
+        .as_ref()
+        .expect("a generic free function must carry one explicit template descriptor");
+    assert_eq!(
+        descriptor.generic_parameters.len(),
+        1,
+        "the descriptor owns the single stable generic parameter"
+    );
+
+    let parameter = &descriptor.generic_parameters[0];
+    assert_eq!(
+        &parameter.identity, &parameter_identity,
+        "the descriptor retains the stable exported generic parameter identity"
+    );
+    assert_eq!(
+        &parameter.bounds,
+        &[CanonicalTraitIdentity::Core(
+            CanonicalCoreTraitIdentity::Displayable,
+        )],
+        "the descriptor retains the ordered canonical trait bounds"
+    );
+}
+
+#[test]
+fn non_generic_free_function_carries_no_template_descriptor() {
+    let function_origin = free_function_origin("render");
+    let binding = ExportBinding::new(
+        module_origin(),
+        "render".to_owned(),
+        OriginDeclarationId::Function(function_origin.clone()),
+    );
+
+    let function = function_type_surface(function_origin, vec![]);
+    let type_surface = type_surface(vec![function], vec![], vec![], vec![], vec![]);
+
+    let records = join_with_empty_constants(std::slice::from_ref(&binding), type_surface, vec![])
+        .expect("join succeeds for one non-generic function");
+
+    assert_eq!(records.len(), 1);
+    let PublicDeclarationSemantics::Function(semantics) = &records[0].semantics else {
+        panic!("expected a function record");
+    };
+
+    assert!(
+        semantics.generic_template.is_none(),
+        "a non-generic free function must carry no template descriptor"
+    );
+}
+
+#[test]
+fn generic_template_descriptor_owns_stable_identity_without_donor_local_handles() {
+    let function_origin = free_function_origin("identity");
+    let binding = ExportBinding::new(
+        module_origin(),
+        "identity".to_owned(),
+        OriginDeclarationId::Function(function_origin.clone()),
+    );
+
+    let first_identity = exported_generic_parameter(&function_origin, 0, "T");
+    let second_identity = exported_generic_parameter(&function_origin, 1, "U");
+    let generic_parameters = vec![
+        PublicGenericParameterSurface {
+            identity: first_identity.clone(),
+            bounds: vec![CanonicalTraitIdentity::Core(
+                CanonicalCoreTraitIdentity::Displayable,
+            )],
+        },
+        PublicGenericParameterSurface {
+            identity: second_identity.clone(),
+            bounds: vec![],
+        },
+    ];
+
+    let function = function_type_surface(function_origin, generic_parameters);
+    let type_surface = type_surface(vec![function], vec![], vec![], vec![], vec![]);
+
+    let records = join_with_empty_constants(std::slice::from_ref(&binding), type_surface, vec![])
+        .expect("join succeeds for a two-parameter generic function");
+
+    let PublicDeclarationSemantics::Function(semantics) = &records[0].semantics else {
+        panic!("expected a function record");
+    };
+    let descriptor = semantics
+        .generic_template
+        .as_ref()
+        .expect("a generic free function must carry one explicit template descriptor");
+
+    // The descriptor owns only stable exported identities and canonical trait bounds. The
+    // enclosing declaration record owns the origin and the enclosing function semantics own
+    // the parameter and return contract, so the descriptor carries neither.
+    assert_eq!(
+        descriptor
+            .generic_parameters
+            .iter()
+            .map(|parameter| &parameter.identity)
+            .collect::<Vec<_>>(),
+        &[&first_identity, &second_identity],
+        "the descriptor preserves authored parameter order through stable identities"
+    );
+    assert_eq!(
+        &descriptor.generic_parameters[0].bounds,
+        &[CanonicalTraitIdentity::Core(
+            CanonicalCoreTraitIdentity::Displayable,
+        )],
+        "the first parameter retains its ordered canonical bound"
+    );
+    assert!(
+        descriptor.generic_parameters[1].bounds.is_empty(),
+        "the second parameter retains its empty bound set"
+    );
 }
 
 // ---------------------------------------------------------------------------

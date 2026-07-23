@@ -20,28 +20,28 @@ This document replaces the previous incremental phase sequence at the same path.
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/canonical-module-compilation-and-scoped-packages-plan.md
 STATUS: active
-CURRENT_SLICE: R2e complete — stable direct reusable-evidence identity and ordered requirement-to-method mappings; checkpoint ready to commit
-LAST_ACCEPTED_COMMIT: 3fbea8e90 (R2d)
-WORKTREE: main at 3fbea8e90 with the reviewed R2e source, focused tests and this plan update; no unrelated changes are present
-REQUIRED_RELOADS: startup files, this plan, direct evidence/conformance owners, public-interface draft owners and current source/diff
+CURRENT_SLICE: R2f1 complete — explicit stable direct public generic-function template descriptor; checkpoint ready to commit
+LAST_ACCEPTED_COMMIT: 3e92a546c (R2e)
+WORKTREE: main at 3e92a546c with reviewed R2f1 source, focused tests and this plan update; preserve and ignore unrelated documentation work if it appears
+REQUIRED_RELOADS: startup files, this plan, generic function template/signature owners, module metadata owners and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: compiler-design-overview.md requires exported reusable evidence to use stable identities; conformance.bd makes canonical evidence reusable wherever target and trait are visible; provider re-exports remain R4 work
-- code: PublicInterfaceDraft now retains direct source-canonical reusable evidence separately from declarations; joined public receiver surfaces remain the sole evidence mapping authority
+- docs: compiler-design-overview.md and locked decision 10 separate consumer-visible generic semantics from declaring-module body/materialisation metadata; R2 borrow/effect joins remain later work
+- code: PublicFunctionSemantics now distinguishes generic templates with an optional PublicGenericTemplateDescriptor that owns stable generic parameter identities and ordered canonical bounds without duplicating the enclosing origin or signature
 ACCEPTANCE_CRITERIA:
-- direct reusable evidence is keyed only by canonical target type plus canonical trait identity and classified by semantic ownership
-- source evidence maps every stable trait requirement identity, in authored order, to the stable implementing receiver-function origin
-- private target or trait evidence does not enter the draft, and no TraitEvidenceId, TraitId, TraitRequirementId, TypeId, path, source location or declaration order becomes cross-module identity
-- duplicate, missing and inconsistent projection joins fail through `CompilerError`; existing conformance, bound and cast behavior and diagnostics remain unchanged
+- each exported generic free-function record carries one explicit generic-template descriptor and each non-generic free-function record carries none
+- the descriptor reuses the existing stable generic parameter identities and ordered canonical bounds as its required-evidence shape; the enclosing declaration record and function signature remain the stable origin and canonical call contract owners
+- no raw tokens, local paths, source locations, GenericParameterListId, GenericParameterId, TypeId or duplicate signature representation enters the descriptor
+- existing generic language behavior and diagnostics remain unchanged; focused draft tests cover generic/non-generic classification and stable facts
 VALIDATION_STATE:
-- focused: 67 public-interface-draft tests passed
-- cargo fmt --all: passed
-- just validate: passed; cross-target Clippy, 3687 Rust tests, 1793 integration contracts, docs check and 28 benchmark sanity cases
-DOCS_IMPACT: active plan only; progress matrix remains unchanged because R2e retains internal stable facts for already-supported reusable evidence
+- focused: 70 public-interface-draft tests passed
+- cargo fmt --all -- --check: passed
+- just validate: passed; 3 cross-target Clippy checks, 3690 Rust tests, 1793 integration contracts, docs check and 28 benchmark sanity cases
+DOCS_IMPACT: active plan only; progress matrix should remain unchanged because this retains internal stable facts for already-supported generic functions
 BLOCKERS_OR_OPEN_DECISIONS: none
 DELEGATION_DECISION: ollama - user requires Ollama for every worker slice
 NEXT_WORKER_ORDER: ollama only
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit the accepted R2e checkpoint, reload the plan and select the bounded generic-template descriptor and body-artefact slice
+NEXT_RESUME_ACTION: commit the accepted R2f1 checkpoint, then define the bounded R2f2 validated body-artefact and immutable materialisation-context retention slice
 ```
 
 Do not append worktree-specific notes, complete validation histories or worker transcripts to this plan. Keep this status block current and concise. Git history is the validation history.

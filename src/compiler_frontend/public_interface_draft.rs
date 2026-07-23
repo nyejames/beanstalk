@@ -175,8 +175,9 @@ pub(crate) struct DefinedPublicTraitSurface {
 /// WHAT: a distinct variant per directly-defined public declaration category. Struct and choice
 /// are separate variants so nominal meaning is never implicit in empty field/variant vectors.
 /// Each variant carries only the semantic facts already produced at R1; folded constant
-/// values are owned by the constant variant. Evidence, provenance, borrow/effect summaries,
-/// generic template bodies and re-exports remain outside this enum.
+/// values are owned by the constant variant. The free-function variant carries an explicit
+/// generic-template descriptor when the function is generic. Evidence, provenance,
+/// borrow/effect summaries, generic template bodies and re-exports remain outside this enum.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum PublicDeclarationSemantics {
     Function(PublicFunctionSemantics),
@@ -187,11 +188,32 @@ pub(crate) enum PublicDeclarationSemantics {
     Trait(PublicTraitSemantics),
 }
 
-/// The semantic facts for one exported free function: generic parameters/bounds, parameter
-/// types, success returns and error return.
+/// The explicit generic-template descriptor for one exported generic free function.
+///
+/// WHAT: owns the stable generic parameter identities and their ordered canonical trait
+/// bounds — the current required-evidence shape — that a cross-module consumer needs for
+/// generic inference. It is present only on generic free-function records: a non-generic
+/// free function carries no descriptor. The enclosing [`PublicDeclarationRecord`] remains the
+/// stable declaration-origin owner and the enclosing [`PublicFunctionSemantics`] remains the
+/// canonical parameter and return contract owner, so the descriptor does not duplicate origin
+/// or signature types. No raw tokens, donor-local path, source location,
+/// `GenericParameterListId`, `GenericParameterId`, `TypeId`, `TraitId` or other local
+/// registry handle enters this descriptor.
+///
+/// WHY: locked decision 10 separates consumer-visible generic semantic identity from the
+/// declaring module's retained template body and compilation context. This descriptor is the
+/// consumer-visible generic contract; the validated body artefact and materialisation context
+/// remain a later compiler-metadata fact.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct PublicGenericTemplateDescriptor {
+    pub(crate) generic_parameters: Vec<PublicGenericParameterSurface>,
+}
+
+/// The semantic facts for one exported free function: the optional generic-template
+/// descriptor, parameter types, success returns and error return.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct PublicFunctionSemantics {
-    pub(crate) generic_parameters: Vec<PublicGenericParameterSurface>,
+    pub(crate) generic_template: Option<PublicGenericTemplateDescriptor>,
     pub(crate) parameters: Vec<PublicParameterTypeSlot>,
     pub(crate) returns: Vec<PublicReturnTypeSlot>,
     pub(crate) error_return: Option<CanonicalTypeIdentity>,
@@ -705,7 +727,17 @@ fn join_declaration_records(
                 declarations.push(PublicDeclarationRecord {
                     origin: binding.origin().clone(),
                     semantics: PublicDeclarationSemantics::Function(PublicFunctionSemantics {
-                        generic_parameters: function.generic_parameters,
+                        // A non-generic free function carries no template descriptor. The
+                        // declaration-syntax parser rejects an empty generic parameter list
+                        // before projection, so an empty vec here means the function has no
+                        // generic parameter list and a non-empty vec means it is generic.
+                        generic_template: if function.generic_parameters.is_empty() {
+                            None
+                        } else {
+                            Some(PublicGenericTemplateDescriptor {
+                                generic_parameters: function.generic_parameters,
+                            })
+                        },
                         parameters: function.parameters,
                         returns: function.returns,
                         error_return: function.error_return,
