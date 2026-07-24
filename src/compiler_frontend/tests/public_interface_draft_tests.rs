@@ -18,6 +18,7 @@ use crate::compiler_frontend::ast::AstPublicInterfaceProjectionInput;
 use crate::compiler_frontend::ast::ReceiverMethodCatalog;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
+use crate::compiler_frontend::ast::generic_functions::GenericFunctionTemplate;
 use crate::compiler_frontend::ast::statements::functions::{FunctionSignature, ReturnChannel};
 use crate::compiler_frontend::ast::{
     ReceiverMethodEntry, ResolvedPublicTraitRoot, ResolvedPublicTypeRoot,
@@ -41,6 +42,9 @@ use crate::compiler_frontend::datatypes::definitions::{
     StructTypeDefinition,
 };
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
+use crate::compiler_frontend::datatypes::generic_parameters::{
+    GenericParameter, GenericParameterList as ParsedGenericParameterList, TypeParameterId,
+};
 use crate::compiler_frontend::datatypes::ids::{GenericParameterListId, NominalTypeId, TypeId};
 use crate::compiler_frontend::defined_public_export_origins::DefinedPublicExportOriginDraft;
 use crate::compiler_frontend::defined_public_type_surface::{
@@ -74,7 +78,7 @@ use crate::compiler_frontend::semantic_identity::{
 };
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation};
 use crate::compiler_frontend::traits::definitions::{
     ResolvedTraitDefinition, ResolvedTraitRequirement, ResolvedTraitReturn,
     TraitReceiverRequirement, TraitVisibility,
@@ -400,7 +404,7 @@ fn type_surface(
         transparent_aliases,
         constants,
         receiver_methods,
-        function_origin_seeds: vec![],
+        public_callable_origin_seeds: vec![],
     }
 }
 
@@ -999,7 +1003,7 @@ fn builder_produces_declaration_centric_draft_covering_every_category() {
         type_environment: &env,
         external_registry: &registry,
         string_table: &string_table,
-        generic_function_template_paths: &[],
+        generic_function_templates: &FxHashMap::default(),
         module_constants: &module_constants,
     })
     .build()
@@ -1149,7 +1153,7 @@ fn builder_attaches_receiver_methods_to_struct_record() {
         type_environment: &env,
         external_registry: &registry,
         string_table: &string_table,
-        generic_function_template_paths: &[],
+        generic_function_templates: &FxHashMap::default(),
         module_constants: &[],
     })
     .build()
@@ -1169,14 +1173,35 @@ fn builder_attaches_receiver_methods_to_struct_record() {
 }
 
 #[test]
-fn builder_classifies_generic_receiver_from_exact_template_path_and_excludes_origin_seed() {
+fn builder_classifies_generic_receiver_from_exact_template_path_and_excludes_hir_origin_seed() {
     let mut string_table = StringTable::new();
     let mut env = TypeEnvironment::new();
 
-    let (_, struct_type_id) =
-        register_struct(&mut env, &mut string_table, "Counter", empty_fields(), None);
+    // Register a generic parameter list with one authored parameter "A".
+    let a_name = string_table.intern("A");
+    let parsed_params = ParsedGenericParameterList {
+        parameters: vec![GenericParameter {
+            id: TypeParameterId(0),
+            name: a_name,
+            location: SourceLocation::default(),
+            trait_bounds: vec![],
+        }],
+    };
+    let registered_list =
+        env.register_generic_parameter_list(&parsed_params, &FxHashMap::default());
+    let list_id = registered_list.list_id;
 
-    let receiver_path = path("Counter", &mut string_table);
+    // Register a generic struct Box<A> whose generic parameter list matches the method
+    // template below.
+    let (_, struct_type_id) = register_struct(
+        &mut env,
+        &mut string_table,
+        "Box",
+        empty_fields(),
+        Some(list_id),
+    );
+
+    let receiver_path = path("Box", &mut string_table);
     let method_fn_path = path("render", &mut string_table);
     let entry = receiver_entry(
         method_fn_path.clone(),
@@ -1186,7 +1211,7 @@ fn builder_classifies_generic_receiver_from_exact_template_path_and_excludes_ori
 
     let root_table = ResolvedPublicTypeRootTable {
         roots: vec![struct_root(
-            "Counter",
+            "Box",
             struct_type_id,
             vec![],
             &mut string_table,
@@ -1197,18 +1222,13 @@ fn builder_classifies_generic_receiver_from_exact_template_path_and_excludes_ori
 
     let binding = ExportBinding::new(
         module_origin(),
-        "Counter".to_owned(),
-        OriginDeclarationId::Type(struct_origin("Counter")),
+        "Box".to_owned(),
+        OriginDeclarationId::Type(struct_origin("Box")),
     );
-    let method_origin = OriginFunctionId::new_receiver(
-        module_origin(),
-        "render".to_owned(),
-        struct_origin("Counter"),
-    );
-    let nominal_origins = nominal_origins_map(
-        vec![("Counter", struct_origin("Counter"))],
-        &mut string_table,
-    );
+    let method_origin =
+        OriginFunctionId::new_receiver(module_origin(), "render".to_owned(), struct_origin("Box"));
+    let nominal_origins =
+        nominal_origins_map(vec![("Box", struct_origin("Box"))], &mut string_table);
 
     let export_origin_draft = DefinedPublicExportOriginDraft::new(
         module_origin(),
@@ -1228,7 +1248,19 @@ fn builder_classifies_generic_receiver_from_exact_template_path_and_excludes_ori
         trait_evidence_environment: Some(std::rc::Rc::new(TraitEvidenceEnvironment::new())),
     };
 
-    let generic_template_paths = vec![method_fn_path];
+    // Build a generic function template for the receiver method, using the same generic
+    // parameter list as the receiver nominal so the aliasing step sees matching parameters.
+    let template = GenericFunctionTemplate {
+        function_path: method_fn_path.clone(),
+        source_file: InternedPath::new(),
+        generic_parameter_list_id: list_id,
+        signature: FunctionSignature::default(),
+        body_tokens: FileTokens::new(method_fn_path.clone(), vec![]),
+        declaration_location: SourceLocation::default(),
+    };
+    let template_map: FxHashMap<InternedPath, GenericFunctionTemplate> =
+        [(method_fn_path.clone(), template)].into_iter().collect();
+
     let registry = ExternalPackageRegistry::new();
     let build_result = PublicInterfaceDraftBuilder::new(PublicInterfaceDraftBuilderInput {
         export_origin_draft,
@@ -1238,7 +1270,7 @@ fn builder_classifies_generic_receiver_from_exact_template_path_and_excludes_ori
         type_environment: &env,
         external_registry: &registry,
         string_table: &string_table,
-        generic_function_template_paths: &generic_template_paths,
+        generic_function_templates: &template_map,
         module_constants: &[],
     })
     .build()
@@ -1248,6 +1280,16 @@ fn builder_classifies_generic_receiver_from_exact_template_path_and_excludes_ori
         build_result.function_origin_seeds.is_empty(),
         "a generic receiver template must not seed a local HIR FunctionId"
     );
+    assert_eq!(build_result.public_callable_origin_seeds.len(), 1);
+    assert_eq!(
+        build_result.public_callable_origin_seeds[0].path, method_fn_path,
+        "the generic callable seed retains the exact donor declaration path"
+    );
+    assert_eq!(
+        build_result.public_callable_origin_seeds[0].origin, method_origin,
+        "the generic callable seed retains the exact stable receiver origin"
+    );
+    assert!(build_result.public_callable_origin_seeds[0].generic_template);
 
     let draft = build_result
         .draft
@@ -1290,7 +1332,7 @@ fn module_origin_survives_empty_public_surface() {
         type_environment: &env,
         external_registry: &registry,
         string_table: &string_table,
-        generic_function_template_paths: &[],
+        generic_function_templates: &FxHashMap::default(),
         module_constants: &[],
     })
     .build()
@@ -1885,7 +1927,7 @@ fn free_function_retains_folded_parameter_defaults_in_authored_order() {
         type_environment: &env,
         external_registry: &registry,
         string_table: &string_table,
-        generic_function_template_paths: &[],
+        generic_function_templates: &FxHashMap::default(),
         module_constants: &[],
     })
     .build()
@@ -1988,7 +2030,7 @@ fn struct_retains_folded_field_defaults_in_authored_order() {
         type_environment: &env,
         external_registry: &registry,
         string_table: &string_table,
-        generic_function_template_paths: &[],
+        generic_function_templates: &FxHashMap::default(),
         module_constants: &[],
     })
     .build()
@@ -2089,7 +2131,7 @@ fn choice_payload_fields_remain_default_free() {
         type_environment: &env,
         external_registry: &registry,
         string_table: &string_table,
-        generic_function_template_paths: &[],
+        generic_function_templates: &FxHashMap::default(),
         module_constants: &[],
     })
     .build()
@@ -2191,7 +2233,7 @@ fn receiver_method_retains_folded_parameter_defaults() {
         type_environment: &env,
         external_registry: &registry,
         string_table: &string_table,
-        generic_function_template_paths: &[],
+        generic_function_templates: &FxHashMap::default(),
         module_constants: &[],
     })
     .build()
@@ -2636,7 +2678,7 @@ fn builder_carries_incompatibilities_on_trait_record() {
         type_environment: &env,
         external_registry: &ExternalPackageRegistry::new(),
         string_table: &string_table,
-        generic_function_template_paths: &[],
+        generic_function_templates: &FxHashMap::default(),
         module_constants: &[],
     })
     .build()

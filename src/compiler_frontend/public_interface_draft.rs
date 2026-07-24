@@ -63,6 +63,7 @@ use crate::compiler_frontend::analysis::borrow_checker::BorrowAnalysis;
 use crate::compiler_frontend::ast::AstPublicInterfaceProjectionInput;
 use crate::compiler_frontend::ast::ResolvedTraitSourceFact;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
+use crate::compiler_frontend::ast::generic_functions::GenericFunctionTemplate;
 use crate::compiler_frontend::ast::statements::functions::ReturnChannel;
 use crate::compiler_frontend::ast::{
     ResolvedPublicTraitRoot, ResolvedTraitRequirementFact, TraitReceiverAccessKind,
@@ -81,10 +82,10 @@ use crate::compiler_frontend::defined_public_export_origins::DefinedPublicExport
 use crate::compiler_frontend::defined_public_type_surface::{
     DefinedPublicAliasTypeSurface, DefinedPublicConstantTypeSurface,
     DefinedPublicFunctionTypeSurface, DefinedPublicNominalTypeSurface,
-    DefinedPublicReceiverMethodTypeSurface, DefinedPublicTypeSurface, PublicChoiceVariantSurface,
-    PublicFieldTypeSlot, PublicGenericParameterSurface, PublicParameterTypeSlot,
-    PublicReturnTypeSlot, TransientNominalOriginResolver, build_defined_public_type_surface,
-    project_trait_source_fact_to_canonical_identity,
+    DefinedPublicReceiverMethodTypeSurface, DefinedPublicTypeSurface, PublicCallableOriginSeed,
+    PublicChoiceVariantSurface, PublicFieldTypeSlot, PublicGenericParameterSurface,
+    PublicParameterTypeSlot, PublicReturnTypeSlot, TransientNominalOriginResolver,
+    build_defined_public_type_surface, project_trait_source_fact_to_canonical_identity,
 };
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::folded_value::{
@@ -428,13 +429,15 @@ pub(crate) struct PublicInterfaceDraft {
 /// Typed pre-HIR result carrying the draft and its transient exact declaration-path metadata.
 ///
 /// WHAT: keeps the stable public draft separate from the `InternedPath` values needed only to
-/// seed the HIR stable-origin/local-`FunctionId` relationship. The path side table is consumed
-/// by HIR lowering and never enters `PublicInterfaceDraft` or `CompiledModuleResult`.
+/// seed the HIR stable-origin/local-`FunctionId` relationship and validate generic body joins.
+/// The path side table is consumed before HIR lowering and never enters `PublicInterfaceDraft` or
+/// `CompiledModuleResult`.
 /// WHY: the origin join must be established while exact AST declaration identity is available;
 /// later stages must not reconstruct it from rendered names, paths or declaration order.
 pub(crate) struct PublicInterfaceDraftBuildResult {
     pub(crate) draft: PublicInterfaceDraft,
     pub(crate) function_origin_seeds: Vec<FunctionOriginSeed>,
+    pub(crate) public_callable_origin_seeds: Vec<PublicCallableOriginSeed>,
 }
 
 // ===========================================================================
@@ -456,10 +459,11 @@ pub(crate) struct PublicInterfaceDraftBuilderInput<'a> {
     pub type_environment: &'a TypeEnvironment,
     pub external_registry: &'a ExternalPackageRegistry,
     pub string_table: &'a StringTable,
-    /// Exact paths retained by AST generic-template validation. This is consumed while the
-    /// transient receiver-method surface still carries its defining path; no path enters the
-    /// declaration-centric draft.
-    pub generic_function_template_paths: &'a [InternedPath],
+    /// Validated generic callable templates retained by AST generic-template validation.
+    /// Borrowed only while the transient type surface records the corresponding stable callable
+    /// origin and aliases receiver-method local generic parameter IDs; no path or template
+    /// enters the declaration-centric draft.
+    pub generic_function_templates: &'a FxHashMap<InternedPath, GenericFunctionTemplate>,
     /// The finalized and normalized module constant declarations from the AST.
     ///
     /// WHAT: the already-folded `Ast::module_constants` consumed before HIR lowering. Each
@@ -515,7 +519,7 @@ impl<'a> PublicInterfaceDraftBuilder<'a> {
             type_environment,
             external_registry,
             string_table,
-            generic_function_template_paths,
+            generic_function_templates,
             module_constants,
         } = self.input;
 
@@ -557,24 +561,36 @@ impl<'a> PublicInterfaceDraftBuilder<'a> {
             &export_origins,
             public_source_nominal_type_origins,
             public_source_trait_origins,
+            generic_function_templates,
             type_environment,
             external_registry,
             string_table,
         )?;
-        let mut generic_receiver_origins = FxHashSet::default();
         for method in &mut type_surface.receiver_methods {
-            method.generic_template = generic_function_template_paths
-                .iter()
-                .any(|path| path == &method.function_path);
-            if method.generic_template {
-                generic_receiver_origins.insert(method.method_origin.clone());
-            }
+            let generic_template = generic_function_templates.contains_key(&method.function_path);
+            method.generic_template = generic_template;
+
+            let Some(seed) = type_surface
+                .public_callable_origin_seeds
+                .iter_mut()
+                .find(|seed| seed.origin == method.method_origin)
+            else {
+                return Err(CompilerError::compiler_error(format!(
+                    "public-interface draft construction: receiver method origin {:?} has no exact callable-origin seed",
+                    method.method_origin
+                )));
+            };
+            seed.generic_template = generic_template;
         }
-        let function_origin_seeds = type_surface
-            .function_origin_seeds
+        let public_callable_origin_seeds =
+            std::mem::take(&mut type_surface.public_callable_origin_seeds);
+        let function_origin_seeds = public_callable_origin_seeds
             .iter()
-            .filter(|seed| !generic_receiver_origins.contains(&seed.origin))
-            .cloned()
+            .filter(|seed| !seed.generic_template)
+            .map(|seed| FunctionOriginSeed {
+                path: seed.path.clone(),
+                origin: seed.origin.clone(),
+            })
             .collect();
 
         let trait_surfaces = build_trait_surfaces(
@@ -647,6 +663,7 @@ impl<'a> PublicInterfaceDraftBuilder<'a> {
                 reusable_evidence,
             },
             function_origin_seeds,
+            public_callable_origin_seeds,
         })
     }
 }
@@ -931,7 +948,7 @@ fn join_declaration_records(
         transparent_aliases,
         constants,
         receiver_methods,
-        function_origin_seeds: _,
+        public_callable_origin_seeds: _,
     } = type_surface;
 
     let mut functions_by_origin: FxHashMap<OriginDeclarationId, DefinedPublicFunctionTypeSurface> =

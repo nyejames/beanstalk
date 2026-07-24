@@ -162,13 +162,13 @@ pub(crate) struct ModuleCompilerMetadata {
     pub(crate) root_activity: ModuleRootActivity,
     pub(crate) doc_fragments: Vec<ModuleDocFragment>,
     pub(crate) rendered_path_usages: Vec<RenderedPathUsage>,
-    /// Validated generic free-function template body artefacts keyed by stable
+    /// Validated generic callable template body artefacts keyed by stable
     /// [`crate::compiler_frontend::semantic_identity::OriginFunctionId`].
     ///
-    /// WHAT: one deterministic artefact per directly exported generic free-function origin and
-    ///       none for non-generic, private or receiver-method functions. Each artefact moves the
-    ///       one existing validated `GenericFunctionTemplate` body payload out of the donor-local
-    ///       AST template map. The store is TIR-free and `Send`.
+    /// WHAT: one deterministic artefact per directly exported generic free-function or
+    ///       receiver-method origin and none for non-generic or private callables. Each artefact
+    ///       moves the one existing validated `GenericFunctionTemplate` body payload out of the
+    ///       donor-local AST template map. The store is TIR-free and `Send`.
     /// WHY: locked decision 10 retains the declaring module's template body as a compiler
     ///      metadata checkpoint for the future build-owned generated sidecar worklist (R3). This
     ///      is a body-artefact checkpoint only, not the complete materialisation context: complete

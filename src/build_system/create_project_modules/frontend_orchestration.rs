@@ -939,11 +939,10 @@ impl FrontendModuleBuildContext<'_> {
             // and never enter a cross-module artefact.
             let public_interface_projection_input =
                 std::mem::take(&mut module_ast.public_interface_projection_input);
-            let generic_function_template_paths = module_ast
-                .generic_function_templates
-                .keys()
-                .cloned()
-                .collect::<Vec<_>>();
+            // Borrow the donor-local template map before the draft builder consumes it for
+            // receiver-method generic-parameter aliasing and generic-template marking. The map
+            // is taken separately for extraction after the draft is built.
+            let generic_function_templates = module_ast.generic_function_templates.as_ref();
 
             // 4. Build the one aggregate public-interface draft before HIR consumes the AST. The
             //    draft is the sole pre-HIR public-semantic handoff: the export-origin
@@ -969,7 +968,7 @@ impl FrontendModuleBuildContext<'_> {
                     type_environment: &module_ast.type_environment,
                     external_registry: compiler.external_package_registry.as_ref(),
                     string_table: &compiler.string_table,
-                    generic_function_template_paths: &generic_function_template_paths,
+                    generic_function_templates,
                     module_constants: &module_ast.module_constants,
                 })
                 .build()
@@ -977,11 +976,12 @@ impl FrontendModuleBuildContext<'_> {
             let public_interface_draft = public_interface_build.draft;
 
             // 4b. Extract validated generic-template body artefacts before HIR consumes AST
-            //     state. The draft is the authority for which exported free functions are
-            //     generic; the donor-local template map is the authority for the validated body
-            //     payload. The extraction/join owner moves the relevant templates out of the
-            //     donor-local map and keys them by the exact `OriginFunctionId` already retained
-            //     by the draft. Private and non-generic templates remain intentional exclusions.
+            //     state. The transient public callable seed table is the exact path-to-origin
+            //     authority for every directly exported generic free function or receiver method;
+            //     the donor-local template map is the authority for the validated body payload.
+            //     The extraction/join owner moves matching templates out of the donor-local map
+            //     and keys them by the exact `OriginFunctionId` already retained by the draft.
+            //     Private and non-generic templates remain intentional exclusions.
             //     This runs after generic body validation and before HIR so the templates never
             //     re-enter donor AST state.
             let generic_function_templates =
@@ -1002,8 +1002,8 @@ impl FrontendModuleBuildContext<'_> {
             };
             let validated_generic_templates = extract_validated_generic_template_artefacts(
                 &public_interface_draft,
+                &public_interface_build.public_callable_origin_seeds,
                 owned_templates,
-                &compiler.string_table,
             )
             .map_err(|error| CompilerMessages::from_error_ref(error, &compiler.string_table))?;
 

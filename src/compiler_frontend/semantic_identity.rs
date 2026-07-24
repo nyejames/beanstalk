@@ -31,7 +31,7 @@ use std::path::{Component, Path};
 /// WHY: later exported declaration identities embed the package identity so origin identities
 /// remain stable when source moves across machines or checkouts. Identity is never inferred from
 /// checkout-directory names or absolute paths.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub(crate) struct StablePackageIdentity {
     origin: PackageOrigin,
     name: String,
@@ -86,7 +86,7 @@ pub(crate) enum ModuleRootRole {
 /// WHY: later exported declaration identities embed this module origin identity. Keeping the
 /// dense `ModuleId` as the build-local handle prevents process-local indexes from leaking across
 /// module boundaries or into persistent artefacts.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub(crate) struct StableModuleOriginIdentity {
     package: StablePackageIdentity,
     logical_module_path: String,
@@ -284,7 +284,7 @@ pub(crate) enum OriginTypeCategory {
 /// distinct receiver types cannot collapse because the receiver type identity is embedded in the
 /// variant. This is the sole authoritative receiver state: a free function with a receiver or a
 /// receiver method without a receiver type is unrepresentable.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub(crate) enum FunctionOriginKind {
     Free,
     Receiver(OriginTypeId),
@@ -299,7 +299,7 @@ pub(crate) enum FunctionOriginKind {
 /// reordered or aliased at export time.
 /// WHY: cross-module type references and generated instances key off this origin so changing a
 /// declaration's name, category or module alters identity while cosmetic moves do not.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub(crate) struct OriginTypeId {
     module_origin: StableModuleOriginIdentity,
     defining_name: String,
@@ -353,7 +353,7 @@ impl OriginTypeId {
 /// same name are distinct, and renaming a function or moving it between modules alters identity
 /// while reordering and aliasing do not. Binding-backed external call identities are a separate
 /// target class owned by a later phase, not this origin.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub(crate) struct OriginFunctionId {
     module_origin: StableModuleOriginIdentity,
     defining_name: String,

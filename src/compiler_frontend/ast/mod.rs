@@ -233,14 +233,14 @@ pub struct Ast {
     ///      future facts.
     pub public_interface_projection_input: AstPublicInterfaceProjectionInput,
 
-    /// Validated generic free-function templates carried past finalization to the
-    /// extraction/join owner.
+    /// Validated generic callable templates carried past finalization to the extraction/join
+    /// owner.
     ///
     /// WHAT: the donor-local `generic_function_templates_by_path` map cloned from the completed
     ///       AST environment lookups before they are dropped. Production AST construction always
     ///       populates this; synthetic AST fixtures use an empty map. Each entry is the one
     ///       existing [`GenericFunctionTemplate`] body payload produced during signature
-    ///       resolution and body validation.
+    ///       resolution and body validation, for either a free function or a receiver method.
     /// WHY: the semantic orchestration takes this through `std::mem::take` before HIR lowering
     ///      and runs the validated-generic-template extraction/join owner against the completed
     ///      public-interface draft, moving the relevant templates into `ModuleCompilerMetadata`.

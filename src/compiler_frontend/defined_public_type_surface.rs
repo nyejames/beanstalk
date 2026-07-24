@@ -47,6 +47,7 @@ use crate::compiler_frontend::ast::ReceiverMethodEntry;
 use crate::compiler_frontend::ast::ResolvedTraitSourceFact;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
+use crate::compiler_frontend::ast::generic_functions::GenericFunctionTemplate;
 use crate::compiler_frontend::ast::statements::functions::{
     FunctionSignature, ReturnChannel, ReturnSlot,
 };
@@ -71,7 +72,6 @@ use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::folded_value::{
     PublicFoldedValue, convert_expression_to_folded_value,
 };
-use crate::compiler_frontend::hir::functions::FunctionOriginSeed;
 use crate::compiler_frontend::semantic_identity::{
     DefinedPublicExportOrigins, ExportBinding, OriginConstantId, OriginDeclarationId,
     OriginFunctionId, OriginTraitId, OriginTypeCategory, OriginTypeId, ReceiverSurfaceOrigins,
@@ -91,8 +91,10 @@ use rustc_hash::{FxHashMap, FxHashSet};
 /// intermediate consumed by the [`PublicInterfaceDraftBuilder`] before the draft boundary.
 ///
 /// WHAT: carries only owned, stable values: canonical type identities and owned authored names.
-/// Its `function_origin_seeds` are a separate transient lowering side table; they are consumed
-/// before the draft boundary and never enter declaration records or module artefacts.
+/// Its `public_callable_origin_seeds` are a separate transient path-to-origin side table; they
+/// are consumed before the draft boundary and never enter declaration records or module
+/// artefacts. The same exact relationship is used for HIR lowering and validated generic-body
+/// extraction while donor-local AST facts still exist.
 /// The stable type-surface entries themselves never embed `TypeId`, `NominalTypeId`,
 /// `GenericParameterId`, `InternedPath`, `StringId`, source locations, absolute paths or
 /// donor-local external numeric IDs.
@@ -106,7 +108,21 @@ pub(crate) struct DefinedPublicTypeSurface {
     pub(super) transparent_aliases: Vec<DefinedPublicAliasTypeSurface>,
     pub(super) constants: Vec<DefinedPublicConstantTypeSurface>,
     pub(super) receiver_methods: Vec<DefinedPublicReceiverMethodTypeSurface>,
-    pub(super) function_origin_seeds: Vec<FunctionOriginSeed>,
+    pub(super) public_callable_origin_seeds: Vec<PublicCallableOriginSeed>,
+}
+
+/// Exact transient declaration-path-to-origin facts for directly exported callables.
+///
+/// WHAT: pairs one donor-local declaration path with its stable free-function or receiver-method
+/// origin and records whether the validated body is generic. This is a transient AST/type-surface
+/// join fact, not HIR identity and not public-interface identity.
+/// WHY: generic body extraction must distinguish same-named receiver methods by exact path and
+/// stable origin, while HIR must receive only the non-generic subset as local function seeds.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct PublicCallableOriginSeed {
+    pub(crate) path: InternedPath,
+    pub(crate) origin: OriginFunctionId,
+    pub(crate) generic_template: bool,
 }
 
 /// One parameter slot in a public function or receiver-method semantic record.
@@ -367,6 +383,31 @@ impl TransientGenericParameterOriginResolver {
 
         Ok(())
     }
+
+    /// Register one donor-local `GenericParameterId` under an already-established stable
+    /// identity.
+    ///
+    /// WHAT: used by receiver-method parameter aliasing so the method's local parameter ID
+    /// maps to the receiver nominal's stable exported identity without making the method a
+    /// generic declaration owner. A donor-local ID already registered under the same identity
+    /// is idempotent; under a conflicting identity it is a `CompilerError`.
+    fn register_aligned_parameter_alias(
+        &mut self,
+        parameter_id: GenericParameterId,
+        identity: ExportedGenericParameterIdentity,
+    ) -> Result<(), CompilerError> {
+        match self.origins.get(&parameter_id) {
+            Some(existing) if existing == &identity => Ok(()),
+            Some(existing) => Err(CompilerError::compiler_error(format!(
+                "defined public type-surface projection: GenericParameterId({}) is already                  registered under a different stable identity ({:?}); receiver-method                  parameter aliasing cannot override an existing registration",
+                parameter_id.0, existing
+            ))),
+            None => {
+                self.origins.insert(parameter_id, identity);
+                Ok(())
+            }
+        }
+    }
 }
 
 impl GenericParameterOriginResolver for TransientGenericParameterOriginResolver {
@@ -477,13 +518,16 @@ impl<'a> RootIndex<'a> {
 ///
 /// The stable surface carries only owned stable values. No `TypeId`, `NominalTypeId`,
 /// `GenericParameterId`, `GenericParameterListId`, `TraitId`, `CoreTraitKind`, `InternedPath` or
-/// `StringId` enters its declaration-shaped entries. The separate exact function-origin path
-/// side table is consumed by HIR lowering before the module-result boundary.
+/// `StringId` enters its declaration-shaped entries. The separate exact callable-origin path
+/// side table is consumed by HIR lowering and generic-template extraction before the
+/// module-result boundary.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn build_defined_public_type_surface(
     root_table: &ResolvedPublicTypeRootTable,
     export_origins: &DefinedPublicExportOrigins,
     public_source_nominal_type_origins: &FxHashMap<InternedPath, OriginTypeId>,
     public_source_trait_origins: &FxHashMap<InternedPath, OriginTraitId>,
+    generic_function_templates: &FxHashMap<InternedPath, GenericFunctionTemplate>,
     type_environment: &TypeEnvironment,
     external_registry: &ExternalPackageRegistry,
     string_table: &StringTable,
@@ -496,6 +540,7 @@ pub(crate) fn build_defined_public_type_surface(
         &mut generic_resolver,
         root_table,
         export_origins,
+        generic_function_templates,
         &nominal_resolver,
         type_environment,
         string_table,
@@ -513,7 +558,7 @@ pub(crate) fn build_defined_public_type_surface(
     let mut nominal_types = Vec::new();
     let mut transparent_aliases = Vec::new();
     let mut constants = Vec::new();
-    let mut function_origin_seeds = Vec::new();
+    let mut public_callable_origin_seeds = Vec::new();
 
     // Iterate over export bindings in their deterministic order. A trait binding carries no
     // type root in this type-only slice, so it is skipped without consuming a root. Every
@@ -547,13 +592,12 @@ pub(crate) fn build_defined_public_type_surface(
                     public_source_trait_origins,
                     string_table,
                 )?;
-                if generic_parameter_list_id.is_none() {
-                    push_function_origin_seed(
-                        &mut function_origin_seeds,
-                        root.path.clone(),
-                        function_origin.clone(),
-                    )?;
-                }
+                push_public_callable_origin_seed(
+                    &mut public_callable_origin_seeds,
+                    root.path.clone(),
+                    function_origin.clone(),
+                    generic_parameter_list_id.is_some(),
+                )?;
                 free_functions.push(function_surface);
             }
             ResolvedPublicTypeRootKind::Struct { type_id, fields } => {
@@ -639,20 +683,14 @@ pub(crate) fn build_defined_public_type_surface(
 
     // Receiver methods: project in the deterministic receiver-surface order from
     // DefinedPublicExportOrigins, matching each method to its resolved entry.
-    let (receiver_methods, receiver_function_origin_seeds) = project_receiver_methods(
+    let (receiver_methods, receiver_callable_origin_seeds) = project_receiver_methods(
         &root_table.receiver_methods,
         export_origins.receiver_surfaces(),
         type_environment,
         &projection_context,
         string_table,
     )?;
-    for function_origin_seed in receiver_function_origin_seeds {
-        push_function_origin_seed(
-            &mut function_origin_seeds,
-            function_origin_seed.path,
-            function_origin_seed.origin,
-        )?;
-    }
+    public_callable_origin_seeds.extend(receiver_callable_origin_seeds);
 
     Ok(DefinedPublicTypeSurface {
         free_functions,
@@ -660,22 +698,23 @@ pub(crate) fn build_defined_public_type_surface(
         transparent_aliases,
         constants,
         receiver_methods,
-        function_origin_seeds,
+        public_callable_origin_seeds,
     })
 }
 
-/// Retain one exact declaration path-to-origin relationship for HIR lowering.
+/// Retain one exact declaration path-to-origin relationship for direct exported callable joins.
 ///
-/// WHAT: rejects duplicate stable function origins while the AST-owned declaration path is still
-/// available. Exact path uniqueness is validated when the side table is converted to the HIR
-/// lookup, where paths are correctly interpreted within one lowered module. The resulting side
-/// table is consumed before HIR assigns local `FunctionId`s.
+/// WHAT: rejects duplicate stable function origins and duplicate generic declaration paths while
+/// the AST-owned path is still available. Non-generic receiver methods may share a leaf path when
+/// their stable receiver origins differ; the resulting seed is consumed before the module-result
+/// boundary and its non-generic subset is later converted into HIR-local function-origin seeds.
 /// WHY: the later join must not reconstruct identity from rendered names, paths or declaration
 /// order, and no donor-local path may enter a completed public declaration record.
-fn push_function_origin_seed(
-    seeds: &mut Vec<FunctionOriginSeed>,
+fn push_public_callable_origin_seed(
+    seeds: &mut Vec<PublicCallableOriginSeed>,
     path: InternedPath,
     origin: OriginFunctionId,
+    generic_template: bool,
 ) -> Result<(), CompilerError> {
     if seeds.iter().any(|existing| existing.origin == origin) {
         return Err(CompilerError::compiler_error(format!(
@@ -683,20 +722,37 @@ fn push_function_origin_seed(
             origin
         )));
     }
-    seeds.push(FunctionOriginSeed { path, origin });
+    if seeds
+        .iter()
+        .any(|existing| existing.path == path && (existing.generic_template || generic_template))
+    {
+        return Err(CompilerError::compiler_error(format!(
+            "defined public type-surface projection: duplicate public callable declaration path \
+             {:?}",
+            path
+        )));
+    }
+    seeds.push(PublicCallableOriginSeed {
+        path,
+        origin,
+        generic_template,
+    });
     Ok(())
 }
 
-/// Register generic-parameter origins from function and nominal roots.
+/// Register generic-parameter origins from function and nominal roots, then alias
+/// receiver-method generic parameters to their receiver nominal's stable identities.
 ///
 /// Free functions with a `GenericParameterListId` register their parameters under a
 /// `GenericDeclarationOrigin::free_function`. Struct/choice roots register their parameters
-/// under a `GenericDeclarationOrigin::nominal_type`. Receiver methods do not register
-/// parameters: they reuse their receiver nominal's parameters and must not become owners.
+/// under a `GenericDeclarationOrigin::nominal_type`. Receiver methods with a validated
+/// `GenericFunctionTemplate` alias their local `GenericParameterId` values to the receiver
+/// nominal's already-registered stable identities without becoming declaration owners.
 fn register_generic_parameter_origins(
     generic_resolver: &mut TransientGenericParameterOriginResolver,
     root_table: &ResolvedPublicTypeRootTable,
     export_origins: &DefinedPublicExportOrigins,
+    generic_function_templates: &FxHashMap<InternedPath, GenericFunctionTemplate>,
     nominal_resolver: &TransientNominalOriginResolver,
     type_environment: &TypeEnvironment,
     string_table: &StringTable,
@@ -772,6 +828,17 @@ fn register_generic_parameter_origins(
         }
     }
 
+    // After nominal origins are registered, alias receiver-method local generic parameter IDs
+    // to their receiver nominal's stable identities. Receiver methods must not become
+    // generic declaration owners; they reuse the nominal's parameters by alignment.
+    register_receiver_method_generic_parameter_aliases(
+        generic_resolver,
+        &root_table.receiver_methods,
+        generic_function_templates,
+        type_environment,
+        string_table,
+    )?;
+
     Ok(())
 }
 
@@ -804,6 +871,147 @@ fn register_nominal_generic_origins(
 
     let declaration_origin = GenericDeclarationOrigin::nominal_type(nominal_origin)?;
     generic_resolver.register_list(type_environment, list_id, declaration_origin, string_table)?;
+
+    Ok(())
+}
+
+/// Alias receiver-method local generic parameter IDs to their receiver nominal's stable
+/// exported generic parameter identities.
+///
+/// WHAT: for each receiver method with a validated `GenericFunctionTemplate`, resolves the
+/// method's `GenericParameterListId` and the receiver nominal's `GenericParameterListId` from
+/// the `TypeEnvironment`, verifies position-by-position authored-name alignment, then aliases
+/// each receiver-local `GenericParameterId` to the nominal's already-registered
+/// `ExportedGenericParameterIdentity`. The receiver method must not become a
+/// `GenericDeclarationOrigin` owner.
+///
+/// WHY: a generic receiver method's signature references receiver-local `GenericParameterId`
+/// values distinct from the nominal's IDs. The nominal's parameters are already registered by
+/// `register_nominal_generic_origins`; aliasing lets the method's type projection resolve its
+/// local IDs to the same stable identities without registering a second declaration owner.
+fn register_receiver_method_generic_parameter_aliases(
+    generic_resolver: &mut TransientGenericParameterOriginResolver,
+    receiver_method_entries: &[ReceiverMethodEntry],
+    generic_function_templates: &FxHashMap<InternedPath, GenericFunctionTemplate>,
+    type_environment: &TypeEnvironment,
+    string_table: &StringTable,
+) -> Result<(), CompilerError> {
+    for entry in receiver_method_entries {
+        let Some(template) = generic_function_templates.get(&entry.function_path) else {
+            continue;
+        };
+
+        let receiver_path = match &entry.receiver {
+            ReceiverKey::Struct(path) | ReceiverKey::Choice(path) => path,
+            ReceiverKey::External(_) | ReceiverKey::BuiltinScalar(_) => {
+                return Err(CompilerError::compiler_error(format!(
+                    "defined public type-surface projection: a receiver method with a                      validated generic template carries a non-nominal receiver key ({:?});                      aligned generic parameters require a nominal receiver",
+                    entry.receiver
+                )));
+            }
+        };
+
+        let nominal_id = type_environment
+            .nominal_id_for_path(receiver_path)
+            .ok_or_else(|| {
+                CompilerError::compiler_error(format!(
+                    "defined public type-surface projection: a generic receiver method's                      receiver path is not a registered nominal (path: {:?})",
+                    receiver_path
+                ))
+            })?;
+
+        let nominal_generic_list_id = match type_environment.struct_definition(nominal_id) {
+            Some(def) => def.generic_parameters,
+            None => match type_environment.choice_definition(nominal_id) {
+                Some(def) => def.generic_parameters,
+                None => {
+                    return Err(CompilerError::compiler_error(format!(
+                        "defined public type-surface projection: a generic receiver method's                          nominal ID ({}) is neither a struct nor a choice definition",
+                        nominal_id.0
+                    )));
+                }
+            },
+        };
+
+        let Some(nominal_list_id) = nominal_generic_list_id else {
+            return Err(CompilerError::compiler_error(format!(
+                "defined public type-surface projection: a generic receiver method on                  non-generic nominal {:?} has a validated generic template; a generic                  receiver method requires a generic receiver nominal",
+                receiver_path
+            )));
+        };
+
+        alias_aligned_generic_parameters(
+            generic_resolver,
+            type_environment,
+            nominal_list_id,
+            template.generic_parameter_list_id,
+            string_table,
+        )?;
+    }
+
+    Ok(())
+}
+
+/// Alias each receiver-method generic parameter to the receiver nominal's already-registered
+/// stable identity, verifying authored-name alignment at each position.
+///
+/// WHAT: resolves both parameter lists from the `TypeEnvironment`, checks count and per-position
+/// authored-name equality, then for each pair resolves the nominal's stable identity from the
+/// already-built resolver and registers the method's local ID under it. A count or name mismatch
+/// is a `CompilerError` rather than a silent coercion.
+fn alias_aligned_generic_parameters(
+    generic_resolver: &mut TransientGenericParameterOriginResolver,
+    type_environment: &TypeEnvironment,
+    nominal_list_id: GenericParameterListId,
+    method_list_id: GenericParameterListId,
+    string_table: &StringTable,
+) -> Result<(), CompilerError> {
+    let nominal_list = type_environment
+        .generic_parameters(nominal_list_id)
+        .ok_or_else(|| {
+            CompilerError::compiler_error(format!(
+                "defined public type-surface projection: the receiver nominal's                  GenericParameterListId({}) is missing from the TypeEnvironment while                  aliasing receiver-method generic parameters",
+                nominal_list_id.0
+            ))
+        })?;
+
+    let method_list = type_environment
+        .generic_parameters(method_list_id)
+        .ok_or_else(|| {
+            CompilerError::compiler_error(format!(
+                "defined public type-surface projection: the receiver method's                  GenericParameterListId({}) is missing from the TypeEnvironment while                  aliasing receiver-method generic parameters",
+                method_list_id.0
+            ))
+        })?;
+
+    if nominal_list.parameters.len() != method_list.parameters.len() {
+        return Err(CompilerError::compiler_error(format!(
+            "defined public type-surface projection: a generic receiver method has {}              generic parameters but its receiver nominal has {}; aligned parameters              must match in count",
+            method_list.parameters.len(),
+            nominal_list.parameters.len()
+        )));
+    }
+
+    for (nominal_param, method_param) in nominal_list
+        .parameters
+        .iter()
+        .zip(method_list.parameters.iter())
+    {
+        let nominal_name = string_table.resolve(nominal_param.name);
+        let method_name = string_table.resolve(method_param.name);
+        if nominal_name != method_name {
+            return Err(CompilerError::compiler_error(format!(
+                "defined public type-surface projection: a generic receiver method's                  parameter '{}' does not match the receiver nominal's parameter '{}';                  aligned parameters must match in authored name and order",
+                method_name, nominal_name
+            )));
+        }
+
+        // The nominal's GenericParameterId is already registered; resolve its stable identity
+        // and alias the method's local ID under it.
+        let nominal_identity =
+            generic_resolver.resolve_generic_parameter_origin(nominal_param.id)?;
+        generic_resolver.register_aligned_parameter_alias(method_param.id, nominal_identity)?;
+    }
 
     Ok(())
 }
@@ -1401,7 +1609,7 @@ fn project_receiver_methods(
 ) -> Result<
     (
         Vec<DefinedPublicReceiverMethodTypeSurface>,
-        Vec<FunctionOriginSeed>,
+        Vec<PublicCallableOriginSeed>,
     ),
     CompilerError,
 > {
@@ -1424,7 +1632,7 @@ fn project_receiver_methods(
     }
 
     let mut surfaces = Vec::new();
-    let mut function_origin_seeds = Vec::new();
+    let mut public_callable_origin_seeds = Vec::new();
 
     for surface in receiver_surfaces {
         let receiver_origin = surface.receiver().clone();
@@ -1502,10 +1710,11 @@ fn project_receiver_methods(
                 returns,
                 error_return,
             });
-            push_function_origin_seed(
-                &mut function_origin_seeds,
+            push_public_callable_origin_seed(
+                &mut public_callable_origin_seeds,
                 entry.function_path.clone(),
                 method_origin.clone(),
+                false,
             )?;
         }
     }
@@ -1516,11 +1725,7 @@ fn project_receiver_methods(
     // so the error is reproducible. This is diagnostic-only and never affects the projected
     // surface.
     let mut leftover: Vec<(OriginTypeId, String)> = entries_by_origin.into_keys().collect();
-    leftover.sort_by(|left, right| {
-        format!("{:?}", left.0)
-            .cmp(&format!("{:?}", right.0))
-            .then_with(|| left.1.cmp(&right.1))
-    });
+    leftover.sort();
     if let Some(key) = leftover.first() {
         return Err(CompilerError::compiler_error(format!(
             "defined public type-surface projection: a resolved receiver-method entry has no \
@@ -1530,7 +1735,7 @@ fn project_receiver_methods(
         )));
     }
 
-    Ok((surfaces, function_origin_seeds))
+    Ok((surfaces, public_callable_origin_seeds))
 }
 
 /// Build the exact stable join key for one resolved receiver-method entry.

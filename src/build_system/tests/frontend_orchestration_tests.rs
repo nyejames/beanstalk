@@ -21,7 +21,7 @@ use crate::compiler_frontend::headers::parse_file_headers::{
     FileFrontendPrepareError, HeaderKind, HeaderParseOptions, PreparedHeaderSyntax,
     bind_module_headers, prepare_header_syntax,
 };
-use crate::compiler_frontend::paths::module_roots::ModuleRootTable;
+use crate::compiler_frontend::paths::module_roots::{ModuleRootRecord, ModuleRootTable};
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::semantic_identity::{
     ModuleRootRole, StableModuleOriginIdentity, StablePackageIdentity,
@@ -436,7 +436,12 @@ fn fused_preparation_merges_local_forks_and_resolves_source_and_generated_string
 fn prepare_module_retains_header_syntax_for_semantic_compilation() {
     let temp_dir = tempfile::tempdir().expect("should create temp dir");
     let entry_file = temp_dir.path().join("entry.bst");
-    fs::write(&entry_file, "alpha #= 1\n").unwrap();
+    let source = "export:\n\
+    identity type T |value T| -> T:\n\
+        return value\n\
+    ;\n\
+;\n";
+    fs::write(&entry_file, source).unwrap();
     let canonical_entry = fs::canonicalize(&entry_file).unwrap();
 
     let mut string_table = StringTable::new();
@@ -454,7 +459,7 @@ fn prepare_module_retains_header_syntax_for_semantic_compilation() {
         &style_directives,
         &mut string_table,
         canonical_entry.clone(),
-        "alpha #= 1\n",
+        source,
     )];
 
     // Fork a local module string table sharing the fixture base so retained token StringIds
@@ -478,10 +483,13 @@ fn prepare_module_retains_header_syntax_for_semantic_compilation() {
     let source_file_kinds = SourceFileKindRegistry::new();
     let project_path_resolver = ProjectPathResolver::new_with_module_roots(
         project_root.clone(),
-        project_root,
+        project_root.clone(),
         PreparedSourcePackageRoots::empty(),
         &source_file_kinds,
-        ModuleRootTable::empty(),
+        ModuleRootTable::from_records(vec![ModuleRootRecord::new(
+            project_root.clone(),
+            canonical_entry.clone(),
+        )]),
     )
     .expect("project path resolver should build");
 
@@ -520,8 +528,8 @@ fn prepare_module_retains_header_syntax_for_semantic_compilation() {
             .prepared_header_syntax
             .headers
             .iter()
-            .any(|header| matches!(header.kind, HeaderKind::Constant { .. })),
-        "retained PreparedHeaderSyntax should carry the parsed constant declaration"
+            .any(|header| matches!(header.kind, HeaderKind::Function { .. })),
+        "retained PreparedHeaderSyntax should carry the parsed public generic function declaration"
     );
     assert_eq!(
         prepared.source_files.iter().count(),
@@ -549,8 +557,11 @@ fn prepare_module_retains_header_syntax_for_semantic_compilation() {
         .compile_module_semantic(prepared, &canonical_entry, module_label)
         .expect("semantic compilation should succeed");
 
-    let super::ModuleCompilationOutcome::Success(compiled) = compiled else {
-        panic!("a clean constant declaration should compile, not diagnose");
+    let compiled = match compiled {
+        super::ModuleCompilationOutcome::Success(compiled) => compiled,
+        super::ModuleCompilationOutcome::Diagnosed(diagnostics) => panic!(
+            "a generic free-function declaration should compile, not diagnose: {diagnostics:?}"
+        ),
     };
 
     assert_eq!(
@@ -559,7 +570,33 @@ fn prepare_module_retains_header_syntax_for_semantic_compilation() {
     );
     assert!(
         compiled.module.metadata.warnings.is_empty(),
-        "semantic compilation should not introduce warnings for a clean constant declaration"
+        "semantic compilation should not introduce warnings for a clean generic free-function declaration"
+    );
+    assert_eq!(
+        compiled.module.metadata.validated_generic_templates.len(),
+        1,
+        "the production semantic path should retain one generic free-function template body"
+    );
+    assert_eq!(
+        compiled
+            .module
+            .metadata
+            .validated_generic_templates
+            .artefacts()[0]
+            .origin
+            .defining_name(),
+        "identity",
+        "generic template metadata should retain the exported function origin"
+    );
+    assert!(
+        compiled
+            .module
+            .metadata
+            .validated_generic_templates
+            .artefacts()[0]
+            .origin
+            .receiver()
+            .is_none()
     );
 }
 

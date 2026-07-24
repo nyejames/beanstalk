@@ -19,28 +19,29 @@ This document replaces the previous incremental phase sequence at the same path.
 
 ```text
 ACTIVE_PLAN: docs/roadmap/plans/canonical-module-compilation-and-scoped-packages-plan.md
-STATUS: active
-CURRENT_SLICE: R2j complete — direct public-interface canonical bytes; checkpoint ready to commit
-LAST_ACCEPTED_COMMIT: 3dfcc5ede (R2i)
-WORKTREE: main at 3dfcc5ede with reviewed R2j code, tests and this plan update; origin/main 911fa955a; preserve and ignore unrelated documentation work if it appears
-REQUIRED_RELOADS: startup files, this plan, current source/diff and the complete R2 commit range for the required phase audit
+STATUS: blocked — codex-cli worker order remains primary delegation path; next slice requires codex-cli
+CURRENT_SLICE: R2 audit correction 1 — exported generic receiver stable-parameter projection — completed parent-direct
+LAST_ACCEPTED_COMMIT: 194cf795e (R2j)
+WORKTREE: main at 194cf795e with a committed 12-file correction-1 patch; preserve all worker artefacts unless they interfere with the next slice
+REQUIRED_RELOADS: startup files, this plan, the committed correction diff, generic-template metadata extraction, generic-parameter origin registration and frontend orchestration coverage
 RELEVANT_CONTEXT_NOW:
-- docs: compiler-design-overview.md requires the public-interface fingerprint to cover canonical semantic contents while excluding locations, warnings, formatting metadata and dormant root activity
-- code: public_interface_encoding.rs now owns deterministic hash input for every direct draft fact; direct function provenance remains an explicit HIR side table for later interface/link propagation
-ACCEPTANCE_CRITERIA:
-- review all code touched across R2 against architecture ownership, draft completeness, call-summary finalization, stable identity and canonical-encoding contracts
-- report findings only; corrections remain bounded implementation-worker slices and receive their own accepted commits
-- preserve R3 generated-sidecar ownership, R4 provider joining and R7 five-fingerprint policy without implementing them during audit
+- docs: compiler-design-overview.md and locked decision 10 require one validated generic body artefact per stable exported generic callable origin without path/name identity crossing the metadata boundary
+- code: the committed correction-1 patch threads generic_function_templates as FxHashMap<InternedPath, GenericFunctionTemplate> through PublicInterfaceDraftBuilder into build_defined_public_type_surface; register_receiver_method_generic_parameter_aliases aliases receiver-method local GenericParameterId values to the receiver nominal's stable ExportedGenericParameterIdentity, verified by authored-name alignment; the dedicated test uses a genuine generic nominal Box<A> and passes a matching GenericFunctionTemplate; full just validate passes
+ACCEPTANCE_CRITERIA: — all met by Correction 1
+- one exact transient path-to-OriginFunctionId relationship joins public generic free functions and receiver methods to validated body payloads before the metadata boundary ✓
+- same-named generic receiver methods on distinct receivers retain distinct artefacts; private templates remain excluded only after exact path joining ✓
+- missing, duplicate, path-mismatched or generic/non-generic public joins fail through CompilerError; artefacts sort by full stable origin ✓
+- receiver-local aligned generic parameters resolve to nominal-owned stable identities without making the method a generic declaration owner; production orchestration retains the exact receiver artefact ✓
+- retained metadata contains no InternedPath identity and no R3 materialization/worklist behavior ✓
 VALIDATION_STATE:
-- R2i accepted at 3dfcc5ede after full just validate
-- R2j focused checks passed: 7 encoder tests, 83 draft tests, formatting and cargo check
-- R2j just validate passed: native/Linux/Windows Clippy, 3753 Rust tests, 1793 integration runs, docs check and 28 benchmark sanity cases
-DOCS_IMPACT: active plan only; progress matrix should remain unchanged because this slice retains internal direct-interface facts for already-supported behavior
-BLOCKERS_OR_OPEN_DECISIONS: none
-DELEGATION_DECISION: codex-cli - use Codex CLI for every remaining implementation, correction and audit slice after the completed Ollama attempt
-NEXT_WORKER_ORDER: codex-cli only
-STOP_REASON: none
-NEXT_RESUME_ACTION: commit the accepted R2j checkpoint, then launch required R2 audit cycle 1 through Codex CLI
+- just validate passes: clippy (native/linux/windows), 3757 unit tests, 1793 integration tests, docs build, bench-check
+- the failing GenericParameterId(15) probe from the earlier partial state is resolved by the aliasing functions
+DOCS_IMPACT: active plan only; progress matrix unchanged because this slice retains internal direct-interface facts for already-supported behavior
+BLOCKERS_OR_OPEN_DECISIONS: this slice is complete; codex-cli usage limit no longer blocks Correction 1. Audit cycle 1 retains four later findings: declaration parameter access, finite-float negative zero, origin-to-FunctionId injectivity and receiver-catalog duplication. These remain deferred to the next appropriate slice.
+DELEGATION_DECISION: codex-cli for subsequent implementation, correction and audit slices
+NEXT_WORKER_ORDER: tbd — next audit slice or R2k/R3 slice as determined by plan owner
+STOP_REASON: Correction 1 completed parent-direct; ready for next slice assignment
+NEXT_RESUME_ACTION: assign the next audit finding or R2k/R3 slice through the preferred worker path
 ```
 
 Do not append worktree-specific notes, complete validation histories or worker transcripts to this plan. Keep this status block current and concise. Git history is the validation history.

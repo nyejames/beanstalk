@@ -15,15 +15,17 @@ use crate::compiler_frontend::canonical_type_identity::{
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::ids::GenericParameterListId;
+use crate::compiler_frontend::defined_public_type_surface::PublicCallableOriginSeed;
 use crate::compiler_frontend::defined_public_type_surface::PublicGenericParameterSurface;
 use crate::compiler_frontend::public_call_summary::PublicCallSummaryState;
 use crate::compiler_frontend::public_interface_draft::{
     PublicDeclarationRecord, PublicDeclarationSemantics, PublicFunctionSemantics,
-    PublicGenericTemplateDescriptor, PublicInterfaceDraft,
+    PublicGenericTemplateDescriptor, PublicInterfaceDraft, PublicReceiverMethodSemantics,
+    PublicStructSemantics,
 };
 use crate::compiler_frontend::semantic_identity::{
-    ModuleRootRole, OriginDeclarationId, OriginFunctionId, StableModuleOriginIdentity,
-    StablePackageIdentity,
+    ModuleRootRole, OriginDeclarationId, OriginFunctionId, OriginTypeCategory, OriginTypeId,
+    StableModuleOriginIdentity, StablePackageIdentity,
 };
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -114,14 +116,56 @@ fn templates_map(
     map
 }
 
-/// Build one template whose donor path is multi-component (`parent::name`) so its defining
-/// name differs from its full path. The map key equals the template's own `function_path`.
-fn template_under_path(
-    parent: &str,
+fn callable_seed(
     name: &str,
+    generic_template: bool,
     string_table: &mut StringTable,
-) -> (InternedPath, GenericFunctionTemplate) {
-    let path = InternedPath::from_single_str(parent, string_table).join_str(name, string_table);
+) -> PublicCallableOriginSeed {
+    PublicCallableOriginSeed {
+        path: InternedPath::from_single_str(name, string_table),
+        origin: free_function_origin(name),
+        generic_template,
+    }
+}
+
+fn receiver_origin(receiver_name: &str, method_name: &str) -> OriginFunctionId {
+    OriginFunctionId::new_receiver(
+        module_origin(),
+        method_name.to_owned(),
+        OriginTypeId::new(
+            module_origin(),
+            receiver_name.to_owned(),
+            OriginTypeCategory::Struct,
+        ),
+    )
+}
+
+fn receiver_record(
+    receiver_name: &str,
+    method_origin: OriginFunctionId,
+) -> PublicDeclarationRecord {
+    PublicDeclarationRecord {
+        origin: OriginDeclarationId::Type(OriginTypeId::new(
+            module_origin(),
+            receiver_name.to_owned(),
+            OriginTypeCategory::Struct,
+        )),
+        semantics: PublicDeclarationSemantics::Struct(PublicStructSemantics {
+            generic_parameters: vec![],
+            fields: vec![],
+            receiver_methods: vec![PublicReceiverMethodSemantics {
+                method_origin,
+                generic_template: true,
+                parameters: vec![],
+                returns: vec![],
+                error_return: None,
+                call_summary: PublicCallSummaryState::PendingGenerated,
+            }],
+        }),
+    }
+}
+
+fn template_at_path(path: InternedPath) -> (InternedPath, GenericFunctionTemplate) {
     let template = GenericFunctionTemplate {
         function_path: path.to_owned(),
         source_file: InternedPath::new(),
@@ -158,7 +202,8 @@ fn exported_generic_free_function_retains_one_artefact_keyed_by_origin() {
     let draft = empty_draft(vec![function_record("identity", true)]);
     let templates = templates_map(&["identity"], &mut string_table);
 
-    let store = extract_validated_generic_template_artefacts(&draft, templates, &string_table)
+    let seed = callable_seed("identity", true, &mut string_table);
+    let store = extract_validated_generic_template_artefacts(&draft, &[seed], templates)
         .expect("one exported generic function with a matching template extracts one artefact");
 
     assert_eq!(store.len(), 1);
@@ -176,12 +221,59 @@ fn exported_generic_free_function_retains_one_artefact_keyed_by_origin() {
 }
 
 #[test]
+fn same_named_generic_receiver_methods_retain_distinct_exact_origins() {
+    let mut string_table = StringTable::new();
+    let first_method = receiver_origin("First", "map");
+    let second_method = receiver_origin("Second", "map");
+    let draft = empty_draft(vec![
+        receiver_record("First", first_method.clone()),
+        receiver_record("Second", second_method.clone()),
+    ]);
+
+    let first_path = InternedPath::from_single_str("First", &mut string_table)
+        .join_str("map", &mut string_table);
+    let second_path = InternedPath::from_single_str("Second", &mut string_table)
+        .join_str("map", &mut string_table);
+    let (first_path, first_template) = template_at_path(first_path);
+    let (second_path, second_template) = template_at_path(second_path);
+    let mut templates = FxHashMap::default();
+    templates.insert(first_path.clone(), first_template);
+    templates.insert(second_path.clone(), second_template);
+    let seeds = [
+        PublicCallableOriginSeed {
+            path: first_path,
+            origin: first_method.clone(),
+            generic_template: true,
+        },
+        PublicCallableOriginSeed {
+            path: second_path,
+            origin: second_method.clone(),
+            generic_template: true,
+        },
+    ];
+
+    let store = extract_validated_generic_template_artefacts(&draft, &seeds, templates)
+        .expect("same-named receiver methods on distinct receivers join by exact path");
+
+    assert_eq!(store.len(), 2);
+    let origins: Vec<OriginFunctionId> = store
+        .artefacts()
+        .iter()
+        .map(|artefact| artefact.origin.clone())
+        .collect();
+    let mut expected = vec![first_method, second_method];
+    expected.sort();
+    assert_eq!(origins, expected);
+}
+
+#[test]
 fn non_generic_exported_function_produces_no_artefact() {
     let mut string_table = StringTable::new();
     let draft = empty_draft(vec![function_record("render", false)]);
     let templates = templates_map(&[], &mut string_table);
 
-    let store = extract_validated_generic_template_artefacts(&draft, templates, &string_table)
+    let seed = callable_seed("render", false, &mut string_table);
+    let store = extract_validated_generic_template_artefacts(&draft, &[seed], templates)
         .expect("a non-generic exported function with no templates produces an empty store");
 
     assert!(
@@ -193,12 +285,12 @@ fn non_generic_exported_function_produces_no_artefact() {
 #[test]
 fn private_generic_function_is_intentionally_excluded() {
     let mut string_table = StringTable::new();
-    // The draft exports no functions. The template map contains one private generic function
-    // whose defining name does not match any exported free function.
+    // The draft exports no callables. The template map contains one private generic function
+    // whose exact declaration path does not match any exported callable seed.
     let draft = empty_draft(vec![]);
     let templates = templates_map(&["private_helper"], &mut string_table);
 
-    let store = extract_validated_generic_template_artefacts(&draft, templates, &string_table)
+    let store = extract_validated_generic_template_artefacts(&draft, &[], templates)
         .expect("a private generic template is an intentional exclusion, not an error");
 
     assert!(
@@ -213,11 +305,41 @@ fn missing_template_for_exported_generic_function_is_compiler_error() {
     let draft = empty_draft(vec![function_record("identity", true)]);
     let templates = templates_map(&[], &mut string_table);
 
-    let result = extract_validated_generic_template_artefacts(&draft, templates, &string_table);
+    let seed = callable_seed("identity", true, &mut string_table);
+    let result = extract_validated_generic_template_artefacts(&draft, &[seed], templates);
 
     assert!(
         matches!(result, Err(CompilerError { .. })),
         "an exported generic function with no matching template must fail as CompilerError"
+    );
+}
+
+#[test]
+fn missing_public_callable_seed_is_compiler_error() {
+    let mut string_table = StringTable::new();
+    let draft = empty_draft(vec![function_record("identity", true)]);
+    let templates = templates_map(&["identity"], &mut string_table);
+
+    let result = extract_validated_generic_template_artefacts(&draft, &[], templates);
+
+    assert!(
+        matches!(result, Err(CompilerError { .. })),
+        "an exported callable without its exact transient seed must fail as CompilerError"
+    );
+}
+
+#[test]
+fn public_callable_seed_generic_flag_mismatch_is_compiler_error() {
+    let mut string_table = StringTable::new();
+    let draft = empty_draft(vec![function_record("identity", true)]);
+    let templates = templates_map(&[], &mut string_table);
+    let seed = callable_seed("identity", false, &mut string_table);
+
+    let result = extract_validated_generic_template_artefacts(&draft, &[seed], templates);
+
+    assert!(
+        matches!(result, Err(CompilerError { .. })),
+        "a callable seed whose generic flag disagrees with the draft must fail as CompilerError"
     );
 }
 
@@ -228,7 +350,8 @@ fn generic_non_generic_mismatch_is_compiler_error() {
     let draft = empty_draft(vec![function_record("identity", false)]);
     let templates = templates_map(&["identity"], &mut string_table);
 
-    let result = extract_validated_generic_template_artefacts(&draft, templates, &string_table);
+    let seed = callable_seed("identity", false, &mut string_table);
+    let result = extract_validated_generic_template_artefacts(&draft, &[seed], templates);
 
     assert!(
         matches!(result, Err(CompilerError { .. })),
@@ -244,22 +367,32 @@ fn multiple_exported_generic_functions_retain_one_artefact_each_in_deterministic
         function_record("alpha", true),
         function_record("mid", true),
     ]);
-    // Insert in non-sorted order to prove the store sorts by defining name.
+    // Insert in non-sorted order to prove the store sorts by full stable origin.
     let templates = templates_map(&["mid", "zebra", "alpha"], &mut string_table);
+    let seeds = [
+        callable_seed("zebra", true, &mut string_table),
+        callable_seed("alpha", true, &mut string_table),
+        callable_seed("mid", true, &mut string_table),
+    ];
 
-    let store = extract_validated_generic_template_artefacts(&draft, templates, &string_table)
+    let store = extract_validated_generic_template_artefacts(&draft, &seeds, templates)
         .expect("three exported generic functions with matching templates extract three artefacts");
 
     assert_eq!(store.len(), 3);
-    let names: Vec<&str> = store
+    let origins: Vec<OriginFunctionId> = store
         .artefacts()
         .iter()
-        .map(|artefact| artefact.origin.defining_name())
+        .map(|artefact| artefact.origin.clone())
         .collect();
+    let mut expected = vec![
+        free_function_origin("zebra"),
+        free_function_origin("alpha"),
+        free_function_origin("mid"),
+    ];
+    expected.sort();
     assert_eq!(
-        names,
-        vec!["alpha", "mid", "zebra"],
-        "artefacts are sorted by defining name for deterministic iteration"
+        origins, expected,
+        "artefacts are sorted by full stable origin for deterministic iteration"
     );
 }
 
@@ -268,8 +401,9 @@ fn mixed_exported_and_private_generic_functions_retain_only_exported() {
     let mut string_table = StringTable::new();
     let draft = empty_draft(vec![function_record("public_generic", true)]);
     let templates = templates_map(&["public_generic", "private_generic"], &mut string_table);
+    let seed = callable_seed("public_generic", true, &mut string_table);
 
-    let store = extract_validated_generic_template_artefacts(&draft, templates, &string_table)
+    let store = extract_validated_generic_template_artefacts(&draft, &[seed], templates)
         .expect("a private generic template alongside an exported one is an intentional exclusion");
 
     assert_eq!(store.len(), 1);
@@ -290,7 +424,8 @@ fn duplicate_draft_origin_is_compiler_error() {
     ]);
     let templates = templates_map(&["identity"], &mut string_table);
 
-    let result = extract_validated_generic_template_artefacts(&draft, templates, &string_table);
+    let seed = callable_seed("identity", true, &mut string_table);
+    let result = extract_validated_generic_template_artefacts(&draft, &[seed], templates);
 
     assert!(
         matches!(result, Err(CompilerError { .. })),
@@ -299,22 +434,44 @@ fn duplicate_draft_origin_is_compiler_error() {
 }
 
 #[test]
-fn duplicate_template_defining_name_with_distinct_donor_paths_is_compiler_error() {
+fn duplicate_public_callable_seed_path_is_compiler_error() {
     let mut string_table = StringTable::new();
     let draft = empty_draft(vec![function_record("identity", true)]);
-    // Two templates share the defining name "identity" but live under distinct donor paths.
-    let mut templates = FxHashMap::default();
-    let (first_path, first_template) = template_under_path("shapes", "identity", &mut string_table);
-    let (second_path, second_template) =
-        template_under_path("other", "identity", &mut string_table);
-    templates.insert(first_path, first_template);
-    templates.insert(second_path, second_template);
+    let templates = templates_map(&["identity"], &mut string_table);
+    let seed = callable_seed("identity", true, &mut string_table);
 
-    let result = extract_validated_generic_template_artefacts(&draft, templates, &string_table);
+    let result =
+        extract_validated_generic_template_artefacts(&draft, &[seed.clone(), seed], templates);
 
     assert!(
         matches!(result, Err(CompilerError { .. })),
-        "two templates sharing a defining name via distinct donor paths must fail as CompilerError"
+        "a duplicate exact public callable path must fail as CompilerError"
+    );
+}
+
+#[test]
+fn duplicate_public_callable_seed_origin_is_compiler_error() {
+    let mut string_table = StringTable::new();
+    let draft = empty_draft(vec![
+        function_record("identity", true),
+        function_record("render", true),
+    ]);
+    let identity_seed = callable_seed("identity", true, &mut string_table);
+    let duplicate_origin_seed = PublicCallableOriginSeed {
+        path: InternedPath::from_single_str("render", &mut string_table),
+        origin: identity_seed.origin.clone(),
+        generic_template: true,
+    };
+
+    let result = extract_validated_generic_template_artefacts(
+        &draft,
+        &[identity_seed, duplicate_origin_seed],
+        FxHashMap::default(),
+    );
+
+    assert!(
+        matches!(result, Err(CompilerError { .. })),
+        "duplicate stable public callable origins must fail as CompilerError"
     );
 }
 
@@ -327,7 +484,8 @@ fn map_key_template_function_path_mismatch_is_compiler_error() {
     let (key, template) = mismatched_template("identity", "mismatch", &mut string_table);
     templates.insert(key, template);
 
-    let result = extract_validated_generic_template_artefacts(&draft, templates, &string_table);
+    let seed = callable_seed("identity", true, &mut string_table);
+    let result = extract_validated_generic_template_artefacts(&draft, &[seed], templates);
 
     assert!(
         matches!(result, Err(CompilerError { .. })),
